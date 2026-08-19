@@ -167,3 +167,47 @@ compiled in this environment. The unblock is a one-time Trust & Enable inside Xc
 (`DEVICE-CHECKLIST.md` section A), after which command-line builds should work. Until someone
 confirms that, treat "the app builds" as an open question rather than an assumption — including in
 any CI plan, since Xcode Cloud will hit the same macro trust step on first run.
+
+## Findings from building the logger
+
+### 9. StructuredQueries needs `#bind` around assigned values
+
+`.update { $0.column = value }` fails to compile for literals *and* for optional columns, with
+`'subscript(dynamicMember:)' is unavailable: Use '#bind' to explicitly wrap this value`. Variables
+assigned to non-optional columns are fine, which makes the rule easy to half-learn. Wrap every
+assignment.
+
+### 10. `swiftc -typecheck` and a cached `swift build` both give false all-clears
+
+Two separate traps, one lesson. Region-based isolation is enforced in SIL, so concurrency errors
+only appear under `swiftc -c` or a real build. And `swift build --target X` happily reports
+`Build of target 'X' complete!` at `[0/1]` having compiled nothing — after adding files, `touch`
+the sources and confirm the compiler actually names them.
+
+### 11. Module default isolation leaks into extensions and function references
+
+`HardsetStore` and `HardsetUI` default to `MainActor`, so a plain `struct` or `extension` written
+there is MainActor-isolated. Passing `Type.init(row:)` as a function value into a nonisolated
+closure then fails with "loses global actor 'MainActor'". Every type that touches a database queue
+is explicitly `nonisolated`, matching the schema types.
+
+### 12. Record detection has to read history *before* the write
+
+Detecting personal records after persisting the set means comparing the set against itself, so a
+genuine best can never win. `SessionCoordinator.logSet` therefore reads history first, writes, and
+only then announces — which also preserves the persist-before-claim rule, since a failed write
+announces nothing.
+
+### 13. Public API must not leak the `@Table` row types
+
+The row types are `internal` and their column names are permanently frozen. Returning them from a
+public method fails to compile, which is the right outcome: `SessionRecord`, `LoggedSetRecord`,
+`PlannedExerciseRecord` and `CatalogEntry` are the store's public vocabulary, speaking typed
+identifiers and `SessionTimeline` rather than raw `UUID`s and loose dates.
+
+### 14. Two definitions of the pound had already appeared
+
+`StrengthMath.displayRounded` carried a local `2.2046226218` while `WeightUnit` used the defined
+`1/0.45359237`. Two constants, slightly different, three weeks into a greenfield codebase — which
+is how a single-source-of-truth rule fails in practice. Conversion now goes through `WeightUnit`
+only.

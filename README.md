@@ -5,8 +5,15 @@ A hypertrophy logger for intermediate lifters. Local-first, CloudKit-synced, no 
 Three things it is trying to be, in order: honest about what it knows, aware of the specific
 machines you train on, and fast to log a set.
 
-**Status: Phase 0.** Target graph, store, schema, rest-timer engine, and the honesty layer.
-No screens yet.
+**Status: the logger works, in the package.** Sessions, sets, prefill from history, the rest
+bar, recovery of an interrupted workout, personal records, a 50-movement seed catalogue and a
+picker. 164 tests across 20 suites run on the host in about a tenth of a second.
+
+**Not yet true:** the app and widget targets have never been compiled. `xcodebuild` fails here
+because the Swift macro plugin server does not survive the shell sandbox, so everything real lives
+in package targets that build with `swift build`, and the `.xcodeproj` app target is a thin shell.
+Unblocking it is a one-time Trust & Enable inside Xcode — see `DEVICE-CHECKLIST.md`. Nothing in
+this repo has run on a device.
 
 ## Layout
 
@@ -19,7 +26,8 @@ Packages/HardsetKit/
   HardsetCore              Foundation-only, nonisolated. Engine + alarm metadata. Tests on host.
   HardsetAlarm             iOS-only. AlarmKit conformance + rest-timer controller.
   HardsetStore             GRDB/SQLiteData. Schema, migration, sync.
-  HardsetUI                Design tokens + the certainty/assumption components.
+  HardsetUI                Design tokens, set row, keypad, rest bar, session screen, picker.
+  HardsetFeature           The composition root. Lives here, not in the app target, so it builds.
 ```
 
 `HardsetCore` deliberately imports nothing but Foundation, which is why the suite runs on macOS.
