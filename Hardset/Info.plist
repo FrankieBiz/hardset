@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CFBundleDisplayName</key>
+	<string>Hardset</string>
+	<key>CFBundleShortVersionString</key>
+	<string>1.0</string>
+	<key>CFBundleVersion</key>
+	<string>1</string>
+	<key>UILaunchScreen</key>
+	<dict/>
+
+	<!-- Required for AlarmKit. Without this key AlarmManager cannot schedule at all: the
+	     framework fails at runtime with "Client has not provided an NSAlarmKitUsageDescription
+	     value". There is no AlarmKit entitlement and no Xcode capability to add. -->
+	<key>NSAlarmKitUsageDescription</key>
+	<string>Hardset uses alarms so your rest timer still alerts you when the app is closed, silenced, or in Focus.</string>
+
+	<!-- Remote notifications: CKSyncEngine needs them to learn about changes from other
+	     devices. Declared here and enabled as a capability on the target. -->
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>remote-notification</string>
+	</array>
+</dict>
+</plist>

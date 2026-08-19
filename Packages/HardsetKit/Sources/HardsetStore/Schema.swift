@@ -1,0 +1,137 @@
+import Foundation
+import SQLiteData
+
+// Every table name is written out explicitly rather than left to the @Table macro's
+// pluralisation. Renaming a table is permanently disallowed, so the name must not depend on
+// a derivation rule that could differ from what the migration created.
+//
+// All of these are `nonisolated`: this module defaults to MainActor isolation, and table
+// types are read and written from database queues.
+
+@Table("exercises")
+nonisolated struct Exercise: Hashable, Identifiable, Sendable {
+  let id: UUID
+  var name = ""
+  /// Stable key for curated entries; nil for user-created ones.
+  ///
+  /// Deliberately not UNIQUE -- it cannot be. Curated rows carry fixed primary keys from the
+  /// bundled catalogue instead, which makes seeding idempotent by primary key.
+  var catalogSlug: String?
+  var isCurated = false
+  var modality = "unknown"
+  var primaryMuscle = "unknown"
+  var secondaryMusclesJSON = "[]"
+  var notes = ""
+  /// Soft delete. Hard-deleting a curated row would resurrect it on the next seed.
+  var isArchived = false
+  var createdAt = Date(timeIntervalSince1970: 0)
+}
+
+@Table("gyms")
+nonisolated struct Gym: Hashable, Identifiable, Sendable {
+  let id: UUID
+  var name = ""
+  var isArchived = false
+  var createdAt = Date(timeIntervalSince1970: 0)
+}
+
+@Table("machines")
+nonisolated struct Machine: Hashable, Identifiable, Sendable {
+  let id: UUID
+  var gymID: UUID
+  var name = ""
+  var brand = ""
+  var loadType = "unknown"
+  /// Smallest load step this machine allows, when known. Drives honest progression
+  /// suggestions: proposing +2.5 kg on a stack that moves in 5 kg jumps is a lie.
+  var stackIncrementKg: Double?
+  var isArchived = false
+  var createdAt = Date(timeIntervalSince1970: 0)
+}
+
+@Table("machineExercises")
+nonisolated struct MachineExercise: Hashable, Identifiable, Sendable {
+  /// Present only because every synchronized table needs a single non-compound primary key.
+  let id: UUID
+  var machineID: UUID
+  var exerciseID: UUID
+  var createdAt = Date(timeIntervalSince1970: 0)
+}
+
+@Table("sessions")
+nonisolated struct Session: Hashable, Identifiable, Sendable {
+  let id: UUID
+  var gymID: UUID?
+  var title = ""
+  var notes = ""
+  /// Immutable. Together with `finishedAt` this is the only source of duration.
+  var startedAt = Date(timeIntervalSince1970: 0)
+  /// nil means the session is still open. Never backfilled from `Date()`.
+  var finishedAt: Date?
+}
+
+@Table("sessionExercises")
+nonisolated struct SessionExercise: Hashable, Identifiable, Sendable {
+  let id: UUID
+  var sessionID: UUID
+  var exerciseID: UUID
+  var machineID: UUID?
+  var position = 0
+  var plannedSets: Int?
+}
+
+@Table("loggedSets")
+nonisolated struct LoggedSet: Hashable, Identifiable, Sendable {
+  let id: UUID
+  var sessionID: UUID
+  var exerciseID: UUID
+  /// Which physical machine. This is what makes progression machine-level rather than
+  /// exercise-level.
+  var machineID: UUID?
+  var setOrdinal = 0
+  /// Canonical kilograms. Conversion to pounds happens only at the UI boundary.
+  var weightKg = 0.0
+  var reps = 0
+  var rpe: Double?
+  var isWarmup = false
+  var completedAt = Date(timeIntervalSince1970: 0)
+}
+
+@Table("bodyweightEntries")
+nonisolated struct BodyweightEntry: Hashable, Identifiable, Sendable {
+  let id: UUID
+  var weightKg = 0.0
+  var measuredAt = Date(timeIntervalSince1970: 0)
+  /// Always "manual" in v1. Present so a future HealthKit-sourced row is distinguishable
+  /// without a schema change -- adding a column later is allowed, renaming one is not.
+  var enteredBy = "manual"
+}
+
+// MARK: - Device-local tables
+//
+// These are never registered with the SyncEngine. Note that SQLiteData's account-change
+// wipe only empties *registered* tables, so keeping these out of the sync list also keeps
+// them safe from `deleteLocalData()`.
+
+@Table("deviceHealthSamples")
+nonisolated struct DeviceHealthSample: Hashable, Identifiable, Sendable {
+  let id: UUID
+  var kind = "unknown"
+  var value = 0.0
+  var unit = ""
+  var startedAt = Date(timeIntervalSince1970: 0)
+  var endedAt: Date?
+}
+
+@Table("deviceRestTimer")
+nonisolated struct DeviceRestTimer: Hashable, Identifiable, Sendable {
+  let id: UUID
+  var sessionID: UUID?
+  /// The AlarmKit alarm currently backing this timer, so it can be cancelled on relaunch.
+  var alarmID: UUID?
+  /// Exactly one of `endsAt` / `pausedRemainingSeconds` is non-nil, or both are nil when
+  /// idle. `RestTimerState` is the only thing that should construct these two values.
+  var endsAt: Date?
+  var pausedRemainingSeconds: Double?
+  var updatedAt = Date(timeIntervalSince1970: 0)
+}

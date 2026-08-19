@@ -1,0 +1,10 @@
+.DS_Store
+build/
+DerivedData/
+*.xcuserstate
+xcuserdata/
+.swiftpm/
+Packages/*/.build/
+*.hmap
+*.ipa
+*.dSYM.zip

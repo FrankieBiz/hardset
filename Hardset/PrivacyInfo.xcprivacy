@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- No tracking, and no data leaves the device except to the user's own private CloudKit
+	     database, which is not "collection" by Apple's definition. -->
+	<key>NSPrivacyTracking</key>
+	<false/>
+	<key>NSPrivacyTrackingDomains</key>
+	<array/>
+
+	<!-- Deliberately empty.
+	     Apple: "Your app's privacy manifest file doesn't need to cover data collected by
+	     third-party SDKs that your app links to." RevenueCat declares its own
+	     NSPrivacyCollectedDataTypePurchaseHistory, so restating it here would be wrong.
+	     Purchase history must still be disclosed in the App Store Connect questionnaire --
+	     the SDK-inheritance rule does not apply there, and that is where rejections originate.
+
+	     Revisit if we ever pass our own appUserID to Purchases.configure: that would add an
+	     NSPrivacyCollectedDataTypeUserID entry here. -->
+	<key>NSPrivacyCollectedDataTypes</key>
+	<array/>
+
+	<key>NSPrivacyAccessedAPITypes</key>
+	<array>
+		<dict>
+			<!-- UserDefaults, for this app's own preferences only.
+			     CA92.1 is the correct reason: access limited to information written by the app
+			     itself. The app-group reason 1C8F.1 is NOT declared because nothing here reads
+			     UserDefaults(suiteName:) -- the widget receives its data through AlarmKit's
+			     AlarmAttributes, not through a shared defaults suite. If that ever changes, ADD
+			     1C8F.1 alongside CA92.1 (do not replace it) and give the widget extension its
+			     own PrivacyInfo.xcprivacy, since extensions are scanned separately. -->
+			<key>NSPrivacyAccessedAPIType</key>
+			<string>NSPrivacyAccessedAPICategoryUserDefaults</string>
+			<key>NSPrivacyAccessedAPITypeReasons</key>
+			<array>
+				<string>CA92.1</string>
+			</array>
+		</dict>
+	</array>
+
+	<!-- Not declared, on purpose:
+	     * FileTimestamp / DiskSpace on GRDB's account. GRDB 7.11.1 ships its own manifest with
+	       an EMPTY NSPrivacyAccessedAPITypes, calls no timestamp APIs (only fileExists and
+	       removeItem), and links libsqlite3 dynamically, so SQLite's internal stat/fstat never
+	       enter our binary. This flips only if SQLite is ever statically linked (SQLCipher or a
+	       vendored amalgamation) -- verify before upload with:
+	         nm -u Hardset.app/Hardset | grep -E 'getattrlist|_stat|_fstat|statfs'
+	     * SystemBootTime, ActiveKeyboards: nothing in this stack calls them.
+	     Note SQLiteData and swift-structured-queries ship no manifest of their own, which is
+	     why the declaration above is ours to make. -->
+</dict>
+</plist>
