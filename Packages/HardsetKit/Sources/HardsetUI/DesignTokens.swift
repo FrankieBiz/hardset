@@ -51,8 +51,15 @@ public enum Tokens {
     public static let caption = Font.caption
   }
 
-  /// Minimum tap target. Logging happens with sweaty hands, mid-set, one-handed.
+  /// Minimum tap target anywhere in the app — Apple's floor, fine for chips and badges.
   public static let minimumTapTarget: CGFloat = 44
+
+  /// Minimum tap target inside the logger, which is deliberately larger.
+  ///
+  /// Logging happens one-handed, with sweaty hands, at arm's length from a rack, between
+  /// heavy sets. 44 pt is the accessibility floor for a calm user sitting still; the set row
+  /// and the keypad get 56 because a missed tap there costs a set.
+  public static let loggerTapTarget: CGFloat = 56
 }
 
 /// Mirror of `HardsetCore.Certainty` for the UI layer.
