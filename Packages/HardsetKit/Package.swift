@@ -30,6 +30,7 @@ let package = Package(
     .library(name: "HardsetAlarm", targets: ["HardsetAlarm"]),
     .library(name: "HardsetStore", targets: ["HardsetStore"]),
     .library(name: "HardsetUI", targets: ["HardsetUI"]),
+    .library(name: "HardsetFeature", targets: ["HardsetFeature"]),
   ],
   dependencies: [
     // Locked decision. Brings GRDB 7.11+ transitively along with ~9 other
@@ -65,6 +66,18 @@ let package = Package(
       name: "HardsetUI",
       dependencies: ["HardsetCore"],
       resources: [.process("Resources")],
+      swiftSettings: mainActorByDefault
+    ),
+
+    // The composition root, kept in the package rather than in the app target on purpose.
+    // The .xcodeproj app target cannot be compiled from a sandboxed command line here (the
+    // Swift macro plugin server fails), so anything living there is unverifiable. Putting the
+    // wiring in a package target instead means it builds on the host and the app target shrinks
+    // to a handful of lines. AlarmKit stays out: it is iOS-only, so the rest-timer hooks arrive
+    // as closures supplied by the app.
+    .target(
+      name: "HardsetFeature",
+      dependencies: ["HardsetCore", "HardsetStore", "HardsetUI"],
       swiftSettings: mainActorByDefault
     ),
 

@@ -91,7 +91,7 @@ def fmt_settings(d, indent):
 
 # Package products each target links.
 PRODUCTS = {
-    APP: ["HardsetCore", "HardsetStore", "HardsetUI", "HardsetAlarm"],
+    APP: ["HardsetCore", "HardsetStore", "HardsetUI", "HardsetAlarm", "HardsetFeature"],
     WIDGET: ["HardsetCore", "HardsetUI", "HardsetAlarm"],
     TESTS: ["HardsetCore"],
 }
