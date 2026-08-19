@@ -133,3 +133,37 @@ belong to swift-structured-queries, re-exported. That package is pinned at a **0
 0.37 could break source compatibility inside a SQLiteData patch bump. Treat it as a first-class
 dependency to watch. And swift-syntax means macro expansion, which is what makes a sandboxed
 `xcodebuild` fail here.
+
+## Findings added after the first authoritative run
+
+### 7. Spike B cannot be built as specified — `MockCloudContainer` is `package`-scoped
+
+The brief asked for a `CKSyncEngine` conformance harness driving two stores through all six
+documented sync scenarios. That is not reachable from application code.
+`MockCloudContainer` is declared `package final class` in
+`Sources/SQLiteData/CloudKit/Internal/MockCloudContainer.swift:7`, and `SQLiteDataTestSupport` —
+the only test-facing module the package ships — contains exactly one symbol, `assertQuery`. There
+is no public test double for CloudKit.
+
+Two consequences. SQLiteData already exercises those six scenarios across ~25 files in
+`Tests/SQLiteDataTests/CloudKitTests/`, so re-testing the library's merge semantics was never our
+job. What *is* our job is that our schema and our delegate behave against a real container, and
+that is a two-device integration test, not a unit test. Spike B is therefore redefined as section C
+of `DEVICE-CHECKLIST.md`. Vendoring or forking SQLiteData to expose the mock was considered and
+rejected: it buys coverage of someone else's code at the cost of owning a fork of the sync layer.
+
+### 8. The app target cannot be compiled from a sandboxed command line
+
+`swift test --disable-sandbox` runs the full package suite (54 tests, 7 suites) because SwiftPM's
+own `--disable-sandbox` lets the macro plugin server run. `xcodebuild` has no equivalent flag —
+`-disable-sandbox` is rejected as an invalid option — and fails with
+`error: external macro implementation type 'SwiftMacros.TaskLocalMacro' could not be found ...
+swift-plugin-server produced malformed response`. `-skipMacroValidation` clears the *trust* gate
+but not this one; the plugin server itself execs fine, so the failure is in the sandboxed
+plugin-server transport, not in the binary or the project.
+
+So: **the package suite is verified, the app and widget targets are not.** They have never been
+compiled in this environment. The unblock is a one-time Trust & Enable inside Xcode
+(`DEVICE-CHECKLIST.md` section A), after which command-line builds should work. Until someone
+confirms that, treat "the app builds" as an open question rather than an assumption — including in
+any CI plan, since Xcode Cloud will hit the same macro trust step on first run.
