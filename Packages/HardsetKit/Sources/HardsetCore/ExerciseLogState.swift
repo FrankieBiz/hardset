@@ -119,6 +119,76 @@ public struct ExerciseLogState: Hashable, Sendable, Identifiable {
     )
   }
 
+  /// A set already written, as recovery sees it.
+  public struct LoggedSetSummary: Hashable, Sendable {
+    public let setID: SetID
+    public let weightKg: Double
+    public let reps: Int
+    public let isWarmup: Bool
+
+    public init(setID: SetID, weightKg: Double, reps: Int, isWarmup: Bool) {
+      self.setID = setID
+      self.weightKg = weightKg
+      self.reps = reps
+      self.isWarmup = isWarmup
+    }
+  }
+
+  /// Rebuilds an exercise mid-workout, after the app was killed or the phone died.
+  ///
+  /// Recovery is reconstruction from what was written, never a guess. Sets that reached the
+  /// database come back exactly as they were logged and are already ticked; only the rows that
+  /// were never written are open, and those are prefilled from history the same way a fresh
+  /// session would prefill them.
+  ///
+  /// Note what this deliberately does not do: it does not reopen a logged set for editing, and
+  /// it does not drop a set because the plan said three and four were performed. The written
+  /// record wins over the plan.
+  public static func resume(
+    exerciseID: ExerciseID,
+    machineID: MachineID? = nil,
+    exerciseName: String,
+    machineName: String? = nil,
+    machineIncrementKg: Double? = nil,
+    loggedSets: [LoggedSetSummary],
+    snapshot: PriorPerformanceSnapshot,
+    plannedSets: Int? = nil,
+    allowingOtherMachines: Bool = true
+  ) -> ExerciseLogState {
+    var state = build(
+      exerciseID: exerciseID,
+      machineID: machineID,
+      exerciseName: exerciseName,
+      machineName: machineName,
+      machineIncrementKg: machineIncrementKg,
+      snapshot: snapshot,
+      plannedSets: plannedSets,
+      allowingOtherMachines: allowingOtherMachines
+    )
+
+    // Written sets replace the opening rows, in the order they were performed.
+    var slots: [SetSlot] = loggedSets.map { logged in
+      SetSlot(
+        draft: SetEntryDraft(weightKg: logged.weightKg, reps: logged.reps),
+        isWarmup: logged.isWarmup,
+        loggedSetID: logged.setID
+      )
+    }
+
+    // Then however many the plan still expects, prefilled but open. If more was performed than
+    // planned, nothing is added and nothing is discarded.
+    let target = plannedSets ?? max(state.slots.count, slots.count)
+    let workingLogged = slots.count { !$0.isWarmup }
+    if target > workingLogged {
+      for index in workingLogged..<target {
+        slots.append(SetSlot(draft: SetEntryDraft(suggestion: state.suggestion(forSetIndex: index))))
+      }
+    }
+
+    state.slots = slots
+    return state
+  }
+
   public var progressionKey: ProgressionKey {
     ProgressionKey(exerciseID: exerciseID, machineID: machineID)
   }

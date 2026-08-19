@@ -114,6 +114,127 @@ public final class SessionCoordinator {
     )
   }
 
+  /// Rebuilds a coordinator for a workout that was left open.
+  ///
+  /// This is the crash-recovery path: the app was killed mid-set, the phone died, or the session
+  /// was left running overnight. Nothing is assumed about how long ago that was and nothing is
+  /// closed automatically — an abandoned session is finished by an explicit choice, never by the
+  /// app deciding "now" is the end. That is the bug the ancestor app shipped as 9,749-minute
+  /// workouts.
+  ///
+  /// Returns `nil` when no session is open, which is the normal case.
+  public static func resume(
+    store: LoggerStore,
+    now: @escaping () -> Date = { Date() },
+    restAfterSet: Duration? = nil,
+    onStartRest: @escaping (Duration, RestMetadata) -> Void = { _, _ in }
+  ) throws -> SessionCoordinator? {
+    guard let session = try store.openSession() else { return nil }
+
+    let planned = try store.sessionExercises(in: session.id)
+    let written = try store.sets(in: session.id)
+
+    // One history read for the whole session, excluding the session itself so a recovered
+    // workout cannot suggest values from its own sets.
+    let snapshot = try store.priorPerformanceSnapshot(
+      for: planned.map(\.progressionKey),
+      excluding: session.id,
+      asOf: now()
+    )
+
+    let byKey = Dictionary(grouping: written) { $0.progressionKey }
+    let states = planned.map { entry -> ExerciseLogState in
+      let logged = (byKey[entry.progressionKey] ?? [])
+        .sorted { $0.setOrdinal < $1.setOrdinal }
+        .map {
+          ExerciseLogState.LoggedSetSummary(
+            setID: $0.id, weightKg: $0.weightKg, reps: $0.reps, isWarmup: $0.isWarmup
+          )
+        }
+      return ExerciseLogState.resume(
+        exerciseID: entry.exerciseID,
+        machineID: entry.machineID,
+        exerciseName: entry.exerciseName,
+        machineName: entry.machineName,
+        loggedSets: logged,
+        snapshot: snapshot,
+        plannedSets: entry.plannedSets
+      )
+    }
+
+    return SessionCoordinator(
+      store: store,
+      sessionID: session.id,
+      exercises: states,
+      now: now,
+      restAfterSet: restAfterSet,
+      onStartRest: onStartRest
+    )
+  }
+
+  /// Adds a movement to the workout in progress.
+  ///
+  /// Reads history for just this movement rather than re-reading the session's, so mid-workout
+  /// additions cost one small query instead of redoing session start.
+  @discardableResult
+  public func addExercise(
+    exerciseID: ExerciseID,
+    exerciseName: String,
+    machineID: MachineID? = nil,
+    machineName: String? = nil,
+    machineIncrementKg: Double? = nil,
+    plannedSets: Int? = nil
+  ) -> Bool {
+    let key = ProgressionKey(exerciseID: exerciseID, machineID: machineID)
+    do {
+      try store.addExercise(
+        to: sessionID,
+        exerciseID: exerciseID,
+        machineID: machineID,
+        position: exercises.count,
+        plannedSets: plannedSets
+      )
+      let snapshot = try store.priorPerformanceSnapshot(
+        for: [key], excluding: sessionID, asOf: now()
+      )
+      exercises.append(
+        ExerciseLogState.build(
+          exerciseID: exerciseID,
+          machineID: machineID,
+          exerciseName: exerciseName,
+          machineName: machineName,
+          machineIncrementKg: machineIncrementKg,
+          snapshot: snapshot,
+          plannedSets: plannedSets
+        )
+      )
+      lastError = nil
+      return true
+    } catch {
+      lastError = error
+      return false
+    }
+  }
+
+  /// Convenience for the picker, which hands back a `CatalogEntry`.
+  @discardableResult
+  public func addExercise(
+    _ entry: CatalogEntry,
+    machineID: MachineID? = nil,
+    machineName: String? = nil,
+    machineIncrementKg: Double? = nil,
+    plannedSets: Int? = nil
+  ) -> Bool {
+    addExercise(
+      exerciseID: entry.id,
+      exerciseName: entry.name,
+      machineID: machineID,
+      machineName: machineName,
+      machineIncrementKg: machineIncrementKg,
+      plannedSets: plannedSets
+    )
+  }
+
   // MARK: - Logging
 
   /// Persists one row, then — and only then — marks it logged and requests rest.

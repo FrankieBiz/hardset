@@ -162,6 +162,50 @@ public nonisolated struct LoggerStore {
     }
   }
 
+  /// The exercises on a session's plan, in order, with the names needed to render them.
+  ///
+  /// Deliberately three small reads merged in Swift rather than one join: the row counts here are
+  /// a session's worth, the joins would be the only ones in the codebase, and a wrong join is a
+  /// subtler bug than a wrong dictionary lookup.
+  public func sessionExercises(in sessionID: SessionID) throws -> [PlannedExerciseRecord] {
+    try database.read { db in
+      let rows = try SessionExercise
+        .where { $0.sessionID.eq(sessionID.rawValue) }
+        .order { $0.position }
+        .fetchAll(db)
+      guard !rows.isEmpty else { return [] }
+
+      let exerciseIDs = Array(Set(rows.map(\.exerciseID)))
+      let names = try Exercise
+        .where { $0.id.in(exerciseIDs) }
+        .fetchAll(db)
+        .reduce(into: [UUID: String]()) { $0[$1.id] = $1.name }
+
+      let machineIDs = Array(Set(rows.compactMap(\.machineID)))
+      let machineNames =
+        machineIDs.isEmpty
+        ? [:]
+        : try Machine
+          .where { $0.id.in(machineIDs) }
+          .fetchAll(db)
+          .reduce(into: [UUID: String]()) { $0[$1.id] = $1.name }
+
+      return rows.map { row in
+        PlannedExerciseRecord(
+          id: row.id,
+          exerciseID: ExerciseID(rawValue: row.exerciseID),
+          machineID: row.machineID.map(MachineID.init(rawValue:)),
+          // A missing name means a deleted exercise row, which the foreign key should prevent.
+          // Shown as unknown rather than crashing a recovery path.
+          exerciseName: names[row.exerciseID] ?? "Unknown movement",
+          machineName: row.machineID.flatMap { machineNames[$0] },
+          position: row.position,
+          plannedSets: row.plannedSets
+        )
+      }
+    }
+  }
+
   // MARK: - The one hoisted read
 
   /// Reads every exercise's history in a single query and returns it as an immutable value.
@@ -285,6 +329,20 @@ public nonisolated struct LoggedSetRecord: Hashable, Sendable {
   }
 
   /// The progression unit this set belongs to.
+  public var progressionKey: ProgressionKey {
+    ProgressionKey(exerciseID: exerciseID, machineID: machineID)
+  }
+}
+
+public nonisolated struct PlannedExerciseRecord: Hashable, Sendable, Identifiable {
+  public let id: UUID
+  public let exerciseID: ExerciseID
+  public let machineID: MachineID?
+  public let exerciseName: String
+  public let machineName: String?
+  public let position: Int
+  public let plannedSets: Int?
+
   public var progressionKey: ProgressionKey {
     ProgressionKey(exerciseID: exerciseID, machineID: machineID)
   }

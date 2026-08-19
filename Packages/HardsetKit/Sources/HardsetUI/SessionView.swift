@@ -21,6 +21,7 @@ public struct SessionView: View {
   private let onAdjustRest: (Duration) -> Void
   private let onPauseResumeRest: () -> Void
   private let onSkipRest: () -> Void
+  private let onAddExercise: (() -> Void)?
   private let onFinish: () -> Void
 
   public init(
@@ -33,6 +34,7 @@ public struct SessionView: View {
     onAdjustRest: @escaping (Duration) -> Void = { _ in },
     onPauseResumeRest: @escaping () -> Void = {},
     onSkipRest: @escaping () -> Void = {},
+    onAddExercise: (() -> Void)? = nil,
     onFinish: @escaping () -> Void = {}
   ) {
     self._exercises = exercises
@@ -44,6 +46,7 @@ public struct SessionView: View {
     self.onAdjustRest = onAdjustRest
     self.onPauseResumeRest = onPauseResumeRest
     self.onSkipRest = onSkipRest
+    self.onAddExercise = onAddExercise
     self.onFinish = onFinish
   }
 
@@ -68,6 +71,31 @@ public struct SessionView: View {
           }
           .background(Tokens.Color.surface.opacity(0.4), in: RoundedRectangle(cornerRadius: Tokens.Radius.card))
           .padding(.horizontal, Tokens.Spacing.snug)
+        }
+
+        if let onAddExercise {
+          Button(action: onAddExercise) {
+            Label("Add movement", systemImage: "plus")
+              .font(Tokens.Text.label)
+              .frame(maxWidth: .infinity, minHeight: Tokens.loggerTapTarget)
+          }
+          .buttonStyle(.plain)
+          .foregroundStyle(Tokens.Color.accent)
+          .background(
+            Tokens.Color.surface,
+            in: RoundedRectangle(cornerRadius: Tokens.Radius.control)
+          )
+          .padding(.horizontal, Tokens.Spacing.regular)
+        }
+
+        // An empty workout says so, and says what to do about it, rather than rendering a bare
+        // "Finish" button under nothing.
+        if exercises.isEmpty {
+          ContentUnavailableView {
+            Label("Nothing added yet", systemImage: "dumbbell")
+          } description: {
+            Text("Add a movement to start logging sets.")
+          }
         }
 
         summary

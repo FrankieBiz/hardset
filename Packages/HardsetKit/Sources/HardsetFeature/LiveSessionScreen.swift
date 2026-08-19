@@ -47,19 +47,27 @@ public struct RestTimerHooks {
 public struct LiveSessionScreen: View {
   @State private var coordinator: SessionCoordinator
   @State private var restMetadata: RestMetadata?
+  @State private var isPickerPresented = false
+  @State private var pickerQuery = ""
+  @State private var pickerEntries: [CatalogEntry] = []
   private let unit: WeightUnit
   private let hooks: RestTimerHooks
+  private let catalog: CatalogSeeder?
   private let onFinished: () -> Void
 
+  /// - Parameter catalog: Supplies the picker. Passing `nil` hides the add-movement affordance
+  ///   entirely rather than showing a button that opens an empty list.
   public init(
     coordinator: SessionCoordinator,
     unit: WeightUnit,
     hooks: RestTimerHooks = .inert,
+    catalog: CatalogSeeder? = nil,
     onFinished: @escaping () -> Void = {}
   ) {
     self._coordinator = State(initialValue: coordinator)
     self.unit = unit
     self.hooks = hooks
+    self.catalog = catalog
     self.onFinished = onFinished
   }
 
@@ -81,8 +89,34 @@ public struct LiveSessionScreen: View {
         hooks.cancel()
         restMetadata = nil
       },
+      onAddExercise: catalog == nil ? nil : { isPickerPresented = true },
       onFinish: finish
     )
+    .sheet(isPresented: $isPickerPresented) {
+      NavigationStack {
+        ExercisePickerView(query: $pickerQuery, entries: pickerEntries) { entry in
+          coordinator.addExercise(entry)
+          isPickerPresented = false
+          pickerQuery = ""
+        }
+        .navigationTitle("Add movement")
+      }
+      // Searching hits the database, so it happens here rather than inside the picker, which
+      // stays free of storage. The query is re-run on change instead of filtering in memory so a
+      // user-created movement shows up without reopening the sheet.
+      .task(id: pickerQuery) { refreshPicker() }
+    }
+  }
+
+  private func refreshPicker() {
+    guard let catalog else { return }
+    do {
+      pickerEntries = try catalog.search(pickerQuery)
+    } catch {
+      // An unreadable catalogue is not worth blocking a workout over: the list is empty and the
+      // picker says so, and the user can still log what is already on the plan.
+      pickerEntries = []
+    }
   }
 
   /// A failed write is stated in the user's words, not as an error dump. The row stays
