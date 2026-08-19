@@ -1,0 +1,225 @@
+import Foundation
+import HardsetCore
+import SQLiteData
+
+/// Drives one live workout: holds the exercise states, persists sets, and asks for rest.
+///
+/// The ordering here is the whole point, and it is the opposite of what is convenient:
+/// **the row is marked logged only after the write succeeds.** A coordinator that optimistically
+/// ticks the check mark and then discovers the write failed has told the user a lie about their
+/// training, which is unrecoverable in a way a spinner is not. Rest is likewise requested only
+/// after a successful write — a timer running for a set that was not saved is worse than no
+/// timer.
+///
+/// The rest timer arrives as a closure rather than as `RestTimerController` directly. AlarmKit
+/// exists only in the iPhoneOS SDK, so depending on it here would drag this type — and its
+/// tests — onto a simulator. Injected, the coordinator's logic runs on the host in
+/// milliseconds and a test can assert exactly what rest was requested.
+@MainActor
+@Observable
+public final class SessionCoordinator {
+  public let sessionID: SessionID
+  /// Settable, because SwiftUI binds directly into a row's draft as the user types — that is
+  /// what `@Observable` plus `@Bindable` is for, and a `private(set)` here would force a
+  /// pass-through mutator for every keystroke.
+  ///
+  /// The protected behaviour is not write access, it is ordering: `logSet` is the only thing
+  /// that may set `loggedSetID` or request rest, because it is the only place that knows the
+  /// write succeeded. Marking a slot logged by hand is how you end up with a check mark on a
+  /// set that was never saved.
+  public var exercises: [ExerciseLogState]
+  /// Surfaced rather than swallowed: a failed write must be visible in the UI, because the
+  /// user's alternative is discovering it days later in their history.
+  public private(set) var lastError: (any Error)?
+  public private(set) var isFinished = false
+
+  private let store: LoggerStore
+  private let now: () -> Date
+  private let restAfterSet: Duration?
+  private let onStartRest: (Duration, RestMetadata) -> Void
+
+  /// - Parameters:
+  ///   - restAfterSet: Rest to request after a working set is logged. `nil` means the app does
+  ///     not start a timer on its own. There is no built-in default: a rest prescription is a
+  ///     training decision, and inventing 90 seconds here would be the app asserting something
+  ///     it has no basis for.
+  ///   - onStartRest: Where a rest request goes. Left empty in tests and in previews.
+  public init(
+    store: LoggerStore,
+    sessionID: SessionID,
+    exercises: [ExerciseLogState],
+    now: @escaping () -> Date = { Date() },
+    restAfterSet: Duration? = nil,
+    onStartRest: @escaping (Duration, RestMetadata) -> Void = { _, _ in }
+  ) {
+    self.store = store
+    self.sessionID = sessionID
+    self.exercises = exercises
+    self.now = now
+    self.restAfterSet = restAfterSet
+    self.onStartRest = onStartRest
+  }
+
+  /// Opens a session and builds its exercise states from one history read.
+  ///
+  /// The snapshot is taken here, once, and excludes the session being started so a resumed
+  /// workout cannot suggest values from its own sets.
+  public static func start(
+    store: LoggerStore,
+    gymID: GymID? = nil,
+    title: String = "",
+    plan: [PlannedExercise],
+    now: @escaping () -> Date = { Date() },
+    restAfterSet: Duration? = nil,
+    onStartRest: @escaping (Duration, RestMetadata) -> Void = { _, _ in }
+  ) throws -> SessionCoordinator {
+    let startedAt = now()
+    let sessionID = try store.startSession(gymID: gymID, title: title, at: startedAt)
+
+    let snapshot = try store.priorPerformanceSnapshot(
+      for: plan.map(\.progressionKey),
+      excluding: sessionID,
+      asOf: startedAt
+    )
+
+    var states: [ExerciseLogState] = []
+    for (position, planned) in plan.enumerated() {
+      try store.addExercise(
+        to: sessionID,
+        exerciseID: planned.exerciseID,
+        machineID: planned.machineID,
+        position: position,
+        plannedSets: planned.plannedSets
+      )
+      states.append(
+        ExerciseLogState.build(
+          exerciseID: planned.exerciseID,
+          machineID: planned.machineID,
+          exerciseName: planned.exerciseName,
+          machineName: planned.machineName,
+          machineIncrementKg: planned.machineIncrementKg,
+          snapshot: snapshot,
+          plannedSets: planned.plannedSets
+        )
+      )
+    }
+
+    return SessionCoordinator(
+      store: store,
+      sessionID: sessionID,
+      exercises: states,
+      now: now,
+      restAfterSet: restAfterSet,
+      onStartRest: onStartRest
+    )
+  }
+
+  // MARK: - Logging
+
+  /// Persists one row, then — and only then — marks it logged and requests rest.
+  ///
+  /// Returns `true` when the set was written. A `false` result leaves the row untouched and
+  /// populates `lastError`.
+  @discardableResult
+  public func logSet(slotID: UUID, inExercise exerciseStateID: UUID) -> Bool {
+    guard
+      let exerciseIndex = exercises.firstIndex(where: { $0.id == exerciseStateID }),
+      let slotIndex = exercises[exerciseIndex].slots.firstIndex(where: { $0.id == slotID })
+    else {
+      lastError = SessionCoordinatorError.unknownSlot
+      return false
+    }
+
+    let exercise = exercises[exerciseIndex]
+    let slot = exercise.slots[slotIndex]
+    guard !slot.isLogged else { return true }
+
+    do {
+      let setID = try store.logSet(
+        sessionID: sessionID,
+        exerciseID: exercise.exerciseID,
+        machineID: exercise.machineID,
+        draft: slot.draft,
+        // Storage ordinal counts every row including warm-ups, so the performed order is
+        // recoverable exactly as it happened.
+        setOrdinal: slotIndex,
+        isWarmup: slot.isWarmup,
+        at: now()
+      )
+      exercises[exerciseIndex].markLogged(slotID: slotID, setID: setID)
+      lastError = nil
+
+      // Warm-ups do not start a rest timer: the user is still warming up.
+      if let restAfterSet, !slot.isWarmup {
+        onStartRest(
+          restAfterSet,
+          RestMetadata(
+            exerciseName: exercise.exerciseName,
+            setOrdinal: exercises[exerciseIndex].workingOrdinal(ofSlotID: slotID) ?? 1,
+            plannedSets: exercises[exerciseIndex].workingSetCount,
+            machineName: exercise.machineName
+          )
+        )
+      }
+      return true
+    } catch {
+      lastError = error
+      return false
+    }
+  }
+
+  public func addSet(inExercise exerciseStateID: UUID, isWarmup: Bool = false) {
+    guard let index = exercises.firstIndex(where: { $0.id == exerciseStateID }) else {
+      lastError = SessionCoordinatorError.unknownExercise
+      return
+    }
+    exercises[index].appendSlot(isWarmup: isWarmup)
+  }
+
+  // MARK: - Finishing
+
+  /// Closes the session. Refuses to double-finish, so `finishedAt` cannot drift.
+  public func finish() throws {
+    try store.finishSession(sessionID, at: now())
+    isFinished = true
+  }
+
+  public var loggedSetCount: Int {
+    exercises.reduce(0) { $0 + $1.loggedCount }
+  }
+}
+
+/// One exercise on today's plan, before the session exists.
+public struct PlannedExercise: Hashable, Sendable {
+  public let exerciseID: ExerciseID
+  public let machineID: MachineID?
+  public let exerciseName: String
+  public let machineName: String?
+  public let machineIncrementKg: Double?
+  public let plannedSets: Int?
+
+  public init(
+    exerciseID: ExerciseID,
+    machineID: MachineID? = nil,
+    exerciseName: String,
+    machineName: String? = nil,
+    machineIncrementKg: Double? = nil,
+    plannedSets: Int? = nil
+  ) {
+    self.exerciseID = exerciseID
+    self.machineID = machineID
+    self.exerciseName = exerciseName
+    self.machineName = machineName
+    self.machineIncrementKg = machineIncrementKg
+    self.plannedSets = plannedSets
+  }
+
+  public var progressionKey: ProgressionKey {
+    ProgressionKey(exerciseID: exerciseID, machineID: machineID)
+  }
+}
+
+public enum SessionCoordinatorError: Error, Equatable, Sendable {
+  case unknownExercise
+  case unknownSlot
+}

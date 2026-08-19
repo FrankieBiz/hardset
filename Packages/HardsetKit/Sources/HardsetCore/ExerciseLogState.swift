@@ -36,6 +36,8 @@ public struct ExerciseLogState: Hashable, Sendable, Identifiable {
   public let exerciseID: ExerciseID
   public let machineID: MachineID?
   public let exerciseName: String
+  /// Shown on the Lock Screen while resting, so the user knows which station they left.
+  public let machineName: String?
   /// Set to the machine's real load step when known, so a suggested load is achievable.
   public let machineIncrementKg: Double?
   public var slots: [SetSlot]
@@ -51,6 +53,7 @@ public struct ExerciseLogState: Hashable, Sendable, Identifiable {
     exerciseID: ExerciseID,
     machineID: MachineID? = nil,
     exerciseName: String,
+    machineName: String? = nil,
     machineIncrementKg: Double? = nil,
     prior: PriorPerformance?,
     priorNote: String? = nil,
@@ -60,6 +63,7 @@ public struct ExerciseLogState: Hashable, Sendable, Identifiable {
     self.exerciseID = exerciseID
     self.machineID = machineID
     self.exerciseName = exerciseName
+    self.machineName = machineName
     self.machineIncrementKg = machineIncrementKg
     self.prior = prior
     self.priorNote = priorNote
@@ -79,6 +83,7 @@ public struct ExerciseLogState: Hashable, Sendable, Identifiable {
     exerciseID: ExerciseID,
     machineID: MachineID? = nil,
     exerciseName: String,
+    machineName: String? = nil,
     machineIncrementKg: Double? = nil,
     snapshot: PriorPerformanceSnapshot,
     plannedSets: Int? = nil,
@@ -106,6 +111,7 @@ public struct ExerciseLogState: Hashable, Sendable, Identifiable {
       exerciseID: exerciseID,
       machineID: machineID,
       exerciseName: exerciseName,
+      machineName: machineName,
       machineIncrementKg: machineIncrementKg,
       prior: prior,
       priorNote: note,
@@ -123,6 +129,17 @@ public struct ExerciseLogState: Hashable, Sendable, Identifiable {
   }
 
   public var loggedCount: Int { slots.count(where: \.isLogged) }
+
+  /// Working sets only. Warm-ups are not part of the prescription.
+  public var workingSetCount: Int { slots.count { !$0.isWarmup } }
+
+  /// 1-based working-set number for a slot, skipping warm-ups, for display and for the
+  /// Live Activity's "Set 2 of 4".
+  public func workingOrdinal(ofSlotID id: UUID) -> Int? {
+    guard let index = slots.firstIndex(where: { $0.id == id }), !slots[index].isWarmup
+    else { return nil }
+    return slots[..<index].count { !$0.isWarmup } + 1
+  }
 
   /// The first row not yet written — what the log control should act on.
   public var nextUnloggedSlotID: UUID? {
