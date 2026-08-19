@@ -17,6 +17,7 @@ public struct SessionView: View {
   private let restState: RestTimerState
   private let restMetadata: RestMetadata?
   private let errorMessage: String?
+  private let records: [PersonalRecord]
   private let onLogSet: (UUID, SetSlot) -> Void
   private let onAdjustRest: (Duration) -> Void
   private let onPauseResumeRest: () -> Void
@@ -30,6 +31,7 @@ public struct SessionView: View {
     restState: RestTimerState = .idle,
     restMetadata: RestMetadata? = nil,
     errorMessage: String? = nil,
+    records: [PersonalRecord] = [],
     onLogSet: @escaping (UUID, SetSlot) -> Void,
     onAdjustRest: @escaping (Duration) -> Void = { _ in },
     onPauseResumeRest: @escaping () -> Void = {},
@@ -42,6 +44,7 @@ public struct SessionView: View {
     self.restState = restState
     self.restMetadata = restMetadata
     self.errorMessage = errorMessage
+    self.records = records
     self.onLogSet = onLogSet
     self.onAdjustRest = onAdjustRest
     self.onPauseResumeRest = onPauseResumeRest
@@ -63,6 +66,31 @@ public struct SessionView: View {
             .padding(Tokens.Spacing.regular)
             .background(Tokens.Color.surface, in: RoundedRectangle(cornerRadius: Tokens.Radius.card))
             .padding(.horizontal, Tokens.Spacing.regular)
+        }
+
+        if !records.isEmpty {
+          // Each record names what it beat, so the claim is checkable rather than a bare "PR!".
+          VStack(alignment: .leading, spacing: Tokens.Spacing.tight) {
+            ForEach(records) { record in
+              Label {
+                VStack(alignment: .leading, spacing: 0) {
+                  Text(record.kind.label)
+                    .font(Tokens.Text.label.weight(.semibold))
+                  Text(Self.describe(record))
+                    .font(Tokens.Text.caption)
+                    .foregroundStyle(Tokens.Color.textSecondary)
+                }
+              } icon: {
+                Image(systemName: "trophy")
+              }
+              .foregroundStyle(Tokens.Color.certainty(.high))
+            }
+          }
+          .frame(maxWidth: .infinity, alignment: .leading)
+          .padding(Tokens.Spacing.regular)
+          .background(Tokens.Color.surface, in: RoundedRectangle(cornerRadius: Tokens.Radius.card))
+          .padding(.horizontal, Tokens.Spacing.regular)
+          .accessibilityElement(children: .combine)
         }
 
         ForEach($exercises) { $exercise in
@@ -114,6 +142,32 @@ public struct SessionView: View {
         onSkip: onSkipRest
       )
     }
+  }
+
+  /// Spells out the comparison. An estimated-1RM record says it is an estimate, because
+  /// guideline 1.4.1 is about not presenting an estimate as a measurement.
+  static func describe(_ record: PersonalRecord) -> String {
+    switch record.kind {
+    case .heaviestLoad:
+      if let previous = record.previousWeightKg {
+        return "\(Self.trim(record.weightKg)) kg, up from \(Self.trim(previous)) kg"
+      }
+      return "\(Self.trim(record.weightKg)) kg"
+    case .repsAtLoad:
+      if let previousReps = record.previousReps {
+        return "\(record.reps) reps at \(Self.trim(record.weightKg)) kg, up from \(previousReps)"
+      }
+      return "\(record.reps) reps at \(Self.trim(record.weightKg)) kg"
+    case .estimatedOneRepMax:
+      if let previous = record.previousWeightKg {
+        return "estimated, up from about \(Self.trim(previous)) kg"
+      }
+      return "estimated"
+    }
+  }
+
+  static func trim(_ value: Double) -> String {
+    value == value.rounded() ? String(Int(value)) : String(format: "%.1f", value)
   }
 
   private var summary: some View {

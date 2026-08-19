@@ -32,6 +32,9 @@ public final class SessionCoordinator {
   /// user's alternative is discovering it days later in their history.
   public private(set) var lastError: (any Error)?
   public private(set) var isFinished = false
+  /// Records set by the most recently logged set, or empty. Cleared on the next log so a
+  /// celebration cannot linger onto a set that did not earn it.
+  public private(set) var lastRecords: [PersonalRecord] = []
 
   private let store: LoggerStore
   private let now: () -> Date
@@ -256,6 +259,11 @@ public final class SessionCoordinator {
     guard !slot.isLogged else { return true }
 
     do {
+      // Read history BEFORE writing. Querying afterwards would include the set being tested, so
+      // a new best would be compared against itself and could never win.
+      let priorHistory =
+        (try? store.completedSets(for: exercise.progressionKey)) ?? []
+
       let setID = try store.logSet(
         sessionID: sessionID,
         exerciseID: exercise.exerciseID,
@@ -269,6 +277,20 @@ public final class SessionCoordinator {
       )
       exercises[exerciseIndex].markLogged(slotID: slotID, setID: setID)
       lastError = nil
+
+      // Records are announced only after a successful write, for the same reason the check mark
+      // is: a celebration for a set that was not saved is worse than no celebration.
+      if let resolved = slot.draft.resolved() {
+        lastRecords = PersonalRecordDetector.records(
+          for: .init(
+            weightKg: resolved.weightKg, reps: resolved.reps, isWarmup: slot.isWarmup
+          ),
+          history: priorHistory,
+          increment: exercise.machineIncrementKg
+        )
+      } else {
+        lastRecords = []
+      }
 
       // Warm-ups do not start a rest timer: the user is still warming up.
       if let restAfterSet, !slot.isWarmup {

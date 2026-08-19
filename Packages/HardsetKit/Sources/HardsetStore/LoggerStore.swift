@@ -206,6 +206,38 @@ public nonisolated struct LoggerStore {
     }
   }
 
+  /// Every completed working set for one exercise-and-machine, newest first.
+  ///
+  /// Used for record detection, which needs the all-time best rather than the most recent
+  /// session. Warm-ups are excluded in SQL: a heavy warm-up is not a record and not a benchmark.
+  /// Bounded, so a lifter with years of history does not pay for it on the tap path.
+  public func completedSets(
+    for key: ProgressionKey,
+    limit: Int = 1_000
+  ) throws -> [PriorSetRecord] {
+    try database.read { db in
+      let rows: [LoggedSet]
+      if let machineID = key.machineID?.rawValue {
+        rows = try LoggedSet
+          .where { $0.exerciseID.eq(key.exerciseID.rawValue) }
+          .where { $0.machineID.eq(machineID) }
+          .where { !$0.isWarmup }
+          .order { $0.completedAt.desc() }
+          .limit(limit)
+          .fetchAll(db)
+      } else {
+        rows = try LoggedSet
+          .where { $0.exerciseID.eq(key.exerciseID.rawValue) }
+          .where { $0.machineID.is(nil) }
+          .where { !$0.isWarmup }
+          .order { $0.completedAt.desc() }
+          .limit(limit)
+          .fetchAll(db)
+      }
+      return rows.map { PriorSetRecord(weightKg: $0.weightKg, reps: $0.reps, completedAt: $0.completedAt) }
+    }
+  }
+
   // MARK: - The one hoisted read
 
   /// Reads every exercise's history in a single query and returns it as an immutable value.

@@ -70,11 +70,16 @@ public enum StrengthMath {
   /// Display rounding. Never two decimals: a load estimate implying 10 g precision reads
   /// as a measurement, which is exactly the impression guideline 1.4.1 penalises.
   /// Kilograms round to the nearest 0.5; pounds to the nearest 1.
-  public static func displayRounded(_ kg: Double, imperial: Bool) -> Double {
-    if imperial {
-      let lb = kg * 2.2046226218
-      return (lb).rounded()
+  ///
+  /// Conversion goes through `WeightUnit` rather than a local factor. This function used to
+  /// carry its own `2.2046226218`, which is both a second definition of the pound and a
+  /// slightly different one from the defined 1/0.45359237 — exactly the divergence the
+  /// single-source-of-truth rule exists to prevent.
+  public static func displayRounded(_ kg: Double, in unit: WeightUnit) -> Double {
+    let displayed = unit.fromKilograms(kg)
+    switch unit {
+    case .pounds: return displayed.rounded()
+    case .kilograms: return (displayed * 2).rounded() / 2
     }
-    return (kg * 2).rounded() / 2
   }
 }

@@ -80,6 +80,7 @@ public struct LiveSessionScreen: View {
       restState: hooks.state(),
       restMetadata: restMetadata,
       errorMessage: errorMessage,
+      records: coordinator.lastRecords,
       onLogSet: { exerciseStateID, slot in
         coordinator.logSet(slotID: slot.id, inExercise: exerciseStateID)
       },

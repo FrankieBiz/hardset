@@ -64,11 +64,11 @@ struct StrengthMathTests {
   /// App Review guideline 1.4.1 penalises.
   @Test("Displayed loads are never rendered at two-decimal precision")
   func displayRounding() {
-    let kg = StrengthMath.displayRounded(116.6666666, imperial: false)
+    let kg = StrengthMath.displayRounded(116.6666666, in: .kilograms)
     #expect(kg == 116.5)
     #expect(kg * 2 == (kg * 2).rounded(), "kg must land on a 0.5 boundary")
 
-    let lb = StrengthMath.displayRounded(116.6666666, imperial: true)
+    let lb = StrengthMath.displayRounded(116.6666666, in: .pounds)
     #expect(lb == lb.rounded(), "lb must land on a whole number")
   }
 
