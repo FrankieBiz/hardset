@@ -111,24 +111,21 @@ public nonisolated struct CatalogSeeder {
   }
 }
 
-/// A selectable movement, as the picker sees it.
-public nonisolated struct CatalogEntry: Hashable, Sendable, Identifiable {
-  public let id: ExerciseID
-  public let name: String
-  public let slug: String?
-  public let isCurated: Bool
-  public let modality: ExerciseModality?
-  public let primaryMuscle: String
-  public let secondaryMuscles: [String]
-
-  init(row: Exercise) {
-    self.id = ExerciseID(rawValue: row.id)
-    self.name = row.name
-    self.slug = row.catalogSlug
-    self.isCurated = row.isCurated
-    self.modality = ExerciseModality(rawValue: row.modality)
-    self.primaryMuscle = row.primaryMuscle
-    self.secondaryMuscles =
-      (try? JSONDecoder().decode([String].self, from: Data(row.secondaryMusclesJSON.utf8))) ?? []
+/// Maps a stored row into the shared `CatalogEntry` value.
+///
+/// The value itself lives in `HardsetCore` so the picker can render it without `HardsetUI`
+/// depending on storage; this is the only place that knows about columns.
+extension CatalogEntry {
+  nonisolated init(row: Exercise) {
+    self.init(
+      id: ExerciseID(rawValue: row.id),
+      name: row.name,
+      slug: row.catalogSlug,
+      isCurated: row.isCurated,
+      modality: ExerciseModality(rawValue: row.modality),
+      primaryMuscle: row.primaryMuscle,
+      secondaryMuscles:
+        (try? JSONDecoder().decode([String].self, from: Data(row.secondaryMusclesJSON.utf8))) ?? []
+    )
   }
 }

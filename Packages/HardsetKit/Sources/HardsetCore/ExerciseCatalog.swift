@@ -468,3 +468,38 @@ public enum ExerciseCatalog {
   /// trusted, because a malformed literal here would fail at seed time on a user's device.
   public static var slugs: [String] { v1.map(\.slug) }
 }
+
+/// A selectable movement, as a picker sees it.
+///
+/// Lives here rather than in `HardsetStore` so the UI layer can render a list of movements
+/// without taking a dependency on the database. `HardsetStore` maps rows into it.
+public struct CatalogEntry: Hashable, Sendable, Identifiable {
+  public let id: ExerciseID
+  public let name: String
+  /// Present for curated movements, `nil` for ones the user created.
+  public let slug: String?
+  public let isCurated: Bool
+  /// `nil` when a stored row carries a modality this build does not know — a forward-compatible
+  /// unknown rather than a crash or a silent default.
+  public let modality: ExerciseModality?
+  public let primaryMuscle: String
+  public let secondaryMuscles: [String]
+
+  public init(
+    id: ExerciseID,
+    name: String,
+    slug: String?,
+    isCurated: Bool,
+    modality: ExerciseModality?,
+    primaryMuscle: String,
+    secondaryMuscles: [String]
+  ) {
+    self.id = id
+    self.name = name
+    self.slug = slug
+    self.isCurated = isCurated
+    self.modality = modality
+    self.primaryMuscle = primaryMuscle
+    self.secondaryMuscles = secondaryMuscles
+  }
+}
