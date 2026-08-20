@@ -34,19 +34,22 @@ public struct SetSlot: Hashable, Sendable, Identifiable {
 public struct ExerciseLogState: Hashable, Sendable, Identifiable {
   public let id: UUID
   public let exerciseID: ExerciseID
-  public let machineID: MachineID?
+  /// Mutable, because a lifter can find their usual machine occupied and move mid-exercise.
+  /// Changing it re-prefills the unlogged rows from the new machine's history — see
+  /// `changeMachine`.
+  public private(set) var machineID: MachineID?
   public let exerciseName: String
   /// Shown on the Lock Screen while resting, so the user knows which station they left.
-  public let machineName: String?
+  public private(set) var machineName: String?
   /// Set to the machine's real load step when known, so a suggested load is achievable.
   public let machineIncrementKg: Double?
   public var slots: [SetSlot]
   /// Set when the prefills came from the same exercise on *different* equipment. Surfaced to
   /// the user verbatim rather than silently: 80 kg on another brand's machine is not this
   /// machine's 80 kg, and pretending otherwise is the kind of quiet lie this app is against.
-  public let priorNote: String?
+  public private(set) var priorNote: String?
 
-  private let prior: PriorPerformance?
+  private var prior: PriorPerformance?
 
   public init(
     id: UUID = UUID(),
@@ -226,6 +229,31 @@ public struct ExerciseLogState: Hashable, Sendable, Identifiable {
     let suggestion: PriorSetRecord? =
       lastLoggedRecord() ?? prior?.suggestion(forSetIndex: index)
     slots.append(SetSlot(draft: SetEntryDraft(suggestion: suggestion), isWarmup: isWarmup))
+  }
+
+  /// Moves this exercise to a different machine mid-session.
+  ///
+  /// Already-logged rows are left exactly as they are: those sets were performed on the previous
+  /// machine, and rewriting them would be falsifying the record. Only the unlogged rows re-prefill,
+  /// from the new machine's history, because that is what the lifter is about to do.
+  ///
+  /// `prior` is the new machine's history, which only the store can supply — this type holds no
+  /// database handle and must not start pretending otherwise.
+  public mutating func changeMachine(
+    to machineID: MachineID?,
+    machineName: String?,
+    prior newPrior: PriorPerformance?,
+    priorNote newNote: String? = nil
+  ) {
+    self.machineID = machineID
+    self.machineName = machineName
+    self.prior = newPrior
+    self.priorNote = newNote
+
+    for index in slots.indices where !slots[index].isLogged {
+      let workingIndex = slots[..<index].count { !$0.isWarmup }
+      slots[index].draft = SetEntryDraft(suggestion: newPrior?.suggestion(forSetIndex: workingIndex))
+    }
   }
 
   /// Marks a row written. Ignores an unknown id rather than trapping — a stale callback from

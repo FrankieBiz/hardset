@@ -319,6 +319,43 @@ public final class SessionCoordinator {
     exercises[index].appendSlot(isWarmup: isWarmup)
   }
 
+  /// Moves an exercise to a different machine, re-prefilling from that machine's history.
+  ///
+  /// Reads history for just the new key. Logged sets keep the machine they were performed on,
+  /// because they were performed on it.
+  @discardableResult
+  public func changeMachine(
+    to machineID: MachineID?,
+    machineName: String?,
+    inExercise exerciseStateID: UUID
+  ) -> Bool {
+    guard let index = exercises.firstIndex(where: { $0.id == exerciseStateID }) else {
+      lastError = SessionCoordinatorError.unknownExercise
+      return false
+    }
+    let exercise = exercises[index]
+    let key = ProgressionKey(exerciseID: exercise.exerciseID, machineID: machineID)
+    do {
+      let snapshot = try store.priorPerformanceSnapshot(
+        for: [key], excluding: sessionID, asOf: now()
+      )
+      var prior = snapshot.prior(for: key)
+      var note: String?
+      if prior == nil, let fallback = snapshot.priorAllowingOtherMachines(for: key) {
+        prior = fallback.performance
+        if fallback.wasOtherMachine { note = "From another machine" }
+      }
+      exercises[index].changeMachine(
+        to: machineID, machineName: machineName, prior: prior, priorNote: note
+      )
+      lastError = nil
+      return true
+    } catch {
+      lastError = error
+      return false
+    }
+  }
+
   // MARK: - Finishing
 
   /// Closes the session. Refuses to double-finish, so `finishedAt` cannot drift.
