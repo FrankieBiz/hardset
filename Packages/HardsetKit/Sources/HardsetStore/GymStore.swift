@@ -158,3 +158,24 @@ public nonisolated struct GymStore {
     }
   }
 }
+
+extension GymStore {
+  /// The gym of the most recent session that recorded one.
+  ///
+  /// Used to preselect where the next workout is, because a lifter trains at the same place most
+  /// of the time and being asked every session is the kind of friction that makes people stop
+  /// recording the machine at all. Learned from what was logged rather than stored as a
+  /// preference, so there is no setting to go stale.
+  public func lastUsedGym() throws -> GymID? {
+    try database.read { db in
+      let row = try Session
+        .where { $0.gymID.isNot(nil) }
+        .order { $0.startedAt.desc() }
+        .fetchOne(db)
+      guard let raw = row?.gymID else { return nil }
+      // Archived gyms are not offered: the equipment list would be empty.
+      let live = try Gym.where { $0.id.eq(raw) }.where { !$0.isArchived }.fetchOne(db)
+      return live.map { GymID(rawValue: $0.id) }
+    }
+  }
+}

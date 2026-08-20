@@ -23,6 +23,7 @@ public struct SessionView: View {
   private let onPauseResumeRest: () -> Void
   private let onSkipRest: () -> Void
   private let onAddExercise: (() -> Void)?
+  private let onSelectMachine: ((UUID) -> Void)?
   private let onFinish: () -> Void
 
   public init(
@@ -37,6 +38,7 @@ public struct SessionView: View {
     onPauseResumeRest: @escaping () -> Void = {},
     onSkipRest: @escaping () -> Void = {},
     onAddExercise: (() -> Void)? = nil,
+    onSelectMachine: ((UUID) -> Void)? = nil,
     onFinish: @escaping () -> Void = {}
   ) {
     self._exercises = exercises
@@ -50,6 +52,7 @@ public struct SessionView: View {
     self.onPauseResumeRest = onPauseResumeRest
     self.onSkipRest = onSkipRest
     self.onAddExercise = onAddExercise
+    self.onSelectMachine = onSelectMachine
     self.onFinish = onFinish
   }
 
@@ -94,9 +97,14 @@ public struct SessionView: View {
         }
 
         ForEach($exercises) { $exercise in
-          ExerciseSectionView(state: $exercise, unit: unit) { slot in
-            onLogSet(exercise.id, slot)
-          }
+          ExerciseSectionView(
+            state: $exercise,
+            unit: unit,
+            onLogSet: { slot in onLogSet(exercise.id, slot) },
+            onSelectMachine: onSelectMachine.map { select in
+              { select(exercise.id) }
+            }
+          )
           .background(Tokens.Color.surface.opacity(0.4), in: RoundedRectangle(cornerRadius: Tokens.Radius.card))
           .padding(.horizontal, Tokens.Spacing.snug)
         }

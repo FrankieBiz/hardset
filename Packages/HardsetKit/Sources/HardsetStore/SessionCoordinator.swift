@@ -54,10 +54,18 @@ public final class SessionCoordinator {
   ///     training decision, and inventing 90 seconds here would be the app asserting something
   ///     it has no basis for.
   ///   - onStartRest: Where a rest request goes. Left empty in tests and in previews.
+  /// The gym this session is at, when one is known.
+  ///
+  /// Retained rather than re-read per render: the machine picker needs it to offer the rest of the
+  /// gym's equipment, and a view that queried for it on every body evaluation would hit the
+  /// database inside the logging path.
+  public private(set) var gymID: GymID?
+
   public init(
     store: LoggerStore,
     sessionID: SessionID,
     exercises: [ExerciseLogState],
+    gymID: GymID? = nil,
     now: @escaping () -> Date = { Date() },
     restAfterSet: Duration? = nil,
     onStartRest: @escaping (Duration, RestMetadata) -> Void = { _, _ in }
@@ -65,6 +73,7 @@ public final class SessionCoordinator {
     self.store = store
     self.sessionID = sessionID
     self.exercises = exercises
+    self.gymID = gymID
     self.now = now
     self.restAfterSet = restAfterSet
     self.onStartRest = onStartRest
@@ -124,6 +133,7 @@ public final class SessionCoordinator {
       store: store,
       sessionID: sessionID,
       exercises: states,
+      gymID: gymID,
       now: now,
       restAfterSet: restAfterSet,
       onStartRest: onStartRest
@@ -219,6 +229,8 @@ public final class SessionCoordinator {
       store: store,
       sessionID: session.id,
       exercises: states,
+      // Read back from the session row, so a recovered workout offers the same gym's equipment.
+      gymID: session.gymID,
       now: now,
       restAfterSet: restAfterSet,
       onStartRest: onStartRest

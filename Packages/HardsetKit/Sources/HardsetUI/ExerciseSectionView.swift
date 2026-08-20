@@ -14,15 +14,20 @@ public struct ExerciseSectionView: View {
   @Binding private var state: ExerciseLogState
   private let unit: WeightUnit
   private let onLogSet: (SetSlot) -> Void
+  private let onSelectMachine: (() -> Void)?
 
+  /// - Parameter onSelectMachine: Opens the machine picker. Passing `nil` hides the chip, which is
+  ///   correct when no gym is known — an affordance that opens an empty list is worse than none.
   public init(
     state: Binding<ExerciseLogState>,
     unit: WeightUnit,
-    onLogSet: @escaping (SetSlot) -> Void
+    onLogSet: @escaping (SetSlot) -> Void,
+    onSelectMachine: (() -> Void)? = nil
   ) {
     self._state = state
     self.unit = unit
     self.onLogSet = onLogSet
+    self.onSelectMachine = onSelectMachine
   }
 
   public var body: some View {
@@ -63,6 +68,9 @@ public struct ExerciseSectionView: View {
           .foregroundStyle(Tokens.Color.textSecondary)
           .monospacedDigit()
       }
+      if let onSelectMachine {
+        machineChip(action: onSelectMachine)
+      }
       if let note = state.priorNote {
         // Stated as a caveat about where the numbers came from, in words, once.
         Label(note, systemImage: "arrow.triangle.branch")
@@ -72,6 +80,42 @@ public struct ExerciseSectionView: View {
       }
     }
     .padding(.horizontal, Tokens.Spacing.regular)
+  }
+
+  /// Where per-machine tracking is actually reached.
+  ///
+  /// It sits in the header of the exercise being performed, one tap from the set rows, because the
+  /// only moment a lifter knows which machine they are on is while standing at it. Anywhere else —
+  /// a setup screen, a gym profile — and the field stays empty forever, which is what happened in
+  /// the ancestor app: the schema tracked machines, no screen ever set one, and every set was
+  /// logged against nothing.
+  ///
+  /// Unset reads as an invitation, never a warning. A set with no machine is a real set.
+  private func machineChip(action: @escaping () -> Void) -> some View {
+    Button(action: action) {
+      HStack(spacing: Tokens.Spacing.hairline) {
+        Image(systemName: state.machineID == nil ? "dumbbell" : "dumbbell.fill")
+        Text(state.machineName ?? "Choose machine")
+        if let increment = state.machineIncrementKg {
+          // Shown because it is the constraint on what a suggestion may propose.
+          Text("· \(Self.format(increment)) kg steps")
+        }
+      }
+      .font(Tokens.Text.caption)
+      .foregroundStyle(
+        state.machineID == nil ? Tokens.Color.textSecondary : Tokens.Color.accent
+      )
+      .frame(minHeight: Tokens.minimumTapTarget, alignment: .leading)
+      .contentShape(Rectangle())
+    }
+    .buttonStyle(.plain)
+    .accessibilityLabel(
+      state.machineName.map { "Machine: \($0). Change." } ?? "No machine recorded. Choose one."
+    )
+  }
+
+  static func format(_ value: Double) -> String {
+    value == value.rounded() ? String(Int(value)) : String(format: "%.1f", value)
   }
 
   private var addSetButton: some View {

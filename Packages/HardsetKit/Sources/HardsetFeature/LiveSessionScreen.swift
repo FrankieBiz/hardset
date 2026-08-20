@@ -3,6 +3,11 @@ import HardsetStore
 import HardsetUI
 import SwiftUI
 
+/// Identifies which exercise's machine picker is open.
+private struct MachineTarget: Identifiable, Hashable {
+  let id: UUID
+}
+
 /// Hooks the app supplies for the rest timer.
 ///
 /// This exists so the composition root can live in a package target that builds on the host.
@@ -53,24 +58,37 @@ public struct LiveSessionScreen: View {
   @State private var finishFailed = false
   @State private var pickerQuery = ""
   @State private var pickerEntries: [CatalogEntry] = []
+  /// The exercise whose machine is being chosen. Non-nil presents the picker.
+  ///
+  /// Wrapped rather than a bare `UUID` because `sheet(item:)` needs `Identifiable`, and retroactively
+  /// conforming a Foundation type to get it would leak that conformance to every importer.
+  @State private var machineTarget: MachineTarget?
+  @State private var machineOptions: (recent: [MachineOption], others: [MachineOption]) = ([], [])
+  @State private var newMachineName = ""
+  @State private var isAddingMachine = false
   private let unit: WeightUnit
   private let hooks: RestTimerHooks
   private let catalog: CatalogSeeder?
+  private let gyms: GymStore?
   private let onFinished: () -> Void
 
   /// - Parameter catalog: Supplies the picker. Passing `nil` hides the add-movement affordance
   ///   entirely rather than showing a button that opens an empty list.
+  /// - Parameter gyms: Supplies the machine picker. Passing `nil`, or running a session with no
+  ///   gym, hides the machine affordance — the same rule as the catalogue.
   public init(
     coordinator: SessionCoordinator,
     unit: WeightUnit,
     hooks: RestTimerHooks = .inert,
     catalog: CatalogSeeder? = nil,
+    gyms: GymStore? = nil,
     onFinished: @escaping () -> Void = {}
   ) {
     self._coordinator = State(initialValue: coordinator)
     self.unit = unit
     self.hooks = hooks
     self.catalog = catalog
+    self.gyms = gyms
     self.onFinished = onFinished
   }
 
@@ -94,6 +112,9 @@ public struct LiveSessionScreen: View {
         restMetadata = nil
       },
       onAddExercise: catalog == nil ? nil : { isPickerPresented = true },
+      // Offered only when there is a gym to attach equipment to. Machines belong to a gym, so
+      // without one there is nothing honest to put in the list.
+      onSelectMachine: canPickMachines ? { machineTarget = MachineTarget(id: $0) } : nil,
       onFinish: finish
     )
     .sheet(isPresented: $isPickerPresented) {
@@ -109,6 +130,94 @@ public struct LiveSessionScreen: View {
       // stays free of storage. The query is re-run on change instead of filtering in memory so a
       // user-created movement shows up without reopening the sheet.
       .task(id: pickerQuery) { refreshPicker() }
+    }
+    .sheet(item: $machineTarget) { wrapped in
+      let target = wrapped.id
+      NavigationStack {
+        MachinePickerView(
+          recent: machineOptions.recent,
+          others: machineOptions.others,
+          selected: coordinator.exercises.first { $0.id == target }?.machineID,
+          onSelect: { machineID in
+            selectMachine(machineID, forExercise: target)
+            machineTarget = nil
+          },
+          onAddMachine: { isAddingMachine = true }
+        )
+        .navigationTitle("Machine")
+        .toolbar {
+          ToolbarItem(placement: .cancellationAction) {
+            Button("Cancel") { machineTarget = nil }
+          }
+        }
+        // Named on the spot rather than in a setup flow, because the lifter is standing at the
+        // machine right now and will not be later.
+        .alert("Add a machine", isPresented: $isAddingMachine) {
+          TextField("Name or brand", text: $newMachineName)
+          Button("Cancel", role: .cancel) { newMachineName = "" }
+          Button("Add") { addMachine(forExercise: target) }
+        } message: {
+          Text("Whatever you'd recognise it by — \"Hammer Strength\" or \"the one by the window\".")
+        }
+      }
+      // Reloaded per presentation: what the lifter used most recently changes as they log.
+      .task(id: wrapped) { refreshMachines(forExercise: target) }
+    }
+  }
+
+  private var canPickMachines: Bool { gyms != nil && coordinator.gymID != nil }
+
+  /// Loads the picker's two lists, recency first.
+  ///
+  /// Split here rather than in the view so `MachinePickerView` keeps no storage dependency, and so
+  /// the ordering rule — the machine you last used this movement on is the one you are standing at
+  /// — lives in one place.
+  private func refreshMachines(forExercise target: UUID) {
+    guard let gyms, let gymID = coordinator.gymID,
+      let exercise = coordinator.exercises.first(where: { $0.id == target })
+    else { return }
+    do {
+      let recent = try gyms.recentMachines(for: exercise.exerciseID, at: gymID)
+      let recentIDs = Set(recent.map(\.id))
+      let others = try gyms.machines(at: gymID).filter { !recentIDs.contains($0.id) }
+      machineOptions = (recent.map(Self.option(for:)), others.map(Self.option(for:)))
+    } catch {
+      // An unreadable gym must not block logging. The picker shows only "Not recorded", which is
+      // a true statement about what can be offered rather than a fabricated list.
+      machineOptions = ([], [])
+    }
+  }
+
+  private static func option(for record: MachineRecord) -> MachineOption {
+    MachineOption(
+      id: record.id, displayName: record.displayName, stackIncrementKg: record.stackIncrementKg
+    )
+  }
+
+  private func selectMachine(_ machineID: MachineID?, forExercise target: UUID) {
+    let name =
+      machineID.flatMap { id in
+        (machineOptions.recent + machineOptions.others).first { $0.id == id }?.displayName
+      }
+    // The coordinator persists before it mutates memory, and reads the increment from the machines
+    // table itself, so nothing here needs to know either.
+    _ = coordinator.changeMachine(to: machineID, machineName: name, inExercise: target)
+  }
+
+  private func addMachine(forExercise target: UUID) {
+    let name = newMachineName.trimmingCharacters(in: .whitespacesAndNewlines)
+    newMachineName = ""
+    guard let gyms, let gymID = coordinator.gymID, !name.isEmpty else { return }
+    do {
+      let machineID = try gyms.createMachine(at: gymID, name: name)
+      // Selected immediately: adding one and then having to find it in a list is a second decision
+      // for no reason. The stack step is left unknown rather than guessed — an invented increment
+      // would licence progression suggestions the equipment cannot honour.
+      refreshMachines(forExercise: target)
+      _ = coordinator.changeMachine(to: machineID, machineName: name, inExercise: target)
+    } catch {
+      // Nothing was created, so nothing is selected and the list is unchanged. Silent because the
+      // user's next tap is the retry, and a modal error over a modal picker is worse than none.
     }
   }
 

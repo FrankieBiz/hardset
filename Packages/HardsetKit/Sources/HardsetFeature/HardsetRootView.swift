@@ -16,6 +16,7 @@ public struct HardsetEnvironment {
   public let volume: VolumeStore
   public let history: HistoryStore
   public let progression: ProgressionStore
+  public let gyms: GymStore
 
   public init(database: any DatabaseWriter) {
     self.logger = LoggerStore(database: database)
@@ -23,6 +24,7 @@ public struct HardsetEnvironment {
     self.volume = VolumeStore(database: database)
     self.history = HistoryStore(database: database)
     self.progression = ProgressionStore(database: database)
+    self.gyms = GymStore(database: database)
   }
 }
 
@@ -37,6 +39,13 @@ public struct HardsetEnvironment {
 public struct HardsetRootView: View {
   @State private var coordinator: SessionCoordinator?
   @State private var startFailed = false
+  /// Where the next workout will be. Preselected from the last one, changeable in one tap, and
+  /// allowed to stay nil — training somewhere new must not require setup first.
+  @State private var selectedGym: GymID?
+  @State private var gymOptions: [GymRecord] = []
+  @State private var isChoosingGym = false
+  @State private var isAddingGym = false
+  @State private var newGymName = ""
   private let environment: HardsetEnvironment
   private let unit: WeightUnit
   private let hooks: RestTimerHooks
@@ -69,6 +78,7 @@ public struct HardsetRootView: View {
             onStartRest: { duration, metadata in hooks.start(duration, metadata) }
           )
         }
+        refreshGyms()
       }
   }
 
@@ -109,6 +119,7 @@ public struct HardsetRootView: View {
         unit: unit,
         hooks: hooks,
         catalog: environment.catalog,
+        gyms: environment.gyms,
         onFinished: { self.coordinator = nil }
       )
       .navigationTitle("Workout")
@@ -124,6 +135,8 @@ public struct HardsetRootView: View {
       } description: {
         Text("Start an empty workout and add movements as you go.")
       }
+      gymRow
+
       Button(action: startEmptyWorkout) {
         Text("Start workout")
           .font(Tokens.Text.label.weight(.semibold))
@@ -142,6 +155,127 @@ public struct HardsetRootView: View {
     }
     .frame(maxWidth: .infinity, maxHeight: .infinity)
     .background(Tokens.Color.background)
+    .sheet(isPresented: $isChoosingGym) { gymSheet }
+    .alert("Add a gym", isPresented: $isAddingGym) {
+      TextField("Name", text: $newGymName)
+      Button("Cancel", role: .cancel) { newGymName = "" }
+      Button("Add", action: addGym)
+    }
+  }
+
+  /// Sets where this workout is, which is what makes per-machine tracking reachable at all: a
+  /// machine belongs to a gym, so a session with no gym can only ever log `machineID == nil`.
+  ///
+  /// Stated as one line rather than a required step. It is preselected from the last gym used, so
+  /// the common case — training at the same place — costs nothing.
+  private var gymRow: some View {
+    Button {
+      isChoosingGym = true
+    } label: {
+      HStack(spacing: Tokens.Spacing.snug) {
+        Image(systemName: "mappin.and.ellipse")
+        Text(selectedGymName ?? "Add a gym to track machines")
+        Spacer(minLength: 0)
+        Image(systemName: "chevron.right")
+          .font(Tokens.Text.caption)
+      }
+      .font(Tokens.Text.caption)
+      .foregroundStyle(
+        selectedGymName == nil ? Tokens.Color.textSecondary : Tokens.Color.textPrimary
+      )
+      .frame(minHeight: Tokens.minimumTapTarget)
+      .padding(.horizontal, Tokens.Spacing.regular)
+      .contentShape(Rectangle())
+    }
+    .buttonStyle(.plain)
+    .padding(.horizontal, Tokens.Spacing.section)
+  }
+
+  private var selectedGymName: String? {
+    selectedGym.flatMap { id in gymOptions.first { $0.id == id }?.name }
+  }
+
+  private var gymSheet: some View {
+    NavigationStack {
+      List {
+        Section {
+          ForEach(gymOptions) { gym in
+            Button {
+              selectedGym = gym.id
+              isChoosingGym = false
+            } label: {
+              HStack {
+                Text(gym.name).foregroundStyle(Tokens.Color.textPrimary)
+                Spacer()
+                if selectedGym == gym.id {
+                  Image(systemName: "checkmark").foregroundStyle(Tokens.Color.accent)
+                }
+              }
+              .frame(minHeight: Tokens.minimumTapTarget)
+              .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+          }
+        } footer: {
+          Text("Loads are tracked per machine, and machines belong to a gym.")
+        }
+
+        Section {
+          Button {
+            // Not recorded stays available: someone training at home or travelling should not be
+            // made to invent a gym to log a set.
+            selectedGym = nil
+            isChoosingGym = false
+          } label: {
+            HStack {
+              Text("Not recorded").foregroundStyle(Tokens.Color.textSecondary)
+              Spacer()
+              if selectedGym == nil {
+                Image(systemName: "checkmark").foregroundStyle(Tokens.Color.accent)
+              }
+            }
+            .frame(minHeight: Tokens.minimumTapTarget)
+            .contentShape(Rectangle())
+          }
+          .buttonStyle(.plain)
+
+          Button { isAddingGym = true } label: {
+            Label("Add a gym", systemImage: "plus")
+              .frame(minHeight: Tokens.minimumTapTarget)
+          }
+          .buttonStyle(.plain)
+          .foregroundStyle(Tokens.Color.accent)
+        }
+      }
+      .navigationTitle("Where are you training?")
+      .toolbar {
+        ToolbarItem(placement: .confirmationAction) {
+          Button("Done") { isChoosingGym = false }
+        }
+      }
+    }
+  }
+
+  private func refreshGyms() {
+    gymOptions = (try? environment.gyms.gyms()) ?? []
+    // Preselected from behaviour, not from a stored setting that could disagree with reality.
+    if selectedGym == nil {
+      selectedGym = try? environment.gyms.lastUsedGym()
+    }
+    // A gym that has since been archived must not stay selected invisibly.
+    if let selectedGym, !gymOptions.contains(where: { $0.id == selectedGym }) {
+      self.selectedGym = nil
+    }
+  }
+
+  private func addGym() {
+    let name = newGymName.trimmingCharacters(in: .whitespacesAndNewlines)
+    newGymName = ""
+    guard !name.isEmpty else { return }
+    guard let id = try? environment.gyms.createGym(name: name) else { return }
+    refreshGyms()
+    selectedGym = id
+    isChoosingGym = false
   }
 
   private func startEmptyWorkout() {
@@ -150,6 +284,7 @@ public struct HardsetRootView: View {
       // yet. Movements are added from the picker as the lifter goes.
       coordinator = try SessionCoordinator.start(
         store: environment.logger,
+        gymID: selectedGym,
         plan: [],
         restAfterSet: restAfterSet,
         hooks: hooks
