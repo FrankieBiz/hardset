@@ -120,6 +120,7 @@ public struct HardsetRootView: View {
         hooks: hooks,
         catalog: environment.catalog,
         gyms: environment.gyms,
+        progression: environment.progression,
         onFinished: { self.coordinator = nil }
       )
       .navigationTitle("Workout")

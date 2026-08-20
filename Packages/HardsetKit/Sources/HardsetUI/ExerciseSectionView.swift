@@ -15,19 +15,23 @@ public struct ExerciseSectionView: View {
   private let unit: WeightUnit
   private let onLogSet: (SetSlot) -> Void
   private let onSelectMachine: (() -> Void)?
+  private let onShowHistory: (() -> Void)?
 
   /// - Parameter onSelectMachine: Opens the machine picker. Passing `nil` hides the chip, which is
   ///   correct when no gym is known — an affordance that opens an empty list is worse than none.
+  /// - Parameter onShowHistory: Opens this movement's load history. `nil` leaves the name inert.
   public init(
     state: Binding<ExerciseLogState>,
     unit: WeightUnit,
     onLogSet: @escaping (SetSlot) -> Void,
-    onSelectMachine: (() -> Void)? = nil
+    onSelectMachine: (() -> Void)? = nil,
+    onShowHistory: (() -> Void)? = nil
   ) {
     self._state = state
     self.unit = unit
     self.onLogSet = onLogSet
     self.onSelectMachine = onSelectMachine
+    self.onShowHistory = onShowHistory
   }
 
   public var body: some View {
@@ -60,8 +64,30 @@ public struct ExerciseSectionView: View {
   private var header: some View {
     VStack(alignment: .leading, spacing: Tokens.Spacing.tight) {
       HStack(alignment: .firstTextBaseline) {
-        Text(state.exerciseName)
-          .font(Tokens.Text.label.weight(.semibold))
+        // The name is the way into this movement's load history. Placed here because "how have I
+        // been doing on this" is a question asked while standing at the machine, and a chart
+        // buried in a separate browse tab does not get looked at mid-set.
+        Button {
+          onShowHistory?()
+        } label: {
+          HStack(spacing: Tokens.Spacing.tight) {
+            Text(state.exerciseName)
+              .font(Tokens.Text.label.weight(.semibold))
+              .foregroundStyle(Tokens.Color.textPrimary)
+            if onShowHistory != nil {
+              Image(systemName: "chart.xyaxis.line")
+                .font(Tokens.Text.caption)
+                .foregroundStyle(Tokens.Color.accent)
+            }
+          }
+          .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .disabled(onShowHistory == nil)
+        .accessibilityLabel(
+          onShowHistory == nil
+            ? state.exerciseName : "\(state.exerciseName). Show load history."
+        )
         Spacer()
         Text(progressDescription)
           .font(Tokens.Text.caption)

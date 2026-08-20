@@ -65,7 +65,8 @@ let package = Package(
     .target(
       name: "HardsetUI",
       dependencies: ["HardsetCore"],
-      resources: [.process("Resources")],
+      // No resources on purpose. The two dynamic colours these used to hold are now code (see
+      // `Tokens.Color`), which removes an asset-catalogue build step that failed outright.
       swiftSettings: mainActorByDefault
     ),
 

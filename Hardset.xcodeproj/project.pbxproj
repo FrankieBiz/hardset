@@ -13,6 +13,7 @@
 		65342E8704866A7FA63B7D7F /* PrivacyInfo.xcprivacy in Hardset */ = {isa = PBXBuildFile; fileRef = 9DA6D3A9523128D8236A0547 /* PrivacyInfo.xcprivacy */; };
 		EB0E7800B3B9CBC55200705F /* Assets.xcassets in Hardset */ = {isa = PBXBuildFile; fileRef = 2872DB59AAC00898EC5AC167 /* Assets.xcassets */; };
 		27CF9CF3EE27D125AC53CB48 /* HardsetCore */ = {isa = PBXBuildFile; productRef = 299DED104025EEA646ADE2F4 /* HardsetCore */; };
+		A1F0C0DE0000000000000001 /* HardsetFeature */ = {isa = PBXBuildFile; productRef = A1F0C0DE0000000000000002 /* HardsetFeature */; };
 		5F3D50D2DE60064848672CE0 /* HardsetStore */ = {isa = PBXBuildFile; productRef = 4BD04F50D3691F17448149E4 /* HardsetStore */; };
 		54B81466C42A28C826A1B775 /* HardsetUI */ = {isa = PBXBuildFile; productRef = B8FEB24B1C5CAB855B8DA0C1 /* HardsetUI */; };
 		5F3D50D2DE6006470B5A43E0 /* HardsetAlarm */ = {isa = PBXBuildFile; productRef = 4BD04F50D3691F16077460E4 /* HardsetAlarm */; };
@@ -76,6 +77,10 @@
 /* End XCLocalSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
+		A1F0C0DE0000000000000002 /* HardsetFeature */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = HardsetFeature;
+		};
 		299DED104025EEA646ADE2F4 /* HardsetCore */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = HardsetCore;
@@ -119,6 +124,7 @@
 				5F3D50D2DE60064848672CE0 /* HardsetStore */,
 				54B81466C42A28C826A1B775 /* HardsetUI */,
 				5F3D50D2DE6006470B5A43E0 /* HardsetAlarm */,
+				A1F0C0DE0000000000000001 /* HardsetFeature */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -215,6 +221,7 @@
 				4BD04F50D3691F17448149E4 /* HardsetStore */,
 				B8FEB24B1C5CAB855B8DA0C1 /* HardsetUI */,
 				4BD04F50D3691F16077460E4 /* HardsetAlarm */,
+				A1F0C0DE0000000000000002 /* HardsetFeature */,
 			);
 			productName = Hardset;
 			productReference = C0DD8C9D659EAB28228ED87D /* Hardset.app */;

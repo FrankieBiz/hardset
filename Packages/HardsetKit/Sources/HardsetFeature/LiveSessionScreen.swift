@@ -68,8 +68,10 @@ public struct LiveSessionScreen: View {
   @State private var isAddingMachine = false
   private let unit: WeightUnit
   private let hooks: RestTimerHooks
+  @State private var historyTarget: MachineTarget?
   private let catalog: CatalogSeeder?
   private let gyms: GymStore?
+  private let progression: ProgressionStore?
   private let onFinished: () -> Void
 
   /// - Parameter catalog: Supplies the picker. Passing `nil` hides the add-movement affordance
@@ -82,6 +84,7 @@ public struct LiveSessionScreen: View {
     hooks: RestTimerHooks = .inert,
     catalog: CatalogSeeder? = nil,
     gyms: GymStore? = nil,
+    progression: ProgressionStore? = nil,
     onFinished: @escaping () -> Void = {}
   ) {
     self._coordinator = State(initialValue: coordinator)
@@ -89,6 +92,7 @@ public struct LiveSessionScreen: View {
     self.hooks = hooks
     self.catalog = catalog
     self.gyms = gyms
+    self.progression = progression
     self.onFinished = onFinished
   }
 
@@ -115,6 +119,7 @@ public struct LiveSessionScreen: View {
       // Offered only when there is a gym to attach equipment to. Machines belong to a gym, so
       // without one there is nothing honest to put in the list.
       onSelectMachine: canPickMachines ? { machineTarget = MachineTarget(id: $0) } : nil,
+      onShowHistory: progression == nil ? nil : { historyTarget = MachineTarget(id: $0) },
       onFinish: finish
     )
     .sheet(isPresented: $isPickerPresented) {
@@ -162,6 +167,24 @@ public struct LiveSessionScreen: View {
       }
       // Reloaded per presentation: what the lifter used most recently changes as they log.
       .task(id: wrapped) { refreshMachines(forExercise: target) }
+    }
+    .sheet(item: $historyTarget) { wrapped in
+      if let progression, let exercise = coordinator.exercises.first(where: { $0.id == wrapped.id })
+      {
+        NavigationStack {
+          ExerciseProgressScreen(
+            store: progression,
+            exerciseID: exercise.exerciseID,
+            exerciseName: exercise.exerciseName,
+            unit: unit
+          )
+          .toolbar {
+            ToolbarItem(placement: .confirmationAction) {
+              Button("Done") { historyTarget = nil }
+            }
+          }
+        }
+      }
     }
   }
 
