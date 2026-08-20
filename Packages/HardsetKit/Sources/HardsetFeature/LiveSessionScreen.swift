@@ -243,6 +243,9 @@ public struct LiveSessionScreen: View {
       // would licence progression suggestions the equipment cannot honour.
       refreshMachines(forExercise: target)
       _ = coordinator.changeMachine(to: machineID, machineName: name, inExercise: target)
+      // Dismissed, like choosing an existing machine does. Leaving the picker open after the
+      // decision has been made asks the lifter to confirm something twice.
+      machineTarget = nil
     } catch {
       // Nothing was created, so nothing is selected and the list is unchanged. Silent because the
       // user's next tap is the retry, and a modal error over a modal picker is worse than none.

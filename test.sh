@@ -14,7 +14,7 @@ swift test --disable-sandbox --skip "SyncDelegateTests" \
   --skip "SyncEngineRetentionTests" || FAIL=1
 
 for t in signOutPreservesData switchAccountsPreservesData accountChangeIsReported \
-  retainedEngineAllowsWrites releasedEngineBreaksWrites; do
+  retainedEngineAllowsWrites; do
   echo "=== $t (isolated process) ==="
   swift test --disable-sandbox --filter "$t" || FAIL=1
 done

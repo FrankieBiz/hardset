@@ -59,26 +59,12 @@ struct SyncEngineRetentionTests {
     }
   }
 
-  @Test("A released engine leaves them unwritable, which is why the app must hold it")
-  func releasedEngineBreaksWrites() async throws {
-    try await withDependencies {
-      $0.context = .test
-    } operation: {
-      let database = try migratedDatabase()
-      let delegate = HardsetSyncDelegate()
-      do {
-        let engine = try HardsetDatabase.makeSyncEngine(
-          for: database, delegate: delegate, containerIdentifier: uniqueContainer()
-        )
-        try insertGym(database)
-        withExtendedLifetime(engine) {}
-      }
-      // The engine is gone; its triggers are not.
-      #expect(throws: (any Error).self) {
-        try insertGym(database)
-      }
-      let count = try database.read { try Gym.count().fetchOne($0) }
-      #expect(count == 1, "the second write did not land, which is the whole point")
-    }
-  }
+  // There is deliberately NO test asserting that a RELEASED engine breaks writes, though the
+  // failing behaviour is real and is what the app hit. It was written, and it was flaky: whether
+  // the next INSERT throws depends on when the engine is actually deallocated and on what its
+  // `deinit` has torn down by then, neither of which a test can pin. It passed, then failed on a
+  // later run with the write succeeding — so it was removed rather than left to fail at random.
+  //
+  // The guard against the original bug is therefore the compiler: `makeSyncEngine` is not
+  // `@discardableResult`, so dropping the engine is a warning at the call site.
 }
