@@ -188,7 +188,8 @@ struct SessionRecoveryTests {
 
     let entry = CatalogEntry(
       id: curl, name: "Leg Curl", slug: "seated-leg-curl", isCurated: true,
-      modality: .machine, primaryMuscle: "hamstrings", secondaryMuscles: []
+      modality: .machine, primaryMuscle: MuscleKey(.hamstrings),
+      contributions: [.init(.hamstrings, role: .direct, certainty: .moderate, source: .anatomy)]
     )
     #expect(live.addExercise(entry, plannedSets: 2))
     #expect(live.exercises.count == 2)

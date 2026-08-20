@@ -40,8 +40,8 @@ public struct ExercisePickerView: View {
           )
         }
       } else {
-        ForEach(groups, id: \.muscle) { group in
-          Section(Self.title(for: group.muscle)) {
+        ForEach(groups) { group in
+          Section(sectionTitle(group.key)) {
             ForEach(group.entries) { entry in
               row(entry)
             }
@@ -61,8 +61,10 @@ public struct ExercisePickerView: View {
           Text(entry.name)
             .font(Tokens.Text.label)
             .foregroundStyle(Tokens.Color.textPrimary)
-          if !entry.secondaryMuscles.isEmpty {
-            Text("also \(entry.secondaryMuscles.map(Self.title(for:)).joined(separator: ", "))")
+          // Credited muscles only. Grip and bracing are stabilisers and are deliberately not
+          // listed here: showing them as "also trains" is the claim the role split exists to stop.
+          if !supportingText(for: entry).isEmpty {
+            Text(supportingText(for: entry))
               .font(Tokens.Text.caption)
               .foregroundStyle(Tokens.Color.textSecondary)
               .lineLimit(1)
@@ -92,48 +94,68 @@ public struct ExercisePickerView: View {
     .accessibilityHint("Double tap to add to this workout.")
   }
 
-  private struct Group {
-    let muscle: String
+  private struct Group: Identifiable {
+    let key: MuscleKey
     let entries: [CatalogEntry]
+    var id: String { key.storedValue }
   }
 
-  /// Muscles ordered by how they appear in a body, not alphabetically, so scanning the list
-  /// mirrors how a lifter reads their own plan.
-  private static let muscleOrder = [
-    "chest", "lats", "upperBack", "traps", "frontDelts", "sideDelts", "rearDelts",
-    "biceps", "triceps", "forearms", "quadriceps", "hamstrings", "glutes", "calves",
-    "abs", "lowerBack",
-  ]
-
+  /// Grouped by the muscle a movement primarily trains, ordered by the vocabulary's own
+  /// declaration order.
+  ///
+  /// The hand-maintained `muscleOrder` array this replaced was a second source of truth that could
+  /// silently omit a token — a new muscle would have sorted last with no warning. `Muscle.allCases`
+  /// cannot drift from the enum.
   private var groups: [Group] {
     let grouped = Dictionary(grouping: entries, by: \.primaryMuscle)
+    let index = Dictionary(uniqueKeysWithValues: Muscle.allCases.enumerated().map { ($1, $0) })
     return grouped
-      .map { Group(muscle: $0.key, entries: $0.value.sorted { $0.name < $1.name }) }
+      .map { Group(key: $0.key, entries: $0.value.sorted { $0.name < $1.name }) }
       .sorted { lhs, rhs in
-        let l = Self.muscleOrder.firstIndex(of: lhs.muscle) ?? Self.muscleOrder.count
-        let r = Self.muscleOrder.firstIndex(of: rhs.muscle) ?? Self.muscleOrder.count
-        // Anything unrecognised sorts last, alphabetically, rather than being hidden.
-        return l == r ? lhs.muscle < rhs.muscle : l < r
+        // Unrecognised and unattributed tokens sort last rather than being hidden: a row nobody
+        // has attributed is a data problem to see.
+        let l = lhs.key.muscle.map { index[$0] ?? Int.max } ?? Int.max
+        let r = rhs.key.muscle.map { index[$0] ?? Int.max } ?? Int.max
+        if l != r { return l < r }
+        return lhs.key.storedValue < rhs.key.storedValue
       }
   }
 
-  /// Turns a stored muscle key into words. An unrecognised key is shown as-is rather than being
-  /// dropped — an unknown muscle is a data problem to see, not to hide.
-  static func title(for muscle: String) -> String {
-    switch muscle {
-    case "upperBack": "Upper back"
-    case "lowerBack": "Lower back"
-    case "frontDelts": "Front delts"
-    case "sideDelts": "Side delts"
-    case "rearDelts": "Rear delts"
-    case "lats": "Lats"
-    case "abs": "Abs"
-    default: muscle.prefix(1).uppercased() + muscle.dropFirst()
-    }
+  /// Section title. Comes from the vocabulary, so there is no title-casing fallback that would
+  /// make an unrecognised token look like an authored muscle name.
+  private func sectionTitle(_ key: MuscleKey) -> String {
+    Self.displayName(key)
   }
 
+  private func supportingText(for entry: CatalogEntry) -> String {
+    let others = entry.creditedMuscles.filter { $0.key != entry.primaryMuscle }
+    guard !others.isEmpty else { return "" }
+    return "also " + others.map { Self.displayName($0.key) }.joined(separator: ", ")
+  }
+
+  /// Placeholder resolution of the String Catalog key.
+  ///
+  /// The real lookup is `String(localized:)` once a catalog exists; until then this is the ONE
+  /// place that turns a key into words, so localisation is a change here and nowhere else. It
+  /// deliberately does not title-case an unknown raw value.
+  static func displayName(_ key: MuscleKey) -> String {
+    if let muscle = key.muscle { return Self.copy[muscle] ?? muscle.rawValue }
+    return key.isReservedSentinel ? "Not attributed" : "Not recognised"
+  }
+
+  private static let copy: [Muscle: String] = [
+    .chest: "Chest", .frontDelts: "Front delts", .sideDelts: "Side delts",
+    .rearDelts: "Rear delts", .rotatorCuff: "Rotator cuff", .lats: "Lats",
+    .upperBack: "Upper back", .traps: "Traps", .lowerBack: "Lower back",
+    .biceps: "Biceps", .triceps: "Triceps", .forearms: "Forearms",
+    .abs: "Abs", .obliques: "Obliques", .neck: "Neck",
+    .quadriceps: "Quads", .hamstrings: "Hamstrings", .glutes: "Glutes",
+    .adductors: "Adductors", .hipAbductors: "Hip abductors",
+    .gastrocnemius: "Gastrocnemius", .soleus: "Soleus",
+  ]
+
   static func spokenLabel(for entry: CatalogEntry) -> String {
-    var parts = [entry.name, title(for: entry.primaryMuscle)]
+    var parts = [entry.name, displayName(entry.primaryMuscle)]
     if let modality = entry.modality { parts.append(modality.label) }
     if !entry.isCurated { parts.append("your own movement") }
     return parts.joined(separator: ", ")
@@ -146,22 +168,12 @@ public struct ExercisePickerView: View {
       @State private var query = ""
 
       private var entries: [CatalogEntry] {
-        ExerciseCatalog.v1.compactMap { entry in
-          guard let uuid = entry.uuid else { return nil }
-          return CatalogEntry(
-            id: ExerciseID(rawValue: uuid),
-            name: entry.name,
-            slug: entry.slug,
-            isCurated: true,
-            modality: entry.modality,
-            primaryMuscle: entry.primaryMuscle,
-            secondaryMuscles: entry.secondaryMuscles
-          )
-        }
-        .filter {
-          query.isEmpty
-            || $0.name.range(of: query, options: [.caseInsensitive, .diacriticInsensitive]) != nil
-        }
+        ExerciseCatalog.v1
+          .compactMap(\.catalogEntry)
+          .filter {
+            query.isEmpty
+              || $0.name.range(of: query, options: [.caseInsensitive, .diacriticInsensitive]) != nil
+          }
       }
 
       var body: some View {

@@ -31,12 +31,16 @@ public nonisolated struct CatalogSeeder {
     try database.write { db in
       for entry in catalogue {
         guard let uuid = entry.uuid else {
-          // A malformed literal is a programmer error, caught by `CatalogTests`. Skipping is
+          // A malformed literal is a programmer error, caught by `ExerciseCatalogTests`. Skipping is
           // still better than trapping in a user's launch path.
           continue
         }
         let existing = try Exercise.where { $0.id.eq(uuid) }.fetchOne(db)
-        let secondaryJSON = Self.encode(entry.secondaryMuscles)
+        // The object grammar, always. The previous reader was a bare `[String]` decode, which
+        // throws on the whole array for one non-string element and therefore returns []. A build
+        // shipped with that reader would see every object-grammar row as "no muscles at all",
+        // silently zeroing every indirect credit, permanently, for those installs.
+        let attributionJSON = MuscleColumn.encode(entry.contributions)
 
         if existing == nil {
           try Exercise.insert {
@@ -46,8 +50,8 @@ public nonisolated struct CatalogSeeder {
               catalogSlug: entry.slug,
               isCurated: true,
               modality: entry.modality.rawValue,
-              primaryMuscle: entry.primaryMuscle,
-              secondaryMusclesJSON: secondaryJSON,
+              primaryMuscle: entry.primaryMuscle.rawValue,
+              secondaryMusclesJSON: attributionJSON,
               notes: "",
               isArchived: false,
               createdAt: now
@@ -64,8 +68,8 @@ public nonisolated struct CatalogSeeder {
               $0.catalogSlug = #bind(entry.slug)
               $0.isCurated = #bind(true)
               $0.modality = #bind(entry.modality.rawValue)
-              $0.primaryMuscle = #bind(entry.primaryMuscle)
-              $0.secondaryMusclesJSON = #bind(secondaryJSON)
+              $0.primaryMuscle = #bind(entry.primaryMuscle.rawValue)
+              $0.secondaryMusclesJSON = #bind(attributionJSON)
             }
             .execute(db)
         }
@@ -103,12 +107,6 @@ public nonisolated struct CatalogSeeder {
     }
   }
 
-  private static func encode(_ muscles: [String]) -> String {
-    guard let data = try? JSONEncoder().encode(muscles),
-      let json = String(data: data, encoding: .utf8)
-    else { return "[]" }
-    return json
-  }
 }
 
 /// Maps a stored row into the shared `CatalogEntry` value.
@@ -117,15 +115,17 @@ public nonisolated struct CatalogSeeder {
 /// depending on storage; this is the only place that knows about columns.
 extension CatalogEntry {
   nonisolated init(row: Exercise) {
+    let decoded = MuscleColumn.decodeContributions(row.secondaryMusclesJSON)
     self.init(
       id: ExerciseID(rawValue: row.id),
       name: row.name,
       slug: row.catalogSlug,
       isCurated: row.isCurated,
       modality: ExerciseModality(rawValue: row.modality),
-      primaryMuscle: row.primaryMuscle,
-      secondaryMuscles:
-        (try? JSONDecoder().decode([String].self, from: Data(row.secondaryMusclesJSON.utf8))) ?? []
+      primaryMuscle: MuscleColumn.decodePrimary(row.primaryMuscle),
+      contributions: decoded.contributions,
+      // Carried, not dropped. The decoder is only safe because its failures travel with the value.
+      unreadableEntryCount: decoded.unreadableEntryCount
     )
   }
 }
