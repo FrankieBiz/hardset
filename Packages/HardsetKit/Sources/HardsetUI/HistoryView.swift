@@ -1,0 +1,185 @@
+import HardsetCore
+import SwiftUI
+
+/// A row's worth of a past session, with no dependency on storage.
+public struct HistoryRow: Hashable, Sendable, Identifiable {
+  public let id: SessionID
+  public let title: String
+  public let date: Date
+  public let duration: Duration?
+  public let exerciseNames: [String]
+  public let volume: SessionVolume
+  /// A recorded span longer than any real workout. Rendered as a caveat rather than a boast.
+  public let hasImplausibleDuration: Bool
+
+  public init(
+    id: SessionID,
+    title: String,
+    date: Date,
+    duration: Duration?,
+    exerciseNames: [String],
+    volume: SessionVolume,
+    hasImplausibleDuration: Bool
+  ) {
+    self.id = id
+    self.title = title
+    self.date = date
+    self.duration = duration
+    self.exerciseNames = exerciseNames
+    self.volume = volume
+    self.hasImplausibleDuration = hasImplausibleDuration
+  }
+}
+
+/// Past workouts, newest first.
+///
+/// The one thing this screen must not do is present a broken record as an achievement. The
+/// ancestor app shipped 9,749-minute workouts here — a session left running overnight, its
+/// duration recomputed against the wall clock — and rendered them as personal bests. A session
+/// whose recorded span is longer than any real workout is shown with the span replaced by a
+/// caveat, because the honest thing to say is "we do not know how long this took", not "20 hours".
+public struct HistoryView: View {
+  private let rows: [HistoryRow]
+  private let unit: WeightUnit
+  private let onSelect: ((HistoryRow) -> Void)?
+
+  public init(
+    rows: [HistoryRow],
+    unit: WeightUnit,
+    onSelect: ((HistoryRow) -> Void)? = nil
+  ) {
+    self.rows = rows
+    self.unit = unit
+    self.onSelect = onSelect
+  }
+
+  public var body: some View {
+    List {
+      if rows.isEmpty {
+        ContentUnavailableView {
+          Label("No workouts yet", systemImage: "clock.arrow.circlepath")
+        } description: {
+          Text("Finished workouts appear here.")
+        }
+      } else {
+        ForEach(rows) { row in
+          Button {
+            onSelect?(row)
+          } label: {
+            content(row)
+          }
+          .buttonStyle(.plain)
+          .disabled(onSelect == nil)
+        }
+      }
+    }
+  }
+
+  private func content(_ row: HistoryRow) -> some View {
+    VStack(alignment: .leading, spacing: Tokens.Spacing.tight) {
+      HStack(alignment: .firstTextBaseline) {
+        Text(row.title.isEmpty ? Self.dateText(row.date) : row.title)
+          .font(Tokens.Text.label.weight(.semibold))
+        Spacer(minLength: Tokens.Spacing.snug)
+        durationLabel(row)
+      }
+
+      if !row.title.isEmpty {
+        Text(Self.dateText(row.date))
+          .font(Tokens.Text.caption)
+          .foregroundStyle(Tokens.Color.textSecondary)
+      }
+
+      Text(Self.volumeText(row.volume, unit: unit))
+        .font(Tokens.Text.caption)
+        .foregroundStyle(Tokens.Color.textSecondary)
+        .monospacedDigit()
+
+      if !row.exerciseNames.isEmpty {
+        Text(row.exerciseNames.joined(separator: " · "))
+          .font(Tokens.Text.caption)
+          .foregroundStyle(Tokens.Color.textSecondary)
+          .lineLimit(2)
+      }
+    }
+    .padding(.vertical, Tokens.Spacing.tight)
+    .frame(minHeight: Tokens.minimumTapTarget, alignment: .leading)
+    .accessibilityElement(children: .combine)
+    .accessibilityLabel(Self.spokenLabel(row, unit: unit))
+  }
+
+  @ViewBuilder private func durationLabel(_ row: HistoryRow) -> some View {
+    if row.hasImplausibleDuration {
+      // The honest statement. A 20-hour span means the session was left open, not that it was
+      // trained through, so the number is withheld rather than displayed.
+      Label("Length unknown", systemImage: "exclamationmark.circle")
+        .font(Tokens.Text.caption)
+        .foregroundStyle(Tokens.Color.certainty(.low))
+    } else if let duration = row.duration {
+      Text(duration.clockString)
+        .font(Tokens.Text.caption)
+        .foregroundStyle(Tokens.Color.textSecondary)
+        .monospacedDigit()
+    }
+  }
+
+  static func dateText(_ date: Date) -> String {
+    date.formatted(.dateTime.weekday(.abbreviated).day().month(.abbreviated))
+  }
+
+  static func volumeText(_ volume: SessionVolume, unit: WeightUnit) -> String {
+    guard !volume.isEmpty else { return "No sets" }
+    var parts = ["\(volume.workingSets) sets", "\(volume.reps) reps"]
+    if volume.volumeKg > 0 {
+      let displayed = unit.fromKilograms(volume.volumeKg)
+      parts.append("\(Int(displayed.rounded())) \(unit.abbreviation)")
+    }
+    if volume.warmupSets > 0 { parts.append("\(volume.warmupSets) warm-up") }
+    return parts.joined(separator: " · ")
+  }
+
+  static func spokenLabel(_ row: HistoryRow, unit: WeightUnit) -> String {
+    var parts = [row.title.isEmpty ? dateText(row.date) : "\(row.title), \(dateText(row.date))"]
+    parts.append(volumeText(row.volume, unit: unit))
+    if row.hasImplausibleDuration {
+      parts.append("length unknown, this session was left open")
+    } else if let duration = row.duration {
+      parts.append(duration.clockString)
+    }
+    return parts.joined(separator: ", ")
+  }
+}
+
+#if DEBUG
+  private struct HistoryPreviewHarness: View {
+    private let day = Date(timeIntervalSince1970: 15_000_000)
+
+    var body: some View {
+      HistoryView(
+        rows: [
+          HistoryRow(
+            id: SessionID(), title: "Push", date: day,
+            duration: .seconds(4_320),
+            exerciseNames: ["Bench Press", "Overhead Press", "Cable Triceps Pushdown"],
+            volume: SessionVolume(workingSets: 12, warmupSets: 2, volumeKg: 9_400, reps: 96),
+            hasImplausibleDuration: false
+          ),
+          // Left running overnight: the span is withheld rather than shown as a 20-hour workout.
+          HistoryRow(
+            id: SessionID(), title: "Legs", date: day.addingTimeInterval(-172_800),
+            duration: .seconds(72_000),
+            exerciseNames: ["Barbell Back Squat", "Romanian Deadlift"],
+            volume: SessionVolume(workingSets: 8, warmupSets: 3, volumeKg: 11_200, reps: 64),
+            hasImplausibleDuration: true
+          ),
+        ],
+        unit: .kilograms,
+        onSelect: { _ in }
+      )
+    }
+  }
+
+  #Preview("History") {
+    HistoryPreviewHarness()
+  }
+#endif

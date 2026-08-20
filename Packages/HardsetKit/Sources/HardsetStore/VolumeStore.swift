@@ -142,3 +142,109 @@ public nonisolated struct ProgressionHistory: Hashable, Sendable {
 
   public var isEmpty: Bool { series.isEmpty }
 }
+
+/// One past session, summarised for a list.
+public nonisolated struct SessionSummary: Hashable, Sendable, Identifiable {
+  public let id: SessionID
+  public let title: String
+  public let timeline: SessionTimeline
+  /// Distinct movements performed, in the order they were first logged.
+  public let exerciseNames: [String]
+  public let volume: SessionVolume
+
+  public init(
+    id: SessionID,
+    title: String,
+    timeline: SessionTimeline,
+    exerciseNames: [String],
+    volume: SessionVolume
+  ) {
+    self.id = id
+    self.title = title
+    self.timeline = timeline
+    self.exerciseNames = exerciseNames
+    self.volume = volume
+  }
+
+  /// A session recorded as implausibly long is quarantined rather than displayed as an
+  /// achievement. The ancestor shipped 9,749-minute workouts to its history screen.
+  public var hasImplausibleDuration: Bool { timeline.isImplausible }
+}
+
+/// Reads finished sessions for the history screen.
+public nonisolated struct HistoryStore {
+  private let database: any DatabaseWriter
+
+  public init(database: any DatabaseWriter) {
+    self.database = database
+  }
+
+  /// Finished sessions, newest first.
+  ///
+  /// Open sessions are excluded: an unfinished workout belongs in the recovery path, not in
+  /// history, and showing it with no duration invites the reader to think it lasted zero minutes.
+  public func recentSessions(limit: Int = 50) throws -> [SessionSummary] {
+    try database.read { db in
+      let sessions = try Session
+        .where { $0.finishedAt.isNot(nil) }
+        .order { $0.startedAt.desc() }
+        .limit(limit)
+        .fetchAll(db)
+      guard !sessions.isEmpty else { return [] }
+
+      let sessionIDs = sessions.map(\.id)
+      let sets = try LoggedSet
+        .where { $0.sessionID.in(sessionIDs) }
+        .order { $0.setOrdinal }
+        .fetchAll(db)
+
+      let exerciseIDs = Array(Set(sets.map(\.exerciseID)))
+      let names = exerciseIDs.isEmpty
+        ? [:]
+        : try Exercise
+          .where { $0.id.in(exerciseIDs) }
+          .fetchAll(db)
+          .reduce(into: [UUID: String]()) { $0[$1.id] = $1.name }
+
+      let setsBySession = Dictionary(grouping: sets, by: \.sessionID)
+
+      return sessions.map { session in
+        let own = setsBySession[session.id] ?? []
+        var seen = Set<UUID>()
+        var ordered: [String] = []
+        for set in own where !seen.contains(set.exerciseID) {
+          seen.insert(set.exerciseID)
+          ordered.append(names[set.exerciseID] ?? "Unknown movement")
+        }
+        return SessionSummary(
+          id: SessionID(rawValue: session.id),
+          title: session.title,
+          timeline: SessionTimeline(startedAt: session.startedAt, finishedAt: session.finishedAt),
+          exerciseNames: ordered,
+          volume: Self.volume(of: own)
+        )
+      }
+    }
+  }
+
+  /// Reuses `SessionVolume`'s rules so the history screen and the live screen cannot disagree
+  /// about what a session contained.
+  private static func volume(of sets: [LoggedSet]) -> SessionVolume {
+    var workingSets = 0
+    var warmupSets = 0
+    var volumeKg = 0.0
+    var reps = 0
+    for set in sets {
+      if set.isWarmup {
+        warmupSets += 1
+      } else {
+        workingSets += 1
+        volumeKg += set.weightKg * Double(set.reps)
+        reps += set.reps
+      }
+    }
+    return SessionVolume(
+      workingSets: workingSets, warmupSets: warmupSets, volumeKg: volumeKg, reps: reps
+    )
+  }
+}

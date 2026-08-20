@@ -211,3 +211,60 @@ identifiers and `SessionTimeline` rather than raw `UUID`s and loose dates.
 `1/0.45359237`. Two constants, slightly different, three weeks into a greenfield codebase — which
 is how a single-source-of-truth rule fails in practice. Conversion now goes through `WeightUnit`
 only.
+
+## The muscle taxonomy and what rests on it
+
+### 15. Adding a muscle token is cheap; renaming one is impossible
+
+The single fact a future contributor most needs. SQLiteData forbids column renames forever and
+CloudKit's production schema is additive-only, so nothing constrains the *set of string values* a
+TEXT column may hold — but a re-spelling after a build reaches a second device is a data migration
+across every user's device, visible only as volume that quietly stopped counting. `Muscle`'s raw
+values are pinned by a test for exactly this reason.
+
+### 16. `MuscleKey` is a struct because Swift has no per-case access control
+
+An enum with `case known(Muscle) / case unrecognised(String)` cannot prevent
+`.unrecognised("chest")` being constructed — a distinct `Hashable` value returning an identical
+`storedValue`, which would split one muscle's volume across two dictionary keys while the grand
+total still reconciled. A private stored `String` with one public initialiser makes that
+unrepresentable. Storage is byte-preserved and never normalised, so a round trip cannot rewrite a
+peer's data.
+
+### 17. The 0.5 indirect credit is an adopted convention, not an inherited finding
+
+Pelland et al. fixed the weight a priori and compared three fixed schemes (1.0 / 0.5 / 0.0) for
+model fit; no weight was estimated from data, and their own discussion calls it "an assumption" and
+"a heuristic". The claim "the weight was fitted under that labelling, so we are entitled to it" is
+false and must not appear anywhere. The `stabilizer` weight of 0 is a second Hardset convention and
+is not part of the scheme that was tested. `SetCounting.source.methodology` says all of this in the
+text App Review reads, and a test asserts it keeps saying it.
+
+### 18. Three quantities, three names, so they cannot be conflated
+
+`fractionalSets` may be compared to a curve. `hardSets` is a count of completed working sets.
+`setsTouchingGroup` counts sets once per group and is the only group-level number the app may show —
+summing fractional credits across a group triple-counts a bench press. `VolumeAnalyzer.report`
+takes sets and attribution and nothing else, so no threshold can leak from warnings into arithmetic.
+
+### 19. There are no weekly set targets, and that is a finding
+
+`weeklyTarget` returns `.unevaluated` for every muscle. No per-muscle weekly target is established:
+the corpus gives a dose-response relationship for eight measured sites, not targets; the ancestor's
+bands were uncited practitioner numbers; and the ~4-fractional-set figure is the volume at which
+modelled gain first exceeds the smallest detectable effect size — a detectability artefact, not a
+biological floor. The function exists anyway so future warning code can only iterate *evaluated*
+targets, which makes "warn with no target" unrepresentable.
+
+### 20. Machine series are never merged
+
+A single line through two different leg presses draws progress the lifter did not make. Every
+machine is its own series, and `MachineChange.explanation` states the load delta and that it is "a
+difference between the machines rather than a change in strength" — refusing to call it progress or
+regression, because across a switch it is neither.
+
+### 21. A broken duration is withheld, not displayed
+
+The ancestor shipped 9,749-minute workouts to its history screen as achievements. `SessionTimeline`
+already refuses to store a duration; `HistoryView` additionally renders "Length unknown" for a span
+longer than any real workout, because the honest statement is that we do not know how long it took.
