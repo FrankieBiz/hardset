@@ -115,6 +115,26 @@ public struct SetRowView: View {
     .sheet(item: $editing) { field in
       padSheet(for: field)
     }
+    // Reseeded when the unit changes, because `@State` is initialised once per view identity: the
+    // suffix switched to "kg" while the number stayed in pounds, so a 60 kg set read "132.28 kg".
+    // Editing that row would then have written 132.28 kg to storage — a wrong number the user
+    // never typed. The draft is canonical kilograms, so reseeding from it is always correct.
+    .onChange(of: unit) { reseedBuffers() }
+  }
+
+  /// Rebuilds both display buffers from the draft, in the current unit.
+  private func reseedBuffers() {
+    weightBuffer = NumericEntryBuffer(
+      value: draft.weightKg.map(unit.fromKilograms),
+      maximumIntegerDigits: 4,
+      maximumFractionDigits: 2
+    )
+    repsBuffer = NumericEntryBuffer(
+      value: draft.reps.map(Double.init),
+      allowsDecimal: false,
+      maximumIntegerDigits: 3,
+      maximumFractionDigits: 0
+    )
   }
 
   // MARK: - Pieces
@@ -140,6 +160,11 @@ public struct SetRowView: View {
         Text(buffer.isEmpty ? "—" : buffer.displayText)
           .font(Tokens.Text.setEntry)
           .foregroundStyle(buffer.isEmpty ? Tokens.Color.textSecondary : Tokens.Color.textPrimary)
+          // Kilograms fit in four characters; pounds need six ("132.28"), and the field wrapped
+          // mid-number onto a second line. Shrinking beats wrapping for a value read at a glance
+          // between sets.
+          .lineLimit(1)
+          .minimumScaleFactor(0.6)
         Text(suffix)
           .font(Tokens.Text.caption)
           .foregroundStyle(Tokens.Color.textSecondary)

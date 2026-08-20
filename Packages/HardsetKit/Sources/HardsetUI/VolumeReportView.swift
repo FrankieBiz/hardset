@@ -51,7 +51,7 @@ public struct VolumeReportView: View {
 
   private var header: some View {
     VStack(alignment: .leading, spacing: Tokens.Spacing.snug) {
-      Text("\(report.hardSets) working sets this week")
+      Text("^[\(report.hardSets) working set](inflect: true) this week")
         .font(Tokens.Text.readout)
         .monospacedDigit()
 

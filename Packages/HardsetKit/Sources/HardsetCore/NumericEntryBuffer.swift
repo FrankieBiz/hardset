@@ -46,10 +46,12 @@ public struct NumericEntryBuffer: Hashable, Sendable {
     case .none:
       seed = ""
     case .some(let value) where allowsDecimal:
-      // Trailing ".0" is noise on a set row: 60, not 60.0.
-      seed = value == value.rounded() ? String(Int(value)) : String(value)
+      // Rounded to what this buffer can actually hold. Seeding `String(value)` printed the raw
+      // double, so a 60 kg set displayed in pounds read as "132.277357310926 53" and wrapped
+      // across four lines of the row — the conversion is exact, the *display* was not truncated.
+      seed = Self.seedText(value, fractionDigits: maximumFractionDigits)
     case .some(let value):
-      seed = String(Int(value.rounded()))
+      seed = Self.seedText(value, fractionDigits: 0)
     }
     self.init(
       text: seed,
@@ -57,6 +59,18 @@ public struct NumericEntryBuffer: Hashable, Sendable {
       maximumIntegerDigits: maximumIntegerDigits,
       maximumFractionDigits: maximumFractionDigits
     )
+  }
+
+  /// Formats a prefill to at most `fractionDigits`, with no trailing zeros.
+  ///
+  /// Uses `String(format:)` rather than an `Int` conversion so a large value cannot trap, and
+  /// trims so trailing ".0" never appears on a set row: 60, not 60.0.
+  private static func seedText(_ value: Double, fractionDigits: Int) -> String {
+    var text = String(format: "%.\(max(0, fractionDigits))f", value)
+    guard text.contains(".") else { return text }
+    while text.hasSuffix("0") { text.removeLast() }
+    if text.hasSuffix(".") { text.removeLast() }
+    return text
   }
 
   /// The number entered, or `nil` when nothing usable has been typed.

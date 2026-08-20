@@ -45,24 +45,37 @@ public struct HardsetRootView: View {
   @State private var gymOptions: [GymRecord] = []
   @State private var isChoosingGym = false
   @State private var isAddingGym = false
+  @State private var isShowingSettings = false
+  /// Inferred from the device's locale on first launch rather than asked, and stored the moment the
+  /// user disagrees. Kilograms remain the canonical storage unit either way — this only decides
+  /// what is displayed and what typed numbers are read as.
+  @AppStorage("hardset.useImperial") private var useImperial =
+    Locale.current.measurementSystem == .us
   /// Why the last gym write failed, in the user's words. A `try?` here hid a real failure behind a
   /// button that appeared to do nothing, which is precisely what this app is not allowed to do.
   @State private var gymError: String?
   private let environment: HardsetEnvironment
-  private let unit: WeightUnit
+  /// Overrides the stored preference. Exists for previews and tests; the app passes `nil` so the
+  /// user's own choice wins.
+  private let unitOverride: WeightUnit?
   private let hooks: RestTimerHooks
   private let restAfterSet: Duration?
 
   public init(
     environment: HardsetEnvironment,
-    unit: WeightUnit = .kilograms,
+    unit: WeightUnit? = nil,
     hooks: RestTimerHooks = .inert,
     restAfterSet: Duration? = nil
   ) {
     self.environment = environment
-    self.unit = unit
+    self.unitOverride = unit
     self.hooks = hooks
     self.restAfterSet = restAfterSet
+  }
+
+  /// What every screen displays in. One derivation, so no screen can disagree with another.
+  private var unit: WeightUnit {
+    unitOverride ?? (useImperial ? .pounds : .kilograms)
   }
 
   public var body: some View {
@@ -87,7 +100,23 @@ public struct HardsetRootView: View {
   @ViewBuilder private var tabs: some View {
     let content = TabView {
       Tab("Train", systemImage: "figure.strengthtraining.traditional") {
-        NavigationStack { trainTab }
+        NavigationStack {
+          trainTab
+            .toolbar {
+              // `.primaryAction` rather than `.topBarTrailing`: the latter does not exist on
+              // macOS, and this target builds for the host so the suite can run there.
+              ToolbarItem(placement: .primaryAction) {
+                Button {
+                  isShowingSettings = true
+                } label: {
+                  Label("Settings", systemImage: "gearshape")
+                }
+              }
+            }
+            .sheet(isPresented: $isShowingSettings) {
+              SettingsSheet(useImperial: $useImperial) { isShowingSettings = false }
+            }
+        }
       }
       Tab("Volume", systemImage: "chart.bar") {
         NavigationStack {
@@ -332,7 +361,8 @@ public struct HardsetRootView: View {
     if let coordinator {
       HStack(spacing: Tokens.Spacing.snug) {
         Image(systemName: "figure.strengthtraining.traditional")
-        Text("\(coordinator.loggedSetCount) sets logged")
+        // Inflected rather than concatenated, so one set does not read "1 sets".
+        Text("^[\(coordinator.loggedSetCount) set](inflect: true) logged")
           .font(Tokens.Text.caption)
           .monospacedDigit()
         Spacer(minLength: 0)
@@ -346,7 +376,9 @@ public struct HardsetRootView: View {
       }
       .padding(.horizontal, Tokens.Spacing.regular)
       .accessibilityElement(children: .combine)
-      .accessibilityLabel("Workout in progress, \(coordinator.loggedSetCount) sets logged")
+      .accessibilityLabel(
+        Text("Workout in progress, ^[\(coordinator.loggedSetCount) set](inflect: true) logged")
+      )
     }
   }
 }

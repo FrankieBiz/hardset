@@ -61,7 +61,10 @@ private struct RootView: View {
   var body: some View {
     HardsetRootView(
       environment: HardsetEnvironment(database: database),
-      unit: .kilograms,
+      // No unit passed: the root view infers it from the device locale on first launch and then
+      // honours whatever the user chose in Settings. Hardcoding `.kilograms` here meant a US
+      // lifter had no way to see pounds at all, though the engine supported it throughout.
+      unit: nil,
       hooks: RestTimerHooks(
         state: { restTimer.state },
         start: { duration, metadata in

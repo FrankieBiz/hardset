@@ -213,7 +213,10 @@ public struct SessionView: View {
     let volume = SessionVolume(exercises: exercises)
     guard !volume.isEmpty else { return "No sets logged yet" }
     let displayed = unit.fromKilograms(volume.volumeKg)
-    var parts = ["\(volume.workingSets) sets", "\(volume.reps) reps"]
+    var parts = [
+      volume.workingSets == 1 ? "1 set" : "\(volume.workingSets) sets",
+      volume.reps == 1 ? "1 rep" : "\(volume.reps) reps",
+    ]
     if volume.volumeKg > 0 {
       parts.append("\(Int(displayed.rounded())) \(unit.abbreviation) volume")
     }
