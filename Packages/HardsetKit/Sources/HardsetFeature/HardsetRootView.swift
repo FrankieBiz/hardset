@@ -45,7 +45,6 @@ public struct HardsetRootView: View {
   @State private var gymOptions: [GymRecord] = []
   @State private var isChoosingGym = false
   @State private var isAddingGym = false
-  @State private var newGymName = ""
   private let environment: HardsetEnvironment
   private let unit: WeightUnit
   private let hooks: RestTimerHooks
@@ -102,9 +101,16 @@ public struct HardsetRootView: View {
     }
 
     #if os(iOS)
-      content
-        .tabViewBottomAccessory { liveSessionAccessory }
-        .tabBarMinimizeBehavior(.onScrollDown)
+      // The accessory is attached only while a session exists. Attaching it unconditionally and
+      // returning an empty view inside drew an empty pill above the tab bar on the start screen —
+      // the slot is reserved by the modifier, not by its content.
+      if coordinator != nil {
+        content
+          .tabViewBottomAccessory { liveSessionAccessory }
+          .tabBarMinimizeBehavior(.onScrollDown)
+      } else {
+        content
+      }
     #else
       content
     #endif
@@ -157,11 +163,6 @@ public struct HardsetRootView: View {
     .frame(maxWidth: .infinity, maxHeight: .infinity)
     .background(Tokens.Color.background)
     .sheet(isPresented: $isChoosingGym) { gymSheet }
-    .alert("Add a gym", isPresented: $isAddingGym) {
-      TextField("Name", text: $newGymName)
-      Button("Cancel", role: .cancel) { newGymName = "" }
-      Button("Add", action: addGym)
-    }
   }
 
   /// Sets where this workout is, which is what makes per-machine tracking reachable at all: a
@@ -254,6 +255,20 @@ public struct HardsetRootView: View {
           Button("Done") { isChoosingGym = false }
         }
       }
+      // Attached INSIDE the gym sheet on purpose. Two `.sheet` modifiers on the same anchor means
+      // the second one silently never presents: "Add a gym" was a button that did nothing.
+      .sheet(isPresented: $isAddingGym) {
+        NameEntrySheet(
+          title: "Add a gym",
+          prompt: "Name",
+          footnote: "Machines are recorded per gym, so this is what groups them.",
+          onConfirm: { name in
+            isAddingGym = false
+            addGym(named: name)
+          },
+          onCancel: { isAddingGym = false }
+        )
+      }
     }
   }
 
@@ -269,9 +284,10 @@ public struct HardsetRootView: View {
     }
   }
 
-  private func addGym() {
-    let name = newGymName.trimmingCharacters(in: .whitespacesAndNewlines)
-    newGymName = ""
+  /// Takes the name as an argument rather than reading it back out of state. The version that
+  /// read `@State` written by a `TextField` inside an `.alert` received an empty string every
+  /// time, so no gym was ever created even though the field visibly held text.
+  private func addGym(named name: String) {
     guard !name.isEmpty else { return }
     guard let id = try? environment.gyms.createGym(name: name) else { return }
     refreshGyms()

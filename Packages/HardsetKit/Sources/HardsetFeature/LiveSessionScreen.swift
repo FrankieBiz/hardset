@@ -64,7 +64,6 @@ public struct LiveSessionScreen: View {
   /// conforming a Foundation type to get it would leak that conformance to every importer.
   @State private var machineTarget: MachineTarget?
   @State private var machineOptions: (recent: [MachineOption], others: [MachineOption]) = ([], [])
-  @State private var newMachineName = ""
   @State private var isAddingMachine = false
   private let unit: WeightUnit
   private let hooks: RestTimerHooks
@@ -157,12 +156,18 @@ public struct LiveSessionScreen: View {
         }
         // Named on the spot rather than in a setup flow, because the lifter is standing at the
         // machine right now and will not be later.
-        .alert("Add a machine", isPresented: $isAddingMachine) {
-          TextField("Name or brand", text: $newMachineName)
-          Button("Cancel", role: .cancel) { newMachineName = "" }
-          Button("Add") { addMachine(forExercise: target) }
-        } message: {
-          Text("Whatever you'd recognise it by — \"Hammer Strength\" or \"the one by the window\".")
+        .sheet(isPresented: $isAddingMachine) {
+          NameEntrySheet(
+            title: "Add a machine",
+            prompt: "Name or brand",
+            footnote:
+              "Whatever you'd recognise it by — \"Hammer Strength\" or \"the one by the window\".",
+            onConfirm: { name in
+              isAddingMachine = false
+              addMachine(named: name, forExercise: target)
+            },
+            onCancel: { isAddingMachine = false }
+          )
         }
       }
       // Reloaded per presentation: what the lifter used most recently changes as they log.
@@ -227,9 +232,9 @@ public struct LiveSessionScreen: View {
     _ = coordinator.changeMachine(to: machineID, machineName: name, inExercise: target)
   }
 
-  private func addMachine(forExercise target: UUID) {
-    let name = newMachineName.trimmingCharacters(in: .whitespacesAndNewlines)
-    newMachineName = ""
+  /// Same argument-passing rule as `addGym`: the name arrives as a parameter, because reading it
+  /// back out of state across a presentation boundary produced an empty string.
+  private func addMachine(named name: String, forExercise target: UUID) {
     guard let gyms, let gymID = coordinator.gymID, !name.isEmpty else { return }
     do {
       let machineID = try gyms.createMachine(at: gymID, name: name)
