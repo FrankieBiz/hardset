@@ -48,6 +48,9 @@ public struct LiveSessionScreen: View {
   @State private var coordinator: SessionCoordinator
   @State private var restMetadata: RestMetadata?
   @State private var isPickerPresented = false
+  /// Set when finishing failed and the session is still open, so the user is told rather than
+  /// silently returned to a start screen while their workout is stranded.
+  @State private var finishFailed = false
   @State private var pickerQuery = ""
   @State private var pickerEntries: [CatalogEntry] = []
   private let unit: WeightUnit
@@ -123,6 +126,10 @@ public struct LiveSessionScreen: View {
   /// A failed write is stated in the user's words, not as an error dump. The row stays
   /// unlogged, so the correct instruction is to try again.
   private var errorMessage: String? {
+    if finishFailed {
+      return "This workout could not be finished, so it is still open. Your sets are saved. "
+        + "Check your device's date and time, then try again."
+    }
     guard let error = coordinator.lastError else { return nil }
     if let storeError = error as? LoggerStoreError {
       switch storeError {
@@ -141,10 +148,20 @@ public struct LiveSessionScreen: View {
     do {
       try coordinator.finish()
       onFinished()
-    } catch {
-      // Already finished, or finishing before it started. Either way the session is closed and
-      // nothing is lost, so the user is moved on rather than trapped on a dead screen.
+    } catch SessionTimelineError.alreadyFinished {
+      // Genuinely closed already — a double tap, or a finish that raced a recovery. Moving on is
+      // correct here because the session really is finished.
       onFinished()
+    } catch {
+      // Anything else and the session is STILL OPEN. Calling onFinished() here was a bug: the root
+      // view dropped the coordinator, the user started a new workout, and because openSession()
+      // returns only the newest and history shows finished sessions only, the first session's sets
+      // became unreachable from every screen. The earlier comment claimed "nothing is lost", which
+      // was wrong.
+      //
+      // `finishedBeforeStart` is the realistic trigger: the device clock moving backwards, from a
+      // timezone or NTP correction, makes `now()` precede `startedAt`.
+      finishFailed = true
     }
   }
 }

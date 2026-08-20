@@ -94,13 +94,20 @@ public nonisolated struct LoggerStore {
   /// Throws `LoggerStoreError.incompleteSet` when the draft has no usable weight-and-reps
   /// pair. Zero added load is accepted — bodyweight work is a real set — but a missing value
   /// is not, and the two are distinct because `SetEntryDraft` holds optionals.
+  /// - Parameters:
+  ///   - sessionExerciseID: The plan row this set belongs to. Supplying it is what lets recovery
+  ///     tell two blocks of the same movement apart.
+  ///   - setOrdinal: Position within the exercise. Pass `nil` to have it derived from what is
+  ///     already stored, which is the safe choice: a caller computing it from a slot index will
+  ///     reissue an ordinal after a recovery, because recovered slots are renumbered.
   @discardableResult
   public func logSet(
     sessionID: SessionID,
     exerciseID: ExerciseID,
     machineID: MachineID? = nil,
+    sessionExerciseID: UUID? = nil,
     draft: SetEntryDraft,
-    setOrdinal: Int,
+    setOrdinal: Int? = nil,
     isWarmup: Bool = false,
     rpe: Double? = nil,
     at completedAt: Date
@@ -110,13 +117,27 @@ public nonisolated struct LoggerStore {
     }
     let id = SetID()
     try database.write { db in
+      // Derived inside the write, so two sets logged in quick succession cannot collide.
+      let ordinal: Int
+      if let setOrdinal {
+        ordinal = setOrdinal
+      } else {
+        let existing = try LoggedSet
+          .where { $0.sessionID.eq(sessionID.rawValue) }
+          .where { $0.exerciseID.eq(exerciseID.rawValue) }
+          .fetchAll(db)
+          .map(\.setOrdinal)
+          .max()
+        ordinal = (existing ?? -1) + 1
+      }
       try LoggedSet.insert {
         LoggedSet.Draft(
           id: id.rawValue,
           sessionID: sessionID.rawValue,
           exerciseID: exerciseID.rawValue,
           machineID: machineID?.rawValue,
-          setOrdinal: setOrdinal,
+          sessionExerciseID: sessionExerciseID,
+          setOrdinal: ordinal,
           weightKg: resolved.weightKg,
           reps: resolved.reps,
           rpe: rpe,
@@ -127,6 +148,26 @@ public nonisolated struct LoggerStore {
       .execute(db)
     }
     return id
+  }
+
+  /// Stack increments for the given machines, keyed by id.
+  ///
+  /// Exists so every path that builds an `ExerciseLogState` reads the equipment's real step size
+  /// from storage instead of trusting a caller to know it. When `start` trusted the caller and
+  /// `resume` read the database, the same set could be a record before a restart and not after.
+  public func machineIncrements(for ids: [MachineID]) throws -> [MachineID: Double] {
+    guard !ids.isEmpty else { return [:] }
+    let raws = Array(Set(ids.map(\.rawValue)))
+    return try database.read { db in
+      try Machine
+        .where { $0.id.in(raws) }
+        .fetchAll(db)
+        .reduce(into: [MachineID: Double]()) { result, row in
+          if let increment = row.stackIncrementKg {
+            result[MachineID(rawValue: row.id)] = increment
+          }
+        }
+    }
   }
 
   /// Closes a session at `finishedAt`, going through `SessionTimeline`'s guards.
@@ -360,6 +401,8 @@ public nonisolated struct LoggedSetRecord: Hashable, Sendable {
   public let rpe: Double?
   public let isWarmup: Bool
   public let completedAt: Date
+  /// The plan row this set was logged against, when known.
+  public let sessionExerciseID: UUID?
 
   init(row: LoggedSet) {
     self.id = SetID(rawValue: row.id)
@@ -372,6 +415,7 @@ public nonisolated struct LoggedSetRecord: Hashable, Sendable {
     self.rpe = row.rpe
     self.isWarmup = row.isWarmup
     self.completedAt = row.completedAt
+    self.sessionExerciseID = row.sessionExerciseID
   }
 
   /// The progression unit this set belongs to.

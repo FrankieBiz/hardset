@@ -96,6 +96,13 @@ public nonisolated enum HardsetMigrations {
         CREATE TABLE "exercises" (
           "id" TEXT PRIMARY KEY NOT NULL ON CONFLICT REPLACE DEFAULT (uuid()),
           "name" TEXT NOT NULL ON CONFLICT REPLACE DEFAULT '',
+          -- The name the curated catalogue last shipped for this row, which is what makes
+          -- `name` safely user-editable. The seeder must not clobber a rename, but without a
+          -- record of what it wrote it cannot tell a rename from an untouched row -- so it
+          -- either overwrites the user or, as before, can never correct its own typo on any
+          -- install that already seeded. Comparing the two settles it: equal means untouched,
+          -- so a curated correction lands; different means the user renamed it, so it stands.
+          "curatedName" TEXT NOT NULL ON CONFLICT REPLACE DEFAULT '',
           "catalogSlug" TEXT,
           "isCurated" INTEGER NOT NULL ON CONFLICT REPLACE DEFAULT 0,
           "modality" TEXT NOT NULL ON CONFLICT REPLACE DEFAULT 'unknown',
@@ -208,6 +215,14 @@ public nonisolated enum HardsetMigrations {
           "sessionID" TEXT NOT NULL REFERENCES "sessions"("id") ON DELETE CASCADE,
           "exerciseID" TEXT NOT NULL REFERENCES "exercises"("id") ON DELETE CASCADE,
           "machineID" TEXT REFERENCES "machines"("id") ON DELETE SET NULL,
+          -- Which plan row this set belongs to. Nullable, and deliberately NOT a foreign key: it
+          -- is a grouping hint for recovery, while sessionID/exerciseID/machineID remain the
+          -- authoritative references and carry the constraints.
+          --
+          -- Without it, recovery cannot tell two blocks of the same movement apart. Grouping by
+          -- machine lost sets when a lifter moved mid-exercise; grouping by exercise made BOTH
+          -- blocks claim the same sets and double-counted them. Neither is fixable without this.
+          "sessionExerciseID" TEXT,
           "setOrdinal" INTEGER NOT NULL ON CONFLICT REPLACE DEFAULT 0,
           "weightKg" REAL NOT NULL ON CONFLICT REPLACE DEFAULT 0,
           "reps" INTEGER NOT NULL ON CONFLICT REPLACE DEFAULT 0,

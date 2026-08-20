@@ -12,6 +12,9 @@ import SQLiteData
 nonisolated struct Exercise: Hashable, Identifiable, Sendable {
   let id: UUID
   var name = ""
+  /// What the curated catalogue last shipped as this exercise's name. Compared against `name` to
+  /// decide whether a catalogue correction may overwrite it. Empty for user-created rows.
+  var curatedName = ""
   /// Stable key for curated entries; nil for user-created ones.
   ///
   /// Deliberately not UNIQUE -- it cannot be. Curated rows carry fixed primary keys from the
@@ -88,6 +91,9 @@ nonisolated struct LoggedSet: Hashable, Identifiable, Sendable {
   /// Which physical machine. This is what makes progression machine-level rather than
   /// exercise-level.
   var machineID: UUID?
+  /// The `sessionExercises` row this set was logged against. Nullable for rows written before the
+  /// column existed, and for any path that does not know its plan row.
+  var sessionExerciseID: UUID?
   var setOrdinal = 0
   /// Canonical kilograms. Conversion to pounds happens only at the UI boundary.
   var weightKg = 0.0

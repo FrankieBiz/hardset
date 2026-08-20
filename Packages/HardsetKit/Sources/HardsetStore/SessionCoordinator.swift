@@ -94,6 +94,10 @@ public final class SessionCoordinator {
 
     var states: [ExerciseLogState] = []
     var rowIDs: [UUID: UUID] = [:]
+    // Read from the machines table rather than trusting the caller. `start` used to take whatever
+    // increment was passed in — and nothing in the app passed one — while `resume` read it from
+    // storage, so the same set could be a record before a restart and not after.
+    let increments = try store.machineIncrements(for: plan.compactMap(\.machineID))
     for (position, planned) in plan.enumerated() {
       let rowID = try store.addExercise(
         to: sessionID,
@@ -107,7 +111,8 @@ public final class SessionCoordinator {
         machineID: planned.machineID,
         exerciseName: planned.exerciseName,
         machineName: planned.machineName,
-        machineIncrementKg: planned.machineIncrementKg,
+        machineIncrementKg: planned.machineID.flatMap { increments[$0] }
+          ?? planned.machineIncrementKg,
         snapshot: snapshot,
         plannedSets: planned.plannedSets
       )
@@ -163,10 +168,31 @@ public final class SessionCoordinator {
     //
     // Known limitation: the same exercise appearing twice in one session merges, because
     // `loggedSets` carries no reference to a `sessionExercises` row and so cannot distinguish them.
-    let byExercise = Dictionary(grouping: written) { $0.exerciseID }
+    // Grouped by PLAN ROW where the set records one. That is what distinguishes two blocks of the
+    // same movement, which neither of the earlier keys could: grouping by machine lost sets when a
+    // lifter moved mid-exercise, and grouping by exercise made both blocks claim the same sets.
+    //
+    // Sets written before the column existed carry no plan row, so they fall back to exercise
+    // matching — and only into the FIRST plan row for that exercise, so they are attributed once
+    // rather than to every block.
+    let byPlanRow = Dictionary(
+      grouping: written.filter { $0.sessionExerciseID != nil }
+    ) { $0.sessionExerciseID! }
+    let orphansByExercise = Dictionary(
+      grouping: written.filter { $0.sessionExerciseID == nil }
+    ) { $0.exerciseID }
+    var claimedOrphans = Set<ExerciseID>()
+
     var rowIDs: [UUID: UUID] = [:]
     let states = planned.map { entry -> ExerciseLogState in
-      let logged = (byExercise[entry.exerciseID] ?? [])
+      var own = byPlanRow[entry.id] ?? []
+      if !claimedOrphans.contains(entry.exerciseID),
+        let orphans = orphansByExercise[entry.exerciseID]
+      {
+        claimedOrphans.insert(entry.exerciseID)
+        own += orphans
+      }
+      let logged = own
         .sorted { $0.setOrdinal < $1.setOrdinal }
         .map {
           ExerciseLogState.LoggedSetSummary(
@@ -226,12 +252,15 @@ public final class SessionCoordinator {
       let snapshot = try store.priorPerformanceSnapshot(
         for: [key], excluding: sessionID, asOf: now()
       )
+      let resolvedIncrement =
+        machineIncrementKg
+        ?? (machineID.flatMap { try? store.machineIncrements(for: [$0])[$0] })
       let state = ExerciseLogState.build(
         exerciseID: exerciseID,
         machineID: machineID,
         exerciseName: exerciseName,
         machineName: machineName,
-        machineIncrementKg: machineIncrementKg,
+        machineIncrementKg: resolvedIncrement,
         snapshot: snapshot,
         plannedSets: plannedSets
       )
@@ -294,10 +323,13 @@ public final class SessionCoordinator {
         sessionID: sessionID,
         exerciseID: exercise.exerciseID,
         machineID: exercise.machineID,
+        // Stamped so recovery can tell two blocks of the same movement apart. Without it,
+        // grouping by exercise made both blocks claim the same sets and double-counted them.
+        sessionExerciseID: planRowIDs[exercise.id],
         draft: slot.draft,
-        // Storage ordinal counts every row including warm-ups, so the performed order is
-        // recoverable exactly as it happened.
-        setOrdinal: slotIndex,
+        // Derived by the store from what is already written, NOT from the slot index. Recovered
+        // slots are renumbered, so a slot-index ordinal reissues one that is already taken.
+        setOrdinal: nil,
         isWarmup: slot.isWarmup,
         at: now()
       )
@@ -383,8 +415,12 @@ public final class SessionCoordinator {
         return false
       }
       try store.setSessionExerciseMachine(rowID: rowID, machineID: machineID)
+      // Same rule: the equipment's own step size, not whatever the caller happened to know.
+      let resolvedIncrement =
+        machineIncrementKg
+        ?? (machineID.flatMap { try? store.machineIncrements(for: [$0])[$0] })
       exercises[index].changeMachine(
-        to: machineID, machineName: machineName, machineIncrementKg: machineIncrementKg,
+        to: machineID, machineName: machineName, machineIncrementKg: resolvedIncrement,
         prior: prior, priorNote: note
       )
       lastError = nil

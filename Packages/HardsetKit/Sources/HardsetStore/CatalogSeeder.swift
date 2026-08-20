@@ -47,6 +47,7 @@ public nonisolated struct CatalogSeeder {
             Exercise.Draft(
               id: uuid,
               name: entry.name,
+              curatedName: entry.name,
               catalogSlug: entry.slug,
               isCurated: true,
               modality: entry.modality.rawValue,
@@ -60,11 +61,26 @@ public nonisolated struct CatalogSeeder {
           .execute(db)
           inserted += 1
         } else {
-          // Deliberately does not touch `name`, `notes` or `isArchived`: those are the user's,
-          // and overwriting them on every launch would silently undo their edits.
+          // Deliberately does not touch `notes` or `isArchived`: those are the user's, and
+          // overwriting them on every launch would silently undo their edits.
+          //
+          // `name` is a three-way merge rather than either extreme. Never writing it meant a
+          // curated correction could not reach any install that had already seeded, so two
+          // installs disagreed forever about what the same movement is called while their
+          // muscles and modality updated normally. Always writing it would erase a user's
+          // rename on the next launch. So: adopt the new name only when the stored one is still
+          // exactly what the catalogue last shipped.
+          //
+          // An empty `curatedName` means a row written before this column existed, which can
+          // only predate any rename UI -- so it counts as untouched.
+          let storedName = existing?.name ?? ""
+          let lastCurated = existing?.curatedName ?? ""
+          let userRenamedIt = !lastCurated.isEmpty && storedName != lastCurated
           try Exercise
             .where { $0.id.eq(uuid) }
             .update {
+              if !userRenamedIt { $0.name = #bind(entry.name) }
+              $0.curatedName = #bind(entry.name)
               $0.catalogSlug = #bind(entry.slug)
               $0.isCurated = #bind(true)
               $0.modality = #bind(entry.modality.rawValue)
