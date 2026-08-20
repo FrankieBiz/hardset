@@ -35,11 +35,24 @@ public nonisolated enum HardsetDatabase {
   ///
   /// `bodyweightEntries` is deliberately absent from the synchronized set -- see
   /// `HardsetMigrations.deferredSyncTableNames` for why.
+  ///
+  /// ## The returned engine MUST be retained for the process lifetime
+  ///
+  /// This is not a style preference. `SyncEngine` installs triggers on every synchronized table
+  /// that call `sqlitedata_icloud_didUpdate`, and that SQL function is an instance method on the
+  /// engine, held weakly to break a retain cycle. Drop the engine and the triggers survive with a
+  /// dead function behind them, so the next INSERT into ANY synchronized table fails with
+  /// `_DatabaseFunctionDeallocated`.
+  ///
+  /// That is exactly what shipped: the result was discarded, the engine deallocated at the end of
+  /// the launch task, and from then on the app could not write a gym, a machine, a session or a
+  /// set. Nothing surfaced it, because the failure is a thrown error inside a trigger and every
+  /// caller used `try?`. `@discardableResult` is therefore deliberately absent -- ignoring the
+  /// return value is now a compiler warning.
   /// - Parameter containerIdentifier: Pass `nil` in production to use the container from the
   ///   entitlement. Tests pass a unique identifier so each gets its own metadatabase -- the
   ///   metadatabase path derives from this, and sharing one across parallel tests deadlocks
   ///   SQLite.
-  @discardableResult
   public static func makeSyncEngine(
     for database: any DatabaseWriter,
     delegate: HardsetSyncDelegate,

@@ -48,6 +48,14 @@ private struct RootView: View {
   let syncDelegate: HardsetSyncDelegate
   let restTimer: RestTimerController
 
+  /// Retained for the process lifetime, and that is load-bearing rather than tidy.
+  ///
+  /// `SyncEngine` installs triggers on every synchronized table that call an instance method of
+  /// its own, held weakly. Letting it deallocate leaves those triggers in place with nothing
+  /// behind them, and every subsequent write to a synchronized table throws
+  /// `_DatabaseFunctionDeallocated` -- no gyms, no machines, no sessions, no sets.
+  @State private var syncEngine: SyncEngine?
+
   @Dependency(\.defaultDatabase) private var database
 
   var body: some View {
@@ -75,7 +83,7 @@ private struct RootView: View {
     .task {
       // Sync starts after the UI exists, so a CloudKit hiccup cannot block launch.
       do {
-        try HardsetDatabase.makeSyncEngine(for: database, delegate: syncDelegate)
+        syncEngine = try HardsetDatabase.makeSyncEngine(for: database, delegate: syncDelegate)
       } catch {
         // A schema the SyncEngine rejects is a programmer error caught by `SchemaTests`, not
         // something a user can act on — so run local-only rather than crash.

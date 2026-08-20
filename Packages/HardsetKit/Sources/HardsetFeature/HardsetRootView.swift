@@ -45,6 +45,9 @@ public struct HardsetRootView: View {
   @State private var gymOptions: [GymRecord] = []
   @State private var isChoosingGym = false
   @State private var isAddingGym = false
+  /// Why the last gym write failed, in the user's words. A `try?` here hid a real failure behind a
+  /// button that appeared to do nothing, which is precisely what this app is not allowed to do.
+  @State private var gymError: String?
   private let environment: HardsetEnvironment
   private let unit: WeightUnit
   private let hooks: RestTimerHooks
@@ -219,7 +222,11 @@ public struct HardsetRootView: View {
             .buttonStyle(.plain)
           }
         } footer: {
-          Text("Loads are tracked per machine, and machines belong to a gym.")
+          if let gymError {
+            Text(gymError).foregroundStyle(Tokens.Color.certainty(.low))
+          } else {
+            Text("Loads are tracked per machine, and machines belong to a gym.")
+          }
         }
 
         Section {
@@ -289,10 +296,17 @@ public struct HardsetRootView: View {
   /// time, so no gym was ever created even though the field visibly held text.
   private func addGym(named name: String) {
     guard !name.isEmpty else { return }
-    guard let id = try? environment.gyms.createGym(name: name) else { return }
-    refreshGyms()
-    selectedGym = id
-    isChoosingGym = false
+    do {
+      let id = try environment.gyms.createGym(name: name)
+      refreshGyms()
+      selectedGym = id
+      gymError = nil
+      isChoosingGym = false
+    } catch {
+      // Stated, not swallowed. The error text is included because there is nothing useful to say
+      // about a storage failure without it.
+      gymError = "\(name) could not be saved. \(error)"
+    }
   }
 
   private func startEmptyWorkout() {
