@@ -36,6 +36,13 @@ public final class SessionCoordinator {
   /// celebration cannot linger onto a set that did not earn it.
   public private(set) var lastRecords: [PersonalRecord] = []
 
+  /// Maps an `ExerciseLogState.id` to its `sessionExercises` row id.
+  ///
+  /// Held here rather than on `ExerciseLogState` because a storage row id is a storage concern and
+  /// `HardsetCore` must not learn about one. Without it, a machine change has nowhere to be
+  /// written, and the plan in the database silently contradicts the sets that were logged.
+  private var planRowIDs: [UUID: UUID] = [:]
+
   private let store: LoggerStore
   private let now: () -> Date
   private let restAfterSet: Duration?
@@ -86,28 +93,29 @@ public final class SessionCoordinator {
     )
 
     var states: [ExerciseLogState] = []
+    var rowIDs: [UUID: UUID] = [:]
     for (position, planned) in plan.enumerated() {
-      try store.addExercise(
+      let rowID = try store.addExercise(
         to: sessionID,
         exerciseID: planned.exerciseID,
         machineID: planned.machineID,
         position: position,
         plannedSets: planned.plannedSets
       )
-      states.append(
-        ExerciseLogState.build(
-          exerciseID: planned.exerciseID,
-          machineID: planned.machineID,
-          exerciseName: planned.exerciseName,
-          machineName: planned.machineName,
-          machineIncrementKg: planned.machineIncrementKg,
-          snapshot: snapshot,
-          plannedSets: planned.plannedSets
-        )
+      let state = ExerciseLogState.build(
+        exerciseID: planned.exerciseID,
+        machineID: planned.machineID,
+        exerciseName: planned.exerciseName,
+        machineName: planned.machineName,
+        machineIncrementKg: planned.machineIncrementKg,
+        snapshot: snapshot,
+        plannedSets: planned.plannedSets
       )
+      rowIDs[state.id] = rowID
+      states.append(state)
     }
 
-    return SessionCoordinator(
+    let coordinator = SessionCoordinator(
       store: store,
       sessionID: sessionID,
       exercises: states,
@@ -115,6 +123,8 @@ public final class SessionCoordinator {
       restAfterSet: restAfterSet,
       onStartRest: onStartRest
     )
+    coordinator.planRowIDs = rowIDs
+    return coordinator
   }
 
   /// Rebuilds a coordinator for a workout that was left open.
@@ -145,27 +155,41 @@ public final class SessionCoordinator {
       asOf: now()
     )
 
-    let byKey = Dictionary(grouping: written) { $0.progressionKey }
+    // Grouped by EXERCISE, not by progression key. A lifter who moves machines mid-exercise
+    // produces sets with mixed machine ids under one plan row, and keying on the machine returned
+    // only the subset that happened to match — reporting written sets as unlogged and inviting the
+    // user to log them again. The set's machine is still recorded on the set itself; it is simply
+    // not what identifies which plan row the set belongs to.
+    //
+    // Known limitation: the same exercise appearing twice in one session merges, because
+    // `loggedSets` carries no reference to a `sessionExercises` row and so cannot distinguish them.
+    let byExercise = Dictionary(grouping: written) { $0.exerciseID }
+    var rowIDs: [UUID: UUID] = [:]
     let states = planned.map { entry -> ExerciseLogState in
-      let logged = (byKey[entry.progressionKey] ?? [])
+      let logged = (byExercise[entry.exerciseID] ?? [])
         .sorted { $0.setOrdinal < $1.setOrdinal }
         .map {
           ExerciseLogState.LoggedSetSummary(
             setID: $0.id, weightKg: $0.weightKg, reps: $0.reps, isWarmup: $0.isWarmup
           )
         }
-      return ExerciseLogState.resume(
+      let state = ExerciseLogState.resume(
         exerciseID: entry.exerciseID,
         machineID: entry.machineID,
         exerciseName: entry.exerciseName,
         machineName: entry.machineName,
+        // Restored, not defaulted. Dropping it makes record detection fall back to a step size the
+        // equipment may be unable to hit.
+        machineIncrementKg: entry.machineIncrementKg,
         loggedSets: logged,
         snapshot: snapshot,
         plannedSets: entry.plannedSets
       )
+      rowIDs[state.id] = entry.id
+      return state
     }
 
-    return SessionCoordinator(
+    let coordinator = SessionCoordinator(
       store: store,
       sessionID: session.id,
       exercises: states,
@@ -173,6 +197,8 @@ public final class SessionCoordinator {
       restAfterSet: restAfterSet,
       onStartRest: onStartRest
     )
+    coordinator.planRowIDs = rowIDs
+    return coordinator
   }
 
   /// Adds a movement to the workout in progress.
@@ -190,7 +216,7 @@ public final class SessionCoordinator {
   ) -> Bool {
     let key = ProgressionKey(exerciseID: exerciseID, machineID: machineID)
     do {
-      try store.addExercise(
+      let rowID = try store.addExercise(
         to: sessionID,
         exerciseID: exerciseID,
         machineID: machineID,
@@ -200,17 +226,17 @@ public final class SessionCoordinator {
       let snapshot = try store.priorPerformanceSnapshot(
         for: [key], excluding: sessionID, asOf: now()
       )
-      exercises.append(
-        ExerciseLogState.build(
-          exerciseID: exerciseID,
-          machineID: machineID,
-          exerciseName: exerciseName,
-          machineName: machineName,
-          machineIncrementKg: machineIncrementKg,
-          snapshot: snapshot,
-          plannedSets: plannedSets
-        )
+      let state = ExerciseLogState.build(
+        exerciseID: exerciseID,
+        machineID: machineID,
+        exerciseName: exerciseName,
+        machineName: machineName,
+        machineIncrementKg: machineIncrementKg,
+        snapshot: snapshot,
+        plannedSets: plannedSets
       )
+      planRowIDs[state.id] = rowID
+      exercises.append(state)
       lastError = nil
       return true
     } catch {
@@ -327,6 +353,7 @@ public final class SessionCoordinator {
   public func changeMachine(
     to machineID: MachineID?,
     machineName: String?,
+    machineIncrementKg: Double? = nil,
     inExercise exerciseStateID: UUID
   ) -> Bool {
     guard let index = exercises.firstIndex(where: { $0.id == exerciseStateID }) else {
@@ -345,8 +372,20 @@ public final class SessionCoordinator {
         prior = fallback.performance
         if fallback.wasOtherMachine { note = "From another machine" }
       }
+      // Persist before mutating in memory, so a failed write leaves the two in agreement rather
+      // than leaving the app believing something the database does not.
+      //
+      // A missing row id is refused rather than skipped. Silently not persisting is precisely the
+      // defect being fixed here — the app would show the new machine while the database kept the
+      // old one — so an untracked exercise fails loudly instead of appearing to succeed.
+      guard let rowID = planRowIDs[exercise.id] else {
+        lastError = SessionCoordinatorError.untrackedExercise
+        return false
+      }
+      try store.setSessionExerciseMachine(rowID: rowID, machineID: machineID)
       exercises[index].changeMachine(
-        to: machineID, machineName: machineName, prior: prior, priorNote: note
+        to: machineID, machineName: machineName, machineIncrementKg: machineIncrementKg,
+        prior: prior, priorNote: note
       )
       lastError = nil
       return true
@@ -402,4 +441,8 @@ public struct PlannedExercise: Hashable, Sendable {
 public enum SessionCoordinatorError: Error, Equatable, Sendable {
   case unknownExercise
   case unknownSlot
+  /// The exercise exists in memory but has no `sessionExercises` row id, so a machine change has
+  /// nowhere to be written. Only reachable through the public initialiser; `start`, `resume` and
+  /// `addExercise` all record the id.
+  case untrackedExercise
 }

@@ -42,7 +42,10 @@ public struct ExerciseLogState: Hashable, Sendable, Identifiable {
   /// Shown on the Lock Screen while resting, so the user knows which station they left.
   public private(set) var machineName: String?
   /// Set to the machine's real load step when known, so a suggested load is achievable.
-  public let machineIncrementKg: Double?
+  ///
+  /// Mutable for the same reason `machineID` is: carrying the previous machine's step across a
+  /// change announces records the new equipment cannot justify, and hides ones it can.
+  public private(set) var machineIncrementKg: Double?
   public var slots: [SetSlot]
   /// Set when the prefills came from the same exercise on *different* equipment. Surfaced to
   /// the user verbatim rather than silently: 80 kg on another brand's machine is not this
@@ -242,11 +245,15 @@ public struct ExerciseLogState: Hashable, Sendable, Identifiable {
   public mutating func changeMachine(
     to machineID: MachineID?,
     machineName: String?,
+    machineIncrementKg newIncrement: Double?,
     prior newPrior: PriorPerformance?,
     priorNote newNote: String? = nil
   ) {
     self.machineID = machineID
     self.machineName = machineName
+    // Refreshed, not carried. A 2.5 kg plate step and a 10 kg selectorized stack demand different
+    // margins before a load counts as a record.
+    self.machineIncrementKg = newIncrement
     self.prior = newPrior
     self.priorNote = newNote
 

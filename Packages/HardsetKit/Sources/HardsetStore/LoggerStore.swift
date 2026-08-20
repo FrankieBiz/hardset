@@ -76,6 +76,19 @@ public nonisolated struct LoggerStore {
     return rowID
   }
 
+  /// Records that an exercise moved to different equipment mid-session.
+  ///
+  /// Without this the plan row keeps the machine the exercise STARTED on while the logged sets
+  /// carry the one it moved to, and recovery rebuilds from a plan that contradicts the record.
+  public func setSessionExerciseMachine(rowID: UUID, machineID: MachineID?) throws {
+    try database.write { db in
+      try SessionExercise
+        .where { $0.id.eq(rowID) }
+        .update { $0.machineID = #bind(machineID?.rawValue) }
+        .execute(db)
+    }
+  }
+
   /// Writes one completed set.
   ///
   /// Throws `LoggerStoreError.incompleteSet` when the draft has no usable weight-and-reps
@@ -182,13 +195,13 @@ public nonisolated struct LoggerStore {
         .reduce(into: [UUID: String]()) { $0[$1.id] = $1.name }
 
       let machineIDs = Array(Set(rows.compactMap(\.machineID)))
-      let machineNames =
+      let machines =
         machineIDs.isEmpty
         ? [:]
         : try Machine
           .where { $0.id.in(machineIDs) }
           .fetchAll(db)
-          .reduce(into: [UUID: String]()) { $0[$1.id] = $1.name }
+          .reduce(into: [UUID: Machine]()) { $0[$1.id] = $1 }
 
       return rows.map { row in
         PlannedExerciseRecord(
@@ -198,9 +211,10 @@ public nonisolated struct LoggerStore {
           // A missing name means a deleted exercise row, which the foreign key should prevent.
           // Shown as unknown rather than crashing a recovery path.
           exerciseName: names[row.exerciseID] ?? "Unknown movement",
-          machineName: row.machineID.flatMap { machineNames[$0] },
+          machineName: row.machineID.flatMap { machines[$0]?.name },
           position: row.position,
-          plannedSets: row.plannedSets
+          plannedSets: row.plannedSets,
+          machineIncrementKg: row.machineID.flatMap { machines[$0]?.stackIncrementKg }
         )
       }
     }
@@ -374,6 +388,9 @@ public nonisolated struct PlannedExerciseRecord: Hashable, Sendable, Identifiabl
   public let machineName: String?
   public let position: Int
   public let plannedSets: Int?
+  /// The machine's real load step, when known. Carried here so recovery restores it — without it,
+  /// a recovered session falls back to a default step the equipment may not be able to hit.
+  public let machineIncrementKg: Double?
 
   public var progressionKey: ProgressionKey {
     ProgressionKey(exerciseID: exerciseID, machineID: machineID)
