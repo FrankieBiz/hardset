@@ -77,7 +77,12 @@ let package = Package(
     // as closures supplied by the app.
     .target(
       name: "HardsetFeature",
-      dependencies: ["HardsetCore", "HardsetStore", "HardsetUI"],
+      dependencies: [
+        "HardsetCore", "HardsetStore", "HardsetUI",
+        // Declared explicitly, not leaned on transitively: the composition root takes a
+        // `DatabaseWriter`, so this target genuinely uses the type and should say so.
+        .product(name: "SQLiteData", package: "sqlite-data"),
+      ],
       swiftSettings: mainActorByDefault
     ),
 
