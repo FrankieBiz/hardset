@@ -60,3 +60,85 @@ public nonisolated struct VolumeStore {
     try report(from: now.addingTimeInterval(-7 * 86_400), to: now)
   }
 }
+
+/// Reads load history for one exercise, per machine.
+public nonisolated struct ProgressionStore {
+  private let database: any DatabaseWriter
+
+  public init(database: any DatabaseWriter) {
+    self.database = database
+  }
+
+  /// Completed working sets for one exercise, across every machine, oldest first.
+  ///
+  /// Warm-ups are excluded in SQL. A warm-up reaching the analyser would be a bug, so it is not
+  /// filtered defensively there — that would hide it.
+  public func samples(for exerciseID: ExerciseID, limit: Int = 2_000) throws
+    -> [ProgressionSample]
+  {
+    try database.read { db in
+      try LoggedSet
+        .where { $0.exerciseID.eq(exerciseID.rawValue) }
+        .where { !$0.isWarmup }
+        .order { $0.completedAt }
+        .limit(limit)
+        .fetchAll(db)
+        .map {
+          ProgressionSample(
+            sessionID: SessionID(rawValue: $0.sessionID),
+            machineID: $0.machineID.map(MachineID.init(rawValue:)),
+            weightKg: $0.weightKg,
+            reps: $0.reps,
+            completedAt: $0.completedAt
+          )
+        }
+    }
+  }
+
+  /// Machine names, for labelling the series. A machine the user deleted resolves to `nil` and the
+  /// series is labelled generically rather than dropped — the sets were still performed.
+  public func machineNames(_ ids: [MachineID]) throws -> [MachineID: String] {
+    guard !ids.isEmpty else { return [:] }
+    let raws = ids.map(\.rawValue)
+    return try database.read { db in
+      try Machine
+        .where { $0.id.in(raws) }
+        .fetchAll(db)
+        .reduce(into: [MachineID: String]()) { $0[MachineID(rawValue: $1.id)] = $1.name }
+    }
+  }
+
+  /// Everything a load-history chart needs for one exercise.
+  public func history(for exerciseID: ExerciseID) throws -> ProgressionHistory {
+    let samples = try samples(for: exerciseID)
+    let series = ProgressionAnalyzer.series(from: samples, exerciseID: exerciseID)
+    let changes = ProgressionAnalyzer.machineChanges(from: samples)
+    let names = try machineNames(series.compactMap(\.key.machineID))
+    return ProgressionHistory(series: series, machineChanges: changes, machineNames: names)
+  }
+}
+
+/// One exercise's load history, ready to plot.
+public nonisolated struct ProgressionHistory: Hashable, Sendable {
+  public let series: [ProgressionSeries]
+  public let machineChanges: [MachineChange]
+  public let machineNames: [MachineID: String]
+
+  public init(
+    series: [ProgressionSeries],
+    machineChanges: [MachineChange],
+    machineNames: [MachineID: String]
+  ) {
+    self.series = series
+    self.machineChanges = machineChanges
+    self.machineNames = machineNames
+  }
+
+  /// Label for a series. Free-weight work and a deleted machine are named rather than blank.
+  public func label(for key: ProgressionKey) -> String {
+    guard let machineID = key.machineID else { return "Free weight" }
+    return machineNames[machineID] ?? "Unnamed machine"
+  }
+
+  public var isEmpty: Bool { series.isEmpty }
+}
