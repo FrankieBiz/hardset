@@ -10,18 +10,38 @@ can sign before starting.
 
 ---
 
-## A. One-time: trust the macros (also unblocks command-line builds)
+## A. Building the app — DONE, and what it cost
 
-`xcodebuild` from a sandboxed shell fails here with `swift-plugin-server produced malformed
-response`, because the Swift macro plugin server cannot run under it. The package suite is
-unaffected — `swift test --disable-sandbox` runs fine, which is why 54 tests pass — but the app
-and widget targets cannot be compiled from the CLI in that environment.
+The app target now builds and runs on the iOS 26.4 simulator. It had never compiled before, for
+four independent reasons; see the `fix(app)` commit. Two are worth remembering:
 
-- [ ] Open `Hardset.xcodeproj` in Xcode, build once, and click **Trust & Enable** when prompted for
-      the macros from `swift-syntax`, `swift-structured-queries` and `swift-perception`.
-- [ ] Confirm `xcodebuild -scheme Hardset -destination 'generic/platform=iOS Simulator' build`
-      then succeeds. If it still fails, the app target has only ever been built inside Xcode —
-      say so explicitly rather than assuming CI will work.
+* Anything behind `#if canImport(AlarmKit)` is **invisible to the host suite** — `HardsetAlarm` had
+  a hard compile error that no `swift test` run could ever have caught. Treat "the package tests
+  pass" as saying nothing about iOS-only code.
+* `GENERATE_INFOPLIST_FILE` is `NO` here, so every `CFBundle*` identity key must be spelled out in
+  `Info.plist`. Without `CFBundleIdentifier` the bundle builds and cannot be installed.
+
+- [x] Builds for the simulator via headless `xcodebuild` (the Simulator MCP `build` tool passes
+      `-skipMacroValidation`, which also bypasses the macro trust prompt).
+- [ ] Open `Hardset.xcodeproj` in Xcode once and click **Trust & Enable** for the macros from
+      `swift-syntax`, `swift-structured-queries` and `swift-perception`. Only needed for building
+      inside Xcode; the headless path does not prompt.
+- [ ] Build and run on a **physical device** — still never done. Signing needs a team identifier
+      the sandbox cannot supply.
+
+## A2. Verified in the simulator (not a substitute for the device gate)
+
+Walked end to end on iPhone 17 / iOS 26.4, with the database checked directly after each step:
+
+- [x] Create a gym, name a machine at the rack, log 60 kg x 10 against it. The row lands with its
+      `machineID` and `gymID` set — the differentiator works rather than merely existing.
+- [x] Load history draws **one line per machine** and shows an 80 kg Epley estimate for 60 x 10.
+- [x] Three presentation bugs found and fixed here that no test could see: an `.alert` `TextField`
+      binding that always read empty, a second `.sheet` on one anchor that never presented, and an
+      empty accessory pill above the tab bar.
+- [x] One total-loss bug found here: the app discarded the `SyncEngine`, whose triggers then had a
+      dead function behind them, so **every write to every synchronized table failed**. Nothing in
+      the suite could have caught it.
 
 ## B. AlarmKit — the rest timer
 
