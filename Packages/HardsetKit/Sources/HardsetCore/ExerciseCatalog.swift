@@ -13,6 +13,18 @@ import Foundation
 public struct CatalogExercise: Hashable, Sendable, Identifiable {
   /// Lowercase UUID string. Stored as a string so the literal in this file *is* the value that
   /// reaches the database, with no formatting step in between to get wrong.
+  ///
+  /// **Assign it with `python3 Tools/catalog_id.py <slug>`, never by hand.** It is a UUID version 5
+  /// derived from the slug:
+  ///
+  ///     id = uuid5(uuid5(NAMESPACE_DNS, "catalog.hardset.app"), slug)
+  ///
+  /// Hashing rather than minting is what makes two devices converge instead of duplicating, and
+  /// there is no database-level backstop: SQLiteData forbids `UNIQUE` on anything but the primary
+  /// key of a synchronized table. The scheme is enforced by `CatalogIdSchemeTests`.
+  ///
+  /// The first 50 entries were authored before this was recorded and do not follow it. Their ids
+  /// are grandfathered in that test and are permanent.
   public let id: String
   public let slug: String
   public let name: String

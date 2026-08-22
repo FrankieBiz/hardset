@@ -304,3 +304,32 @@ deliberately not built**: haptic-and-pixel co-timing and a 100 ms acknowledgemen
 judgeable in a simulator, and AlarmKit has never fired on hardware, so the rest timer gets proven
 before it gets decorated. `Tokens.Motion` ships as the vocabulary so there is nothing to invent
 later.
+
+### 23. Catalogue ids are derived from the slug, and that had been lost
+
+Every `CatalogExercise.id` is a permanent primary key that logged sets reference, and every one of
+the original 50 is a valid UUID **version 5** — a hash. So a deterministic scheme existed, and it
+was the right choice: hashing is what makes two devices seeding the catalogue write identical rows
+instead of duplicating each other, and there is no backstop, because SQLiteData forbids `UNIQUE` on
+anything but the primary key of a synchronized table.
+
+The scheme was written down nowhere — not in the file, not here, not in the taxonomy spec. 684
+combinations of standard namespace and name template failed to reproduce the ids, so it was
+genuinely lost rather than merely undocumented. The consequence is not hypothetical: two authors
+adding the same movement would each have minted a different id, giving one exercise two permanent
+rows on an additive-only schema, and the file's own comment claims those fixed ids are precisely
+what prevents that.
+
+Recorded now, and enforced:
+
+    id = uuid5(uuid5(NAMESPACE_DNS, "catalog.hardset.app"), slug)
+    namespace = 0dd2c109-7335-5eb0-aba6-8f1ee6e4f48a
+
+`Tools/catalog_id.py` assigns it and rejects a malformed slug, because the slug is part of the key
+and a typo in it is permanent. `CatalogIdSchemeTests` pins both halves: every entry outside the
+grandfathered list must derive, **and** the grandfathered list must be exactly the set that does
+not — so it cannot grow silently. The original 50 keep their ids, because changing one orphans
+every set that references it.
+
+The lesson generalises past this file: a deterministic identifier scheme with no recorded
+derivation is a random scheme with extra steps.
