@@ -23,11 +23,40 @@ public struct CommitButtonStyle: ButtonStyle {
   }
 
   public func makeBody(configuration: Configuration) -> some View {
-    configuration.label
-      .scaleEffect(configuration.isPressed ? pressedScale : 1)
-      // Reduce Motion keeps the acknowledgement -- it is information, not decoration -- but
-      // expresses it as opacity, since the objection is to movement rather than to feedback.
-      .opacity(configuration.isPressed ? 0.85 : 1)
-      .animation(Tokens.Motion.commit(intensity: intensity), value: configuration.isPressed)
+    // Routed through a nested `View` because `@Environment` is not read reliably on a
+    // `ButtonStyle` itself -- the style is not a node in the view graph. Without this the
+    // accessibility setting below is simply never consulted, which is exactly the bug the
+    // previous version of this file had while its comment claimed otherwise.
+    PressFeedback(
+      configuration: configuration,
+      intensity: intensity,
+      pressedScale: pressedScale
+    )
+  }
+
+  private struct PressFeedback: View {
+    let configuration: ButtonStyleConfiguration
+    let intensity: Double?
+    let pressedScale: CGFloat
+
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    var body: some View {
+      configuration.label
+        // Under Reduce Motion the scale is dropped entirely: that is the movement, and movement
+        // is what the setting objects to.
+        .scaleEffect(reduceMotion ? 1 : (configuration.isPressed ? pressedScale : 1))
+        // The dim survives, because the acknowledgement is information rather than decoration --
+        // guideline M7. Reduce Motion means "stop moving things", not "stop telling me anything".
+        .opacity(configuration.isPressed ? 0.82 : 1)
+        .animation(
+          reduceMotion
+            // A crossfade, not a spring: a spring is a statement about mass and there is no mass
+            // to convey once the movement is gone.
+            ? .linear(duration: 0.08)
+            : Tokens.Motion.commit(intensity: intensity),
+          value: configuration.isPressed
+        )
+    }
   }
 }

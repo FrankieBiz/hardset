@@ -129,6 +129,12 @@ public struct LiveSessionScreen: View {
           pickerQuery = ""
         }
         .navigationTitle("Add movement")
+        // Inline rather than large. A large title truncates instead of wrapping, so at
+        // accessibility text sizes this sheet was headed "Add movem...". Inline also stops a
+        // modal picker from spending a third of its height on its own name.
+        #if os(iOS)
+          .navigationBarTitleDisplayMode(.inline)
+        #endif
       }
       // Searching hits the database, so it happens here rather than inside the picker, which
       // stays free of storage. The query is re-run on change instead of filtering in memory so a

@@ -11,6 +11,9 @@ import SwiftUI
 /// only helps someone who already knows the exact name they want. The search field covers that
 /// case.
 public struct ExercisePickerView: View {
+  /// Drives the row layout: see `row(_:)`.
+  @Environment(\.dynamicTypeSize) private var typeSize
+
   @Binding private var query: String
   private let entries: [CatalogEntry]
   private let onSelect: (CatalogEntry) -> Void
@@ -56,33 +59,25 @@ public struct ExercisePickerView: View {
     Button {
       onSelect(entry)
     } label: {
-      HStack(spacing: Tokens.Spacing.regular) {
-        VStack(alignment: .leading, spacing: Tokens.Spacing.hairline) {
-          Text(entry.name)
-            .font(Tokens.Text.label)
-            .foregroundStyle(Tokens.Color.textPrimary)
-          // Credited muscles only. Grip and bracing are stabilisers and are deliberately not
-          // listed here: showing them as "also trains" is the claim the role split exists to stop.
-          if !supportingText(for: entry).isEmpty {
-            Text(supportingText(for: entry))
-              .font(Tokens.Text.caption)
-              .foregroundStyle(Tokens.Color.textSecondary)
-              .lineLimit(1)
+      SwiftUI.Group {
+        if typeSize.isAccessibilitySize {
+          // Stacked, because at accessibility sizes the name and the equipment label were
+          // competing for one line and both lost: "Machine" rendered as "Ma-" and the muscle list
+          // as "also Fro...". The equipment moves under the name rather than beside it.
+          VStack(alignment: .leading, spacing: Tokens.Spacing.tight) {
+            nameAndMuscles(entry)
+            HStack(spacing: Tokens.Spacing.snug) {
+              modalityLabel(entry)
+              ownMovementMark(entry)
+            }
           }
-        }
-        Spacer(minLength: 0)
-        if let modality = entry.modality {
-          Text(modality.label)
-            .font(Tokens.Text.caption)
-            .foregroundStyle(Tokens.Color.textSecondary)
-        }
-        // A movement the user created is marked, so a typo'd duplicate of a curated entry is
-        // visibly theirs rather than looking official.
-        if !entry.isCurated {
-          Image(systemName: "person.crop.circle")
-            .font(Tokens.Text.caption)
-            .foregroundStyle(Tokens.Color.textSecondary)
-            .accessibilityLabel("Your own movement")
+        } else {
+          HStack(spacing: Tokens.Spacing.regular) {
+            nameAndMuscles(entry)
+            Spacer(minLength: 0)
+            modalityLabel(entry)
+            ownMovementMark(entry)
+          }
         }
       }
       .frame(minHeight: Tokens.minimumTapTarget)
@@ -125,6 +120,48 @@ public struct ExercisePickerView: View {
   /// make an unrecognised token look like an authored muscle name.
   private func sectionTitle(_ key: MuscleKey) -> String {
     Self.displayName(key)
+  }
+
+  @ViewBuilder private func nameAndMuscles(_ entry: CatalogEntry) -> some View {
+    VStack(alignment: .leading, spacing: Tokens.Spacing.hairline) {
+      Text(entry.name)
+        .font(Tokens.Text.label)
+        .foregroundStyle(Tokens.Color.textPrimary)
+      // Credited muscles only. Grip and bracing are stabilisers and are deliberately not
+      // listed here: showing them as "also trains" is the claim the role split exists to stop.
+      //
+      // Deliberately NOT line-limited. This line is the whole reason the picker is more useful
+      // than a list of names, and truncating it to "also Fro..." throws away the differentiator
+      // to save a few points of height.
+      if !supportingText(for: entry).isEmpty {
+        Text(supportingText(for: entry))
+          .font(Tokens.Text.caption)
+          .foregroundStyle(Tokens.Color.textSecondary)
+          .fixedSize(horizontal: false, vertical: true)
+      }
+    }
+  }
+
+  @ViewBuilder private func modalityLabel(_ entry: CatalogEntry) -> some View {
+    if let modality = entry.modality {
+      Text(modality.label)
+        .font(Tokens.Text.caption)
+        .foregroundStyle(Tokens.Color.textSecondary)
+        // Never hyphenated mid-word: "Machine" became "Ma-" when it had to share a line.
+        .lineLimit(1)
+        .fixedSize(horizontal: true, vertical: false)
+    }
+  }
+
+  /// A movement the user created is marked, so a typo'd duplicate of a curated entry is visibly
+  /// theirs rather than looking official.
+  @ViewBuilder private func ownMovementMark(_ entry: CatalogEntry) -> some View {
+    if !entry.isCurated {
+      Image(systemName: "person.crop.circle")
+        .font(Tokens.Text.caption)
+        .foregroundStyle(Tokens.Color.textSecondary)
+        .accessibilityLabel("Your own movement")
+    }
   }
 
   private func supportingText(for entry: CatalogEntry) -> String {

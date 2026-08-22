@@ -42,6 +42,21 @@ Walked end to end on iPhone 17 / iOS 26.4, with the database checked directly af
 - [x] One total-loss bug found here: the app discarded the `SyncEngine`, whose triggers then had a
       dead function behind them, so **every write to every synchronized table failed**. Nothing in
       the suite could have caught it.
+- [x] **AX5 Dynamic Type pass** (`simctl ui <udid> content_size accessibility-extra-extra-extra-large`).
+      Three defects found by looking, none of which any test could see:
+      * `SetRowView` collapsed. "Last time" broke to one character per line ("Las / t / tim / e"),
+        the unit suffixes split mid-word ("-k / g", "-re / p / s"), and one set row grew to ~600 pt.
+        The most-used screen in the app was unusable at the sizes that exist for people who need
+        them. Fixed with a stacked layout at accessibility sizes and a `@ScaledMetric` ordinal
+        gutter, which had been a hard 28 pt -- narrower than a single AX5 digit.
+      * `ExercisePickerView` truncated the muscle attribution to "also Fro..." and the equipment
+        label to "Ma-". That line is the reason the picker beats a list of names, so truncating it
+        threw away the differentiator to save height. Fixed: no line limit on the attribution, and
+        the row stacks at accessibility sizes.
+      * The picker sheet's large title truncated to "Add movem...". Large titles truncate rather
+        than wrap; it is inline now.
+      Verified after the fix: each label holds one line, the attribution renders in full, and the
+      log control spans the row. The Volume screen and the start screen already passed unchanged.
 - [x] One crash found here, on the first tap that animated a colour: `Tokens.Color.dynamic` builds a
       `UIColor` dynamic provider, and `HardsetUI` compiles with `defaultIsolation(MainActor)`, so the
       provider closure was inferred `@MainActor`. SwiftUI resolves colours **off** the main actor

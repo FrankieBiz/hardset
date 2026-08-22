@@ -33,6 +33,11 @@ acknowledges on touch-*down*, and the check replaces the circle. The root forces
 transition in §5.7, most of the haptics table in §5.8, the glass policy in §4.4, and the
 concentric-corner rule in §4.2.
 
+**Reduce Motion** is honoured on the press path (`CommitButtonStyle` drops the scale and keeps the
+dim) and throughout `SessionSummaryView`. It is **not** yet honoured by `SetRowView`'s row-level
+recede and symbol replace, which still animate with the setting on. That file is being edited
+elsewhere; the gap is small (a colour crossfade and a symbol swap) but it is real.
+
 **Tuning is not verification.** Every animation above is implemented to specification and none has
 been felt on hardware. Haptic-and-pixel co-timing (M4) and 120 Hz cannot be judged in a simulator,
 so expect these numbers to move once the device gate closes. The rest timer stays undecorated until
@@ -274,8 +279,10 @@ Existing scale is sound. Two additions for the sleeker rhythm — sleekness is m
 `Radius.control = 10`, `Radius.card = 16` — keep. All corners continuous, never circular.
 
 **Nested corners must be concentric,** not equal. An inset child inside a 16 pt card needs
-`16 − inset`, not 16. iOS 26 has `ConcentricRectangle`, which derives this from the container —
-prefer it over hand-computed radii, and verify the exact API against the SDK before relying on it.
+`16 − inset`, not 16. Prefer `ConcentricRectangle`, which derives this from the container rather
+than from a hand-computed radius. **Confirmed present** in the iOS 26.4 SDK as
+`public struct ConcentricRectangle : Shape, Animatable` in SwiftUICore — an earlier version of this
+line asked the reader to verify it, which is now done.
 
 ### 4.3 Tap targets
 
@@ -366,13 +373,20 @@ pulsing idle state. Battery, and it reads as decoration.
 
 | Name | Definition | Settles | For |
 |---|---|---|---|
-| `tap` | `.spring(duration: 0.09, bounce: 0.18)` | 98 ms | press / release |
-| `control` | `.spring(duration: 0.16, bounce: 0.12)` | 132 ms | toggle, selection, focus ring travel |
+| `tap` | `.spring(duration: 0.09, bounce: 0.18)` | 103 ms | press / release |
+| `control` | `.spring(duration: 0.16, bounce: 0.12)` | 131 ms | toggle, selection, focus ring travel |
 | `surface` | `.spring(duration: 0.24, bounce: 0)` | 284 ms | sheets, cards, rows settling |
-| `travel` | `.spring(duration: 0.30, bounce: 0.16)` | 334 ms | an element crossing the screen |
+| `travel` | `.spring(duration: 0.30, bounce: 0.16)` | 333 ms | an element crossing the screen |
 | `reveal` | `.easeOut(duration: 0.32)` | 320 ms | one-shot, non-interruptible reveal |
 | `decay` | `.linear(duration: remaining)` | — | the rest countdown — duration *is* the datum |
-| `commit(intensity:)` | `.spring(duration: 0.09→0.14, bounce: 0.18→0.04)` | 98–146 ms | **the signature** — a set, weighted by its load |
+| `commit(intensity:)` | `.spring(duration: 0.09→0.14, bounce: 0.18→0.04)` | 97–149 ms | **the signature** — a set, weighted by its load |
+
+Settle times are the time to enter and stay within 0.5% of target, recomputed from the constants
+actually in `Tokens.Motion` and pinned by `CommitSettlingTests`. An earlier version of this table
+was wrong: it carried `tap` at 98 ms, computed from a prototype whose bounce was 0.15, while the
+shipped token is 0.18 — chosen so `commit(intensity: 0)` is continuous with `tap`. The lesson is
+the obvious one, which is that a table of measurements has to be regenerated from the source of
+truth rather than copied forward.
 
 Seven. Anything not on this list needs a reason written next to it.
 
@@ -397,6 +411,13 @@ rather than a celebration bolted on.
 
 Invariants are pinned in `CommitShapeTests`: unknown is unmodulated, damping falls monotonically
 with load, and duration never passes the snappy ceiling.
+
+**Settling is not monotonic, and that is known rather than intended.** Duration rises with load
+while bounce falls, and the two pull in opposite directions, so a mid-weight set settles marginally
+*faster* than a light one — 103 ms at intensity 0, 97 ms at 0.5, 149 ms at 1.0. The dip is 6 ms and
+imperceptible, the heavy end is unambiguously the longest, and the sense of mass is carried by the
+loss of overshoot rather than by total time. `CommitSettlingTests` pins the shape of that envelope
+so a change to the constants cannot quietly alter how the log control feels.
 
 ### 5.3 Hero moment — logging a set
 
@@ -593,6 +614,11 @@ Not merged until all of these hold:
 - [ ] Every animation is on the §5.2 scale, or carries a written reason.
 - [ ] Every animation declares its Reduce Motion substitute, and it was checked with the setting on.
 - [ ] Checked at AX5 Dynamic Type. Nothing clipped, no tap target under 44 pt.
+      Set it with `xcrun simctl ui <udid> content_size accessibility-extra-extra-extra-large`, and
+      actually look — the first pass over this app found the set row rendering one character per
+      line. A fixed-width column or a `.lineLimit(1)` on anything load-bearing is the usual cause;
+      prefer a layout that adapts (`ViewThatFits`, or a `dynamicTypeSize.isAccessibilitySize`
+      branch) over a `minimumScaleFactor` that "fits" by shrinking text the reader asked to enlarge.
 - [ ] Zero database work per animation frame.
 - [ ] Every number on screen has its certainty in the same frame.
 - [ ] VoiceOver: dense rows are one element with a spoken sentence and named custom actions — not

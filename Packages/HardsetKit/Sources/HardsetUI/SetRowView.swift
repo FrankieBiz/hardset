@@ -28,6 +28,15 @@ public struct SetRowView: View {
   @State private var repsBuffer: NumericEntryBuffer
   @State private var editing: SetRowField?
 
+  /// Chosen layout depends on this. At accessibility sizes the horizontal row cannot hold its
+  /// five columns: "Last time" broke to one character per line ("Las / t / tim / e") and the unit
+  /// suffixes split mid-word ("—k / g"), which made the most-used screen in the app unreadable for
+  /// exactly the people who need the larger text.
+  @Environment(\.dynamicTypeSize) private var typeSize
+
+  /// The ordinal's gutter, scaled. It was a hard 28 pt, which is narrower than a single AX5 digit.
+  @ScaledMetric(relativeTo: .subheadline) private var ordinalWidth: CGFloat = 28
+
   private let ordinal: Int
   private let isWarmup: Bool
   private let isLogged: Bool
@@ -81,30 +90,11 @@ public struct SetRowView: View {
   }
 
   public var body: some View {
-    HStack(spacing: Tokens.Spacing.regular) {
-      ordinalBadge
-
-      VStack(alignment: .leading, spacing: Tokens.Spacing.hairline) {
-        Text("Last time")
-          .font(Tokens.Text.caption)
-          .foregroundStyle(Tokens.Color.textSecondary)
-        Text(previousDescription)
-          .font(Tokens.Text.caption)
-          .foregroundStyle(Tokens.Color.textSecondary)
-          .monospacedDigit()
-        if let priorNote {
-          // An assumption the user should be able to see, not a number presented as fact.
-          Text(priorNote)
-            .font(Tokens.Text.caption)
-            .foregroundStyle(Tokens.Color.certainty(.low))
-        }
-      }
-      .frame(minWidth: 78, alignment: .leading)
-
-      valueField(.weight, buffer: weightBuffer, suffix: unit.abbreviation)
-      valueField(.reps, buffer: repsBuffer, suffix: "reps")
-
-      logButton
+    // One set of shared behaviour, two geometries. Everything below the layout choice -- the
+    // commit animation, the accessibility element, the actions, the pad, the unit reseed -- is
+    // identical, so the two paths cannot drift in behaviour, only in arrangement.
+    Group {
+      if typeSize.isAccessibilitySize { stackedRow } else { compactRow }
     }
     .padding(.horizontal, Tokens.Spacing.regular)
     .padding(.vertical, Tokens.Spacing.snug)
@@ -147,6 +137,58 @@ public struct SetRowView: View {
     )
   }
 
+  // MARK: - Layouts
+
+  /// The dense row: five columns, which is right at normal text sizes and is what the logger is
+  /// designed around.
+  private var compactRow: some View {
+    HStack(spacing: Tokens.Spacing.regular) {
+      ordinalBadge
+      previousBlock
+        .frame(minWidth: 78, alignment: .leading)
+      valueField(.weight, buffer: weightBuffer, suffix: unit.abbreviation)
+      valueField(.reps, buffer: repsBuffer, suffix: "reps")
+      logButton
+    }
+  }
+
+  /// The accessibility-size row. Each value gets the full width rather than a fifth of it, so
+  /// nothing wraps mid-word, and the log control spans the row -- which also makes it a far easier
+  /// target for someone who set the text larger for motor rather than visual reasons.
+  private var stackedRow: some View {
+    VStack(alignment: .leading, spacing: Tokens.Spacing.snug) {
+      HStack(alignment: .firstTextBaseline, spacing: Tokens.Spacing.regular) {
+        ordinalBadge
+        previousBlock
+        Spacer(minLength: 0)
+      }
+      valueField(.weight, buffer: weightBuffer, suffix: unit.abbreviation)
+      valueField(.reps, buffer: repsBuffer, suffix: "reps")
+      logButton
+        .frame(maxWidth: .infinity)
+    }
+  }
+
+  /// Last session's numbers. Rendered outside the entry fields on purpose: a suggestion must never
+  /// be mistakable for a filled value.
+  private var previousBlock: some View {
+    VStack(alignment: .leading, spacing: Tokens.Spacing.hairline) {
+      Text("Last time")
+        .font(Tokens.Text.caption)
+        .foregroundStyle(Tokens.Color.textSecondary)
+      Text(previousDescription)
+        .font(Tokens.Text.caption)
+        .foregroundStyle(Tokens.Color.textSecondary)
+        .monospacedDigit()
+      if let priorNote {
+        // An assumption the user should be able to see, not a number presented as fact.
+        Text(priorNote)
+          .font(Tokens.Text.caption)
+          .foregroundStyle(Tokens.Color.certainty(.low))
+      }
+    }
+  }
+
   // MARK: - Pieces
 
   private var ordinalBadge: some View {
@@ -154,7 +196,7 @@ public struct SetRowView: View {
       .font(Tokens.Text.label.weight(.semibold))
       .monospacedDigit()
       .foregroundStyle(ordinalInk)
-      .frame(width: 28)
+      .frame(minWidth: ordinalWidth, alignment: .leading)
   }
 
   /// A logged row recedes, and the next row is left as the brightest thing on screen.

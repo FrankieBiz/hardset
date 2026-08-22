@@ -116,11 +116,22 @@ public struct SessionSummaryView: View {
   /// Deliberately secondary. Duration is a fact; tonnage is a number lifters like that means less
   /// than it looks like it means. Neither gets hero treatment.
   private var readouts: some View {
-    HStack(alignment: .top, spacing: Tokens.Spacing.section) {
-      readout(durationText, label: "Length")
-      readout("\(outcome.volume.reps)", label: "Reps")
-      readout(tonnageText, label: "Volume")
+    // Adaptive by construction rather than by a tuned shrink factor. Three fixed columns cannot
+    // hold "Unknown" plus a six-digit tonnage in pounds at accessibility text sizes -- at AX5 the
+    // `.title` style alone is wider than a third of the screen -- and the previous version papered
+    // over that with `minimumScaleFactor(0.6)`, which "fits" by rendering a value at 60% of a size
+    // the reader explicitly asked to be larger. `ViewThatFits` measures instead: it keeps the row
+    // while the row genuinely fits and falls to a stack when it does not.
+    ViewThatFits(in: .horizontal) {
+      HStack(alignment: .top, spacing: Tokens.Spacing.section) { readoutItems }
+      VStack(alignment: .leading, spacing: Tokens.Spacing.regular) { readoutItems }
     }
+  }
+
+  @ViewBuilder private var readoutItems: some View {
+    readout(durationText, label: "Length")
+    readout("\(outcome.volume.reps)", label: "Reps")
+    readout(tonnageText, label: "Volume")
   }
 
   private func readout(_ value: String, label: String) -> some View {
@@ -130,7 +141,9 @@ public struct SessionSummaryView: View {
         .tracking(Tokens.Tracking.readout)
         .foregroundStyle(Tokens.Color.textPrimary)
         .lineLimit(1)
-        .minimumScaleFactor(0.6)
+        // A mild floor only. Anything that needs more than this gets the stacked layout above
+        // instead of being shrunk out of legibility.
+        .minimumScaleFactor(0.85)
       Text(label)
         .font(Tokens.Text.caption)
         .foregroundStyle(Tokens.Color.textSecondary)

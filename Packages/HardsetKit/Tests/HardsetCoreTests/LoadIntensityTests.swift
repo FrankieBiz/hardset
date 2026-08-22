@@ -122,3 +122,87 @@ struct CommitShapeTests {
     #expect(LoadIntensity.commitShape(intensity: 1).bounce >= 0)
   }
 }
+
+/// Settling time, which is what the hand actually waits for.
+///
+/// `CommitShapeTests` above pins duration and bounce separately, and both are monotonic in load.
+/// Settling time is **not**, because the two move in opposite directions: raising duration
+/// lengthens the settle while lowering bounce shortens it. A mid-weight set therefore settles
+/// marginally *faster* than a light one. That was discovered rather than designed, so it is pinned
+/// here -- the point is that a future change to the constants cannot alter the felt envelope
+/// without a test saying so.
+@Suite("Commit settling stays inside the snappy envelope")
+struct CommitSettlingTests {
+  /// Time for a damped spring to enter and stay within 0.5% of its target.
+  ///
+  /// Duplicated deliberately from the design-language maths rather than imported: this is the
+  /// independent check. If the production formula and this one ever disagree, that disagreement is
+  /// the finding.
+  private func settleSeconds(duration: Double, bounce: Double) -> Double {
+    let zeta = 1 - bounce
+    let w0 = 2 * Double.pi / duration
+    func displacement(_ t: Double) -> Double {
+      // Written out with explicit calls: the `.exp`/`.cos` static-member shorthand made the
+      // type-checker give up on this expression.
+      if zeta < 1 {
+        let wd: Double = w0 * (1 - zeta * zeta).squareRoot()
+        let decay: Double = exp(-zeta * w0 * t)
+        let oscillation: Double = cos(wd * t) + (zeta * w0 / wd) * sin(wd * t)
+        return 1 - decay * oscillation
+      }
+      let decay: Double = exp(-w0 * t)
+      return 1 - decay * (1 + w0 * t)
+    }
+    let step = 0.0005
+    var last = step
+    var t = step
+    while t <= duration * 8 {
+      if abs(displacement(t) - 1) > 0.005 { last = t }
+      t += step
+    }
+    return Swift.max(last + step, duration * 0.4)
+  }
+
+  private func settleMilliseconds(forIntensity intensity: Double?) -> Int {
+    let shape = LoadIntensity.commitShape(intensity: intensity)
+    return Int((settleSeconds(duration: shape.duration, bounce: shape.bounce) * 1000).rounded())
+  }
+
+  @Test("Every commit settles inside 160 ms, so nothing on the log path feels slow")
+  func envelopeCeiling() {
+    for step in 0...20 {
+      let ms = settleMilliseconds(forIntensity: Double(step) / 20)
+      #expect(ms <= 160, "intensity \(Double(step) / 20) settled in \(ms) ms")
+    }
+  }
+
+  @Test("The acknowledgement budget is met at every load")
+  func acknowledgementIsImmediate() {
+    // The press scale begins on touch-down, so acknowledgement is not gated on settling. What must
+    // hold is that the *spring* itself is never so long that the control looks stuck: guideline M3
+    // allows 320 ms for completion.
+    for step in 0...20 {
+      #expect(settleMilliseconds(forIntensity: Double(step) / 20) <= 320)
+    }
+  }
+
+  @Test("Settling is NOT monotonic in load, and that is a known property")
+  func settlingDipsInTheMiddle() {
+    let light = settleMilliseconds(forIntensity: 0)
+    let middle = settleMilliseconds(forIntensity: 0.5)
+    let heavy = settleMilliseconds(forIntensity: 1)
+
+    // Documented, not desired: damping falls faster than duration rises across the lower half.
+    #expect(middle <= light)
+    // The heavy end is unambiguously the longest, which is what carries the sense of mass.
+    #expect(heavy > light)
+    #expect(heavy > middle)
+    // And the dip is far too small to perceive, which is why it is acceptable rather than a bug.
+    #expect(light - middle <= 15, "dip of \(light - middle) ms would become noticeable")
+  }
+
+  @Test("An unknown load settles exactly as the base shape does")
+  func unknownMatchesBase() {
+    #expect(settleMilliseconds(forIntensity: nil) == settleMilliseconds(forIntensity: 0))
+  }
+}
