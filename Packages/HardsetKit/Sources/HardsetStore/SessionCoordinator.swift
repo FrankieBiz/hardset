@@ -36,6 +36,15 @@ public final class SessionCoordinator {
   /// celebration cannot linger onto a set that did not earn it.
   public private(set) var lastRecords: [PersonalRecord] = []
 
+  /// Every record set during this session, accumulated.
+  ///
+  /// `lastRecords` is reset on each write because it drives the per-set announcement. The summary
+  /// needs the whole session, and recomputing it at the end is not an option: detection compares a
+  /// set against the history that existed *before* it was written, and by the time the workout ends
+  /// that history includes the very sets being judged. So it is captured as it happens or not at
+  /// all.
+  public private(set) var sessionRecords: [PersonalRecord] = []
+
   /// Maps an `ExerciseLogState.id` to its `sessionExercises` row id.
   ///
   /// Held here rather than on `ExerciseLogState` because a storage row id is a storage concern and
@@ -61,11 +70,24 @@ public final class SessionCoordinator {
   /// database inside the logging path.
   public private(set) var gymID: GymID?
 
+  /// When this session began and, once closed, when it ended.
+  ///
+  /// Held as a `SessionTimeline` rather than two loose dates so the derived-never-stored rule and
+  /// its guards come along for free: an open session has no duration at all, rather than "however
+  /// long ago it started", which is the bug that shipped 9,749-minute workouts.
+  public private(set) var timeline: SessionTimeline
+
+  /// What this workout amounted to. Read when the summary is shown.
+  public var outcome: SessionOutcome {
+    SessionOutcome(exercises: exercises, timeline: timeline, records: sessionRecords)
+  }
+
   public init(
     store: LoggerStore,
     sessionID: SessionID,
     exercises: [ExerciseLogState],
     gymID: GymID? = nil,
+    startedAt: Date? = nil,
     now: @escaping () -> Date = { Date() },
     restAfterSet: Duration? = nil,
     onStartRest: @escaping (Duration, RestMetadata) -> Void = { _, _ in }
@@ -74,6 +96,7 @@ public final class SessionCoordinator {
     self.sessionID = sessionID
     self.exercises = exercises
     self.gymID = gymID
+    self.timeline = SessionTimeline(startedAt: startedAt ?? now())
     self.now = now
     self.restAfterSet = restAfterSet
     self.onStartRest = onStartRest
@@ -134,6 +157,7 @@ public final class SessionCoordinator {
       sessionID: sessionID,
       exercises: states,
       gymID: gymID,
+      startedAt: startedAt,
       now: now,
       restAfterSet: restAfterSet,
       onStartRest: onStartRest
@@ -231,6 +255,9 @@ public final class SessionCoordinator {
       exercises: states,
       // Read back from the session row, so a recovered workout offers the same gym's equipment.
       gymID: session.gymID,
+      // From storage, never from `now()`. A recovered session started when it started, and
+      // re-stamping it here is exactly how a workout becomes nine thousand minutes long.
+      startedAt: session.timeline.startedAt,
       now: now,
       restAfterSet: restAfterSet,
       onStartRest: onStartRest
@@ -358,6 +385,7 @@ public final class SessionCoordinator {
           history: priorHistory,
           increment: exercise.machineIncrementKg
         )
+        sessionRecords.append(contentsOf: lastRecords)
       } else {
         lastRecords = []
       }
@@ -447,7 +475,11 @@ public final class SessionCoordinator {
 
   /// Closes the session. Refuses to double-finish, so `finishedAt` cannot drift.
   public func finish() throws {
-    try store.finishSession(sessionID, at: now())
+    let finishedAt = now()
+    // The store is the authority, so it goes first: advancing the timeline before a write that
+    // then failed would claim a finish that did not happen, and the session is still open.
+    try store.finishSession(sessionID, at: finishedAt)
+    timeline = SessionTimeline(startedAt: timeline.startedAt, finishedAt: finishedAt)
     isFinished = true
   }
 

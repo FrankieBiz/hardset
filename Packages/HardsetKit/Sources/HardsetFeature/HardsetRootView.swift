@@ -38,6 +38,12 @@ public struct HardsetEnvironment {
 @MainActor
 public struct HardsetRootView: View {
   @State private var coordinator: SessionCoordinator?
+  /// The finished workout, held until the lifter dismisses its summary.
+  ///
+  /// Kept separately from `coordinator`, which is cleared the moment the session closes so the
+  /// live-session accessory disappears with it. A workout that is over should not still show a
+  /// pill saying it is in progress.
+  @State private var finished: FinishedSession?
   @State private var startFailed = false
   /// Where the next workout will be. Preselected from the last one, changeable in one tap, and
   /// allowed to stay nil — training somewhere new must not require setup first.
@@ -164,7 +170,18 @@ public struct HardsetRootView: View {
   // MARK: - Train
 
   @ViewBuilder private var trainTab: some View {
-    if let coordinator {
+    if let finished {
+      // A terminal moment, so it replaces the tab's content rather than covering it. A sheet over
+      // a logger that is no longer live would leave the finished session visible underneath.
+      SessionSummaryScreen(
+        outcome: finished.outcome,
+        timeline: finished.timeline,
+        store: environment.volume,
+        unit: unit,
+        onDone: { self.finished = nil }
+      )
+      .navigationTitle("Summary")
+    } else if let coordinator {
       LiveSessionScreen(
         coordinator: coordinator,
         unit: unit,
@@ -172,7 +189,12 @@ public struct HardsetRootView: View {
         catalog: environment.catalog,
         gyms: environment.gyms,
         progression: environment.progression,
-        onFinished: { self.coordinator = nil }
+        onFinished: { outcome in
+          self.finished = FinishedSession(outcome: outcome, timeline: coordinator.timeline)
+          // Cleared here, not after the summary is dismissed: the session is over, so the
+          // in-progress accessory must go with it.
+          self.coordinator = nil
+        }
       )
       .navigationTitle("Workout")
     } else {
@@ -189,14 +211,19 @@ public struct HardsetRootView: View {
       }
       gymRow
 
+      // The primary action is a white fill with a `ground` label -- the brightest object on the
+      // screen, and there is at most one. This was white-on-surface, which made it read as
+      // secondary and disagreed with the same control on the summary screen.
       Button(action: startEmptyWorkout) {
         Text("Start workout")
           .font(Tokens.Text.label.weight(.semibold))
           .frame(maxWidth: .infinity, minHeight: Tokens.loggerTapTarget)
+          .foregroundStyle(Tokens.Color.ground)
+          .background(
+            Tokens.Color.accent, in: RoundedRectangle(cornerRadius: Tokens.Radius.control)
+          )
       }
-      .buttonStyle(.plain)
-      .foregroundStyle(Tokens.Color.accent)
-      .background(Tokens.Color.surface, in: RoundedRectangle(cornerRadius: Tokens.Radius.control))
+      .buttonStyle(CommitButtonStyle())
       .padding(.horizontal, Tokens.Spacing.section)
 
       if startFailed {
@@ -394,4 +421,14 @@ public struct HardsetRootView: View {
       )
     }
   }
+}
+
+/// A closed workout plus the span it occupied, carried from the logger to the summary.
+///
+/// The timeline travels alongside the outcome because `SessionOutcome` deliberately exposes only a
+/// duration it is willing to state -- it does not hand out the raw instants -- while the summary
+/// still needs them to query the muscle breakdown for exactly this session's window.
+struct FinishedSession {
+  let outcome: SessionOutcome
+  let timeline: SessionTimeline
 }

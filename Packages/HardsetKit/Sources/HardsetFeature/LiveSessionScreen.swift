@@ -71,7 +71,7 @@ public struct LiveSessionScreen: View {
   private let catalog: CatalogSeeder?
   private let gyms: GymStore?
   private let progression: ProgressionStore?
-  private let onFinished: () -> Void
+  private let onFinished: (SessionOutcome) -> Void
 
   /// - Parameter catalog: Supplies the picker. Passing `nil` hides the add-movement affordance
   ///   entirely rather than showing a button that opens an empty list.
@@ -84,7 +84,7 @@ public struct LiveSessionScreen: View {
     catalog: CatalogSeeder? = nil,
     gyms: GymStore? = nil,
     progression: ProgressionStore? = nil,
-    onFinished: @escaping () -> Void = {}
+    onFinished: @escaping (SessionOutcome) -> Void = { _ in }
   ) {
     self._coordinator = State(initialValue: coordinator)
     self.unit = unit
@@ -287,11 +287,13 @@ public struct LiveSessionScreen: View {
     restMetadata = nil
     do {
       try coordinator.finish()
-      onFinished()
+      // Read after the finish, so the timeline is closed and the summary has a duration.
+      onFinished(coordinator.outcome)
     } catch SessionTimelineError.alreadyFinished {
       // Genuinely closed already — a double tap, or a finish that raced a recovery. Moving on is
-      // correct here because the session really is finished.
-      onFinished()
+      // correct here because the session really is finished. The outcome may carry no duration in
+      // that case, and "Unknown" is the honest thing to show.
+      onFinished(coordinator.outcome)
     } catch {
       // Anything else and the session is STILL OPEN. Calling onFinished() here was a bug: the root
       // view dropped the coordinator, the user started a new workout, and because openSession()

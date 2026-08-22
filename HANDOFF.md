@@ -178,11 +178,15 @@ The live sequence:
    needs a signing identity the sandbox cannot supply, and Apple Developer Program membership is
    still an open question in §11. Nothing about AlarmKit is proven until this closes: no alarm has
    ever fired on hardware.
-2. **A post-workout summary screen.** `onFinished` currently just clears the coordinator, so
-   finishing a workout shows nothing. `PersonalRecordDetector` is built, tested, and referenced by
-   no view — the margin rule that took real care to get right announces records **nobody has ever
-   seen.** Read-only over existing tables, so it carries no schema risk. This is the highest-value
-   work available that does not need a device.
+2. **DONE — a post-workout summary screen.** `SessionSummaryView` plus `SessionSummaryScreen`,
+   with `SessionOutcome` in the engine. Finishing used to only clear the coordinator, so a workout
+   ended in silence. Read-only over existing tables, so no schema risk.
+
+   One correction worth recording: an earlier version of this list claimed
+   `PersonalRecordDetector` was referenced by no view and that nobody had ever seen a record. That
+   was wrong — `SessionView` has rendered per-set records all along. The claim came from a grep
+   piped through `head`, read as if it were exhaustive. What was genuinely missing was
+   session-level aggregation (`SessionCoordinator.sessionRecords`) and any summary at all.
 3. **Motion**, in the order the hero moments' hosts become stable: set-log recede, then the rest
    timer, then the summary choreography, then chart draw-on. `docs/UI-GUIDELINES.md` §5 specifies
    all four; `Tokens.Motion` already holds the vocabulary.

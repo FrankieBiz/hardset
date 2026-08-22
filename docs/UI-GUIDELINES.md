@@ -38,9 +38,11 @@ been felt on hardware. Haptic-and-pixel co-timing (M4) and 120 Hz cannot be judg
 so expect these numbers to move once the device gate closes. The rest timer stays undecorated until
 AlarmKit is proven on a phone: do not decorate a timer that has never fired.
 
-**Known gap this document exposed:** `PersonalRecordDetector` is built and tested in `HardsetCore`
-and referenced by no view, and finishing a workout only clears the coordinator. So §5.5 has no host
-screen and no user has ever seen a PR. That is a product gap, not a styling one.
+**Known gap this document exposed:** finishing a workout used to only clear the coordinator, so
+§5.5 had no host screen at all. A `SessionSummaryView` now exists. Records were *already* surfaced
+per set inside the live session by `SessionView` -- an earlier draft of this note claimed no view
+read them, which was wrong -- but nothing had ever aggregated them for the session as a whole, and
+nothing summarised a finished workout.
 
 ---
 

@@ -102,5 +102,14 @@ let package = Package(
       ],
       swiftSettings: strictConcurrency
     ),
+    // Added because view-layer logic kept needing coverage and had nowhere to go: the copy that
+    // states a personal record had a bug that read as a regression, and the only way to catch it
+    // was to walk the simulator. `HardsetUI` builds on the host, so its pure pieces -- number
+    // formatting, the sentences it writes -- are testable here without a device.
+    .testTarget(
+      name: "HardsetUITests",
+      dependencies: ["HardsetUI", "HardsetCore"],
+      swiftSettings: mainActorByDefault
+    ),
   ]
 )
