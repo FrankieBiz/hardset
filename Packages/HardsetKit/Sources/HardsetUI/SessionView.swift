@@ -146,7 +146,7 @@ public struct SessionView: View {
       // Room for the rest bar so the last row is never trapped underneath it.
       .safeAreaPadding(.bottom, restState == .idle ? 0 : 72)
     }
-    .background(Tokens.Color.background)
+    .background(Tokens.Color.ground)
     .safeAreaInset(edge: .bottom) {
       RestBarView(
         state: restState,

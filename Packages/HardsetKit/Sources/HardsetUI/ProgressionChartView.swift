@@ -211,7 +211,7 @@ public struct ProgressionChartView: View {
         )
         .padding()
       }
-      .background(Tokens.Color.background)
+      .background(Tokens.Color.ground)
     }
   }
 

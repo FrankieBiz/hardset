@@ -44,7 +44,7 @@ public struct VolumeReportView: View {
       }
       .padding(Tokens.Spacing.regular)
     }
-    .background(Tokens.Color.background)
+    .background(Tokens.Color.ground)
   }
 
   // MARK: - Header

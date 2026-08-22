@@ -268,3 +268,39 @@ regression, because across a switch it is neither.
 The ancestor shipped 9,749-minute workouts to its history screen as achievements. `SessionTimeline`
 already refuses to store a duration; `HistoryView` additionally renders "Length unknown" for a span
 longer than any real workout, because the honest statement is that we do not know how long it took.
+
+## The design language
+
+### 22. Colour is information, and three chart hues is a measured limit, not a taste
+
+The visual direction is Whoop's instrument feeling with Apple's restraint: near-black ground,
+one hero number per screen, thin marks, no decoration. Dark-only in v1, forced at the root rather
+than following the system — one palette tuned precisely beats two tuned adequately. Light mode
+stays a later decision, kept cheap by never naming a token for an appearance and by leaving the
+light slot in `Tokens.Color.dynamic` in place.
+
+**Chrome is greyscale and the accent is white**, the same value as `textPrimary`. It follows from
+the rule that the brightest thing on screen should be the thing you are doing, and it removes the
+usual dark-app failure where a brand hue competes with every status colour at once. The accent had
+been `Color.accentColor`, so the app's identity was whatever tint the device carried.
+
+**Four simultaneous chart hues do not pass on this ground.** Measured all-pairs, not judged: a
+cool-only set — the most obviously "sleek" choice, and the first one tried — collapses to 1.1 dE
+between blue and violet under deuteranopia, i.e. identical. Adding a green fourth slot fails too
+(5.7 dE against purple, 14.9 against blue on *normal* vision, under the floor of 15). Three pass,
+with 8.8 dE worst-case. So hue is spent on the **gym** and machines within a gym separate by stroke
+dash and marker shape — which falls out of the data model, since a machine belongs to a gym, and it
+is a better encoding than the one that failed.
+
+Consequently **status hue may never enter a plot rect and series hue may never leave one.** Status
+`low` and series amber differ by only 8.4 dE; as large swatches you can just about tell them apart,
+and as 2 px marks — which is what a chart line is — you cannot. The separation has to be structural.
+
+Three eyeballed palettes failed the validator before these values were derived. Colour separation
+is computable, so it gets computed: re-run the validator on any change here rather than judging it.
+
+Everything above is implemented. The motion system in `docs/UI-GUIDELINES.md` §5 is **specified and
+deliberately not built**: haptic-and-pixel co-timing and a 100 ms acknowledgement budget are not
+judgeable in a simulator, and AlarmKit has never fired on hardware, so the rest timer gets proven
+before it gets decorated. `Tokens.Motion` ships as the vocabulary so there is nothing to invent
+later.

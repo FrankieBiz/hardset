@@ -48,7 +48,7 @@ public struct MethodologySheet: View {
         .padding(Tokens.Spacing.regular)
         .frame(maxWidth: .infinity, alignment: .leading)
       }
-      .background(Tokens.Color.background)
+      .background(Tokens.Color.ground)
       .navigationTitle(source.title)
     }
   }

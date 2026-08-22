@@ -218,7 +218,7 @@ public struct ExerciseSectionView: View {
             state.markLogged(slotID: slot.id, setID: SetID())
           }
         }
-        .background(Tokens.Color.background)
+        .background(Tokens.Color.ground)
       }
     }
     return Harness()

@@ -42,7 +42,7 @@ public struct WeeklyVolumeScreen: View {
       } else {
         ProgressView()
           .frame(maxWidth: .infinity, maxHeight: .infinity)
-          .background(Tokens.Color.background)
+          .background(Tokens.Color.ground)
       }
     }
     .task { load() }

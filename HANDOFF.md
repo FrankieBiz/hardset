@@ -168,23 +168,34 @@ the flagship feature actually gets proven. The user has an iPhone and has agreed
 
 ## 8. Next steps, in order
 
-1. **Wire `MachinePickerView` into `ExerciseSectionView`.** The store layer
-   (`GymStore.recentMachines`, `SessionCoordinator.changeMachine`) and the view both exist and are
-   tested, but nothing presents the picker yet. Until this lands, a user still cannot select a
-   machine, and machine-level tracking — the second differentiator — stays unreachable in practice.
-   This is the highest-value hour available.
-2. **Gym management UI.** `GymStore` can create gyms and machines; no screen calls it.
-3. **Exercise detail screen** wiring `ProgressionChartView` to `ProgressionStore.history(for:)`.
-   The chart and the query both exist and are tested; nothing navigates to them.
-4. **A settings screen** for `WeightUnit` — `WeightUnit` exists and is tested, but the unit is
-   hardcoded `.kilograms` at the root view.
-5. **Then**: the device checklist, before stacking more on an unproven foundation.
+**Items 1-4 of the previous list have shipped** — machine selection is wired into the workout, gyms
+and machines have screens, `ProgressionChartView` is reachable through `ExerciseProgressScreen`, and
+the unit picker exists. `DEVICE-CHECKLIST.md` §A2 records the simulator walkthrough that proved it.
 
-Deliberately **not** next, and why: subscriptions (nothing to sell until the app runs), the
-progression *prescription* engine (needs the device-verified logger first), and the 240-exercise
-catalogue (that is content work, ~260–340 hours, and a decision the user has not made).
+The live sequence:
 
----
+1. **The device gate — and it is blocked on the user, not on engineering.** §A of the checklist
+   needs a signing identity the sandbox cannot supply, and Apple Developer Program membership is
+   still an open question in §11. Nothing about AlarmKit is proven until this closes: no alarm has
+   ever fired on hardware.
+2. **A post-workout summary screen.** `onFinished` currently just clears the coordinator, so
+   finishing a workout shows nothing. `PersonalRecordDetector` is built, tested, and referenced by
+   no view — the margin rule that took real care to get right announces records **nobody has ever
+   seen.** Read-only over existing tables, so it carries no schema risk. This is the highest-value
+   work available that does not need a device.
+3. **Motion**, in the order the hero moments' hosts become stable: set-log recede, then the rest
+   timer, then the summary choreography, then chart draw-on. `docs/UI-GUIDELINES.md` §5 specifies
+   all four; `Tokens.Motion` already holds the vocabulary.
+
+Deliberately **not** next, and why: motion before the device gate (haptic-and-pixel co-timing and
+the 100 ms acknowledgement budget are unjudgeable in a simulator, so it would be tuned twice); the
+rest-timer arc before AlarmKit is proven (do not decorate an unverified timer); subscriptions
+(nothing to sell until the app runs on hardware); the 240-exercise catalogue (content work, and a
+decision the user has not made).
+
+One thing to cut rather than build: the glass morph from the set-log control into the rest bar. It
+is the flashiest item in the guidelines, it is tunable only on a device, and it sits on the hottest
+path in the app at forty times a session.
 
 ## 9. Traps that cost me build cycles — do not rediscover these
 

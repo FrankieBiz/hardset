@@ -74,7 +74,7 @@ public struct NumericPad: View {
     .disabled(key == .disabledDecimal)
     .opacity(key == .disabledDecimal ? 0 : 1)
     .background(
-      Tokens.Color.background,
+      Tokens.Color.ground,
       in: RoundedRectangle(cornerRadius: Tokens.Radius.control)
     )
     .accessibilityLabel(accessibilityLabel(for: key))

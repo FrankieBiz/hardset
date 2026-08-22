@@ -50,7 +50,7 @@ public struct ExerciseProgressScreen: View {
         .padding(.horizontal, Tokens.Spacing.regular)
       }
     }
-    .background(Tokens.Color.background)
+    .background(Tokens.Color.ground)
     .navigationTitle(exerciseName)
     .task { load() }
     .refreshable { load() }

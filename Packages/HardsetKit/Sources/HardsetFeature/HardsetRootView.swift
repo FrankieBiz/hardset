@@ -80,6 +80,19 @@ public struct HardsetRootView: View {
 
   public var body: some View {
     tabs
+      // Dark-only in v1, and forced rather than following the system. One palette tuned precisely
+      // beats two tuned adequately, and this app is read at arm's length in a badly lit gym.
+      //
+      // Our own tokens are appearance-independent already -- they resolve to the same values in
+      // either scheme -- so this exists for the chrome we do not draw: list backgrounds, the tab
+      // bar, navigation bars, `ContentUnavailableView`. Light mode stays a later decision, which
+      // is cheap because `Tokens.Color.dynamic` already has a slot waiting for it.
+      .preferredColorScheme(.dark)
+      // Pinning `Tokens.Color.accent` only fixed the colours *we* draw. System-drawn chrome --
+      // the tab bar's selected item, toggles, the navigation back button -- reads its tint from
+      // the environment, which was still the stock blue. Chrome is greyscale in this app, so the
+      // one hue the design exists to remove was left sitting in the tab bar until this line.
+      .tint(Tokens.Color.accent)
       .task {
         // Seeding is idempotent and non-destructive, so running it every launch is the intended
         // usage rather than something to guard with a flag that can drift from reality.
@@ -193,7 +206,7 @@ public struct HardsetRootView: View {
       }
     }
     .frame(maxWidth: .infinity, maxHeight: .infinity)
-    .background(Tokens.Color.background)
+    .background(Tokens.Color.ground)
     .sheet(isPresented: $isChoosingGym) { gymSheet }
   }
 

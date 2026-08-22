@@ -174,7 +174,7 @@ public struct SetRowView: View {
     }
     .buttonStyle(.plain)
     .background(
-      Tokens.Color.background,
+      Tokens.Color.ground,
       in: RoundedRectangle(cornerRadius: Tokens.Radius.control)
     )
     .overlay {
@@ -282,7 +282,7 @@ extension SetRowField: Identifiable {
           SetRowView(draft: $blank, ordinal: 1, unit: .kilograms, onLog: {})
         }
         .padding()
-        .background(Tokens.Color.background)
+        .background(Tokens.Color.ground)
       }
     }
     return Harness()

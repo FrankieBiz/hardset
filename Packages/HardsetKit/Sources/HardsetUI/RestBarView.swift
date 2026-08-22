@@ -153,6 +153,6 @@ public struct RestBarView: View {
       )
     }
     .padding()
-    .background(Tokens.Color.background)
+    .background(Tokens.Color.ground)
   }
 #endif
