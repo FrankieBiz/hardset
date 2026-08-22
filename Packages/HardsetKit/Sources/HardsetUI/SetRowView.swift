@@ -34,6 +34,10 @@ public struct SetRowView: View {
   private let unit: WeightUnit
   private let previous: PriorSetRecord?
   private let priorNote: String?
+  /// How heavy this set is relative to the lifter's own best on this movement, or `nil` when
+  /// there is no history to measure against. Drives the weight of the commit animation only --
+  /// it is never displayed, and `nil` deliberately produces no effect rather than a middle.
+  private let loadFraction: Double?
   private let onLog: () -> Void
 
   public init(
@@ -44,6 +48,7 @@ public struct SetRowView: View {
     unit: WeightUnit,
     previous: PriorSetRecord? = nil,
     priorNote: String? = nil,
+    loadFraction: Double? = nil,
     onLog: @escaping () -> Void
   ) {
     self._draft = draft
@@ -53,6 +58,7 @@ public struct SetRowView: View {
     self.unit = unit
     self.previous = previous
     self.priorNote = priorNote
+    self.loadFraction = loadFraction
     self.onLog = onLog
 
     // Seeded once, from whatever the caller already resolved as the suggestion. Note the
@@ -104,6 +110,10 @@ public struct SetRowView: View {
     .padding(.vertical, Tokens.Spacing.snug)
     // Opaque. Dense numeric rows are the one surface glass is actively wrong for.
     .background(Tokens.Color.surface)
+    // One animation for the whole commit, weighted by the load. Driven off `isLogged` so the
+    // recede, the symbol swap and the tick all move on a single curve rather than three that
+    // drift apart.
+    .animation(Tokens.Motion.commit(intensity: loadFraction), value: isLogged)
     .accessibilityElement(children: .combine)
     .accessibilityLabel(spokenLabel)
     .accessibilityHint(draft.isLoggable ? "Double tap to log this set." : "Enter a weight and reps to log.")
@@ -143,8 +153,22 @@ public struct SetRowView: View {
     Text(isWarmup ? "W" : String(ordinal + 1))
       .font(Tokens.Text.label.weight(.semibold))
       .monospacedDigit()
-      .foregroundStyle(isWarmup ? Tokens.Color.textSecondary : Tokens.Color.textPrimary)
+      .foregroundStyle(ordinalInk)
       .frame(width: 28)
+  }
+
+  /// A logged row recedes, and the next row is left as the brightest thing on screen.
+  ///
+  /// Most loggers do the opposite -- they light up what is finished -- and the result is a screen
+  /// that gets louder as the session fills. Attention belongs on the set being worked on.
+  private var ordinalInk: SwiftUI.Color {
+    if isLogged { return Tokens.Color.textSecondary }
+    return isWarmup ? Tokens.Color.textSecondary : Tokens.Color.textPrimary
+  }
+
+  private func valueInk(isEmpty: Bool) -> SwiftUI.Color {
+    if isEmpty { return Tokens.Color.textSecondary }
+    return isLogged ? Tokens.Color.textSecondary : Tokens.Color.textPrimary
   }
 
   private func valueField(
@@ -159,7 +183,7 @@ public struct SetRowView: View {
         // An empty field shows an em dash, never "0" — a zero on screen reads as a value.
         Text(buffer.isEmpty ? "—" : buffer.displayText)
           .font(Tokens.Text.setEntry)
-          .foregroundStyle(buffer.isEmpty ? Tokens.Color.textSecondary : Tokens.Color.textPrimary)
+          .foregroundStyle(valueInk(isEmpty: buffer.isEmpty))
           // Kilograms fit in four characters; pounds need six ("132.28"), and the field wrapped
           // mid-number onto a second line. Shrinking beats wrapping for a value read at a glance
           // between sets.
@@ -189,10 +213,15 @@ public struct SetRowView: View {
     Button(action: onLog) {
       Image(systemName: isLogged ? "checkmark.circle.fill" : "circle")
         .font(.title2)
+        // The check replaces the circle rather than cross-fading into it. `.offUp` reads as the
+        // set being put away, which is what just happened.
+        .contentTransition(.symbolEffect(.replace.offUp))
         .frame(width: Tokens.loggerTapTarget, height: Tokens.loggerTapTarget)
         .contentShape(Rectangle())
     }
-    .buttonStyle(.plain)
+    // Not `.plain`: this is the app's signature interaction and it has to respond to the finger
+    // landing, not to the finger leaving. See `CommitButtonStyle`.
+    .buttonStyle(CommitButtonStyle(intensity: loadFraction))
     .foregroundStyle(isLogged ? Tokens.Color.certainty(.high) : Tokens.Color.accent)
     // The same predicate the store enforces. There is no second definition of "complete".
     .disabled(!draft.isLoggable)

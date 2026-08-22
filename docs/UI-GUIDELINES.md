@@ -23,15 +23,20 @@ inconvenient, this is why it exists.
 
 Honest division, so nobody reads a specification as a description of the app.
 
-**Landed** (`feat/design-language-tokens`): the whole of §1, §2 (every value in `Tokens`, verified
-against this document by script), §3's token definitions, §4.1's spacing additions, and §5.2 as
-constants in `Tokens.Motion`. The root forces `.dark`.
+**Landed:** the whole of §1, §2 (every value in `Tokens`, verified against this document by
+script), §3's token definitions, §4.1's spacing additions, §5.2 including the `commit(intensity:)`
+signature, and the parts of §5.3 with a host today -- the logged row recedes, the log control
+acknowledges on touch-*down*, and the check replaces the circle. The root forces `.dark`.
 
-**Specification only** -- nothing in the app does this yet: every hero moment in §5.3--5.7, the
-haptics table in §5.8, the glass policy in §4.4, and the concentric-corner rule in §4.2. Motion is
-deliberately unimplemented until the device gate in `DEVICE-CHECKLIST.md` closes: haptic-and-pixel
-co-timing (M4) and the 100 ms acknowledgement budget (M3) are not judgeable in a simulator, and
-AlarmKit has never fired on hardware, so the rest timer must be proven before it is decorated.
+**Specification only** -- nothing in the app does this yet: the focus-ring travel and glass morph in
+§5.3, the rest timer in §5.4, the summary choreography in §5.5, the chart reveals in §5.6, the zoom
+transition in §5.7, most of the haptics table in §5.8, the glass policy in §4.4, and the
+concentric-corner rule in §4.2.
+
+**Tuning is not verification.** Every animation above is implemented to specification and none has
+been felt on hardware. Haptic-and-pixel co-timing (M4) and 120 Hz cannot be judged in a simulator,
+so expect these numbers to move once the device gate closes. The rest timer stays undecorated until
+AlarmKit is proven on a phone: do not decorate a timer that has never fired.
 
 **Known gap this document exposed:** `PersonalRecordDetector` is built and tested in `HardsetCore`
 and referenced by no view, and finishing a workout only clears the coordinator. So §5.5 has no host
@@ -357,16 +362,39 @@ pulsing idle state. Battery, and it reads as decoration.
 
 ### 5.2 The named scale
 
-| Name | Definition | For |
-|---|---|---|
-| `tap` | `.snappy(duration: 0.10, extraBounce: 0)` | press / release |
-| `control` | `.snappy(duration: 0.22)` | toggle, selection, focus ring travel |
-| `surface` | `.smooth(duration: 0.32)` | sheets, cards, rows settling |
-| `travel` | `.spring(duration: 0.42, bounce: 0.18)` | an element crossing the screen |
-| `reveal` | `.easeOut(duration: 0.50)` | one-shot, non-interruptible reveal |
-| `decay` | `.linear(duration: remaining)` | the rest arc — duration *is* the datum |
+| Name | Definition | Settles | For |
+|---|---|---|---|
+| `tap` | `.spring(duration: 0.09, bounce: 0.18)` | 98 ms | press / release |
+| `control` | `.spring(duration: 0.16, bounce: 0.12)` | 132 ms | toggle, selection, focus ring travel |
+| `surface` | `.spring(duration: 0.24, bounce: 0)` | 284 ms | sheets, cards, rows settling |
+| `travel` | `.spring(duration: 0.30, bounce: 0.16)` | 334 ms | an element crossing the screen |
+| `reveal` | `.easeOut(duration: 0.32)` | 320 ms | one-shot, non-interruptible reveal |
+| `decay` | `.linear(duration: remaining)` | — | the rest countdown — duration *is* the datum |
+| `commit(intensity:)` | `.spring(duration: 0.09→0.14, bounce: 0.18→0.04)` | 98–146 ms | **the signature** — a set, weighted by its load |
 
-Six. Anything not on this list needs a reason written next to it.
+Seven. Anything not on this list needs a reason written next to it.
+
+The first pass of this table was a third slower — `travel` at 420 ms settles at 478 ms, which reads
+as loose rather than snappy. Everything is compressed and damped harder, so elements arrive
+*settled* rather than arriving early and wobbling.
+
+### 5.2.1 The signature — motion with mass
+
+`commit(intensity:)` scales the spring by how heavy a set is relative to the lifter's own best on
+that movement. A set near their maximum commits solidly with almost no overshoot; a light set is
+quicker and springier. **It is not slower in any way that reads as lag** — the whole range is 50 ms
+and what the hand notices is the missing wobble, because a heavy plate does not wobble and does not
+arrive late either.
+
+The intensity comes from `LoadIntensity.fraction(weightKg:heaviestKg:)`. `nil` means unknown, and
+unknown applies **no effect at all** rather than a guessed middle — a mid-weight feel on a lift with
+no history is the same neutral-70 fallback this codebase exists to avoid, expressed in physics
+instead of numerals. A load above the previous best clamps to full intensity, so beating a record
+automatically produces the most solid commit in the app: a reward that falls out of the arithmetic
+rather than a celebration bolted on.
+
+Invariants are pinned in `CommitShapeTests`: unknown is unmodulated, damping falls monotonically
+with load, and duration never passes the snappy ceiling.
 
 ### 5.3 Hero moment — logging a set
 

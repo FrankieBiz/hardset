@@ -1,3 +1,4 @@
+import HardsetCore
 import SwiftUI
 
 #if canImport(UIKit)
@@ -136,7 +137,7 @@ public enum Tokens {
     ///
     /// Hex rather than decimals so the values in this file are diffable against
     /// `docs/UI-GUIDELINES.md` character for character.
-    private static func srgb(_ hex: UInt32) -> (Double, Double, Double) {
+    private nonisolated static func srgb(_ hex: UInt32) -> (Double, Double, Double) {
       (
         Double((hex >> 16) & 0xFF) / 255,
         Double((hex >> 8) & 0xFF) / 255,
@@ -157,7 +158,13 @@ public enum Tokens {
     /// appearance-aware types are `UIColor` and `NSColor`. HardsetUI builds on macOS so the suite
     /// can run on the host, so both paths have to exist. Identical values also mean host previews
     /// render correctly whatever appearance the Mac is in.
-    private static func dynamic(
+    /// `nonisolated` is load-bearing, not tidiness. `HardsetUI` builds with
+    /// `defaultIsolation(MainActor)`, so without it the closure below is inferred `@MainActor` --
+    /// and SwiftUI resolves colours off the main actor while updating the view graph
+    /// (`resolvedHDRColor` inside `updateOutputsAsync`). Swift 6 then traps in
+    /// `dispatch_assert_queue`, which crashed the app on the first tap that animated a colour.
+    /// The provider must be callable from any thread because UIKit calls it from any thread.
+    private nonisolated static func dynamic(
       light: (Double, Double, Double), dark: (Double, Double, Double)
     ) -> SwiftUI.Color {
       #if canImport(UIKit)
@@ -240,20 +247,43 @@ public enum Tokens {
   /// 2. **Motion representing a measured quantity is linear.** A rest countdown with ease-out
   ///    shows time slowing down. Easing is for interface; linear is for measurement.
   ///
-  /// Constants only for now: no screen animates yet, and motion is not judgeable off-device --
-  /// haptic-and-pixel co-timing and 120 Hz feel both need hardware. The vocabulary lands first so
-  /// that when screens do animate there is nothing to invent.
+  /// Durations here are deliberately short. The first pass ran `travel` at 420 ms, which settles
+  /// at 478 ms -- a third of a second for a focus ring to move, which reads as loose rather than
+  /// snappy. Everything is compressed by roughly a third and damped harder, so elements arrive
+  /// *settled* instead of arriving early and wobbling.
+  ///
+  /// Feel is still unverified on hardware: haptic-and-pixel co-timing and 120 Hz cannot be judged
+  /// in a simulator. These are implemented to specification and expected to need tuning against a
+  /// phone, which is a different thing from being unwritten.
   public enum Motion {
-    /// Press and release. Begins on touch-*down*, never on the action.
-    public static let tap = Animation.snappy(duration: 0.10, extraBounce: 0)
-    /// Toggle, selection, focus-ring travel.
-    public static let control = Animation.snappy(duration: 0.22)
-    /// Sheets, cards, rows settling.
-    public static let surface = Animation.smooth(duration: 0.32)
-    /// An element crossing the screen.
-    public static let travel = Animation.spring(duration: 0.42, bounce: 0.18)
+    // Written as explicit springs rather than `.snappy`/`.smooth` so the numbers are visible and
+    // so `commit(intensity:)` below is continuous with `tap` at zero intensity.
+
+    /// Press and release. Begins on touch-*down*, never on the action. Settles in ~98 ms.
+    public static let tap = Animation.spring(duration: 0.09, bounce: 0.18)
+    /// Toggle, selection, focus-ring travel. Settles in ~132 ms.
+    public static let control = Animation.spring(duration: 0.16, bounce: 0.12)
+    /// Sheets, cards, rows settling. Critically damped -- no overshoot on a surface. ~284 ms.
+    public static let surface = Animation.spring(duration: 0.24, bounce: 0)
+    /// An element crossing the screen. Settles in ~334 ms.
+    public static let travel = Animation.spring(duration: 0.30, bounce: 0.16)
     /// One-shot, non-interruptible reveal.
-    public static let reveal = Animation.easeOut(duration: 0.50)
+    public static let reveal = Animation.easeOut(duration: 0.32)
+
+    /// **The signature.** A set's commit, weighted by how heavy the set is.
+    ///
+    /// The app is about weight, and no lifting app has ever felt heavier when the weight was
+    /// heavier. A set near the lifter's own best commits solidly with almost no overshoot; a light
+    /// set is quicker and springier. It is not slower in any way that reads as lag -- the entire
+    /// range is 50 ms and what the hand actually notices is the missing wobble.
+    ///
+    /// `intensity` is `LoadIntensity.fraction(weightKg:heaviestKg:)`. Passing `nil` yields exactly
+    /// `tap`: an unknown load applies no effect rather than implying a middleweight one. The shape
+    /// and its invariants are tested in `CommitShapeTests`.
+    public static func commit(intensity: Double?) -> Animation {
+      let shape = LoadIntensity.commitShape(intensity: intensity)
+      return .spring(duration: shape.duration, bounce: shape.bounce)
+    }
 
     /// The rest countdown, whose duration *is* the datum.
     ///

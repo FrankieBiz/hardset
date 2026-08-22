@@ -54,6 +54,16 @@ public struct ExerciseLogState: Hashable, Sendable, Identifiable {
 
   private var prior: PriorPerformance?
 
+  /// The heaviest load ever recorded for this movement, when there is any history at all.
+  ///
+  /// Derived from the prior already stored here, so it costs no extra state and re-bases for free
+  /// when `changeMachine` swaps the prior out -- switching equipment should change what "heavy"
+  /// means, because 80 kg on another brand's machine is not this machine's 80 kg.
+  ///
+  /// `nil` means there is nothing to compare against. Callers must treat that as unknown rather
+  /// than as light: see `LoadIntensity.fraction(weightKg:heaviestKg:)`.
+  public var heaviestPriorKg: Double? { prior?.heaviestSet?.weightKg }
+
   public init(
     id: UUID = UUID(),
     exerciseID: ExerciseID,

@@ -42,6 +42,13 @@ Walked end to end on iPhone 17 / iOS 26.4, with the database checked directly af
 - [x] One total-loss bug found here: the app discarded the `SyncEngine`, whose triggers then had a
       dead function behind them, so **every write to every synchronized table failed**. Nothing in
       the suite could have caught it.
+- [x] One crash found here, on the first tap that animated a colour: `Tokens.Color.dynamic` builds a
+      `UIColor` dynamic provider, and `HardsetUI` compiles with `defaultIsolation(MainActor)`, so the
+      provider closure was inferred `@MainActor`. SwiftUI resolves colours **off** the main actor
+      while updating the view graph (`resolvedHDRColor` under `updateOutputsAsync`), and Swift 6
+      traps in `dispatch_assert_queue`. Fixed by marking the helper `nonisolated`. Latent since the
+      helper was written; routing every colour through it is what made it reachable. **Not
+      unit-testable** — it needs the app running, which is the whole argument for this section.
 
 ## B. AlarmKit — the rest timer
 

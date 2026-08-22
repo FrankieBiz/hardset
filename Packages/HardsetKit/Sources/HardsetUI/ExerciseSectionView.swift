@@ -50,6 +50,12 @@ public struct ExerciseSectionView: View {
             // The borrowed-history note is shown once in the header, not repeated on every
             // row — an honest caveat that appears five times reads as noise and gets ignored.
             priorNote: nil,
+            // How heavy this set is against the lifter's own best on this movement, which is what
+            // gives the commit its weight. `nil` when no weight is entered yet or there is no
+            // history — both are genuinely unknown, and unknown must not feel like anything.
+            loadFraction: slot.draft.weightKg.flatMap {
+              LoadIntensity.fraction(weightKg: $0, heaviestKg: state.heaviestPriorKg)
+            },
             onLog: { onLogSet(slot) }
           )
           .clipShape(RoundedRectangle(cornerRadius: Tokens.Radius.control))
