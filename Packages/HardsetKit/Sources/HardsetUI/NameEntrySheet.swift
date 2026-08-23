@@ -15,17 +15,31 @@ public struct NameEntrySheet: View {
   private let prompt: String
   private let footnote: String?
   private let confirmLabel: String
+  /// Whether confirming with an empty field is meaningful.
+  ///
+  /// `false` for naming something that must have a name. `true` wherever clearing the text is a
+  /// real action -- unnaming a workout, deleting a note -- because otherwise the only way to remove
+  /// something is to leave a single space in the field.
+  private let allowsEmpty: Bool
+  /// Lets the field grow, for text that is a sentence rather than a label.
+  private let isMultiline: Bool
   private let onConfirm: (String) -> Void
   private let onCancel: () -> Void
 
-  @State private var name = ""
+  @State private var name: String
   @FocusState private var isFocused: Bool
 
+  /// - Parameter initialValue: What the field opens with. Empty when creating something; the
+  ///   current text when editing it -- "Rename workout" opened blank and made the user retype a
+  ///   name the app already knew.
   public init(
     title: String,
     prompt: String,
     footnote: String? = nil,
     confirmLabel: String = "Add",
+    initialValue: String = "",
+    allowsEmpty: Bool = false,
+    isMultiline: Bool = false,
     onConfirm: @escaping (String) -> Void,
     onCancel: @escaping () -> Void
   ) {
@@ -33,8 +47,11 @@ public struct NameEntrySheet: View {
     self.prompt = prompt
     self.footnote = footnote
     self.confirmLabel = confirmLabel
+    self.allowsEmpty = allowsEmpty
+    self.isMultiline = isMultiline
     self.onConfirm = onConfirm
     self.onCancel = onCancel
+    self._name = State(initialValue: initialValue)
   }
 
   private var trimmed: String {
@@ -45,10 +62,12 @@ public struct NameEntrySheet: View {
     NavigationStack {
       Form {
         Section {
-          TextField(prompt, text: $name)
+          TextField(prompt, text: $name, axis: isMultiline ? .vertical : .horizontal)
             .focused($isFocused)
-            .submitLabel(.done)
-            .onSubmit(confirm)
+            // A multiline field needs Return to insert a line, so it cannot also submit.
+            .submitLabel(isMultiline ? .return : .done)
+            .onSubmit { if !isMultiline { confirm() } }
+            .lineLimit(isMultiline ? 3...8 : 1...1)
         } footer: {
           if let footnote {
             Text(footnote)
@@ -62,8 +81,9 @@ public struct NameEntrySheet: View {
         }
         ToolbarItem(placement: .confirmationAction) {
           Button(confirmLabel, action: confirm)
-            // Nothing to save is not an error worth explaining; the button simply waits.
-            .disabled(trimmed.isEmpty)
+            // Nothing to save is not an error worth explaining; the button simply waits. Unless
+            // clearing is itself the point, in which case an empty field is a valid thing to save.
+            .disabled(trimmed.isEmpty && !allowsEmpty)
         }
       }
       .onAppear { isFocused = true }
@@ -72,7 +92,7 @@ public struct NameEntrySheet: View {
   }
 
   private func confirm() {
-    guard !trimmed.isEmpty else { return }
+    guard allowsEmpty || !trimmed.isEmpty else { return }
     onConfirm(trimmed)
   }
 }

@@ -191,7 +191,7 @@ public nonisolated struct GymStore {
       try Machine.insert {
         Machine.Draft(
           id: id.rawValue, gymID: gymID.rawValue, name: name, brand: brand,
-          loadType: "unknown", stackIncrementKg: stackIncrementKg,
+          stackIncrementKg: stackIncrementKg,
           isArchived: false, createdAt: now
         )
       }

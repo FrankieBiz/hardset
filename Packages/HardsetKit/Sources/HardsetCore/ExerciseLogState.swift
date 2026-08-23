@@ -57,6 +57,12 @@ public struct ExerciseLogState: Hashable, Sendable, Identifiable {
   /// the user verbatim rather than silently: 80 kg on another brand's machine is not this
   /// machine's 80 kg, and pretending otherwise is the kind of quiet lie this app is against.
   public private(set) var priorNote: String?
+  /// The lifter's own note about this movement: a seat setting, a grip, which bar is bent.
+  ///
+  /// Distinct from `priorNote`, which is the app explaining where a suggestion came from. This is
+  /// the user's text and the app never writes it. Empty means there is no note, not an empty one --
+  /// so nothing is rendered and the menu offers to add rather than to edit.
+  public var notes: String = ""
 
   private var prior: PriorPerformance?
 
@@ -80,6 +86,7 @@ public struct ExerciseLogState: Hashable, Sendable, Identifiable {
     machineIncrementKg: Double? = nil,
     prior: PriorPerformance?,
     priorNote: String? = nil,
+    notes: String = "",
     slots: [SetSlot]
   ) {
     self.id = id
@@ -91,6 +98,7 @@ public struct ExerciseLogState: Hashable, Sendable, Identifiable {
     self.machineIncrementKg = machineIncrementKg
     self.prior = prior
     self.priorNote = priorNote
+    self.notes = notes
     self.slots = slots
   }
 
@@ -112,6 +120,7 @@ public struct ExerciseLogState: Hashable, Sendable, Identifiable {
     machineIncrementKg: Double? = nil,
     snapshot: PriorPerformanceSnapshot,
     plannedSets: Int? = nil,
+    notes: String = "",
     allowingOtherMachines: Bool = true
   ) -> ExerciseLogState {
     let key = ProgressionKey(exerciseID: exerciseID, machineID: machineID)
@@ -149,6 +158,7 @@ public struct ExerciseLogState: Hashable, Sendable, Identifiable {
       machineIncrementKg: machineIncrementKg,
       prior: prior,
       priorNote: note,
+      notes: notes,
       slots: slots
     )
   }

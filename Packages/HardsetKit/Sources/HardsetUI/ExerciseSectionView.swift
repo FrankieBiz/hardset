@@ -20,10 +20,12 @@ public struct ExerciseSectionView: View {
   private let onRemoveExercise: (() -> Void)?
   private let onSelectMachine: (() -> Void)?
   private let onShowHistory: (() -> Void)?
+  private let onEditNote: (() -> Void)?
 
   /// - Parameter onSelectMachine: Opens the machine picker. Passing `nil` hides the chip, which is
   ///   correct when no gym is known — an affordance that opens an empty list is worse than none.
   /// - Parameter onShowHistory: Opens this movement's load history. `nil` leaves the name inert.
+  /// - Parameter onEditNote: Opens the note editor for this movement. `nil` hides the menu item.
   public init(
     state: Binding<ExerciseLogState>,
     unit: WeightUnit,
@@ -33,7 +35,8 @@ public struct ExerciseSectionView: View {
     onRemoveSlot: ((SetSlot) -> Void)? = nil,
     onRemoveExercise: (() -> Void)? = nil,
     onSelectMachine: (() -> Void)? = nil,
-    onShowHistory: (() -> Void)? = nil
+    onShowHistory: (() -> Void)? = nil,
+    onEditNote: (() -> Void)? = nil
   ) {
     self._state = state
     self.unit = unit
@@ -44,6 +47,7 @@ public struct ExerciseSectionView: View {
     self.onRemoveExercise = onRemoveExercise
     self.onSelectMachine = onSelectMachine
     self.onShowHistory = onShowHistory
+    self.onEditNote = onEditNote
   }
 
   public var body: some View {
@@ -92,6 +96,14 @@ public struct ExerciseSectionView: View {
       // On the movement's own header rather than a set row, because this discards every set in it.
       // Long press, with the count stated, so it cannot be confused with removing one row.
       .contextMenu {
+        if let onEditNote {
+          Button(action: onEditNote) {
+            Label(
+              state.notes.isEmpty ? "Add a note" : "Edit note",
+              systemImage: state.notes.isEmpty ? "square.and.pencil" : "pencil"
+            )
+          }
+        }
         if let onRemoveExercise {
           Button(role: .destructive, action: onRemoveExercise) {
             Label(
@@ -140,6 +152,25 @@ public struct ExerciseSectionView: View {
       }
       if let onSelectMachine {
         machineChip(action: onSelectMachine)
+      }
+      if !state.notes.isEmpty {
+        // The lifter's own words, so they are shown plainly and in full rather than truncated --
+        // "seat 4, pin 3" is useless if it reads "seat 4, pin…". Tapping opens the editor, because
+        // a note on screen that cannot be corrected is worse than none.
+        Button {
+          onEditNote?()
+        } label: {
+          Label(state.notes, systemImage: "note.text")
+            .font(Tokens.Text.caption)
+            .foregroundStyle(Tokens.Color.textSecondary)
+            .multilineTextAlignment(.leading)
+            .fixedSize(horizontal: false, vertical: true)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .disabled(onEditNote == nil)
+        .accessibilityLabel("Your note: \(state.notes)")
+        .accessibilityHint(onEditNote == nil ? "" : "Double tap to edit this note.")
       }
       if let note = state.priorNote {
         // Stated as a caveat about where the numbers came from, in words, once.

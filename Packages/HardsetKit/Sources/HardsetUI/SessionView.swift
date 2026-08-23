@@ -31,6 +31,7 @@ public struct SessionView: View {
   private let onAddExercise: (() -> Void)?
   private let onSelectMachine: ((UUID) -> Void)?
   private let onShowHistory: ((UUID) -> Void)?
+  private let onEditNote: ((UUID) -> Void)?
   private let onFinish: () -> Void
 
   public init(
@@ -52,6 +53,7 @@ public struct SessionView: View {
     onAddExercise: (() -> Void)? = nil,
     onSelectMachine: ((UUID) -> Void)? = nil,
     onShowHistory: ((UUID) -> Void)? = nil,
+    onEditNote: ((UUID) -> Void)? = nil,
     onFinish: @escaping () -> Void = {}
   ) {
     self._exercises = exercises
@@ -72,6 +74,7 @@ public struct SessionView: View {
     self.onAddExercise = onAddExercise
     self.onSelectMachine = onSelectMachine
     self.onShowHistory = onShowHistory
+    self.onEditNote = onEditNote
     self.onFinish = onFinish
   }
 
@@ -135,6 +138,9 @@ public struct SessionView: View {
             },
             onShowHistory: onShowHistory.map { show in
               { show(exercise.id) }
+            },
+            onEditNote: onEditNote.map { edit in
+              { edit(exercise.id) }
             }
           )
           .background(Tokens.Color.surface.opacity(0.4), in: RoundedRectangle(cornerRadius: Tokens.Radius.card))

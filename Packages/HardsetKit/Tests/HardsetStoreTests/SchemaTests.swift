@@ -245,4 +245,65 @@ struct SchemaTests {
     #expect(!SchemaRules.isValidColumnName("creationDate"))
     #expect(!SchemaRules.isValidColumnName("recordID"))
   }
+
+  /// The exact column inventory, pinned.
+  ///
+  /// Not a structural rule like the tests above -- an inventory, and deliberately tedious to
+  /// update. SQLiteData forbids removing a column permanently, so the only moment a column can be
+  /// reconsidered is before it ships; the failure mode is a column that nobody notices is dead until
+  /// it is frozen. `machines.loadType` reached that state: written as the literal "unknown" at every
+  /// insert, read nowhere, and structurally valid by all ten rules above.
+  ///
+  /// Adding a column now costs one edit here, which is the cheapest possible moment to be asked
+  /// "and what reads this?".
+  @Test("The schema's columns are exactly the ones intended to be frozen")
+  func columnInventoryIsPinned() throws {
+    let expected: [String: [String]] = [
+      "bodyweightEntries": ["id", "weightKg", "measuredAt", "enteredBy"],
+      "deviceHealthSamples": ["id", "kind", "value", "unit", "startedAt", "endedAt"],
+      "deviceRestTimer": [
+        "id", "sessionID", "alarmID", "endsAt", "pausedRemainingSeconds", "updatedAt",
+      ],
+      "exercises": [
+        "id", "name", "curatedName", "catalogSlug", "isCurated", "modality", "primaryMuscle",
+        "secondaryMusclesJSON", "notes", "isArchived", "createdAt",
+      ],
+      "gyms": ["id", "name", "isArchived", "createdAt"],
+      "loggedSets": [
+        "id", "sessionID", "exerciseID", "machineID", "sessionExerciseID", "setOrdinal",
+        "weightKg", "reps", "rpe", "isWarmup", "completedAt",
+      ],
+      "machineExercises": ["id", "machineID", "exerciseID", "createdAt"],
+      "machines": ["id", "gymID", "name", "brand", "stackIncrementKg", "isArchived", "createdAt"],
+      "sessionExercises": ["id", "sessionID", "exerciseID", "machineID", "position", "plannedSets"],
+      "sessions": ["id", "gymID", "title", "notes", "startedAt", "finishedAt"],
+    ]
+
+    let queue = try DatabaseQueue()
+    try HardsetMigrations.migrator().migrate(queue)
+    let actual = try queue.read { db -> [String: [String]] in
+      var found: [String: [String]] = [:]
+      for table in expected.keys {
+        found[table] = try db.columns(in: table).map(\.name)
+      }
+      return found
+    }
+
+    for table in expected.keys.sorted() {
+      #expect(actual[table] == expected[table], "column inventory changed for \(table)")
+    }
+
+    // And no table exists that this inventory does not describe, so a whole new table cannot be
+    // added without passing through here either.
+    let tables = try queue.read { db in
+      try String.fetchAll(
+        db,
+        sql: """
+          SELECT name FROM sqlite_master
+          WHERE type = 'table' AND name NOT LIKE 'sqlite_%' AND name NOT LIKE 'grdb_%'
+          """
+      )
+    }
+    #expect(Set(tables) == Set(expected.keys))
+  }
 }

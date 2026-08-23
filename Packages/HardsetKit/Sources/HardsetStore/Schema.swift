@@ -44,9 +44,14 @@ nonisolated struct Machine: Hashable, Identifiable, Sendable {
   var gymID: UUID
   var name = ""
   var brand = ""
-  var loadType = "unknown"
   /// Smallest load step this machine allows, when known. Drives honest progression
   /// suggestions: proposing +2.5 kg on a stack that moves in 5 kg jumps is a lie.
+  ///
+  /// This is the whole load description of a machine. A `loadType` column sat beside it holding
+  /// the literal "unknown" for every row ever written -- nothing set it and nothing read it, and
+  /// what it would have described (how the thing is loaded) only ever mattered as the step size,
+  /// which is this. It was removed before the schema froze, because SQLiteData forbids removing a
+  /// column afterwards and permits adding one, so the asymmetry runs in favour of deleting now.
   var stackIncrementKg: Double?
   var isArchived = false
   var createdAt = Date(timeIntervalSince1970: 0)

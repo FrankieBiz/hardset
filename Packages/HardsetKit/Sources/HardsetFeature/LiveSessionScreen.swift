@@ -83,6 +83,8 @@ public struct LiveSessionScreen: View {
   private let tracksRPE: Bool
   private let hooks: RestTimerHooks
   @State private var historyTarget: MachineTarget?
+  /// Which movement's note is being edited, identified by its `ExerciseLogState` id.
+  @State private var noteTarget: MachineTarget?
   private let catalog: CatalogSeeder?
   private let gyms: GymStore?
   private let progression: ProgressionStore?
@@ -147,6 +149,7 @@ public struct LiveSessionScreen: View {
       // without one there is nothing honest to put in the list.
       onSelectMachine: canPickMachines ? { machineTarget = MachineTarget(id: $0) } : nil,
       onShowHistory: progression == nil ? nil : { historyTarget = MachineTarget(id: $0) },
+      onEditNote: { noteTarget = MachineTarget(id: $0) },
       onFinish: finish
     )
     .toolbar {
@@ -173,11 +176,37 @@ public struct LiveSessionScreen: View {
         title: coordinator.title.isEmpty ? "Name this workout" : "Rename workout",
         prompt: "Name",
         footnote: "Optional. Without one, this workout is listed by its date.",
+        confirmLabel: "Save",
+        initialValue: coordinator.title,
+        // "Optional" has to mean it: a workout that was named can go back to being unnamed.
+        allowsEmpty: true,
         onConfirm: { name in
           isNaming = false
           _ = coordinator.rename(to: name)
         },
         onCancel: { isNaming = false }
+      )
+    }
+    .sheet(item: $noteTarget) { wrapped in
+      let exercise = coordinator.exercises.first { $0.id == wrapped.id }
+      NameEntrySheet(
+        // The movement names the sheet; the placeholder shows what to type. The other way
+        // round, the field read "Barbell Bench Press" and invited the user to type a name.
+        title: exercise?.exerciseName ?? "Note",
+        prompt: "Seat 4, pin 3, wide grip",
+        footnote: "Seat height, pin, grip \u{2014} whatever you will not remember next week. Kept with the movement, so it is here every time you do it. Clear it to remove it.",
+        confirmLabel: "Save",
+        initialValue: exercise?.notes ?? "",
+        // Clearing the field is how a note is deleted; there is no separate destructive control.
+        allowsEmpty: true,
+        isMultiline: true,
+        onConfirm: { text in
+          noteTarget = nil
+          if let exerciseID = exercise?.exerciseID {
+            _ = coordinator.setNotes(text, for: exerciseID)
+          }
+        },
+        onCancel: { noteTarget = nil }
       )
     }
     // Changing equipment mid-exercise re-prefills every unlogged row from the new machine's

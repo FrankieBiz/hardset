@@ -170,6 +170,40 @@ public nonisolated struct LoggerStore {
     }
   }
 
+  /// The lifter's own notes for these movements, keyed by exercise. Absent and empty are the
+  /// same thing here, so a movement with no note simply does not appear in the result.
+  ///
+  /// `exercises.notes` shipped in the first migration and had no reader and no writer at all --
+  /// the column existed, every row held "", and no screen could show or set one. Seat heights and
+  /// grip widths are exactly what a lifter needs at the machine and cannot remember between weeks.
+  public func exerciseNotes(for ids: [ExerciseID]) throws -> [ExerciseID: String] {
+    guard !ids.isEmpty else { return [:] }
+    let raws = Array(Set(ids.map(\.rawValue)))
+    return try database.read { db in
+      try Exercise
+        .where { $0.id.in(raws) }
+        .fetchAll(db)
+        .reduce(into: [ExerciseID: String]()) { result, row in
+          let trimmed = row.notes.trimmingCharacters(in: .whitespacesAndNewlines)
+          if !trimmed.isEmpty { result[ExerciseID(rawValue: row.id)] = trimmed }
+        }
+    }
+  }
+
+  /// Writes, or clears, one movement's note.
+  ///
+  /// Trimmed, and whitespace-only stores as empty -- so a note the user blanked out reads back as
+  /// no note rather than as a note made of spaces, and the UI offers "Add" again rather than "Edit".
+  public func setExerciseNotes(_ text: String, for exerciseID: ExerciseID) throws {
+    let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+    try database.write { db in
+      try Exercise
+        .where { $0.id.eq(exerciseID.rawValue) }
+        .update { $0.notes = #bind(trimmed) }
+        .execute(db)
+    }
+  }
+
   /// Closes a session at `finishedAt`, going through `SessionTimeline`'s guards.
   /// Names a workout, or clears the name.
   ///

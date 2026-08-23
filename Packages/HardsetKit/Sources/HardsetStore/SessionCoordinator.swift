@@ -165,6 +165,12 @@ public final class SessionCoordinator {
       states.append(state)
     }
 
+    // One query for the whole plan rather than one per movement.
+    let notes = try store.exerciseNotes(for: states.map(\.exerciseID))
+    for index in states.indices {
+      states[index].notes = notes[states[index].exerciseID] ?? ""
+    }
+
     let coordinator = SessionCoordinator(
       store: store,
       sessionID: sessionID,
@@ -317,7 +323,8 @@ public final class SessionCoordinator {
         machineName: machineName,
         machineIncrementKg: resolvedIncrement,
         snapshot: snapshot,
-        plannedSets: plannedSets
+        plannedSets: plannedSets,
+        notes: (try? store.exerciseNotes(for: [exerciseID])[exerciseID]) ?? ""
       )
       planRowIDs[state.id] = rowID
       exercises.append(state)
@@ -487,6 +494,30 @@ public final class SessionCoordinator {
     do {
       try store.renameSession(sessionID, to: newTitle)
       title = newTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+      lastError = nil
+      return true
+    } catch {
+      lastError = error
+      return false
+    }
+  }
+
+  /// Writes one movement's note, then reflects it on screen.
+  ///
+  /// Persists first, for the same reason `rename` does: a note visible in the app is a note in the
+  /// database, never the other way round.
+  ///
+  /// Applied to *every* state for that exercise, not just the one whose menu was used. A movement
+  /// can legitimately appear twice in one workout -- two blocks on different machines -- and a note
+  /// belongs to the movement, so it must not go stale on the other block.
+  @discardableResult
+  public func setNotes(_ text: String, for exerciseID: ExerciseID) -> Bool {
+    do {
+      try store.setExerciseNotes(text, for: exerciseID)
+      let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+      for index in exercises.indices where exercises[index].exerciseID == exerciseID {
+        exercises[index].notes = trimmed
+      }
       lastError = nil
       return true
     } catch {

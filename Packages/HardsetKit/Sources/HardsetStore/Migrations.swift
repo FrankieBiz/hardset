@@ -141,7 +141,6 @@ public nonisolated enum HardsetMigrations {
           "gymID" TEXT NOT NULL REFERENCES "gyms"("id") ON DELETE CASCADE,
           "name" TEXT NOT NULL ON CONFLICT REPLACE DEFAULT '',
           "brand" TEXT NOT NULL ON CONFLICT REPLACE DEFAULT '',
-          "loadType" TEXT NOT NULL ON CONFLICT REPLACE DEFAULT 'unknown',
           "stackIncrementKg" REAL,
           "isArchived" INTEGER NOT NULL ON CONFLICT REPLACE DEFAULT 0,
           "createdAt" TEXT NOT NULL ON CONFLICT REPLACE DEFAULT (datetime('now', 'subsec'))
