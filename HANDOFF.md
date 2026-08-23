@@ -272,6 +272,25 @@ back. They were computed against the history that existed at the time, and undoi
 means recomputing every record in the session against a changed past. That is its own piece of work.
 Everything read from the rows -- volume, tonnage, chart, history -- is correct again immediately.
 
+## 8c. Dead schema columns, audited
+
+Swept every column against its readers and writers. Two are genuinely dead and should either be
+used or removed before the schema is frozen at ship -- remember DECISIONS #4: SQLiteData forbids
+removing or renaming a column forever once a build reaches a second device.
+
+- **`exercises.notes`** -- never written, never read. Either per-exercise notes become a feature or
+  the column goes.
+- **`machines.loadType`** -- written as the literal `"unknown"` by `createMachine` and never read.
+  Vestigial.
+- **`machines.brand`** -- written as `""` and read once. In practice lifters type the brand into the
+  name ("Hammer Strength"), which is why the field never earned its keep.
+- **`bodyweightEntries`** and **`deviceHealthSamples`** -- no code at all beyond the schema. The
+  second is intentional (HealthKit is out of v1); the first is a real gap, and recording bodyweight
+  is the prerequisite if tonnage is ever to include bodyweight movements.
+
+Fixed in this pass: **`sessions.title`** was read in 23 places and written in none, so every workout
+was nameless and history could only show a date.
+
 ## 9. Traps that cost me build cycles — do not rediscover these
 
 - **`#expect` cannot take a `rethrows` call.** `#expect(xs.allSatisfy(...))` fails to compile.

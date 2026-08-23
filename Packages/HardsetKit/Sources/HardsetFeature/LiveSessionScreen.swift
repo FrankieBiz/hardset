@@ -59,6 +59,8 @@ public struct LiveSessionScreen: View {
   /// Why an equipment edit failed, in the user's words. Separate from the set-logging errors below
   /// because it has a different cause and a different remedy.
   @State private var equipmentError: String?
+  /// Whether the name-this-workout sheet is up.
+  @State private var isNaming = false
   /// Relevance inputs for the picker: the user's own recent movements, and what this gym has
   /// equipment for. Loaded when the picker opens, not per render.
   @State private var recentExercises: [ExerciseID] = []
@@ -147,6 +149,37 @@ public struct LiveSessionScreen: View {
       onShowHistory: progression == nil ? nil : { historyTarget = MachineTarget(id: $0) },
       onFinish: finish
     )
+    .toolbar {
+      ToolbarItem(placement: .principal) {
+        Button { isNaming = true } label: {
+          // The name, or an invitation. Not a required step: a workout with no name is fine and
+          // reads as its date everywhere.
+          Text(coordinator.title.isEmpty ? "Name this workout" : coordinator.title)
+            .font(Tokens.Text.label.weight(.semibold))
+            .foregroundStyle(
+              coordinator.title.isEmpty ? Tokens.Color.textSecondary : Tokens.Color.textPrimary
+            )
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(
+          coordinator.title.isEmpty
+            ? "Name this workout"
+            : "Workout name, \(coordinator.title). Double tap to rename."
+        )
+      }
+    }
+    .sheet(isPresented: $isNaming) {
+      NameEntrySheet(
+        title: coordinator.title.isEmpty ? "Name this workout" : "Rename workout",
+        prompt: "Name",
+        footnote: "Optional. Without one, this workout is listed by its date.",
+        onConfirm: { name in
+          isNaming = false
+          _ = coordinator.rename(to: name)
+        },
+        onCancel: { isNaming = false }
+      )
+    }
     // Changing equipment mid-exercise re-prefills every unlogged row from the new machine's
     // history, which is a big enough change to confirm by feel.
     .sensoryFeedback(.selection, trigger: machineChangeCount)

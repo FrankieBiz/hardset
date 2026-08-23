@@ -222,3 +222,61 @@ struct RemovalTests {
     #expect(try store.openSession() == nil)
   }
 }
+
+/// Naming a workout. `sessions.title` existed from the first migration and nothing ever wrote to
+/// it, so every workout was nameless and history could only show dates -- while lifters think in
+/// "push A" and "leg day".
+@Suite("A workout can be named")
+struct SessionNamingTests {
+  let now = Date(timeIntervalSince1970: 12_000_000)
+
+  private func fixture() throws -> (any DatabaseWriter, LoggerStore) {
+    var configuration = Configuration()
+    configuration.foreignKeysEnabled = true
+    let queue = try DatabaseQueue(configuration: configuration)
+    try HardsetMigrations.migrator().migrate(queue)
+    return (queue, LoggerStore(database: queue))
+  }
+
+  @MainActor
+  @Test("A name persists and survives a resume")
+  func namePersistsAcrossResume() throws {
+    let (_, store) = try fixture()
+    let coordinator = try SessionCoordinator.start(store: store, plan: [], now: { self.now })
+    #expect(coordinator.title.isEmpty)
+
+    #expect(coordinator.rename(to: "Push A"))
+    #expect(coordinator.title == "Push A")
+
+    // The interesting half: a cold start rebuilds the coordinator, and the name has to come back
+    // from storage rather than being lost with the object.
+    let resumed = try #require(try SessionCoordinator.resume(store: store, now: { self.now }))
+    #expect(resumed.title == "Push A")
+  }
+
+  @MainActor
+  @Test("A name is trimmed, and clearing it is allowed")
+  func trimsAndClears() throws {
+    let (_, store) = try fixture()
+    let coordinator = try SessionCoordinator.start(store: store, plan: [], now: { self.now })
+
+    _ = coordinator.rename(to: "  Leg day  ")
+    #expect(coordinator.title == "Leg day")
+
+    // Clearing is a legitimate edit, not an error: every reader falls back to the date.
+    _ = coordinator.rename(to: "")
+    #expect(coordinator.title.isEmpty)
+  }
+
+  @MainActor
+  @Test("The name reaches history")
+  func nameReachesHistory() throws {
+    let (database, store) = try fixture()
+    let history = HistoryStore(database: database)
+    let coordinator = try SessionCoordinator.start(store: store, plan: [], now: { self.now })
+    _ = coordinator.rename(to: "Pull B")
+    try coordinator.finish()
+
+    #expect(try history.recentSessions().first?.title == "Pull B")
+  }
+}

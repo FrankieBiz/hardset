@@ -76,6 +76,10 @@ public final class SessionCoordinator {
   /// database inside the logging path.
   public private(set) var gymID: GymID?
 
+  /// What the lifter called this workout, or empty. Held here so the header can show it without a
+  /// query per render.
+  public private(set) var title: String = ""
+
   /// When this session began and, once closed, when it ended.
   ///
   /// Held as a `SessionTimeline` rather than two loose dates so the derived-never-stored rule and
@@ -94,6 +98,7 @@ public final class SessionCoordinator {
     exercises: [ExerciseLogState],
     gymID: GymID? = nil,
     startedAt: Date? = nil,
+    title: String = "",
     now: @escaping () -> Date = { Date() },
     restAfterSet: Duration? = nil,
     onStartRest: @escaping (Duration, RestMetadata) -> Void = { _, _ in }
@@ -103,6 +108,7 @@ public final class SessionCoordinator {
     self.exercises = exercises
     self.gymID = gymID
     self.timeline = SessionTimeline(startedAt: startedAt ?? now())
+    self.title = title
     self.now = now
     self.restAfterSet = restAfterSet
     self.onStartRest = onStartRest
@@ -265,6 +271,7 @@ public final class SessionCoordinator {
       // From storage, never from `now()`. A recovered session started when it started, and
       // re-stamping it here is exactly how a workout becomes nine thousand minutes long.
       startedAt: session.timeline.startedAt,
+      title: session.title,
       now: now,
       restAfterSet: restAfterSet,
       onStartRest: onStartRest
@@ -474,6 +481,20 @@ public final class SessionCoordinator {
   /// recomputing every record in the session against a changed past -- a bigger piece of work than
   /// this, and one that needs its own thought. What *is* immediately correct again is everything
   /// read from the rows: volume, tonnage, the chart, and history.
+  /// Names the workout. Persists first, so a name on screen is a name in the database.
+  @discardableResult
+  public func rename(to newTitle: String) -> Bool {
+    do {
+      try store.renameSession(sessionID, to: newTitle)
+      title = newTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+      lastError = nil
+      return true
+    } catch {
+      lastError = error
+      return false
+    }
+  }
+
   @discardableResult
   public func unlogSet(slotID: UUID, inExercise exerciseStateID: UUID) -> Bool {
     guard

@@ -171,6 +171,24 @@ public nonisolated struct LoggerStore {
   }
 
   /// Closes a session at `finishedAt`, going through `SessionTimeline`'s guards.
+  /// Names a workout, or clears the name.
+  ///
+  /// `sessions.title` has existed since the first migration and `startSession` has accepted a title
+  /// all along; nothing ever passed one, so every workout was nameless and history could only show
+  /// dates. Lifters do not think in dates -- they think "push A" and "leg day".
+  ///
+  /// An empty name is stored as empty rather than refused: clearing a name is a legitimate edit,
+  /// and every reader already falls back to the date.
+  public func renameSession(_ sessionID: SessionID, to title: String) throws {
+    let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
+    try database.write { db in
+      try Session
+        .where { $0.id.eq(sessionID.rawValue) }
+        .update { $0.title = #bind(trimmed) }
+        .execute(db)
+    }
+  }
+
   /// Removes a whole workout, with its sets and its plan rows.
   ///
   /// One statement: `sessions` is the parent and both `loggedSets.sessionID` and
