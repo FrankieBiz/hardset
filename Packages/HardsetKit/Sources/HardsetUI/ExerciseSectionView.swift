@@ -161,6 +161,12 @@ public struct ExerciseSectionView: View {
   /// logged against nothing.
   ///
   /// Unset reads as an invitation, never a warning. A set with no machine is a real set.
+  private var machineChipLabel: String {
+    guard let name = state.machineName else { return "Choose a machine for this movement" }
+    guard let increment = state.machineIncrementKg else { return "Machine, \(name)" }
+    return "Machine, \(name), moves in \(Self.format(increment)) kilogram steps"
+  }
+
   private func machineChip(action: @escaping () -> Void) -> some View {
     Button(action: action) {
       HStack(spacing: Tokens.Spacing.hairline) {
@@ -176,6 +182,9 @@ public struct ExerciseSectionView: View {
         state.machineID == nil ? Tokens.Color.textSecondary : Tokens.Color.accent
       )
       .frame(minHeight: Tokens.minimumTapTarget, alignment: .leading)
+      // One element with a sentence, rather than three fragments and a spoken bullet.
+      .accessibilityElement(children: .combine)
+      .accessibilityLabel(machineChipLabel)
       .contentShape(Rectangle())
     }
     .buttonStyle(.plain)

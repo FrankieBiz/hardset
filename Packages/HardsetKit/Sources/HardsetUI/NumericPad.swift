@@ -55,6 +55,15 @@ public struct NumericPad: View {
     .background(Tokens.Color.surface)
   }
 
+  /// What VoiceOver says for a key. Digits and the separator read as themselves; the icon does not.
+  private static func spokenLabel(for key: Key, decimalSeparator: String) -> String {
+    switch key {
+    case .digit(let value): String(value)
+    case .decimal, .disabledDecimal: "Decimal point"
+    case .delete: "Delete"
+    }
+  }
+
   private func keyButton(_ key: Key) -> some View {
     Button {
       apply(key)
@@ -72,6 +81,9 @@ public struct NumericPad: View {
     }
     .buttonStyle(.plain)
     .disabled(key == .disabledDecimal)
+    // The delete key is an icon with no text, so without this VoiceOver announces the SF Symbol
+    // name or nothing at all -- on the keypad used to enter every weight and every rep in the app.
+    .accessibilityLabel(Self.spokenLabel(for: key, decimalSeparator: decimalSeparator))
     .opacity(key == .disabledDecimal ? 0 : 1)
     .background(
       Tokens.Color.ground,

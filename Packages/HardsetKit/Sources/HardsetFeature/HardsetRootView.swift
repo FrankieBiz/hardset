@@ -276,6 +276,8 @@ public struct HardsetRootView: View {
         Spacer(minLength: 0)
         Image(systemName: "chevron.right")
           .font(Tokens.Text.caption)
+          // Decoration. Announcing it adds "chevron right" to every reading of this row.
+          .accessibilityHidden(true)
       }
       .font(Tokens.Text.caption)
       .foregroundStyle(
