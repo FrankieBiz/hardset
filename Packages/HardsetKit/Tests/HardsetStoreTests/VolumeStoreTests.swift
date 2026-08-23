@@ -201,7 +201,15 @@ struct VolumeStoreTests {
     #expect(gaps.contains(.hamstrings))
     #expect(gaps.contains(.lats))
     #expect(!gaps.contains(.chest))
-    // Content debt is never presented as the user's gap.
-    #expect(!gaps.contains(.neck))
+
+    // `neck` is a real gap in this week now that the catalogue can train it; the exclusion list is
+    // empty. The rule that content debt is never presented as the user's failing is pinned on an
+    // explicit set instead, so it survives the catalogue growing.
+    #expect(ExerciseCatalog.unauthoredDirectTokens.isEmpty)
+    #expect(gaps.contains(.neck))
+
+    let suppressed = try volume.rollingWeek(endingAt: now).untrainedMuscles(excluding: [.neck])
+    #expect(!suppressed.contains(.neck))
+    #expect(suppressed.contains(.hamstrings))
   }
 }

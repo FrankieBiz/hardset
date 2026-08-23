@@ -165,7 +165,7 @@ struct MuscleVolumeTests {
 
   // MARK: - Coverage gaps
 
-  @Test("Untrained muscles are reported, minus the ones the catalogue cannot train yet")
+  @Test("Untrained muscles are reported, and the exclusion set is honoured")
   func untrainedMuscles() {
     let bench = ExerciseID()
     let attribution = index([(bench, [contribution(.chest, .direct)])])
@@ -174,9 +174,21 @@ struct MuscleVolumeTests {
     let gaps = report.untrainedMuscles(excluding: ExerciseCatalog.unauthoredDirectTokens)
     #expect(!gaps.contains(.chest))
     #expect(gaps.contains(.hamstrings))
-    // Content debt is not reported as the user's coverage gap.
-    #expect(!gaps.contains(.neck))
-    #expect(!gaps.contains(.obliques))
+
+    // Every token now has a movement that trains it, so there is no content debt left to
+    // suppress -- and `neck` is therefore a genuine gap in this user's week rather than a hole in
+    // the catalogue. This assertion used to read `!gaps.contains(.neck)` for the opposite reason.
+    #expect(ExerciseCatalog.unauthoredDirectTokens.isEmpty)
+    #expect(gaps.contains(.neck))
+
+    // The suppression mechanism is pinned separately, on an explicit set rather than on whatever
+    // the catalogue happens to be missing. That is the behaviour worth protecting: a muscle the
+    // app cannot offer an exercise for must never be presented as the user's failing. Testing it
+    // this way also means growing the catalogue cannot break this test again.
+    let suppressed = report.untrainedMuscles(excluding: [.neck, .obliques])
+    #expect(!suppressed.contains(.neck))
+    #expect(!suppressed.contains(.obliques))
+    #expect(suppressed.contains(.hamstrings))
   }
 }
 

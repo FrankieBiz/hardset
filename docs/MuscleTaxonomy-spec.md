@@ -681,7 +681,7 @@ Per the audits and the uniform grip / stabiliser / hinge rules:
 
 ### 7.5 Unauthored direct slots after this pass
 
-`{rotatorCuff, obliques, adductors, hipAbductors, neck}` — five tokens with no `direct` credit anywhere in the 50 entries. This is a **content commitment**, recorded as a shrinking allowlist in CI (test 14), with the named exercise sets the 240-entry pass must author: cable external rotation; Pallof press and side bend; adduction machine and Copenhagen plank; abduction machine and banded lateral walk; neck flexion and extension.
+`{}` — **discharged.** This was `{rotatorCuff, obliques, adductors, hipAbductors, neck}`: five tokens with no `direct` credit anywhere in the first 50 entries, recorded as a shrinking allowlist in CI (test 14). Ten entries now close all five, and they land close to the exercises this section originally named: cable and side-lying external rotation; torso rotation machine and dumbbell side bend; adduction machine and cable adduction; abduction machine and cable abduction; neck flexion and extension. Two substitutions are deliberate — a torso rotation machine rather than a Pallof press, and cable adduction rather than a Copenhagen plank, because both replacements are loaded through a range and therefore loggable as sets, where an isometric hold is not. The allowlist stays in the code at empty, so test 14 now asserts permanently that no token can be shown in the picker while being untrainable.
 
 ---
 

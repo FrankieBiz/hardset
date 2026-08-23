@@ -89,9 +89,10 @@ public enum ExerciseModality: String, Sendable, CaseIterable, Codable {
 /// defensible v1 at roughly 240 hand-curated entries, which is 260–340 hours of content work
 /// that has not been done. Nothing here should be read as that work being finished.
 ///
-/// Five tokens have no `direct` credit anywhere in these fifty and are a recorded content debt:
-/// `rotatorCuff`, `obliques`, `adductors`, `hipAbductors`, `neck`. A test holds that list as a
-/// shrinking allowlist so it cannot be forgotten.
+/// Every one of the 22 muscle tokens now has at least one movement crediting it `direct`. The five
+/// that did not -- `rotatorCuff`, `obliques`, `adductors`, `hipAbductors`, `neck` -- were a recorded
+/// content debt held as a shrinking allowlist in test 14; that allowlist is now empty, so the test
+/// asserts the property permanently rather than tracking a debt.
 ///
 /// On roles: grip is `stabilizer`, never `direct` on `forearms`, and isometric bracing is
 /// `stabilizer`, never `indirect` on `abs`. The first draft of this file credited both as
@@ -684,12 +685,142 @@ public enum ExerciseCatalog {
         .init(.forearms, role: .direct, certainty: .moderate, source: .anatomy),
       ]
     ),
+
+    // Closing the five tokens that had no `direct` credit anywhere in the first fifty. Every
+    // attribution below is `.anatomy` at `.moderate` and cites nothing, deliberately: no
+    // hypertrophy outcome trial isolates these tokens, and inventing a citation to look rigorous
+    // is worse than saying plainly that this rests on anatomy.
+    CatalogExercise(
+      id: "4b71541d-f566-5ebc-9267-8f88d33bd409",
+      slug: "hip-adduction-machine",
+      name: "Hip Adduction",
+      modality: .machine,
+      primaryMuscle: .adductors,
+      // Adduction is the only joint action moving under load, which is what makes this the first
+      // entry to credit `adductors` directly -- squats and leg press only ever reached `indirect`.
+      contributions: [
+        .init(.adductors, role: .direct, certainty: .moderate, source: .anatomy),
+      ]
+    ),
+    CatalogExercise(
+      id: "4ee99752-2d90-548b-b47d-a5fa3c05f712",
+      slug: "cable-hip-adduction",
+      name: "Cable Hip Adduction",
+      modality: .cable,
+      primaryMuscle: .adductors,
+      contributions: [
+        .init(.adductors, role: .direct, certainty: .moderate, source: .anatomy),
+      ]
+    ),
+    CatalogExercise(
+      id: "bbfdb297-a7b9-540c-a745-68e77c79a7ee",
+      slug: "hip-abduction-machine",
+      name: "Hip Abduction",
+      modality: .machine,
+      primaryMuscle: .hipAbductors,
+      contributions: [
+        .init(.hipAbductors, role: .direct, certainty: .moderate, source: .anatomy),
+      ]
+    ),
+    CatalogExercise(
+      id: "905acb82-d9bb-56d6-8170-7e5b95bf4f16",
+      slug: "cable-hip-abduction",
+      name: "Cable Hip Abduction",
+      modality: .cable,
+      primaryMuscle: .hipAbductors,
+      // Standing and unilateral, so the trunk resists the cable's lateral pull. That is bracing, so
+      // `obliques` is a stabiliser at weight zero and contributes no volume.
+      contributions: [
+        .init(.hipAbductors, role: .direct, certainty: .moderate, source: .anatomy),
+        .init(.obliques, role: .stabilizer, certainty: .moderate, source: .anatomy),
+      ]
+    ),
+    CatalogExercise(
+      id: "77586ce2-5439-56ac-9379-3dd6571ada16",
+      slug: "cable-external-rotation",
+      name: "Cable External Rotation",
+      modality: .cable,
+      primaryMuscle: .rotatorCuff,
+      // The `rotatorCuff` token is four muscles held as one unit -- supraspinatus, infraspinatus,
+      // subscapularis, teres minor. External rotation loads the two external rotators and leaves
+      // subscapularis, an internal rotator, largely unloaded, so a full direct credit here is
+      // coarser than the tissue actually trained. That is inherited from the taxonomy declining to
+      // split internal from external rotation, not a claim this entry is making; it is recorded so
+      // nobody reads the credit as more precise than it is.
+      contributions: [
+        .init(.rotatorCuff, role: .direct, certainty: .moderate, source: .anatomy),
+      ]
+    ),
+    CatalogExercise(
+      id: "d003fe75-6e68-5296-8ad3-9b5013954819",
+      slug: "side-lying-dumbbell-external-rotation",
+      name: "Side-Lying Dumbbell External Rotation",
+      modality: .dumbbell,
+      primaryMuscle: .rotatorCuff,
+      contributions: [
+        .init(.rotatorCuff, role: .direct, certainty: .moderate, source: .anatomy),
+      ]
+    ),
+    CatalogExercise(
+      id: "3b20f479-3952-59ad-99f0-1450f277f82e",
+      slug: "torso-rotation-machine",
+      name: "Torso Rotation Machine",
+      modality: .machine,
+      primaryMuscle: .obliques,
+      // Trunk rotation against the pads is the loaded action. The pelvis is fixed by the seat, so
+      // `abs` and `lowerBack` only brace.
+      contributions: [
+        .init(.obliques, role: .direct, certainty: .moderate, source: .anatomy),
+        .init(.abs, role: .stabilizer, certainty: .moderate, source: .anatomy),
+        .init(.lowerBack, role: .stabilizer, certainty: .moderate, source: .anatomy),
+      ]
+    ),
+    CatalogExercise(
+      id: "372e9093-9b05-5632-9303-be01a069965d",
+      slug: "dumbbell-side-bend",
+      name: "Dumbbell Side Bend",
+      modality: .dumbbell,
+      primaryMuscle: .obliques,
+      // Lateral flexion is the second action the token owns, so it ships alongside rotation rather
+      // than crediting `obliques` from one action only. `forearms` is listed because the load is a
+      // heavy held dumbbell, matching `shrug` and the curls rather than the light cable movements.
+      contributions: [
+        .init(.obliques, role: .direct, certainty: .moderate, source: .anatomy),
+        .init(.abs, role: .stabilizer, certainty: .moderate, source: .anatomy),
+        .init(.lowerBack, role: .stabilizer, certainty: .moderate, source: .anatomy),
+        .init(.forearms, role: .stabilizer, certainty: .moderate, source: .anatomy),
+      ]
+    ),
+    CatalogExercise(
+      id: "6e5357b6-3693-5e41-98bd-9bbe480fbee4",
+      slug: "neck-extension",
+      name: "Neck Extension",
+      modality: .machine,
+      primaryMuscle: .neck,
+      // `neck` is already user-visible in the picker, so without these two entries a lifter could see
+      // a muscle the catalogue can never train -- which is the hole test 14 exists to catch.
+      contributions: [
+        .init(.neck, role: .direct, certainty: .moderate, source: .anatomy),
+      ]
+    ),
+    CatalogExercise(
+      id: "a2efe5e1-ed63-5595-b0dc-2ddae8b521b9",
+      slug: "neck-flexion",
+      name: "Neck Flexion",
+      modality: .machine,
+      primaryMuscle: .neck,
+      contributions: [
+        .init(.neck, role: .direct, certainty: .moderate, source: .anatomy),
+      ]
+    ),
   ]
 
   public static var slugs: [String] { v1.map(\.slug) }
 
   /// Tokens with no `direct` credit in the seed. Content debt, not a design statement.
-  public static let unauthoredDirectTokens: Set<Muscle> = [
-    .rotatorCuff, .obliques, .adductors, .hipAbductors, .neck,
-  ]
+  ///
+  /// Empty, and that is the point: every one of the 22 tokens now has at least one movement that
+  /// trains it directly. Keeping the property rather than deleting it keeps test 14 meaningful --
+  /// it now asserts permanently that no token can be shown in the picker while being untrainable.
+  public static let unauthoredDirectTokens: Set<Muscle> = []
 }
