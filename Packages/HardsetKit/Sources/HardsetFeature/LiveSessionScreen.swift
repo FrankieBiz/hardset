@@ -54,6 +54,11 @@ public struct LiveSessionScreen: View {
   @State private var restMetadata: RestMetadata?
   /// Bumped on every accepted machine change, purely to drive the haptic.
   @State private var machineChangeCount = 0
+  /// The machine whose name is being repaired.
+  @State private var renamingMachine: MachineTarget?
+  /// Why an equipment edit failed, in the user's words. Separate from the set-logging errors below
+  /// because it has a different cause and a different remedy.
+  @State private var equipmentError: String?
   /// Relevance inputs for the picker: the user's own recent movements, and what this gym has
   /// equipment for. Loaded when the picker opens, not per render.
   @State private var recentExercises: [ExerciseID] = []
@@ -180,7 +185,9 @@ public struct LiveSessionScreen: View {
             selectMachine(machineID, forExercise: target)
             machineTarget = nil
           },
-          onAddMachine: { isAddingMachine = true }
+          onAddMachine: { isAddingMachine = true },
+          onRename: { renamingMachine = MachineTarget(id: $0.rawValue) },
+          onArchive: { archive($0, forExercise: target) }
         )
         .navigationTitle("Machine")
         .toolbar {
@@ -190,6 +197,20 @@ public struct LiveSessionScreen: View {
         }
         // Named on the spot rather than in a setup flow, because the lifter is standing at the
         // machine right now and will not be later.
+        .sheet(item: $renamingMachine) { wrapped in
+          NameEntrySheet(
+            title: "Rename machine",
+            prompt: "Name or brand",
+            footnote:
+              "Only the label changes. Everything logged on this machine keeps its history.",
+            onConfirm: { newName in
+              let id = MachineID(rawValue: wrapped.id)
+              renamingMachine = nil
+              rename(id, to: newName, forExercise: target)
+            },
+            onCancel: { renamingMachine = nil }
+          )
+        }
         .sheet(isPresented: $isAddingMachine) {
           NameEntrySheet(
             title: "Add a machine",
@@ -254,6 +275,37 @@ public struct LiveSessionScreen: View {
     MachineOption(
       id: record.id, displayName: record.displayName, stackIncrementKg: record.stackIncrementKg
     )
+  }
+
+  /// Retires a machine. If the exercise was pointing at it, the pointer is cleared -- a row
+  /// referencing equipment that is no longer offered is a dead end.
+  private func archive(_ machineID: MachineID, forExercise target: UUID) {
+    guard let gyms else { return }
+    do {
+      try gyms.archiveMachine(machineID)
+      equipmentError = nil
+      if coordinator.exercises.first(where: { $0.id == target })?.machineID == machineID {
+        _ = coordinator.changeMachine(to: nil, machineName: nil, inExercise: target)
+      }
+      refreshMachines(forExercise: target)
+    } catch {
+      equipmentError = "That machine could not be retired. \(error)"
+    }
+  }
+
+  private func rename(_ machineID: MachineID, to name: String, forExercise target: UUID) {
+    guard let gyms else { return }
+    do {
+      try gyms.renameMachine(machineID, to: name)
+      equipmentError = nil
+      // The name is denormalised onto the log state for the Lock Screen, so it is refreshed too.
+      if coordinator.exercises.first(where: { $0.id == target })?.machineID == machineID {
+        _ = coordinator.changeMachine(to: machineID, machineName: name, inExercise: target)
+      }
+      refreshMachines(forExercise: target)
+    } catch {
+      equipmentError = "That machine could not be renamed. \(error)"
+    }
   }
 
   private func selectMachine(_ machineID: MachineID?, forExercise target: UUID) {
@@ -323,6 +375,8 @@ public struct LiveSessionScreen: View {
   /// A failed write is stated in the user's words, not as an error dump. The row stays
   /// unlogged, so the correct instruction is to try again.
   private var errorMessage: String? {
+    // Stated, never swallowed: a rename or retire that failed must not look like it worked.
+    if let equipmentError { return equipmentError }
     if finishFailed {
       return "This workout could not be finished, so it is still open. Your sets are saved. "
         + "Check your device's date and time, then try again."

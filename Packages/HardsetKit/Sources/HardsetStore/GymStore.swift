@@ -73,6 +73,32 @@ public nonisolated struct GymStore {
 
   /// Archives rather than deletes. Logged sets reference machines at this gym, and a hard delete
   /// would either orphan them or cascade away real training history.
+  /// Renames a gym.
+  ///
+  /// The right fix for a typo, and distinct from archiving. Every session, machine and set is keyed
+  /// to the id, so a rename preserves all of it while archiving would strand it.
+  public func renameGym(_ id: GymID, to name: String) throws {
+    let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !trimmed.isEmpty else { return }
+    try database.write { db in
+      try Gym.where { $0.id.eq(id.rawValue) }.update { $0.name = #bind(trimmed) }.execute(db)
+    }
+  }
+
+  /// Renames a machine.
+  ///
+  /// Machines are named at the rack, in a hurry, one-handed -- so typos are likely and this is the
+  /// repair for them. Load history is keyed to the machine id, so the chart keeps every point and
+  /// only the label changes. Archiving a mistyped machine and making a new one would split one
+  /// piece of equipment's history into two series, which is precisely what this app refuses to do.
+  public func renameMachine(_ id: MachineID, to name: String) throws {
+    let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !trimmed.isEmpty else { return }
+    try database.write { db in
+      try Machine.where { $0.id.eq(id.rawValue) }.update { $0.name = #bind(trimmed) }.execute(db)
+    }
+  }
+
   public func archiveGym(_ id: GymID) throws {
     try database.write { db in
       try Gym.where { $0.id.eq(id.rawValue) }.update { $0.isArchived = #bind(true) }.execute(db)

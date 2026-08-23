@@ -136,3 +136,83 @@ struct PickerRelevanceTests {
     #expect(try gyms.exercisesWithEquipment(at: gym).isEmpty)
   }
 }
+
+/// Repairing a name. Machines are named at the rack in a hurry, so typos are likely -- and the
+/// repair has to be a rename rather than archive-and-recreate, because load history is keyed to the
+/// machine id and recreating would split one piece of equipment into two series.
+@Suite("Gyms and machines can be renamed and retired")
+struct GymEditingTests {
+  let now = Date(timeIntervalSince1970: 12_000_000)
+
+  private func fixture() throws -> (any DatabaseWriter, LoggerStore, GymStore) {
+    var configuration = Configuration()
+    configuration.foreignKeysEnabled = true
+    let queue = try DatabaseQueue(configuration: configuration)
+    try HardsetMigrations.migrator().migrate(queue)
+    try CatalogSeeder(database: queue).seed(now: now)
+    return (queue, LoggerStore(database: queue), GymStore(database: queue))
+  }
+
+  @MainActor
+  @Test("Renaming a machine keeps its identity, so history survives")
+  func renameKeepsHistory() throws {
+    let (db, logger, gyms) = try fixture()
+    let gym = try gyms.createGym(name: "Iron Works")
+    let machine = try gyms.createMachine(at: gym, name: "Hamer Strenth")
+    let exercise = try #require(
+      try db.read { d in try Exercise.where { $0.catalogSlug.eq("leg-press") }.fetchOne(d) }
+    )
+    let session = try logger.startSession(gymID: gym, at: now)
+    _ = try logger.logSet(
+      sessionID: session, exerciseID: ExerciseID(rawValue: exercise.id), machineID: machine,
+      draft: SetEntryDraft(weightKg: 120, reps: 8), at: now
+    )
+
+    try gyms.renameMachine(machine, to: "Hammer Strength")
+
+    let renamed = try #require(try gyms.machines(at: gym).first { $0.id == machine })
+    #expect(renamed.name == "Hammer Strength")
+    // Same id, so the set still points at it and the chart keeps its point.
+    #expect(try logger.sets(in: session).first?.machineID == machine)
+  }
+
+  @MainActor
+  @Test("An empty or whitespace name is refused rather than blanking the label")
+  func renameRefusesEmpty() throws {
+    let (_, _, gyms) = try fixture()
+    let gym = try gyms.createGym(name: "Iron Works")
+    try gyms.renameGym(gym, to: "   ")
+    #expect(try gyms.gyms().first { $0.id == gym }?.name == "Iron Works")
+  }
+
+  @MainActor
+  @Test("A renamed name is trimmed, so a stray space does not become part of it")
+  func renameTrims() throws {
+    let (_, _, gyms) = try fixture()
+    let gym = try gyms.createGym(name: "Iron Works")
+    try gyms.renameGym(gym, to: "  Southside  ")
+    #expect(try gyms.gyms().first { $0.id == gym }?.name == "Southside")
+  }
+
+  @MainActor
+  @Test("Archiving retires equipment without erasing what was logged on it")
+  func archiveKeepsSets() throws {
+    let (db, logger, gyms) = try fixture()
+    let gym = try gyms.createGym(name: "Iron Works")
+    let machine = try gyms.createMachine(at: gym, name: "Cybex")
+    let exercise = try #require(
+      try db.read { d in try Exercise.where { $0.catalogSlug.eq("leg-press") }.fetchOne(d) }
+    )
+    let session = try logger.startSession(gymID: gym, at: now)
+    _ = try logger.logSet(
+      sessionID: session, exerciseID: ExerciseID(rawValue: exercise.id), machineID: machine,
+      draft: SetEntryDraft(weightKg: 100, reps: 10), at: now
+    )
+
+    try gyms.archiveMachine(machine)
+
+    // Out of the picker, but the training that happened on it still happened.
+    #expect(try gyms.machines(at: gym).isEmpty)
+    #expect(try logger.sets(in: session).count == 1)
+  }
+}

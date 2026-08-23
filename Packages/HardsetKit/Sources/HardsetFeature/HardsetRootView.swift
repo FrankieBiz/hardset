@@ -64,6 +64,8 @@ public struct HardsetRootView: View {
   /// Why the last gym write failed, in the user's words. A `try?` here hid a real failure behind a
   /// button that appeared to do nothing, which is precisely what this app is not allowed to do.
   @State private var gymError: String?
+  /// The gym whose name is being repaired.
+  @State private var renamingGym: RenameTarget?
   private let environment: HardsetEnvironment
   /// Overrides the stored preference. Exists for previews and tests; the app passes `nil` so the
   /// user's own choice wins.
@@ -306,6 +308,25 @@ public struct HardsetRootView: View {
               .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
+            // Rename on the leading edge and non-destructive: repairing a typo is the common need
+            // and must not sit next to the destructive action.
+            .swipeActions(edge: .leading) {
+              Button { renamingGym = RenameTarget(id: gym.id.rawValue) } label: {
+                Label("Rename", systemImage: "pencil")
+              }
+            }
+            .swipeActions(edge: .trailing) {
+              Button(role: .destructive) {
+                retire(gym.id)
+              } label: {
+                // "Retire", not "Delete": the workouts logged there stay in history.
+                Label("Retire", systemImage: "archivebox")
+              }
+            }
+            .accessibilityActions {
+              Button("Rename this gym") { renamingGym = RenameTarget(id: gym.id.rawValue) }
+              Button("Retire this gym") { retire(gym.id) }
+            }
           }
         } footer: {
           if let gymError {
@@ -350,6 +371,18 @@ public struct HardsetRootView: View {
       }
       // Attached INSIDE the gym sheet on purpose. Two `.sheet` modifiers on the same anchor means
       // the second one silently never presents: "Add a gym" was a button that did nothing.
+      .sheet(item: $renamingGym) { wrapped in
+        NameEntrySheet(
+          title: "Rename gym",
+          prompt: "Name",
+          footnote: "Only the label changes. Every workout logged here keeps its history.",
+          onConfirm: { newName in
+            renamingGym = nil
+            rename(GymID(rawValue: wrapped.id), to: newName)
+          },
+          onCancel: { renamingGym = nil }
+        )
+      }
       .sheet(isPresented: $isAddingGym) {
         NameEntrySheet(
           title: "Add a gym",
@@ -362,6 +395,28 @@ public struct HardsetRootView: View {
           onCancel: { isAddingGym = false }
         )
       }
+    }
+  }
+
+  /// Retires a gym without touching what was logged there.
+  private func retire(_ id: GymID) {
+    do {
+      try environment.gyms.archiveGym(id)
+      if selectedGym == id { selectedGym = nil }
+      gymError = nil
+      refreshGyms()
+    } catch {
+      gymError = "That gym could not be retired. \(error)"
+    }
+  }
+
+  private func rename(_ id: GymID, to name: String) {
+    do {
+      try environment.gyms.renameGym(id, to: name)
+      gymError = nil
+      refreshGyms()
+    } catch {
+      gymError = "That gym could not be renamed. \(error)"
     }
   }
 
@@ -448,4 +503,9 @@ public struct HardsetRootView: View {
 struct FinishedSession {
   let outcome: SessionOutcome
   let timeline: SessionTimeline
+}
+
+/// `sheet(item:)` needs an `Identifiable`, and an id is a value with no natural one of its own.
+struct RenameTarget: Identifiable, Hashable {
+  let id: UUID
 }

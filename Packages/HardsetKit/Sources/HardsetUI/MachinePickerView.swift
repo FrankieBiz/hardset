@@ -32,19 +32,29 @@ public struct MachinePickerView: View {
   private let selected: MachineID?
   private let onSelect: (MachineID?) -> Void
   private let onAddMachine: (() -> Void)?
+  /// Repairs a mistyped name. Distinct from retiring: load history is keyed to the machine id, so
+  /// renaming keeps every point on the chart while archiving and recreating would split one piece
+  /// of equipment into two series.
+  private let onRename: ((MachineID) -> Void)?
+  /// Retires equipment that is gone. What was logged on it stays logged.
+  private let onArchive: ((MachineID) -> Void)?
 
   public init(
     recent: [MachineOption],
     others: [MachineOption] = [],
     selected: MachineID?,
     onSelect: @escaping (MachineID?) -> Void,
-    onAddMachine: (() -> Void)? = nil
+    onAddMachine: (() -> Void)? = nil,
+    onRename: ((MachineID) -> Void)? = nil,
+    onArchive: ((MachineID) -> Void)? = nil
   ) {
     self.recent = recent
     self.others = others
     self.selected = selected
     self.onSelect = onSelect
     self.onAddMachine = onAddMachine
+    self.onRename = onRename
+    self.onArchive = onArchive
   }
 
   public var body: some View {
@@ -123,9 +133,35 @@ public struct MachinePickerView: View {
       .contentShape(Rectangle())
     }
     .buttonStyle(.plain)
+    // Rename is the leading edge and non-destructive, because repairing a typo is the common
+    // need and it must not sit next to the destructive action.
+    .swipeActions(edge: .leading) {
+      if let onRename {
+        Button {
+          onRename(option.id)
+        } label: {
+          Label("Rename", systemImage: "pencil")
+        }
+      }
+    }
+    .swipeActions(edge: .trailing) {
+      if let onArchive {
+        Button(role: .destructive) {
+          onArchive(option.id)
+        } label: {
+          // "Retire", not "Delete": the sets logged on it stay, and saying delete would imply
+          // otherwise.
+          Label("Retire", systemImage: "archivebox")
+        }
+      }
+    }
     .accessibilityLabel(
       selected == option.id ? "\(option.displayName), selected" : option.displayName
     )
+    .accessibilityActions {
+      if let onRename { Button("Rename this machine") { onRename(option.id) } }
+      if let onArchive { Button("Retire this machine") { onArchive(option.id) } }
+    }
   }
 
   static func format(_ value: Double) -> String {
