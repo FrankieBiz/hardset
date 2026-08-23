@@ -113,8 +113,29 @@ public struct VolumeReportView: View {
       ForEach(Array(trained.enumerated()), id: \.element.muscle) { index, row in
         bar(for: row, index: index)
       }
+
+      if trained.contains(where: { $0.muscle.tier == .counted }) {
+        // Once, at the foot of the section, rather than under every affected bar. It was repeated
+        // on seven of fifteen rows, and this app's own rule elsewhere is that an honest caveat
+        // printed five times reads as noise and stops being read. The marker keeps it attached to
+        // the rows it applies to; this says what the marker means.
+        Text(
+          "\(Self.countedMarker) Counted, not modelled \u{2014} these sit outside the corpus the "
+            + "fractional credits come from, so the number is a tally rather than a model."
+        )
+        .font(Tokens.Text.caption)
+        .foregroundStyle(Tokens.Color.textSecondary)
+        .fixedSize(horizontal: false, vertical: true)
+        .padding(.top, Tokens.Spacing.tight)
+      }
     }
   }
+
+  /// Marks a bar whose count is a tally rather than a modelled credit.
+  ///
+  /// Visual shorthand only: it is never the sole carrier of the caveat, because a dagger read aloud
+  /// is meaningless. Every marked row says "counted, not modelled" in its accessibility label.
+  static let countedMarker = "\u{2020}"
 
   private struct Row: Hashable {
     let muscle: Muscle
@@ -151,10 +172,13 @@ public struct VolumeReportView: View {
           .font(Tokens.Text.label)
         Spacer(minLength: Tokens.Spacing.snug)
         // The "≥" is load-bearing, not decorative.
-        Text("\(report.isLowerBound ? "≥ " : "")\(Self.format(row.sets))")
-          .font(Tokens.Text.label)
-          .monospacedDigit()
-          .foregroundStyle(Tokens.Color.textSecondary)
+        Text(
+          "\(report.isLowerBound ? "≥ " : "")\(Self.format(row.sets))"
+            + (row.muscle.tier == .counted ? Self.countedMarker : "")
+        )
+        .font(Tokens.Text.label)
+        .monospacedDigit()
+        .foregroundStyle(Tokens.Color.textSecondary)
       }
       GeometryReader { proxy in
         ZStack(alignment: .leading) {
@@ -169,18 +193,15 @@ public struct VolumeReportView: View {
       }
       .frame(height: 10)
       .animation(revealAnimation(index: index), value: revealed)
-      // A muscle outside the studied corpus gets a quieter claim, because the count means less.
-      if row.muscle.tier == .counted {
-        Text("counted, not modelled")
-          .font(Tokens.Text.caption)
-          .foregroundStyle(Tokens.Color.textSecondary)
-      }
     }
     .padding(.vertical, Tokens.Spacing.tight)
     .accessibilityElement(children: .combine)
     .accessibilityLabel(
       "\(ExercisePickerView.displayName(MuscleKey(row.muscle))), "
         + "\(report.isLowerBound ? "at least " : "")\(Self.format(row.sets)) sets"
+        // Spoken, not implied by a dagger. The old per-row caption was never in this label at all,
+        // so the caveat has been invisible to VoiceOver for as long as it has existed.
+        + (row.muscle.tier == .counted ? ". Counted, not modelled." : "")
     )
   }
 
