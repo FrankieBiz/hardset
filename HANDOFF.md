@@ -206,6 +206,44 @@ One thing to cut rather than build: the glass morph from the set-log control int
 is the flashiest item in the guidelines, it is tunable only on a device, and it sits on the hottest
 path in the app at forty times a session.
 
+## 8a. Ideas taken from the ancestor, and ideas deliberately refused
+
+The ancestor app at `~/dev/elos` is the design ancestor. Some of its ideas were genuinely good and
+are worth carrying; several are incompatible with this app's refusals and must not be reintroduced
+by a future session that finds them in the Elos code and assumes they were an oversight.
+
+**Carried, and central.**
+- **Per-machine load tracking.** The differentiator. 80 kg on a Hammer Strength is not 80 kg on a
+  Cybex, and no series ever merges them.
+- **Relevance in the exercise picker.** Elos called it smart sort, and its own research concluded
+  the defensible version ranks by the equipment a gym actually has -- which needed a
+  machine-to-exercise join Elos did not have. This app had the table from its first migration and
+  had never written to it; it does now.
+- **Muscle attribution as a precedence chain** with roles, certainty and a source per contribution,
+  rather than a flat "works these muscles" list.
+- **Design tokens as the theming seam.** Elos learned this the expensive way. Here it meant the
+  entire palette landed as a one-file change across ~270 call sites.
+- **One canonical unit, converted only at the edges.** Kilograms stored, display converted.
+- **Gyms owning machines**, but learned by naming equipment at the rack rather than through a setup
+  flow nobody completes.
+
+**Refused, on purpose.**
+- **A composite 0-100 quality or readiness score.** `Claim` makes it unrepresentable. Elos scored a
+  session 78/100 "Dialed in" with three exercises it could not attribute at all.
+- **Weekly per-muscle set targets and fatigue bands.** No such target is established; see
+  DECISIONS #19. Bars are comparative, never evaluative.
+- **Auto-fix and program generation.** There is no prescription engine and inventing one would
+  assert what the app cannot support.
+- **Bundled how-to photographs.** The free-exercise-db images Elos shipped are not licensed for it;
+  the repo's Unlicense never covered the scraped photos.
+- **Streaks, a feed, and social.**
+
+**Worth taking later, in this order.**
+1. **How-to text** -- instructions without the unlicensed imagery. Cheap, useful, and it needs a
+   licence decision rather than engineering.
+2. **Per-machine progression suggestion.** Only after the device gate proves the logger; a
+   suggestion engine on an unverified foundation is the wrong order.
+
 ## 9. Traps that cost me build cycles — do not rediscover these
 
 - **`#expect` cannot take a `rethrows` call.** `#expect(xs.allSatisfy(...))` fails to compile.

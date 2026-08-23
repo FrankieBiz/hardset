@@ -54,6 +54,11 @@ public struct LiveSessionScreen: View {
   @State private var restMetadata: RestMetadata?
   /// Bumped on every accepted machine change, purely to drive the haptic.
   @State private var machineChangeCount = 0
+  /// Relevance inputs for the picker: the user's own recent movements, and what this gym has
+  /// equipment for. Loaded when the picker opens, not per render.
+  @State private var recentExercises: [ExerciseID] = []
+  @State private var availableHere: Set<ExerciseID> = []
+  @State private var gymName: String?
   @State private var isPickerPresented = false
   /// Set when finishing failed and the session is still open, so the user is told rather than
   /// silently returned to a start screen while their workout is stranded.
@@ -129,7 +134,13 @@ public struct LiveSessionScreen: View {
     .sensoryFeedback(.selection, trigger: machineChangeCount)
     .sheet(isPresented: $isPickerPresented) {
       NavigationStack {
-        ExercisePickerView(query: $pickerQuery, entries: pickerEntries) { entry in
+        ExercisePickerView(
+          query: $pickerQuery,
+          entries: pickerEntries,
+          recent: recentExercises,
+          availableHere: availableHere,
+          gymName: gymName
+        ) { entry in
           coordinator.addExercise(entry)
           isPickerPresented = false
           pickerQuery = ""
@@ -146,6 +157,8 @@ public struct LiveSessionScreen: View {
       // stays free of storage. The query is re-run on change instead of filtering in memory so a
       // user-created movement shows up without reopening the sheet.
       .task(id: pickerQuery) { refreshPicker() }
+      // Once per presentation. Relevance does not change while the sheet is open.
+      .task { refreshRelevance() }
     }
     .sheet(item: $machineTarget) { wrapped in
       let target = wrapped.id
@@ -252,7 +265,13 @@ public struct LiveSessionScreen: View {
   private func addMachine(named name: String, forExercise target: UUID) {
     guard let gyms, let gymID = coordinator.gymID, !name.isEmpty else { return }
     do {
-      let machineID = try gyms.createMachine(at: gymID, name: name)
+      let exerciseID = coordinator.exercises.first { $0.id == target }?.exerciseID
+      // Recorded here because this is the only moment the association is known for free: a machine
+      // is named from inside an exercise's picker, and nothing later can recover what it was for
+      // without guessing.
+      let machineID = try gyms.createMachine(
+        at: gymID, name: name, forExercise: exerciseID
+      )
       // Selected immediately: adding one and then having to find it in a list is a second decision
       // for no reason. The stack step is left unknown rather than guessed — an invented increment
       // would licence progression suggestions the equipment cannot honour.
@@ -264,6 +283,20 @@ public struct LiveSessionScreen: View {
     } catch {
       // Nothing was created, so nothing is selected and the list is unchanged. Silent because the
       // user's next tap is the retry, and a modal error over a modal picker is worse than none.
+    }
+  }
+
+  /// What to surface above the alphabet. Both inputs are facts -- history and inventory -- so
+  /// neither turns the picker into a recommendation.
+  private func refreshRelevance() {
+    guard let gyms else { return }
+    recentExercises = (try? gyms.recentlyLoggedExercises()) ?? []
+    if let gymID = coordinator.gymID {
+      availableHere = (try? gyms.exercisesWithEquipment(at: gymID)) ?? []
+      gymName = (try? gyms.gyms())?.first { $0.id == gymID }?.name
+    } else {
+      availableHere = []
+      gymName = nil
     }
   }
 

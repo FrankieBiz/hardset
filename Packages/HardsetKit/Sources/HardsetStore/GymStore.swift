@@ -93,11 +93,71 @@ public nonisolated struct GymStore {
   }
 
   @discardableResult
+  /// - Parameter forExercise: The movement this machine was named for, when there is one.
+  ///   Recorded in `machineExercises`, which existed in the schema and was registered for sync
+  ///   from the first migration but had **never been written to**. It is what lets the app know a
+  ///   gym has equipment for a movement *before* a set has been logged on it -- machines here are
+  ///   almost always named from inside an exercise's picker, so the association is free at the
+  ///   moment of creation and unrecoverable later without guessing.
+  /// Movements this gym is known to have equipment for.
+  ///
+  /// Two sources, unioned: machines named for a movement (`machineExercises`), and movements
+  /// actually logged on a machine at this gym. The second is the stronger signal and the first is
+  /// what makes the list useful on a gym's first visit.
+  ///
+  /// This is relevance, never a prescription. It answers "what can I do here", which the app knows,
+  /// and not "what should I do", which it does not.
+  public func exercisesWithEquipment(at gymID: GymID) throws -> Set<ExerciseID> {
+    try database.read { db in
+      let machineIDs = try Machine
+        .where { $0.gymID.eq(gymID.rawValue) && !$0.isArchived }
+        .fetchAll(db)
+        .map(\.id)
+      guard !machineIDs.isEmpty else { return [] }
+
+      var result = Set<ExerciseID>()
+      for row in try MachineExercise.where({ $0.machineID.in(machineIDs) }).fetchAll(db) {
+        result.insert(ExerciseID(rawValue: row.exerciseID))
+      }
+      // `machineID` is optional on a set, so membership is tested in Swift rather than in the
+      // predicate. This runs when the picker opens, not per render, and only over sets that
+      // recorded a machine at all.
+      let atThisGym = Set(machineIDs)
+      for row in try LoggedSet.where({ $0.machineID.isNot(nil) }).fetchAll(db) {
+        guard let machine = row.machineID, atThisGym.contains(machine) else { continue }
+        result.insert(ExerciseID(rawValue: row.exerciseID))
+      }
+      return result
+    }
+  }
+
+  /// Movements logged most recently, newest first, de-duplicated.
+  ///
+  /// The cheapest useful ordering there is: what someone trains is overwhelmingly what they trained
+  /// last week. No modelling, no inference -- just their own history, read back.
+  public func recentlyLoggedExercises(limit: Int = 8) throws -> [ExerciseID] {
+    try database.read { db in
+      let rows = try LoggedSet
+        .order { $0.completedAt.desc() }
+        .limit(limit * 12)
+        .fetchAll(db)
+      var seen = Set<UUID>()
+      var ordered: [ExerciseID] = []
+      for row in rows where !seen.contains(row.exerciseID) {
+        seen.insert(row.exerciseID)
+        ordered.append(ExerciseID(rawValue: row.exerciseID))
+        if ordered.count == limit { break }
+      }
+      return ordered
+    }
+  }
+
   public func createMachine(
     at gymID: GymID,
     name: String,
     brand: String = "",
     stackIncrementKg: Double? = nil,
+    forExercise exerciseID: ExerciseID? = nil,
     now: Date = Date()
   ) throws -> MachineID {
     let id = MachineID()
@@ -110,6 +170,15 @@ public nonisolated struct GymStore {
         )
       }
       .execute(db)
+
+      if let exerciseID {
+        try MachineExercise.insert {
+          MachineExercise.Draft(
+            id: UUID(), machineID: id.rawValue, exerciseID: exerciseID.rawValue, createdAt: now
+          )
+        }
+        .execute(db)
+      }
     }
     return id
   }

@@ -14,6 +14,18 @@ public struct ExercisePickerView: View {
   /// Drives the row layout: see `row(_:)`.
   @Environment(\.dynamicTypeSize) private var typeSize
 
+  /// Movements logged most recently, newest first. Carried over from the ancestor app's smart
+  /// sort, which was the right idea: what someone trains is overwhelmingly what they trained last
+  /// week, and that needs no modelling -- only their own history.
+  private let recent: [ExerciseID]
+  /// Movements this gym is known to have equipment for, and the gym's name for the heading.
+  ///
+  /// The ancestor's research concluded that the defensible version of this ranks by the equipment
+  /// a gym actually has, and that doing so needed a machine-to-exercise join it did not have. This
+  /// app has one.
+  private let availableHere: Set<ExerciseID>
+  private let gymName: String?
+
   @Binding private var query: String
   private let entries: [CatalogEntry]
   private let onSelect: (CatalogEntry) -> Void
@@ -21,10 +33,16 @@ public struct ExercisePickerView: View {
   public init(
     query: Binding<String>,
     entries: [CatalogEntry],
+    recent: [ExerciseID] = [],
+    availableHere: Set<ExerciseID> = [],
+    gymName: String? = nil,
     onSelect: @escaping (CatalogEntry) -> Void
   ) {
     self._query = query
     self.entries = entries
+    self.recent = recent
+    self.availableHere = availableHere
+    self.gymName = gymName
     self.onSelect = onSelect
   }
 
@@ -43,6 +61,19 @@ public struct ExercisePickerView: View {
           )
         }
       } else {
+        // Relevance first, vocabulary second. Neither of these sections is a recommendation --
+        // one is the user's own history and the other is what the building contains. The app still
+        // declines to say what anyone should train.
+        if !recentEntries.isEmpty {
+          Section("Recent") {
+            ForEach(recentEntries) { row($0) }
+          }
+        }
+        if !hereEntries.isEmpty {
+          Section(gymName.map { "At \($0)" } ?? "Equipment you have") {
+            ForEach(hereEntries) { row($0) }
+          }
+        }
         ForEach(groups) { group in
           Section(sectionTitle(group.key)) {
             ForEach(group.entries) { entry in
@@ -101,6 +132,23 @@ public struct ExercisePickerView: View {
   /// The hand-maintained `muscleOrder` array this replaced was a second source of truth that could
   /// silently omit a token — a new muscle would have sorted last with no warning. `Muscle.allCases`
   /// cannot drift from the enum.
+  /// Recently logged, in recency order, and only while the user is not searching -- a query means
+  /// they know what they want and relevance sections just push it down the screen.
+  private var recentEntries: [CatalogEntry] {
+    guard query.isEmpty else { return [] }
+    let byID = Dictionary(uniqueKeysWithValues: entries.map { ($0.id, $0) })
+    return recent.compactMap { byID[$0] }
+  }
+
+  /// Equipment at this gym, minus anything already shown under Recent, so nothing appears twice.
+  private var hereEntries: [CatalogEntry] {
+    guard query.isEmpty else { return [] }
+    let alreadyShown = Set(recentEntries.map(\.id))
+    return entries
+      .filter { availableHere.contains($0.id) && !alreadyShown.contains($0.id) }
+      .sorted { $0.name < $1.name }
+  }
+
   private var groups: [Group] {
     let grouped = Dictionary(grouping: entries, by: \.primaryMuscle)
     let index = Dictionary(uniqueKeysWithValues: Muscle.allCases.enumerated().map { ($1, $0) })
