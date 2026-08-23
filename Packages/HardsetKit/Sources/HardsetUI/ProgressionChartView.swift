@@ -33,6 +33,10 @@ public struct ProgressionChartView: View {
   private let onExplain: (() -> Void)?
   @State private var metric: ProgressionMetric = .heaviestLoad
 
+  @Environment(\.accessibilityReduceMotion) private var reduceMotion
+  /// Left-to-right reveal of the plot area, once per visit.
+  @State private var drawProgress: Double = 0
+
   /// A series plus the label the store resolved for it, so this view does no lookups.
   public struct SeriesInput: Identifiable, Hashable, Sendable {
     public let label: String
@@ -135,7 +139,35 @@ public struct ProgressionChartView: View {
     }
     .chartYAxisLabel(unit.abbreviation)
     .chartLegend(position: .bottom)
+    // The validated series palette rather than Swift Charts' defaults, which are not contrast
+    // checked against this ground. Three hues, assigned in fixed order and never cycled; a
+    // fourth series folds to the neutral rather than inventing a hue that fails colour-blind
+    // separation. NOTE: the guidelines spend hue on the *gym*, and this view only knows machine
+    // labels -- closing that needs gym ids plumbed through `ProgressionHistory`.
+    .chartForegroundStyleScale(
+      domain: series.map(\.label),
+      range: series.indices.map { Tokens.Color.Series.hue(forGymIndex: $0) }
+    )
+    // Masking the plot area rather than the whole chart, so the axes and legend stay put while
+    // the lines draw in. One animated value, and it cannot stair-step the way a point-prefix does.
+    .chartPlotStyle { plot in
+      plot.mask {
+        GeometryReader { proxy in
+          Rectangle()
+            .frame(width: proxy.size.width * drawProgress)
+            .frame(width: proxy.size.width, alignment: .leading)
+        }
+      }
+    }
     .frame(height: 220)
+    .task {
+      guard drawProgress == 0 else { return }
+      if reduceMotion {
+        drawProgress = 1
+      } else {
+        withAnimation(Tokens.Motion.reveal) { drawProgress = 1 }
+      }
+    }
   }
 
   private var machineChangeNotes: some View {

@@ -17,6 +17,11 @@ public struct VolumeReportView: View {
   private let excludedFromGaps: Set<Muscle>
   private let onExplainCounting: (() -> Void)?
 
+  @Environment(\.accessibilityReduceMotion) private var reduceMotion
+  /// Bars grow once per visit to this screen, never again on scroll. Re-animating on every
+  /// scroll-back is the one motion mistake worth naming, because it turns signal into noise.
+  @State private var revealed = false
+
   public init(
     report: MuscleVolumeReport,
     excludedFromGaps: Set<Muscle> = [],
@@ -45,6 +50,10 @@ public struct VolumeReportView: View {
       .padding(Tokens.Spacing.regular)
     }
     .background(Tokens.Color.ground)
+    .task {
+      guard !revealed else { return }
+      withAnimation(reduceMotion ? nil : Tokens.Motion.surface) { revealed = true }
+    }
   }
 
   // MARK: - Header
@@ -101,8 +110,8 @@ public struct VolumeReportView: View {
         .font(Tokens.Text.caption)
         .foregroundStyle(Tokens.Color.textSecondary)
 
-      ForEach(trained, id: \.muscle) { row in
-        bar(for: row)
+      ForEach(Array(trained.enumerated()), id: \.element.muscle) { index, row in
+        bar(for: row, index: index)
       }
     }
   }
@@ -123,7 +132,19 @@ public struct VolumeReportView: View {
     max(trained.first?.sets ?? 1, 1)
   }
 
-  private func bar(for row: Row) -> some View {
+  private func barWidth(in total: CGFloat, sets: Double) -> CGFloat {
+    guard revealed || reduceMotion else { return 0 }
+    return max(2, total * sets / maxSets)
+  }
+
+  /// Capped rather than escapable: at 40 ms a row a twenty-muscle week would stagger well past the
+  /// motion budget, so the total delay is bounded instead of needing a skip affordance.
+  private func revealAnimation(index: Int) -> Animation? {
+    guard !reduceMotion else { return nil }
+    return Tokens.Motion.surface.delay(min(Double(index) * 0.04, 0.28))
+  }
+
+  private func bar(for row: Row, index: Int) -> some View {
     VStack(alignment: .leading, spacing: Tokens.Spacing.hairline) {
       HStack(alignment: .firstTextBaseline) {
         Text(ExercisePickerView.displayName(MuscleKey(row.muscle)))
@@ -141,10 +162,13 @@ public struct VolumeReportView: View {
             .fill(Tokens.Color.surface)
           RoundedRectangle(cornerRadius: 4)
             .fill(Tokens.Color.accent)
-            .frame(width: max(2, proxy.size.width * row.sets / maxSets))
+            // The value animates, not a scaleEffect: a scaled bar carries a distorted corner
+            // radius and would drag its label with it.
+            .frame(width: barWidth(in: proxy.size.width, sets: row.sets))
         }
       }
       .frame(height: 10)
+      .animation(revealAnimation(index: index), value: revealed)
       // A muscle outside the studied corpus gets a quieter claim, because the count means less.
       if row.muscle.tier == .counted {
         Text("counted, not modelled")
