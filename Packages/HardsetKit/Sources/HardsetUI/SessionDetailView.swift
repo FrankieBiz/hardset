@@ -18,6 +18,9 @@ import SwiftUI
 public struct LoggedSetRow: Identifiable, Hashable, Sendable {
   public let id: UUID
   public let exerciseName: String
+  /// True when the movement is loaded by the lifter's own body, so zero means bodyweight and not
+  /// nothing -- the same distinction the set row draws while logging.
+  public let isBodyweight: Bool
   /// `nil` for free weights, or a machine whose row has been removed.
   public let machineName: String?
   public let weightKg: Double
@@ -27,6 +30,7 @@ public struct LoggedSetRow: Identifiable, Hashable, Sendable {
   public init(
     id: UUID,
     exerciseName: String,
+    isBodyweight: Bool = false,
     machineName: String?,
     weightKg: Double,
     reps: Int,
@@ -34,6 +38,7 @@ public struct LoggedSetRow: Identifiable, Hashable, Sendable {
   ) {
     self.id = id
     self.exerciseName = exerciseName
+    self.isBodyweight = isBodyweight
     self.machineName = machineName
     self.weightKg = weightKg
     self.reps = reps
@@ -138,7 +143,7 @@ public struct SessionDetailView: View {
             .monospacedDigit()
             .foregroundStyle(Tokens.Color.textSecondary)
             .frame(minWidth: 22, alignment: .leading)
-          Text("\(Self.format(unit.fromKilograms(set.weightKg))) \(unit.abbreviation)")
+          Text(loadText(set))
             .font(Tokens.Text.setEntry)
             .foregroundStyle(Tokens.Color.textPrimary)
           Text("\u{00D7} \(set.reps)")
@@ -163,6 +168,15 @@ public struct SessionDetailView: View {
     }
   }
 
+  /// "Body" for a bodyweight set with no added load, "Body + 10 kg" when there was some, and the
+  /// plain load otherwise. Reading a pull-up back as "0 kg" is the same lie the set row refuses
+  /// while logging it.
+  private func loadText(_ set: LoggedSetRow) -> String {
+    let value = Self.format(unit.fromKilograms(set.weightKg))
+    guard set.isBodyweight else { return "\(value) \(unit.abbreviation)" }
+    return set.weightKg == 0 ? "Body" : "Body + \(value) \(unit.abbreviation)"
+  }
+
   private func workingOrdinal(of set: LoggedSetRow, in group: Group_) -> Int? {
     guard !set.isWarmup else { return nil }
     let working = group.sets.filter { !$0.isWarmup }
@@ -176,8 +190,7 @@ public struct SessionDetailView: View {
     let which = set.isWarmup
       ? "Warm-up set"
       : "Set \(workingOrdinal(of: set, in: group) ?? fallbackIndex + 1)"
-    let weight = Self.format(unit.fromKilograms(set.weightKg))
-    return "\(which), \(weight) \(unit.abbreviation), \(set.reps) reps"
+    return "\(which), \(loadText(set)), \(set.reps) reps"
   }
 
   /// Grouped in logging order, and a machine change inside one movement starts a new group --

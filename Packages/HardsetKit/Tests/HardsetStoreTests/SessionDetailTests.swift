@@ -92,3 +92,59 @@ struct SessionDetailTests {
     #expect(sets.first?.machineName == nil)
   }
 }
+
+extension SessionDetailTests {
+  @MainActor
+  @Test("A bodyweight set reads back as bodyweight, not as zero load")
+  func bodyweightReadsBackHonestly() throws {
+    let database = try migrated()
+    try CatalogSeeder(database: database).seed(now: now)
+    let logger = LoggerStore(database: database)
+    let history = HistoryStore(database: database)
+
+    let dip = try #require(
+      try database.read { db in try Exercise.where { $0.catalogSlug.eq("dip") }.fetchOne(db) }
+    )
+    // The stored modality is what makes this readable back correctly after a relaunch.
+    #expect(dip.modality == "bodyweight")
+
+    let session = try logger.startSession(at: now)
+    _ = try logger.logSet(
+      sessionID: session, exerciseID: ExerciseID(rawValue: dip.id),
+      draft: SetEntryDraft(weightKg: 0, reps: 10), at: now
+    )
+    // And one with added load, which must not collapse to the same rendering.
+    _ = try logger.logSet(
+      sessionID: session, exerciseID: ExerciseID(rawValue: dip.id),
+      draft: SetEntryDraft(weightKg: 10, reps: 6), at: now.addingTimeInterval(120)
+    )
+    try logger.finishSession(session, at: now.addingTimeInterval(600))
+
+    let sets = try history.sets(in: session)
+    #expect(sets.count == 2)
+    #expect(sets.allSatisfy { $0.modality == .bodyweight })
+    #expect(sets.first?.weightKg == 0)
+    #expect(sets.last?.weightKg == 10)
+  }
+
+  @MainActor
+  @Test("A loaded movement reports its modality too, so nothing guesses")
+  func loadedModalityIsCarried() throws {
+    let database = try migrated()
+    try CatalogSeeder(database: database).seed(now: now)
+    let logger = LoggerStore(database: database)
+    let history = HistoryStore(database: database)
+    let squat = try #require(
+      try database.read { db in
+        try Exercise.where { $0.catalogSlug.eq("barbell-back-squat") }.fetchOne(db)
+      }
+    )
+    let session = try logger.startSession(at: now)
+    _ = try logger.logSet(
+      sessionID: session, exerciseID: ExerciseID(rawValue: squat.id),
+      draft: SetEntryDraft(weightKg: 100, reps: 5), at: now
+    )
+    try logger.finishSession(session, at: now.addingTimeInterval(300))
+    #expect(try history.sets(in: session).first?.modality == .barbell)
+  }
+}

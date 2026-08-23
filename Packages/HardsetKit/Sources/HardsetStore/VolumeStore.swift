@@ -190,6 +190,8 @@ public nonisolated struct LoggedSetDetail: Hashable, Sendable, Identifiable {
   public let id: SetID
   public let exerciseID: ExerciseID
   public let exerciseName: String
+  /// How the movement is loaded. Needed so history does not read back a pull-up as "0 kg".
+  public let modality: ExerciseModality?
   /// `nil` for free weights, or a machine whose row has been removed.
   public let machineName: String?
   public let weightKg: Double
@@ -201,6 +203,7 @@ public nonisolated struct LoggedSetDetail: Hashable, Sendable, Identifiable {
     id: SetID,
     exerciseID: ExerciseID,
     exerciseName: String,
+    modality: ExerciseModality? = nil,
     machineName: String?,
     weightKg: Double,
     reps: Int,
@@ -210,6 +213,7 @@ public nonisolated struct LoggedSetDetail: Hashable, Sendable, Identifiable {
     self.id = id
     self.exerciseID = exerciseID
     self.exerciseName = exerciseName
+    self.modality = modality
     self.machineName = machineName
     self.weightKg = weightKg
     self.reps = reps
@@ -269,10 +273,10 @@ public nonisolated struct HistoryStore {
         .fetchAll(db)
       guard !rows.isEmpty else { return [] }
 
-      let exerciseNames = try Exercise
+      let exercises = try Exercise
         .where { $0.id.in(Array(Set(rows.map(\.exerciseID)))) }
         .fetchAll(db)
-        .reduce(into: [UUID: String]()) { $0[$1.id] = $1.name }
+        .reduce(into: [UUID: Exercise]()) { $0[$1.id] = $1 }
 
       let machineIDs = Array(Set(rows.compactMap(\.machineID)))
       let machineNames = machineIDs.isEmpty
@@ -286,7 +290,8 @@ public nonisolated struct HistoryStore {
         LoggedSetDetail(
           id: SetID(rawValue: row.id),
           exerciseID: ExerciseID(rawValue: row.exerciseID),
-          exerciseName: exerciseNames[row.exerciseID] ?? "Unknown movement",
+          exerciseName: exercises[row.exerciseID]?.name ?? "Unknown movement",
+          modality: exercises[row.exerciseID].flatMap { ExerciseModality(rawValue: $0.modality) },
           machineName: row.machineID.flatMap { machineNames[$0] },
           weightKg: row.weightKg,
           reps: row.reps,

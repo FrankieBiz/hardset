@@ -52,6 +52,7 @@ public struct SessionDetailScreen: View {
         LoggedSetRow(
           id: $0.id.rawValue,
           exerciseName: $0.exerciseName,
+          isBodyweight: $0.modality == .bodyweight,
           machineName: $0.machineName,
           weightKg: $0.weightKg,
           reps: $0.reps,
