@@ -571,7 +571,7 @@ and so cannot satisfy M4.
 | Rest complete, foreground | `.success` | shipped |
 | Personal record | `.impact(flexibility: .solid, intensity: 0.7)` | shipped |
 | Machine changed mid-exercise | `.selection` | shipped |
-| Set un-logged / removed | `.impact(weight: .light)` | **no host** — there is no un-log path |
+| Set un-logged / removed | `.impact(weight: .light)` | shipped |
 | Destructive confirmed | `.warning` | **no host** — nothing destructive exists yet |
 
 The rest cues are scheduled as individual suspensions until an absolute instant, never as a timer:

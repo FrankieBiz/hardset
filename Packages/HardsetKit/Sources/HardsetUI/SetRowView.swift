@@ -51,6 +51,9 @@ public struct SetRowView: View {
   /// means "bodyweight only" and not "no load".
   private let isBodyweight: Bool
   private let onLog: () -> Void
+  /// Takes a logged set back. `nil` hides the affordance, which is correct wherever un-logging is
+  /// not supported.
+  private let onUnlog: (() -> Void)?
 
   public init(
     draft: Binding<SetEntryDraft>,
@@ -62,7 +65,8 @@ public struct SetRowView: View {
     priorNote: String? = nil,
     loadFraction: Double? = nil,
     isBodyweight: Bool = false,
-    onLog: @escaping () -> Void
+    onLog: @escaping () -> Void,
+    onUnlog: (() -> Void)? = nil
   ) {
     self._draft = draft
     self.ordinal = ordinal
@@ -74,6 +78,7 @@ public struct SetRowView: View {
     self.loadFraction = loadFraction
     self.isBodyweight = isBodyweight
     self.onLog = onLog
+    self.onUnlog = onUnlog
 
     // Seeded once, from whatever the caller already resolved as the suggestion. Note the
     // conversion: the draft is canonical kilograms, the buffer is what the user reads.
@@ -115,8 +120,28 @@ public struct SetRowView: View {
     .accessibilityAction(named: Text("Log set")) {
       if draft.isLoggable { onLog() }
     }
+    // On a logged row, taking the set back is the action a lifter actually needs -- a mistyped
+    // weight is otherwise permanent. Long press rather than a visible button: it is rare, and a
+    // destructive control next to the log control on a row tapped forty times a session is a
+    // mis-tap waiting to happen.
+    .contextMenu {
+      if isLogged, let onUnlog {
+        Button(role: .destructive) {
+          onUnlog()
+        } label: {
+          Label("Take this set back", systemImage: "arrow.uturn.backward")
+        }
+      }
+    }
     .accessibilityAction(named: Text("Edit weight")) { editing = .weight }
     .accessibilityAction(named: Text("Edit reps")) { editing = .reps }
+    // VoiceOver cannot long-press, so the same action is named here. Without this the row would be
+    // uncorrectable for anyone using it.
+    .accessibilityActions {
+      if isLogged, let onUnlog {
+        Button("Take this set back", action: onUnlog)
+      }
+    }
     .sheet(item: $editing) { field in
       padSheet(for: field)
     }
@@ -300,6 +325,8 @@ public struct SetRowView: View {
     .opacity(draft.isLoggable || isLogged ? 1 : 0.35)
     // Haptics confirm the tap landed without the user looking at the phone.
     .sensoryFeedback(.success, trigger: isLogged) { !$0 && $1 }
+    // The un-log direction, which the haptics table had listed as having no host.
+    .sensoryFeedback(.impact(weight: .light), trigger: isLogged) { $0 && !$1 }
   }
 
   private func padSheet(for field: SetRowField) -> some View {

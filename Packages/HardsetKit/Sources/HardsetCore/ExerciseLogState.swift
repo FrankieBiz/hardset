@@ -293,6 +293,21 @@ public struct ExerciseLogState: Hashable, Sendable, Identifiable {
 
   /// Marks a row written. Ignores an unknown id rather than trapping — a stale callback from
   /// a dismissed view should not crash a workout.
+  /// Returns a slot to editable, keeping whatever numbers it holds.
+  ///
+  /// The values survive on purpose: un-logging is overwhelmingly how a typo gets corrected, so
+  /// landing back on the row with 500 kg still in the field is what lets the lifter fix the digit
+  /// rather than retype the set. Removing the row entirely is a separate action.
+  ///
+  /// Returns the set that was logged, so the caller knows what to delete from storage.
+  @discardableResult
+  public mutating func markUnlogged(slotID: UUID) -> SetID? {
+    guard let index = slots.firstIndex(where: { $0.id == slotID }) else { return nil }
+    let previous = slots[index].loggedSetID
+    slots[index].loggedSetID = nil
+    return previous
+  }
+
   public mutating func markLogged(slotID: UUID, setID: SetID) {
     guard let index = slots.firstIndex(where: { $0.id == slotID }) else { return }
     slots[index].loggedSetID = setID

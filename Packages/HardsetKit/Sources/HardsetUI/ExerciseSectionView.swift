@@ -14,6 +14,7 @@ public struct ExerciseSectionView: View {
   @Binding private var state: ExerciseLogState
   private let unit: WeightUnit
   private let onLogSet: (SetSlot) -> Void
+  private let onUnlogSet: ((SetSlot) -> Void)?
   private let onSelectMachine: (() -> Void)?
   private let onShowHistory: (() -> Void)?
 
@@ -24,12 +25,14 @@ public struct ExerciseSectionView: View {
     state: Binding<ExerciseLogState>,
     unit: WeightUnit,
     onLogSet: @escaping (SetSlot) -> Void,
+    onUnlogSet: ((SetSlot) -> Void)? = nil,
     onSelectMachine: (() -> Void)? = nil,
     onShowHistory: (() -> Void)? = nil
   ) {
     self._state = state
     self.unit = unit
     self.onLogSet = onLogSet
+    self.onUnlogSet = onUnlogSet
     self.onSelectMachine = onSelectMachine
     self.onShowHistory = onShowHistory
   }
@@ -57,7 +60,8 @@ public struct ExerciseSectionView: View {
               LoadIntensity.fraction(weightKg: $0, heaviestKg: state.heaviestPriorKg)
             },
             isBodyweight: state.modality == .bodyweight,
-            onLog: { onLogSet(slot) }
+            onLog: { onLogSet(slot) },
+            onUnlog: onUnlogSet.map { handler in { handler(slot) } }
           )
           .clipShape(RoundedRectangle(cornerRadius: Tokens.Radius.control))
         }

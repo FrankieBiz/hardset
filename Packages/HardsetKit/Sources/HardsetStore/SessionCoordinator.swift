@@ -419,6 +419,40 @@ public final class SessionCoordinator {
     }
   }
 
+  /// Un-logs a set: deletes the stored row and returns the slot to editable with its numbers
+  /// intact.
+  ///
+  /// **Deletes before it forgets**, which is the mirror of `logSet` persisting before it claims. If
+  /// the delete fails the slot stays logged, because a row still in the database and a check mark
+  /// gone from the screen is the disagreement this codebase exists to prevent.
+  ///
+  /// Records already announced for the session are deliberately not retracted here. They were
+  /// computed against the history that existed at the time, and re-deriving them would mean
+  /// recomputing every record in the session against a changed past -- a bigger piece of work than
+  /// this, and one that needs its own thought. What *is* immediately correct again is everything
+  /// read from the rows: volume, tonnage, the chart, and history.
+  @discardableResult
+  public func unlogSet(slotID: UUID, inExercise exerciseStateID: UUID) -> Bool {
+    guard
+      let exerciseIndex = exercises.firstIndex(where: { $0.id == exerciseStateID }),
+      let slot = exercises[exerciseIndex].slots.first(where: { $0.id == slotID }),
+      let setID = slot.loggedSetID
+    else {
+      lastError = SessionCoordinatorError.unknownSlot
+      return false
+    }
+
+    do {
+      try store.deleteSet(setID)
+      exercises[exerciseIndex].markUnlogged(slotID: slotID)
+      lastError = nil
+      return true
+    } catch {
+      lastError = error
+      return false
+    }
+  }
+
   public func addSet(inExercise exerciseStateID: UUID, isWarmup: Bool = false) {
     guard let index = exercises.firstIndex(where: { $0.id == exerciseStateID }) else {
       lastError = SessionCoordinatorError.unknownExercise

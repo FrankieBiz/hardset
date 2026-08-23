@@ -252,6 +252,26 @@ prerequisite if that ever changes.
 2. **Per-machine progression suggestion.** Only after the device gate proves the logger; a
    suggestion engine on an unverified foundation is the wrong order.
 
+## 8b. The one place the app is not append-only
+
+`LoggerStore.deleteSet` is the single mutation that removes user data, and
+`SessionCoordinator.unlogSet` is its only caller. It exists because the alternative is worse: with
+no way back, a mistyped 500 kg is a permanent personal record, a permanent spike in the progression
+chart and a permanently wrong week, in an app whose entire claim is that its numbers can be trusted.
+
+It deletes hard rather than flagging, because volume, tonnage, the chart, records and history are
+all derived by *reading* those rows -- a flagged set keeps contributing unless every reader learns
+about the flag, and one that forgets is a silent wrong number. SQLiteData propagates the deletion
+through CloudKit as a tombstone.
+
+It deletes **before** it forgets, mirroring `logSet` persisting before it claims. A row still in the
+database with the check mark gone from the screen is the same class of disagreement.
+
+**Known limit:** records already announced during a session are not retracted when a set is taken
+back. They were computed against the history that existed at the time, and undoing one correctly
+means recomputing every record in the session against a changed past. That is its own piece of work.
+Everything read from the rows -- volume, tonnage, chart, history -- is correct again immediately.
+
 ## 9. Traps that cost me build cycles — do not rediscover these
 
 - **`#expect` cannot take a `rethrows` call.** `#expect(xs.allSatisfy(...))` fails to compile.

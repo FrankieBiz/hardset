@@ -171,6 +171,23 @@ public nonisolated struct LoggerStore {
   }
 
   /// Closes a session at `finishedAt`, going through `SessionTimeline`'s guards.
+  /// Removes one logged set.
+  ///
+  /// A hard delete rather than a flag. Everything downstream -- weekly volume, the progression
+  /// chart, records, tonnage -- is derived from these rows by reading them, so a set that a lifter
+  /// says did not happen has to actually stop existing or it keeps contributing. SQLiteData
+  /// propagates the deletion through CloudKit as a tombstone.
+  ///
+  /// The app is otherwise append-only, and that is deliberate. This is the one exception, and it
+  /// exists because the alternative is worse: without it a mistyped 500 kg is a permanent personal
+  /// record, a permanent spike in the chart, and a permanently wrong week -- in an app whose whole
+  /// claim is that its numbers can be trusted.
+  public func deleteSet(_ setID: SetID) throws {
+    try database.write { db in
+      try LoggedSet.where { $0.id.eq(setID.rawValue) }.delete().execute(db)
+    }
+  }
+
   public func finishSession(_ sessionID: SessionID, at finishedAt: Date) throws {
     try database.write { db in
       guard
