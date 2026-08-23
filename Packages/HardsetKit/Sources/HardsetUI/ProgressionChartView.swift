@@ -38,6 +38,12 @@ public struct ProgressionChartView: View {
   /// Colour follows the gym, permanently for this chart. A series that disappears must not
   /// repaint the survivors.
   private func colour(for input: SeriesInput) -> SwiftUI.Color {
+    // A hue exists to tell series apart. With one series there is nothing to tell it apart from, so
+    // the hue carries no information and the line takes the accent instead -- which is also the
+    // highest-contrast option on this ground. This is the common case, and it used to fall through
+    // to `overflow`: a free-weight lift has no gym index, so the single most frequent chart in the
+    // app drew its only line in the neutral grey reserved for "we ran out of hues".
+    guard series.count > 1 else { return Tokens.Color.accent }
     guard let index = input.gymIndex else { return Tokens.Color.Series.overflow }
     return Tokens.Color.Series.hue(forGymIndex: index)
   }
@@ -171,8 +177,15 @@ public struct ProgressionChartView: View {
           }
       }
     }
+    // Not zero-based. Swift Charts includes zero by default, which is right for a bar whose length
+    // encodes magnitude and wrong for a line whose slope encodes change: a lifter going 100 to 110 kg
+    // saw a flat line pinned to the top of a 0-110 plot, which is the one thing this view exists to
+    // make visible. Nobody reads a load chart to be reminded that zero exists.
+    .chartYScale(domain: .automatic(includesZero: false))
     .chartYAxisLabel(unit.abbreviation)
-    .chartLegend(position: .bottom)
+    // No legend for a single series: the screen's own title names it, and a one-row legend reading
+    // "Free weight" tells the reader nothing they did not already know.
+    .chartLegend(series.count > 1 ? .visible : .hidden)
     // The validated series palette rather than Swift Charts' defaults, which are not contrast
     // checked against this ground. Three hues, assigned in fixed order and never cycled; a
     // fourth *gym* folds to the neutral rather than inventing a hue that fails colour-blind
