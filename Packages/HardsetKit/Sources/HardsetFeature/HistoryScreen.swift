@@ -29,13 +29,33 @@ public struct HistoryScreen: View {
           Text("Your logged sets are safe. Pull down to try again.")
         }
       } else {
-        HistoryView(rows: rows, unit: unit) { opened = $0 }
+        HistoryView(
+          rows: rows,
+          unit: unit,
+          onSelect: { opened = $0 },
+          onDelete: delete
+        )
       }
     }
     .task { load() }
     .refreshable { load() }
     .navigationDestination(item: $opened) { row in
       SessionDetailScreen(row: row, store: store, unit: unit)
+    }
+  }
+
+  /// Discards a workout and everything in it.
+  ///
+  /// No confirmation dialog: the swipe is already deliberate, and iOS treats a destructive swipe
+  /// action as its own confirmation. Reloads afterwards so the list cannot show a row whose rows
+  /// are gone.
+  private func delete(_ row: HistoryRow) {
+    do {
+      try store.deleteSession(row.id)
+      load()
+    } catch {
+      // Stated rather than swallowed: a delete that failed must not leave the row looking gone.
+      loadFailed = true
     }
   }
 

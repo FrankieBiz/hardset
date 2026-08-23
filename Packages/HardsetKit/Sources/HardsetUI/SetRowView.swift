@@ -54,6 +54,9 @@ public struct SetRowView: View {
   /// Takes a logged set back. `nil` hides the affordance, which is correct wherever un-logging is
   /// not supported.
   private let onUnlog: (() -> Void)?
+  /// Removes an empty row. `nil` hides it. Never offered on a logged set -- taking a set back is a
+  /// different action with a different meaning.
+  private let onRemove: (() -> Void)?
 
   public init(
     draft: Binding<SetEntryDraft>,
@@ -66,7 +69,8 @@ public struct SetRowView: View {
     loadFraction: Double? = nil,
     isBodyweight: Bool = false,
     onLog: @escaping () -> Void,
-    onUnlog: (() -> Void)? = nil
+    onUnlog: (() -> Void)? = nil,
+    onRemove: (() -> Void)? = nil
   ) {
     self._draft = draft
     self.ordinal = ordinal
@@ -79,6 +83,7 @@ public struct SetRowView: View {
     self.isBodyweight = isBodyweight
     self.onLog = onLog
     self.onUnlog = onUnlog
+    self.onRemove = onRemove
 
     // Seeded once, from whatever the caller already resolved as the suggestion. Note the
     // conversion: the draft is canonical kilograms, the buffer is what the user reads.
@@ -131,6 +136,12 @@ public struct SetRowView: View {
         } label: {
           Label("Take this set back", systemImage: "arrow.uturn.backward")
         }
+      } else if !isLogged, let onRemove {
+        Button(role: .destructive) {
+          onRemove()
+        } label: {
+          Label("Remove this row", systemImage: "minus.circle")
+        }
       }
     }
     .accessibilityAction(named: Text("Edit weight")) { editing = .weight }
@@ -140,6 +151,8 @@ public struct SetRowView: View {
     .accessibilityActions {
       if isLogged, let onUnlog {
         Button("Take this set back", action: onUnlog)
+      } else if !isLogged, let onRemove {
+        Button("Remove this row", action: onRemove)
       }
     }
     .sheet(item: $editing) { field in

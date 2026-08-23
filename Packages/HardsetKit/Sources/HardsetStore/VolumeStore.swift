@@ -257,6 +257,16 @@ public nonisolated struct HistoryStore {
     self.database = database
   }
 
+  /// Discards a workout and, by cascade, its sets and plan rows.
+  ///
+  /// Exposed on `HistoryStore` so the history screen does not need a `LoggerStore` just to delete
+  /// what it is already displaying.
+  public func deleteSession(_ sessionID: SessionID) throws {
+    try database.write { db in
+      try Session.where { $0.id.eq(sessionID.rawValue) }.delete().execute(db)
+    }
+  }
+
   /// Every set logged in one session, in order, with the names needed to read it back.
   ///
   /// The counterpart to `recentSessions`: that answers "what workouts have I done", this answers

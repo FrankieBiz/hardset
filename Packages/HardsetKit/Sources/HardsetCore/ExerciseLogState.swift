@@ -293,6 +293,19 @@ public struct ExerciseLogState: Hashable, Sendable, Identifiable {
 
   /// Marks a row written. Ignores an unknown id rather than trapping — a stale callback from
   /// a dismissed view should not crash a workout.
+  /// Removes an unlogged slot.
+  ///
+  /// Refuses a logged one: taking a set back is `markUnlogged`, and conflating the two would let a
+  /// tap that means "I added a row by mistake" quietly delete a recorded set.
+  @discardableResult
+  public mutating func removeSlot(slotID: UUID) -> Bool {
+    guard let index = slots.firstIndex(where: { $0.id == slotID }), !slots[index].isLogged else {
+      return false
+    }
+    slots.remove(at: index)
+    return true
+  }
+
   /// Returns a slot to editable, keeping whatever numbers it holds.
   ///
   /// The values survive on purpose: un-logging is overwhelmingly how a typo gets corrected, so

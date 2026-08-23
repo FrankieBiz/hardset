@@ -42,15 +42,19 @@ public struct HistoryView: View {
   private let rows: [HistoryRow]
   private let unit: WeightUnit
   private let onSelect: ((HistoryRow) -> Void)?
+  /// Deletes a workout. `nil` hides the affordance.
+  private let onDelete: ((HistoryRow) -> Void)?
 
   public init(
     rows: [HistoryRow],
     unit: WeightUnit,
-    onSelect: ((HistoryRow) -> Void)? = nil
+    onSelect: ((HistoryRow) -> Void)? = nil,
+    onDelete: ((HistoryRow) -> Void)? = nil
   ) {
     self.rows = rows
     self.unit = unit
     self.onSelect = onSelect
+    self.onDelete = onDelete
   }
 
   public var body: some View {
@@ -74,6 +78,18 @@ public struct HistoryView: View {
           }
           .buttonStyle(.plain)
           .disabled(onSelect == nil)
+          // Swipe rather than a menu: this is a `List`, so the gesture is the platform's own and
+          // needs no discovery. It discards the workout and every set in it, which is why the
+          // label says so rather than just "Delete".
+          .swipeActions(edge: .trailing) {
+            if let onDelete {
+              Button(role: .destructive) {
+                onDelete(row)
+              } label: {
+                Label("Delete workout", systemImage: "trash")
+              }
+            }
+          }
         }
       }
     }

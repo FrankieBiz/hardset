@@ -22,6 +22,8 @@ public struct SessionView: View {
   private let records: [PersonalRecord]
   private let onLogSet: (UUID, SetSlot) -> Void
   private let onUnlogSet: ((UUID, SetSlot) -> Void)?
+  private let onRemoveSlot: ((UUID, SetSlot) -> Void)?
+  private let onRemoveExercise: ((UUID) -> Void)?
   private let onAdjustRest: (Duration) -> Void
   private let onPauseResumeRest: () -> Void
   private let onSkipRest: () -> Void
@@ -40,6 +42,8 @@ public struct SessionView: View {
     records: [PersonalRecord] = [],
     onLogSet: @escaping (UUID, SetSlot) -> Void,
     onUnlogSet: ((UUID, SetSlot) -> Void)? = nil,
+    onRemoveSlot: ((UUID, SetSlot) -> Void)? = nil,
+    onRemoveExercise: ((UUID) -> Void)? = nil,
     onAdjustRest: @escaping (Duration) -> Void = { _ in },
     onPauseResumeRest: @escaping () -> Void = {},
     onSkipRest: @escaping () -> Void = {},
@@ -57,6 +61,8 @@ public struct SessionView: View {
     self.records = records
     self.onLogSet = onLogSet
     self.onUnlogSet = onUnlogSet
+    self.onRemoveSlot = onRemoveSlot
+    self.onRemoveExercise = onRemoveExercise
     self.onAdjustRest = onAdjustRest
     self.onPauseResumeRest = onPauseResumeRest
     self.onSkipRest = onSkipRest
@@ -113,6 +119,12 @@ public struct SessionView: View {
             onLogSet: { slot in onLogSet(exercise.id, slot) },
             onUnlogSet: onUnlogSet.map { handler in
               { slot in handler(exercise.id, slot) }
+            },
+            onRemoveSlot: onRemoveSlot.map { handler in
+              { slot in handler(exercise.id, slot) }
+            },
+            onRemoveExercise: onRemoveExercise.map { handler in
+              { handler(exercise.id) }
             },
             onSelectMachine: onSelectMachine.map { select in
               { select(exercise.id) }

@@ -171,6 +171,35 @@ public nonisolated struct LoggerStore {
   }
 
   /// Closes a session at `finishedAt`, going through `SessionTimeline`'s guards.
+  /// Removes a whole workout, with its sets and its plan rows.
+  ///
+  /// One statement: `sessions` is the parent and both `loggedSets.sessionID` and
+  /// `sessionExercises.sessionID` are `ON DELETE CASCADE`, so the children go with it rather than
+  /// being swept up by hand -- which is what would eventually leave orphans.
+  ///
+  /// Requires foreign keys to be enabled on the connection. `HardsetDatabase.open` sets that; a
+  /// test harness that forgets it would silently leave the sets behind, which `deleteSessionCascades`
+  /// pins.
+  public func deleteSession(_ sessionID: SessionID) throws {
+    try database.write { db in
+      try Session.where { $0.id.eq(sessionID.rawValue) }.delete().execute(db)
+    }
+  }
+
+  /// Removes one movement from a session, and any sets logged against it.
+  ///
+  /// The plan row is the parent of nothing, so the sets are removed explicitly. Scoped to the
+  /// session on purpose: the same movement in a different workout is untouched.
+  public func removeSessionExercise(rowID: UUID, from sessionID: SessionID) throws {
+    try database.write { db in
+      try LoggedSet
+        .where { $0.sessionID.eq(sessionID.rawValue) && $0.sessionExerciseID.eq(rowID) }
+        .delete()
+        .execute(db)
+      try SessionExercise.where { $0.id.eq(rowID) }.delete().execute(db)
+    }
+  }
+
   /// Removes one logged set.
   ///
   /// A hard delete rather than a flag. Everything downstream -- weekly volume, the progression

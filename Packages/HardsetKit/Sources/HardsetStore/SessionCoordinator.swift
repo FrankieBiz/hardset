@@ -419,6 +419,46 @@ public final class SessionCoordinator {
     }
   }
 
+  /// Removes an empty set row. Tapping "Add set" twice should not leave a row that cannot go away.
+  @discardableResult
+  public func removeSlot(slotID: UUID, inExercise exerciseStateID: UUID) -> Bool {
+    guard let index = exercises.firstIndex(where: { $0.id == exerciseStateID }) else {
+      lastError = SessionCoordinatorError.unknownSlot
+      return false
+    }
+    // Nothing is persisted per slot until it is logged, so an unlogged row exists only in memory
+    // and removing it touches no storage.
+    return exercises[index].removeSlot(slotID: slotID)
+  }
+
+  /// Removes a movement from the workout, along with anything logged against it.
+  ///
+  /// The confirmation belongs to the caller. This is the one path that can discard recorded sets in
+  /// bulk, and it is deliberately explicit about that rather than silently refusing when the
+  /// movement turns out to have sets -- refusing would leave a lifter who added the wrong exercise,
+  /// logged into it, and noticed, with no way out at all.
+  @discardableResult
+  public func removeExercise(_ exerciseStateID: UUID) -> Bool {
+    guard let index = exercises.firstIndex(where: { $0.id == exerciseStateID }) else {
+      lastError = SessionCoordinatorError.unknownSlot
+      return false
+    }
+    do {
+      if let rowID = planRowIDs[exerciseStateID] {
+        try store.removeSessionExercise(rowID: rowID, from: sessionID)
+        planRowIDs[exerciseStateID] = nil
+      }
+      exercises.remove(at: index)
+      lastError = nil
+      return true
+    } catch {
+      // Storage first again: a movement gone from the screen whose sets are still counted in the
+      // week is the worst of both.
+      lastError = error
+      return false
+    }
+  }
+
   /// Un-logs a set: deletes the stored row and returns the slot to editable with its numbers
   /// intact.
   ///

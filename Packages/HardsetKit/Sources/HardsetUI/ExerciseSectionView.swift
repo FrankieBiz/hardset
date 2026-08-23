@@ -15,6 +15,8 @@ public struct ExerciseSectionView: View {
   private let unit: WeightUnit
   private let onLogSet: (SetSlot) -> Void
   private let onUnlogSet: ((SetSlot) -> Void)?
+  private let onRemoveSlot: ((SetSlot) -> Void)?
+  private let onRemoveExercise: (() -> Void)?
   private let onSelectMachine: (() -> Void)?
   private let onShowHistory: (() -> Void)?
 
@@ -26,6 +28,8 @@ public struct ExerciseSectionView: View {
     unit: WeightUnit,
     onLogSet: @escaping (SetSlot) -> Void,
     onUnlogSet: ((SetSlot) -> Void)? = nil,
+    onRemoveSlot: ((SetSlot) -> Void)? = nil,
+    onRemoveExercise: (() -> Void)? = nil,
     onSelectMachine: (() -> Void)? = nil,
     onShowHistory: (() -> Void)? = nil
   ) {
@@ -33,6 +37,8 @@ public struct ExerciseSectionView: View {
     self.unit = unit
     self.onLogSet = onLogSet
     self.onUnlogSet = onUnlogSet
+    self.onRemoveSlot = onRemoveSlot
+    self.onRemoveExercise = onRemoveExercise
     self.onSelectMachine = onSelectMachine
     self.onShowHistory = onShowHistory
   }
@@ -61,7 +67,12 @@ public struct ExerciseSectionView: View {
             },
             isBodyweight: state.modality == .bodyweight,
             onLog: { onLogSet(slot) },
-            onUnlog: onUnlogSet.map { handler in { handler(slot) } }
+            onUnlog: onUnlogSet.map { handler in { handler(slot) } },
+            // Only offered when there is more than one row: removing the last one would leave a
+            // movement with nothing to log into and no obvious way back.
+            onRemove: state.slots.count > 1
+              ? onRemoveSlot.map { handler in { handler(slot) } }
+              : nil
           )
           .clipShape(RoundedRectangle(cornerRadius: Tokens.Radius.control))
         }
@@ -73,6 +84,24 @@ public struct ExerciseSectionView: View {
   }
 
   private var header: some View {
+    headerContent
+      // On the movement's own header rather than a set row, because this discards every set in it.
+      // Long press, with the count stated, so it cannot be confused with removing one row.
+      .contextMenu {
+        if let onRemoveExercise {
+          Button(role: .destructive, action: onRemoveExercise) {
+            Label(
+              state.loggedCount == 0
+                ? "Remove this movement"
+                : "Remove this movement and its ^[\(state.loggedCount) set](inflect: true)",
+              systemImage: "trash"
+            )
+          }
+        }
+      }
+  }
+
+  @ViewBuilder private var headerContent: some View {
     VStack(alignment: .leading, spacing: Tokens.Spacing.tight) {
       HStack(alignment: .firstTextBaseline) {
         // The name is the way into this movement's load history. Placed here because "how have I

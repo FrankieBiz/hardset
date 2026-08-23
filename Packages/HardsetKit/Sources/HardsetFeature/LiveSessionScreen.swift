@@ -119,6 +119,12 @@ public struct LiveSessionScreen: View {
       onUnlogSet: { exerciseStateID, slot in
         coordinator.unlogSet(slotID: slot.id, inExercise: exerciseStateID)
       },
+      onRemoveSlot: { exerciseStateID, slot in
+        coordinator.removeSlot(slotID: slot.id, inExercise: exerciseStateID)
+      },
+      onRemoveExercise: { exerciseStateID in
+        coordinator.removeExercise(exerciseStateID)
+      },
       onAdjustRest: hooks.adjust,
       onPauseResumeRest: hooks.pauseOrResume,
       onSkipRest: {
