@@ -813,6 +813,259 @@ public enum ExerciseCatalog {
         .init(.neck, role: .direct, certainty: .moderate, source: .anatomy),
       ]
     ),
+
+    // Second content pass: filling the muscles that had one or two movements. Same standard as the
+    // rest -- `.anatomy` at `.moderate` unless a real source says more, conservative roles, and
+    // grip as a stabiliser rather than a credited muscle.
+    CatalogExercise(
+      id: "4428d922-f485-5917-b1d4-ee188d099d26",
+      slug: "glute-bridge",
+      name: "Glute Bridge",
+      modality: .bodyweight,
+      primaryMuscle: .glutes,
+      contributions: [
+        .init(.glutes, role: .direct, certainty: .moderate, source: .anatomy),
+        .init(.hamstrings, role: .indirect, certainty: .moderate, source: .anatomy),
+      ]
+    ),
+    CatalogExercise(
+      id: "794b1311-b671-5828-a206-1085c17a8496",
+      slug: "cable-glute-kickback",
+      name: "Cable Glute Kickback",
+      modality: .cable,
+      primaryMuscle: .glutes,
+      // Hip extension is the only loaded action, which is what makes glutes direct here rather
+      // than a partner to a squat pattern.
+      contributions: [
+        .init(.glutes, role: .direct, certainty: .moderate, source: .anatomy),
+        .init(.hamstrings, role: .indirect, certainty: .moderate, source: .anatomy),
+      ]
+    ),
+    CatalogExercise(
+      id: "18ea1768-2336-5ecb-be87-4a041a472459",
+      slug: "dumbbell-step-up",
+      name: "Dumbbell Step-Up",
+      modality: .dumbbell,
+      primaryMuscle: .quadriceps,
+      contributions: [
+        .init(.quadriceps, role: .direct, certainty: .moderate, source: .anatomy),
+        .init(.glutes, role: .direct, certainty: .moderate, source: .convention, citation: "Hardset convention; see docs-MuscleTaxonomy-spec.md 5.7"),
+        .init(.abs, role: .stabilizer, certainty: .moderate, source: .anatomy),
+      ]
+    ),
+    CatalogExercise(
+      id: "90352dc4-4898-51e4-b60c-63176e66d1bb",
+      slug: "machine-hip-thrust",
+      name: "Machine Hip Thrust",
+      modality: .machine,
+      primaryMuscle: .glutes,
+      contributions: [
+        .init(.glutes, role: .direct, certainty: .moderate, source: .anatomy),
+        .init(.hamstrings, role: .indirect, certainty: .moderate, source: .anatomy),
+      ]
+    ),
+    CatalogExercise(
+      id: "f39be666-91fd-5107-ad6a-d207a3e9e795",
+      slug: "standing-dumbbell-calf-raise",
+      name: "Standing Dumbbell Calf Raise",
+      modality: .dumbbell,
+      primaryMuscle: .gastrocnemius,
+      // Knee straight, so gastrocnemius is direct and soleus indirect. The catalogue's calf split
+      // follows knee position, and a seeder test pins it.
+      contributions: [
+        .init(.gastrocnemius, role: .direct, certainty: .moderate, source: .anatomy),
+        .init(.soleus, role: .indirect, certainty: .moderate, source: .anatomy),
+        .init(.forearms, role: .stabilizer, certainty: .moderate, source: .anatomy),
+      ]
+    ),
+    CatalogExercise(
+      id: "7a00099f-eb65-54db-853d-8bccc3668f13",
+      slug: "leg-press-calf-raise",
+      name: "Leg Press Calf Raise",
+      modality: .machine,
+      primaryMuscle: .gastrocnemius,
+      contributions: [
+        .init(.gastrocnemius, role: .direct, certainty: .moderate, source: .anatomy),
+        .init(.soleus, role: .indirect, certainty: .moderate, source: .anatomy),
+      ]
+    ),
+    CatalogExercise(
+      id: "b1823ab9-710c-5c93-95c2-abec156fcef9",
+      slug: "seated-dumbbell-calf-raise",
+      name: "Seated Dumbbell Calf Raise",
+      modality: .dumbbell,
+      primaryMuscle: .soleus,
+      // Knee bent, which reverses the split: soleus direct, gastrocnemius indirect.
+      contributions: [
+        .init(.soleus, role: .direct, certainty: .moderate, source: .anatomy),
+        .init(.gastrocnemius, role: .indirect, certainty: .moderate, source: .anatomy),
+      ]
+    ),
+    CatalogExercise(
+      id: "cf5ee176-b61f-5a7a-ae1c-7c47fc0e9c1d",
+      slug: "dumbbell-shrug",
+      name: "Dumbbell Shrug",
+      modality: .dumbbell,
+      primaryMuscle: .traps,
+      contributions: [
+        .init(.traps, role: .direct, certainty: .moderate, source: .anatomy),
+        .init(.forearms, role: .stabilizer, certainty: .moderate, source: .anatomy),
+      ]
+    ),
+    CatalogExercise(
+      id: "3545ec28-3abf-5ed6-934b-58c1183d4a73",
+      slug: "machine-shrug",
+      name: "Machine Shrug",
+      modality: .machine,
+      primaryMuscle: .traps,
+      contributions: [
+        .init(.traps, role: .direct, certainty: .moderate, source: .anatomy),
+      ]
+    ),
+    CatalogExercise(
+      id: "3165b92f-69a8-5025-96b8-20784ca45451",
+      slug: "barbell-good-morning",
+      name: "Barbell Good Morning",
+      modality: .barbell,
+      primaryMuscle: .hamstrings,
+      // Two direct credits, which is the cap: the hamstrings and the spinal erectors are both
+      // resisting the same hip hinge under load rather than one assisting the other.
+      contributions: [
+        .init(.hamstrings, role: .direct, certainty: .moderate, source: .anatomy),
+        .init(.lowerBack, role: .direct, certainty: .moderate, source: .anatomy),
+        .init(.glutes, role: .indirect, certainty: .moderate, source: .anatomy),
+        .init(.abs, role: .stabilizer, certainty: .moderate, source: .anatomy),
+      ]
+    ),
+    CatalogExercise(
+      id: "324e8a61-9bd5-5f01-814b-e4ca60b2fda5",
+      slug: "reverse-hyperextension",
+      name: "Reverse Hyperextension",
+      modality: .machine,
+      primaryMuscle: .lowerBack,
+      contributions: [
+        .init(.lowerBack, role: .direct, certainty: .moderate, source: .anatomy),
+        .init(.glutes, role: .indirect, certainty: .moderate, source: .anatomy),
+        .init(.hamstrings, role: .indirect, certainty: .moderate, source: .anatomy),
+      ]
+    ),
+    CatalogExercise(
+      id: "ed3d76bb-9cff-5547-911b-bc03640d3cc8",
+      slug: "machine-shoulder-press",
+      name: "Machine Shoulder Press",
+      modality: .machine,
+      primaryMuscle: .frontDelts,
+      contributions: [
+        .init(.frontDelts, role: .direct, certainty: .moderate, source: .anatomy),
+        .init(.triceps, role: .indirect, certainty: .moderate, source: .anatomy),
+        .init(.sideDelts, role: .indirect, certainty: .moderate, source: .anatomy),
+      ]
+    ),
+    CatalogExercise(
+      id: "61e39025-ee83-59d6-b0c3-f81353597b0c",
+      slug: "dumbbell-front-raise",
+      name: "Dumbbell Front Raise",
+      modality: .dumbbell,
+      primaryMuscle: .frontDelts,
+      contributions: [
+        .init(.frontDelts, role: .direct, certainty: .moderate, source: .anatomy),
+        .init(.forearms, role: .stabilizer, certainty: .moderate, source: .anatomy),
+      ]
+    ),
+    CatalogExercise(
+      id: "5e0341b2-2a17-5aac-9493-3eaf196d3926",
+      slug: "machine-lateral-raise",
+      name: "Machine Lateral Raise",
+      modality: .machine,
+      primaryMuscle: .sideDelts,
+      contributions: [
+        .init(.sideDelts, role: .direct, certainty: .moderate, source: .anatomy),
+        .init(.traps, role: .indirect, certainty: .moderate, source: .anatomy),
+      ]
+    ),
+    CatalogExercise(
+      id: "7e6be534-1506-530b-85d8-4206069dc147",
+      slug: "dumbbell-rear-delt-fly",
+      name: "Dumbbell Rear Delt Fly",
+      modality: .dumbbell,
+      primaryMuscle: .rearDelts,
+      contributions: [
+        .init(.rearDelts, role: .direct, certainty: .moderate, source: .anatomy),
+        .init(.upperBack, role: .indirect, certainty: .moderate, source: .anatomy),
+        .init(.forearms, role: .stabilizer, certainty: .moderate, source: .anatomy),
+      ]
+    ),
+    CatalogExercise(
+      id: "b32f9835-c117-5549-bebf-4c31dcedcd5e",
+      slug: "cable-rear-delt-fly",
+      name: "Cable Rear Delt Fly",
+      modality: .cable,
+      primaryMuscle: .rearDelts,
+      contributions: [
+        .init(.rearDelts, role: .direct, certainty: .moderate, source: .anatomy),
+        .init(.upperBack, role: .indirect, certainty: .moderate, source: .anatomy),
+      ]
+    ),
+    CatalogExercise(
+      id: "be20282e-c9e0-5dd0-8744-5d8a30a25811",
+      slug: "machine-crunch",
+      name: "Machine Crunch",
+      modality: .machine,
+      primaryMuscle: .abs,
+      contributions: [
+        .init(.abs, role: .direct, certainty: .moderate, source: .anatomy),
+        .init(.obliques, role: .indirect, certainty: .moderate, source: .anatomy),
+      ]
+    ),
+    CatalogExercise(
+      id: "b6558d83-74b1-537d-a7a2-0a69c3838c4f",
+      slug: "hanging-knee-raise",
+      name: "Hanging Knee Raise",
+      modality: .bodyweight,
+      primaryMuscle: .abs,
+      // A hang, so grip is a stabiliser at weight zero -- never an indirect credit on forearms.
+      contributions: [
+        .init(.abs, role: .direct, certainty: .moderate, source: .anatomy),
+        .init(.obliques, role: .indirect, certainty: .moderate, source: .anatomy),
+        .init(.forearms, role: .stabilizer, certainty: .moderate, source: .anatomy),
+      ]
+    ),
+    CatalogExercise(
+      id: "7a3120f1-ebab-5f8a-bfb1-9fd9f648d333",
+      slug: "ab-wheel-rollout",
+      name: "Ab Wheel Rollout",
+      modality: .bodyweight,
+      primaryMuscle: .abs,
+      contributions: [
+        .init(.abs, role: .direct, certainty: .moderate, source: .anatomy),
+        .init(.lats, role: .indirect, certainty: .moderate, source: .anatomy),
+        .init(.lowerBack, role: .stabilizer, certainty: .moderate, source: .anatomy),
+      ]
+    ),
+    CatalogExercise(
+      id: "ee61bb89-e650-5aa5-8cef-372d14926d42",
+      slug: "barbell-reverse-curl",
+      name: "Barbell Reverse Curl",
+      modality: .barbell,
+      primaryMuscle: .forearms,
+      // Both direct: a pronated curl loads the wrist extensors and the elbow flexors through the
+      // same excursion rather than one merely assisting.
+      contributions: [
+        .init(.forearms, role: .direct, certainty: .moderate, source: .anatomy),
+        .init(.biceps, role: .direct, certainty: .moderate, source: .anatomy),
+      ]
+    ),
+    CatalogExercise(
+      id: "48589228-e27d-5faf-aa1a-a0c32a5e5733",
+      slug: "dumbbell-hammer-curl",
+      name: "Dumbbell Hammer Curl",
+      modality: .dumbbell,
+      primaryMuscle: .biceps,
+      contributions: [
+        .init(.biceps, role: .direct, certainty: .moderate, source: .anatomy),
+        .init(.forearms, role: .indirect, certainty: .moderate, source: .anatomy),
+      ]
+    ),
   ]
 
   public static var slugs: [String] { v1.map(\.slug) }
