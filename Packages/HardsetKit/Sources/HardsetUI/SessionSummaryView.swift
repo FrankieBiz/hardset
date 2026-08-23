@@ -105,9 +105,13 @@ public struct SessionSummaryView: View {
       return (.high, "Every set attributed to a muscle.")
     }
     let n = muscles.unattributedHardSets
+    // Pluralised by hand. `CertaintyBadge` takes a `String` and renders it with `Text(String)`, so
+    // `^[...](inflect:)` would have shown up verbatim on screen -- the same defect that reached the
+    // history list. Markup only works inside an inline `Text("...")` literal.
     return (
       .low,
-      "^[\(n) set](inflect: true) had no muscles recorded, so the breakdown below is a floor."
+      "\(n) set\(n == 1 ? "" : "s") had no muscles recorded, "
+        + "so the breakdown below is a floor."
     )
   }
 

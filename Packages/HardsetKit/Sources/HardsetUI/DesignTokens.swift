@@ -43,7 +43,11 @@ public enum Tokens {
     public static let overlay = dynamic(light: srgb(0x2F_32_36), dark: srgb(0x2F_32_36))
     /// 1 px separators and card borders. Elevation is lightness plus a hairline, never a shadow:
     /// on `ground` a shadow is invisible, so reaching for one means the step above was skipped.
-    public static let hairline = dynamic(light: srgb(0x37_39_3E), dark: srgb(0x37_39_3E))
+    public static let hairline = dynamic(
+      light: srgb(0x37_39_3E), dark: srgb(0x37_39_3E),
+      // Increase Contrast: 1.55:1 -> 2.81:1 against `surface`.
+      increasedContrast: srgb(0x5D_5F_64)
+    )
 
     // MARK: Ink
     //
@@ -52,14 +56,22 @@ public enum Tokens {
     /// The live value, the hero number, the row being worked on.
     public static let textPrimary = dynamic(light: srgb(0xF5_F5_F7), dark: srgb(0xF5_F5_F7))
     /// Labels, units, completed rows, supporting facts.
-    public static let textSecondary = dynamic(light: srgb(0x9A_9A_A4), dark: srgb(0x9A_9A_A4))
+    public static let textSecondary = dynamic(
+      light: srgb(0x9A_9A_A4), dark: srgb(0x9A_9A_A4),
+      // Increase Contrast: 6.44:1 -> 9.92:1 against `surface`.
+      increasedContrast: srgb(0xBF_C0_CA)
+    )
     /// Disabled controls, decorative separators, `unevaluated`.
     ///
     /// Clears 3:1 on every surface including `overlay` (3.12:1), so it is legal for non-text and
     /// large text -- but it is the lowest rung and carries nothing a lifter needs. If a sentence
     /// matters it is at least `textSecondary`. An earlier candidate (0x62626B) measured 2.97:1 on
     /// `surface` and was cut for failing the 3:1 floor outright.
-    public static let textTertiary = dynamic(light: srgb(0x7A_7D_83), dark: srgb(0x7A_7D_83))
+    public static let textTertiary = dynamic(
+      light: srgb(0x7A_7D_83), dark: srgb(0x7A_7D_83),
+      // Increase Contrast: 4.35:1 -> 8.05:1 against `surface`.
+      increasedContrast: srgb(0xAA_AE_B4)
+    )
 
     // MARK: Accent
 
@@ -164,12 +176,23 @@ public enum Tokens {
     /// (`resolvedHDRColor` inside `updateOutputsAsync`). Swift 6 then traps in
     /// `dispatch_assert_queue`, which crashed the app on the first tap that animated a colour.
     /// The provider must be callable from any thread because UIKit calls it from any thread.
+    /// - Parameter increasedContrast: What to use when the reader has turned on Increase Contrast.
+    ///   `nil` means this colour has nothing to gain from it -- `textPrimary` is already 16.48:1
+    ///   against `surface`, and lifting it further would only reduce the separation from the
+    ///   rungs below.
     private nonisolated static func dynamic(
-      light: (Double, Double, Double), dark: (Double, Double, Double)
+      light: (Double, Double, Double),
+      dark: (Double, Double, Double),
+      increasedContrast: (Double, Double, Double)? = nil
     ) -> SwiftUI.Color {
       #if canImport(UIKit)
         return SwiftUI.Color(
           UIColor { traits in
+            // The trait collection is already here, which is why Increase Contrast needs no
+            // environment plumbing and the tokens can stay static.
+            if traits.accessibilityContrast == .high, let high = increasedContrast {
+              return UIColor(red: high.0, green: high.1, blue: high.2, alpha: 1)
+            }
             let c = traits.userInterfaceStyle == .dark ? dark : light
             return UIColor(red: c.0, green: c.1, blue: c.2, alpha: 1)
           }

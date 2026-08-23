@@ -617,6 +617,14 @@ Not merged until all of these hold:
       sandboxed shell cannot run the Swift macro plugin server, even with `-skipMacroValidation`.
 - [ ] Every colour comes from `Tokens`. No literal in a view.
 - [ ] Contrast re-verified if any colour changed. Text ≥ 4.5 : 1; non-text and large ≥ 3 : 1.
+      Also check with Increase Contrast on
+      (`xcrun simctl ui <udid> increase_contrast enabled`). The three rungs nearest the floor --
+      `textSecondary`, `textTertiary`, `hairline` -- carry a brighter variant, resolved inside the
+      `UIColor` provider from `traits.accessibilityContrast`, which is why the tokens can stay
+      static and need no environment.
+- [ ] No user-facing string uses `^[...](inflect:)` unless it is an inline `Text("...")` literal.
+      The markup is only interpreted for a `LocalizedStringKey`; a `String` that reaches
+      `Text(String)` renders it verbatim, and it shipped on screen as `^[1 set](inflect: true)`.
 - [ ] Categorical palette re-validated all-pairs if a series colour changed. Never eyeballed.
 - [ ] Every animation is on the §5.2 scale, or carries a written reason.
 - [ ] Every animation declares its Reduce Motion substitute, and it was checked with the setting on.

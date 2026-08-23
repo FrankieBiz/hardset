@@ -55,6 +55,17 @@ public struct CertaintyBadge: View {
 ///
 /// Required wherever an inferred experience level moved a number the user sees: the guess is
 /// stated, and correcting it is a single tap away.
+/// An inferred input, paired with the affordance to correct it.
+///
+/// **Unused in v1, deliberately, and not a wiring bug.** It exists for the locked decision that
+/// experience level is inferred rather than asked, with every volume band it moves carrying an
+/// "assumes intermediate" chip. There are no volume bands: `VolumeAnalyzer.weeklyTarget` returns
+/// `.unevaluated` for every muscle because no per-muscle weekly target is established. So there is
+/// currently nothing for this to qualify, and no experience-level concept in the code at all.
+///
+/// Kept rather than deleted because the requirement is a real one and this is what satisfies it the
+/// day a band exists. If bands are still absent when v1 ships, delete both this and `Assumption`
+/// rather than shipping a component with no host.
 public struct AssumptionChip: View {
   private let label: String
   private let correctionPrompt: String

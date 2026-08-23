@@ -133,9 +133,13 @@ public struct HistoryView: View {
 
   static func volumeText(_ volume: SessionVolume, unit: WeightUnit) -> String {
     guard !volume.isEmpty else { return "No sets" }
+    // Pluralised by hand, not with `^[...](inflect:)`. That markup is only interpreted inside a
+    // `LocalizedStringKey` -- an inline `Text("...")` literal -- and these parts are joined into a
+    // `String` that reaches `Text(String)`, which renders the markup verbatim. It shipped on screen
+    // as "^[1 set](inflect: true)" for exactly that reason.
     var parts = [
-      "^[\(volume.workingSets) set](inflect: true)",
-      "^[\(volume.reps) rep](inflect: true)",
+      "\(volume.workingSets) set\(volume.workingSets == 1 ? "" : "s")",
+      "\(volume.reps) rep\(volume.reps == 1 ? "" : "s")",
     ]
     if volume.volumeKg > 0 {
       let displayed = unit.fromKilograms(volume.volumeKg)
