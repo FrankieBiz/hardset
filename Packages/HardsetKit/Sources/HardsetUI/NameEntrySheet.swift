@@ -23,6 +23,8 @@ public struct NameEntrySheet: View {
   private let allowsEmpty: Bool
   /// Lets the field grow, for text that is a sentence rather than a label.
   private let isMultiline: Bool
+  /// Presents the decimal keypad, for a field that holds a number rather than a name.
+  private let isDecimal: Bool
   private let onConfirm: (String) -> Void
   private let onCancel: () -> Void
 
@@ -40,6 +42,7 @@ public struct NameEntrySheet: View {
     initialValue: String = "",
     allowsEmpty: Bool = false,
     isMultiline: Bool = false,
+    isDecimal: Bool = false,
     onConfirm: @escaping (String) -> Void,
     onCancel: @escaping () -> Void
   ) {
@@ -49,6 +52,7 @@ public struct NameEntrySheet: View {
     self.confirmLabel = confirmLabel
     self.allowsEmpty = allowsEmpty
     self.isMultiline = isMultiline
+    self.isDecimal = isDecimal
     self.onConfirm = onConfirm
     self.onCancel = onCancel
     self._name = State(initialValue: initialValue)
@@ -68,6 +72,11 @@ public struct NameEntrySheet: View {
             .submitLabel(isMultiline ? .return : .done)
             .onSubmit { if !isMultiline { confirm() } }
             .lineLimit(isMultiline ? 3...8 : 1...1)
+            // Guarded because this module builds for the host too, so the suite can run
+            // there, and `keyboardType` does not exist on macOS.
+            #if os(iOS)
+              .keyboardType(isDecimal ? .decimalPad : .default)
+            #endif
         } footer: {
           if let footnote {
             Text(footnote)

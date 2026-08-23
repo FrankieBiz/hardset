@@ -17,6 +17,8 @@ public struct HardsetEnvironment {
   public let history: HistoryStore
   public let progression: ProgressionStore
   public let gyms: GymStore
+  /// Device-local, and never registered with the sync engine. See `BodyweightStore`.
+  public let bodyweight: BodyweightStore
 
   public init(database: any DatabaseWriter) {
     self.logger = LoggerStore(database: database)
@@ -25,6 +27,7 @@ public struct HardsetEnvironment {
     self.history = HistoryStore(database: database)
     self.progression = ProgressionStore(database: database)
     self.gyms = GymStore(database: database)
+    self.bodyweight = BodyweightStore(database: database)
   }
 }
 
@@ -167,7 +170,9 @@ public struct HardsetRootView: View {
           SettingsSheet(
             useImperial: $useImperial,
             restSeconds: $restSeconds,
-            tracksRPE: $tracksRPE
+            tracksRPE: $tracksRPE,
+            bodyweight: environment.bodyweight,
+            unit: unit
           ) { isShowingSettings = false }
         }
     }

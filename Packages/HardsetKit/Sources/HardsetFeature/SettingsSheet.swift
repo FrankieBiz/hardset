@@ -1,4 +1,5 @@
 import HardsetCore
+import HardsetStore
 import HardsetUI
 import SwiftUI
 
@@ -13,6 +14,10 @@ public struct SettingsSheet: View {
   @Binding private var useImperial: Bool
   @Binding private var restSeconds: Int
   @Binding private var tracksRPE: Bool
+  /// `nil` hides the bodyweight row entirely, the same rule the rest of the app follows: an
+  /// affordance that opens a screen with no store behind it is worse than no affordance.
+  private let bodyweight: BodyweightStore?
+  private let unit: WeightUnit
   private let onDone: () -> Void
 
   /// Rest options the user can pick from. **Off is first and is the default**, because the app has
@@ -25,11 +30,15 @@ public struct SettingsSheet: View {
     useImperial: Binding<Bool>,
     restSeconds: Binding<Int>,
     tracksRPE: Binding<Bool>,
+    bodyweight: BodyweightStore? = nil,
+    unit: WeightUnit = .kilograms,
     onDone: @escaping () -> Void
   ) {
     self._useImperial = useImperial
     self._restSeconds = restSeconds
     self._tracksRPE = tracksRPE
+    self.bodyweight = bodyweight
+    self.unit = unit
     self.onDone = onDone
   }
 
@@ -97,6 +106,26 @@ public struct SettingsSheet: View {
               + "it. The app records what you enter and nothing more \u{2014} there is no target "
               + "RPE and no warning for being far from failure, because neither is established."
           )
+        }
+        if let bodyweight {
+          Section {
+            NavigationLink {
+              BodyweightScreen(store: bodyweight, unit: unit)
+                .navigationTitle("Bodyweight")
+            } label: {
+              Label("Bodyweight", systemImage: "scalemass")
+            }
+          } header: {
+            Text("You")
+          } footer: {
+            // The two things a lifter needs before typing a weight in: what it is used for, and
+            // where it goes.
+            Text(
+              "Kept on this device and never uploaded. Shown as a "
+                + "\(BodyweightTrend.smoothingDays)-day average, because a single morning is "
+                + "mostly food and water."
+            )
+          }
         }
       }
       .navigationTitle("Settings")
