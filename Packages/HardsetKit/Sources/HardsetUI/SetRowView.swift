@@ -36,6 +36,9 @@ public struct SetRowView: View {
   /// suffixes split mid-word ("—k / g"), which made the most-used screen in the app unreadable for
   /// exactly the people who need the larger text.
   @Environment(\.dynamicTypeSize) private var typeSize
+  /// The commit animation is the app's signature moment, which is exactly why it has to be
+  /// switchable off. The row moves on one curve; under Reduce Motion it changes state without one.
+  @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
   /// The ordinal's gutter, scaled. It was a hard 28 pt, which is narrower than a single AX5 digit.
   @ScaledMetric(relativeTo: .subheadline) private var ordinalWidth: CGFloat = 28
@@ -133,7 +136,7 @@ public struct SetRowView: View {
     // One animation for the whole commit, weighted by the load. Driven off `isLogged` so the
     // recede, the symbol swap and the tick all move on a single curve rather than three that
     // drift apart.
-    .animation(Tokens.Motion.commit(intensity: loadFraction), value: isLogged)
+    .animation(reduceMotion ? nil : Tokens.Motion.commit(intensity: loadFraction), value: isLogged)
     .accessibilityElement(children: .combine)
     .accessibilityLabel(spokenLabel)
     .accessibilityHint(draft.isLoggable ? "Double tap to log this set." : "Enter a weight and reps to log.")
@@ -355,8 +358,10 @@ public struct SetRowView: View {
       Image(systemName: isLogged ? "checkmark.circle.fill" : "circle")
         .font(.title2)
         // The check replaces the circle rather than cross-fading into it. `.offUp` reads as the
-        // set being put away, which is what just happened.
-        .contentTransition(.symbolEffect(.replace.offUp))
+        // set being put away, which is what just happened. Under Reduce Motion the glyph simply
+        // changes -- `.identity`, not a shorter travel, because the travel is the thing being asked
+        // about.
+        .contentTransition(reduceMotion ? .identity : .symbolEffect(.replace.offUp))
         .frame(width: Tokens.loggerTapTarget, height: Tokens.loggerTapTarget)
         .contentShape(Rectangle())
     }
