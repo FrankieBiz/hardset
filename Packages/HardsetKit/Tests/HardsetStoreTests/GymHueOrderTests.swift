@@ -1,4 +1,5 @@
 import Foundation
+import GRDB
 import HardsetCore
 import Testing
 
@@ -88,4 +89,29 @@ struct GymHueOrderTests {
   /// Mirrors `Tokens.Color.Series.ordered.count`. Duplicated as a literal because HardsetStore
   /// must not depend on HardsetUI, and the point of the assertion is that the two agree.
   private var Tokens_seriesHueCount: Int { 3 }
+}
+
+/// The rest preference is a live value, not one captured when the workout began.
+@Suite("Rest length can change mid-session")
+struct LiveRestSettingTests {
+  @MainActor
+  @Test("A coordinator's rest length is mutable after construction")
+  func restIsMutable() throws {
+    let queue = try DatabaseQueue()
+    try HardsetMigrations.migrator().migrate(queue)
+    let store = LoggerStore(database: queue)
+    let coordinator = try SessionCoordinator.start(store: store, plan: [], restAfterSet: nil)
+
+    // Off when the workout started, which is the shipped default.
+    #expect(coordinator.restAfterSet == nil)
+
+    // The lifter turns it on part-way through. Before this was a `var`, the change was invisible
+    // until the next session -- and a resumed session was stuck with whatever the setting was at
+    // launch, which is the case that actually bit.
+    coordinator.restAfterSet = Duration.seconds(90)
+    #expect(coordinator.restAfterSet == Duration.seconds(90))
+
+    coordinator.restAfterSet = nil
+    #expect(coordinator.restAfterSet == nil)
+  }
 }

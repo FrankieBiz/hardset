@@ -57,6 +57,10 @@ public struct HardsetRootView: View {
   /// what is displayed and what typed numbers are read as.
   @AppStorage("hardset.useImperial") private var useImperial =
     Locale.current.measurementSystem == .us
+  /// Rest after a working set, in seconds. **Zero means off, and that is the default**: the app has
+  /// no basis for prescribing a rest length, so it waits to be told one. Stored in seconds rather
+  /// than as a `Duration` because `@AppStorage` cannot hold one.
+  @AppStorage("hardset.restSeconds") private var restSeconds = 0
   /// Why the last gym write failed, in the user's words. A `try?` here hid a real failure behind a
   /// button that appeared to do nothing, which is precisely what this app is not allowed to do.
   @State private var gymError: String?
@@ -84,6 +88,13 @@ public struct HardsetRootView: View {
     unitOverride ?? (useImperial ? .pounds : .kilograms)
   }
 
+  /// What a logged working set should request. One derivation, so the live session and a resumed
+  /// session cannot disagree about whether rest is on.
+  private var resolvedRest: Duration? {
+    if let restAfterSet { return restAfterSet }
+    return restSeconds > 0 ? .seconds(restSeconds) : nil
+  }
+
   public var body: some View {
     tabs
       // Dark-only in v1, and forced rather than following the system. One palette tuned precisely
@@ -93,6 +104,9 @@ public struct HardsetRootView: View {
       // either scheme -- so this exists for the chrome we do not draw: list backgrounds, the tab
       // bar, navigation bars, `ContentUnavailableView`. Light mode stays a later decision, which
       // is cheap because `Tokens.Color.dynamic` already has a slot waiting for it.
+      // Keeps a live session in step with the setting. Without this, turning the rest timer on
+      // mid-workout silently does nothing until the next session.
+      .onChange(of: resolvedRest) { _, updated in coordinator?.restAfterSet = updated }
       .preferredColorScheme(.dark)
       // Pinning `Tokens.Color.accent` only fixed the colours *we* draw. System-drawn chrome --
       // the tab bar's selected item, toggles, the navigation back button -- reads its tint from
@@ -108,7 +122,7 @@ public struct HardsetRootView: View {
         if coordinator == nil {
           coordinator = try? SessionCoordinator.resume(
             store: environment.logger,
-            restAfterSet: restAfterSet,
+            restAfterSet: resolvedRest,
             onStartRest: { duration, metadata in hooks.start(duration, metadata) }
           )
         }
@@ -133,7 +147,10 @@ public struct HardsetRootView: View {
               }
             }
             .sheet(isPresented: $isShowingSettings) {
-              SettingsSheet(useImperial: $useImperial) { isShowingSettings = false }
+              SettingsSheet(
+                useImperial: $useImperial,
+                restSeconds: $restSeconds
+              ) { isShowingSettings = false }
             }
         }
       }
@@ -386,7 +403,7 @@ public struct HardsetRootView: View {
         store: environment.logger,
         gymID: selectedGym,
         plan: [],
-        restAfterSet: restAfterSet,
+        restAfterSet: resolvedRest,
         hooks: hooks
       )
       startFailed = false

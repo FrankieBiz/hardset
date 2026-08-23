@@ -11,11 +11,34 @@ import SwiftUI
 @MainActor
 public struct SettingsSheet: View {
   @Binding private var useImperial: Bool
+  @Binding private var restSeconds: Int
   private let onDone: () -> Void
 
-  public init(useImperial: Binding<Bool>, onDone: @escaping () -> Void) {
+  /// Rest options the user can pick from. **Off is first and is the default**, because the app has
+  /// no basis for prescribing a rest length: the literature does not give one, and inventing 90
+  /// seconds would be exactly the kind of unearned prescription this app refuses elsewhere. What it
+  /// can do is honour a choice the lifter makes, which is a different thing from making it for them.
+  static let restOptions: [Int] = [0, 60, 90, 120, 180, 240]
+
+  public init(
+    useImperial: Binding<Bool>,
+    restSeconds: Binding<Int>,
+    onDone: @escaping () -> Void
+  ) {
     self._useImperial = useImperial
+    self._restSeconds = restSeconds
     self.onDone = onDone
+  }
+
+  static func restLabel(_ seconds: Int) -> String {
+    switch seconds {
+    case 0: "Off"
+    case ..<60: "\(seconds)s"
+    default:
+      seconds % 60 == 0
+        ? "\(seconds / 60) min"
+        : "\(seconds / 60) min \(seconds % 60)s"
+    }
   }
 
   public var body: some View {
@@ -38,6 +61,26 @@ public struct SettingsSheet: View {
               + "see and changes nothing that was recorded."
           )
         }
+
+
+        Section {
+          Picker("After a working set", selection: $restSeconds) {
+            ForEach(Self.restOptions, id: \.self) { seconds in
+              Text(Self.restLabel(seconds)).tag(seconds)
+            }
+          }
+        } header: {
+          Text("Rest timer")
+        } footer: {
+          // Says what it does and, more importantly, what it does not decide.
+          Text(
+            restSeconds == 0
+              ? "No timer starts when you log a set. The app does not prescribe a rest length \u{2014} "
+                + "pick one and it will hold you to it."
+              : "A timer starts when you log a working set, never after a warm-up. It keeps "
+                + "running if you leave the app or force-quit it."
+          )
+        }
       }
       .navigationTitle("Settings")
       .toolbar {
@@ -52,7 +95,10 @@ public struct SettingsSheet: View {
 #if DEBUG
   private struct SettingsHarness: View {
     @State private var useImperial = true
-    var body: some View { SettingsSheet(useImperial: $useImperial) {} }
+    @State private var restSeconds = 90
+    var body: some View {
+      SettingsSheet(useImperial: $useImperial, restSeconds: $restSeconds) {}
+    }
   }
 
   #Preview("Settings") { SettingsHarness() }

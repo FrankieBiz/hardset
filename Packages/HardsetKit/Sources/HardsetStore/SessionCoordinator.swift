@@ -54,7 +54,13 @@ public final class SessionCoordinator {
 
   private let store: LoggerStore
   private let now: () -> Date
-  private let restAfterSet: Duration?
+  /// Rest to request after a working set. **Mutable on purpose.**
+  ///
+  /// This used to be captured at construction, which meant a lifter who turned the rest timer on
+  /// part-way through a workout got nothing until the next session -- the coordinator was already
+  /// holding the old value, and a resumed session held whatever the setting was at launch. The
+  /// root keeps this in step with the stored preference instead.
+  public var restAfterSet: Duration?
   private let onStartRest: (Duration, RestMetadata) -> Void
 
   /// - Parameters:
