@@ -187,7 +187,12 @@ The live sequence:
    was wrong — `SessionView` has rendered per-set records all along. The claim came from a grep
    piped through `head`, read as if it were exhaustive. What was genuinely missing was
    session-level aggregation (`SessionCoordinator.sessionRecords`) and any summary at all.
-3. **Motion**, in the order the hero moments' hosts become stable: set-log recede, then the rest
+3. **DONE — history opens a workout.** `HistoryStore.sets(in:)`, `SessionDetailView`,
+   `SessionDetailScreen`. `HistoryView` had always taken an `onSelect` and nothing passed one, so
+   every row was a disabled button and the app could tell you a session happened but not what was
+   in it. The row's hit area was also only its glyphs, with no `contentShape`.
+
+4. **Motion**, in the order the hero moments' hosts become stable: set-log recede, then the rest
    timer, then the summary choreography, then chart draw-on. `docs/UI-GUIDELINES.md` §5 specifies
    all four; `Tokens.Motion` already holds the vocabulary.
 

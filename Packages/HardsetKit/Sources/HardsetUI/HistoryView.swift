@@ -67,6 +67,10 @@ public struct HistoryView: View {
             onSelect?(row)
           } label: {
             content(row)
+              .frame(maxWidth: .infinity, alignment: .leading)
+              // Without this the hit area is the glyphs themselves, so most of the row was dead
+              // space and the workout only opened if you happened to tap a word.
+              .contentShape(Rectangle())
           }
           .buttonStyle(.plain)
           .disabled(onSelect == nil)
@@ -129,7 +133,10 @@ public struct HistoryView: View {
 
   static func volumeText(_ volume: SessionVolume, unit: WeightUnit) -> String {
     guard !volume.isEmpty else { return "No sets" }
-    var parts = ["\(volume.workingSets) sets", "\(volume.reps) reps"]
+    var parts = [
+      "^[\(volume.workingSets) set](inflect: true)",
+      "^[\(volume.reps) rep](inflect: true)",
+    ]
     if volume.volumeKg > 0 {
       let displayed = unit.fromKilograms(volume.volumeKg)
       parts.append("\(Int(displayed.rounded())) \(unit.abbreviation)")

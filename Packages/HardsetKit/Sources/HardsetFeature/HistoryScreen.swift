@@ -8,6 +8,9 @@ import SwiftUI
 public struct HistoryScreen: View {
   @State private var rows: [HistoryRow] = []
   @State private var loadFailed = false
+  /// The workout being read. History was a dead end until this existed: `HistoryView` has always
+  /// taken an `onSelect` and nothing passed one, so every row was a disabled button.
+  @State private var opened: HistoryRow?
 
   private let store: HistoryStore
   private let unit: WeightUnit
@@ -26,11 +29,14 @@ public struct HistoryScreen: View {
           Text("Your logged sets are safe. Pull down to try again.")
         }
       } else {
-        HistoryView(rows: rows, unit: unit)
+        HistoryView(rows: rows, unit: unit) { opened = $0 }
       }
     }
     .task { load() }
     .refreshable { load() }
+    .navigationDestination(item: $opened) { row in
+      SessionDetailScreen(row: row, store: store, unit: unit)
+    }
   }
 
   private func load() {

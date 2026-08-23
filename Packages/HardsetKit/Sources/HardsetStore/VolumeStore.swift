@@ -185,6 +185,39 @@ public nonisolated struct ProgressionHistory: Hashable, Sendable {
 }
 
 /// One past session, summarised for a list.
+/// One logged set, as history reads it back.
+public nonisolated struct LoggedSetDetail: Hashable, Sendable, Identifiable {
+  public let id: SetID
+  public let exerciseID: ExerciseID
+  public let exerciseName: String
+  /// `nil` for free weights, or a machine whose row has been removed.
+  public let machineName: String?
+  public let weightKg: Double
+  public let reps: Int
+  public let isWarmup: Bool
+  public let completedAt: Date
+
+  public init(
+    id: SetID,
+    exerciseID: ExerciseID,
+    exerciseName: String,
+    machineName: String?,
+    weightKg: Double,
+    reps: Int,
+    isWarmup: Bool,
+    completedAt: Date
+  ) {
+    self.id = id
+    self.exerciseID = exerciseID
+    self.exerciseName = exerciseName
+    self.machineName = machineName
+    self.weightKg = weightKg
+    self.reps = reps
+    self.isWarmup = isWarmup
+    self.completedAt = completedAt
+  }
+}
+
 public nonisolated struct SessionSummary: Hashable, Sendable, Identifiable {
   public let id: SessionID
   public let title: String
@@ -218,6 +251,50 @@ public nonisolated struct HistoryStore {
 
   public init(database: any DatabaseWriter) {
     self.database = database
+  }
+
+  /// Every set logged in one session, in order, with the names needed to read it back.
+  ///
+  /// The counterpart to `recentSessions`: that answers "what workouts have I done", this answers
+  /// "what did I actually do in that one". History was a dead end without it -- `HistoryView` has
+  /// always taken an `onSelect`, and nothing passed one, so every row was a disabled button.
+  ///
+  /// Machine names come along because a set's load is only meaningful next to the equipment it was
+  /// lifted on, which is the whole premise of tracking per machine.
+  public func sets(in sessionID: SessionID) throws -> [LoggedSetDetail] {
+    try database.read { db in
+      let rows = try LoggedSet
+        .where { $0.sessionID.eq(sessionID.rawValue) }
+        .order { $0.setOrdinal }
+        .fetchAll(db)
+      guard !rows.isEmpty else { return [] }
+
+      let exerciseNames = try Exercise
+        .where { $0.id.in(Array(Set(rows.map(\.exerciseID)))) }
+        .fetchAll(db)
+        .reduce(into: [UUID: String]()) { $0[$1.id] = $1.name }
+
+      let machineIDs = Array(Set(rows.compactMap(\.machineID)))
+      let machineNames = machineIDs.isEmpty
+        ? [:]
+        : try Machine
+          .where { $0.id.in(machineIDs) }
+          .fetchAll(db)
+          .reduce(into: [UUID: String]()) { $0[$1.id] = $1.name }
+
+      return rows.map { row in
+        LoggedSetDetail(
+          id: SetID(rawValue: row.id),
+          exerciseID: ExerciseID(rawValue: row.exerciseID),
+          exerciseName: exerciseNames[row.exerciseID] ?? "Unknown movement",
+          machineName: row.machineID.flatMap { machineNames[$0] },
+          weightKg: row.weightKg,
+          reps: row.reps,
+          isWarmup: row.isWarmup,
+          completedAt: row.completedAt
+        )
+      }
+    }
   }
 
   /// Finished sessions, newest first.
