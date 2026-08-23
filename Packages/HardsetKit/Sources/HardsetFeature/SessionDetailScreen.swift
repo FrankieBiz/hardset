@@ -12,14 +12,23 @@ public struct SessionDetailScreen: View {
   private let row: HistoryRow
   private let store: HistoryStore
   private let unit: WeightUnit
+  /// Starts this workout again. `nil` hides the affordance -- correct when a workout is already in
+  /// progress, because the app will not silently abandon one.
+  private let onRepeat: (([RepeatableExercise]) -> Void)?
 
   @State private var sets: [LoggedSetRow] = []
   @State private var loadFailed = false
 
-  public init(row: HistoryRow, store: HistoryStore, unit: WeightUnit) {
+  public init(
+    row: HistoryRow,
+    store: HistoryStore,
+    unit: WeightUnit,
+    onRepeat: (([RepeatableExercise]) -> Void)? = nil
+  ) {
     self.row = row
     self.store = store
     self.unit = unit
+    self.onRepeat = onRepeat
   }
 
   public var body: some View {
@@ -41,7 +50,19 @@ public struct SessionDetailScreen: View {
         )
       }
     }
-    .navigationTitle(row.title)
+    .navigationTitle(row.title.isEmpty ? "Workout" : row.title)
+    .toolbar {
+      if let onRepeat, !sets.isEmpty {
+        ToolbarItem(placement: .primaryAction) {
+          Button {
+            // Rebuilt from what was logged, not from what was planned.
+            onRepeat((try? store.plan(for: row.id)) ?? [])
+          } label: {
+            Label("Do it again", systemImage: "arrow.clockwise")
+          }
+        }
+      }
+    }
     .task { load() }
     .refreshable { load() }
   }

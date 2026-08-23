@@ -69,6 +69,9 @@ public struct HardsetRootView: View {
   @State private var gymError: String?
   /// The gym whose name is being repaired.
   @State private var renamingGym: RenameTarget?
+  /// Which tab is showing. Bound so repeating a workout from History can move the lifter to the
+  /// logger, which is where the workout it just started actually is.
+  @State private var selectedTab: RootTab = .train
   private let environment: HardsetEnvironment
   /// Overrides the stored preference. Exists for previews and tests; the app passes `nil` so the
   /// user's own choice wins.
@@ -135,42 +138,67 @@ public struct HardsetRootView: View {
       }
   }
 
+  /// `nil` while a workout is open, which hides "Do it again" rather than offering a button that
+  /// would silently abandon the session in progress.
+  ///
+  /// Spelled as a property with an explicit type instead of `coordinator == nil ? repeatWorkout : nil`
+  /// inline: a ternary between a method reference and `nil` needs an optional-closure conversion the
+  /// type checker cannot do here, and it fails with "failed to produce diagnostic" rather than saying so.
+  private var repeatHandler: (([RepeatableExercise]) -> Void)? {
+    guard coordinator == nil else { return nil }
+    return { plan in repeatWorkout(plan) }
+  }
+
+  @ViewBuilder private var trainNavigation: some View {
+    NavigationStack {
+      trainTab
+        .toolbar {
+          // `.primaryAction` rather than `.topBarTrailing`: the latter does not exist on macOS,
+          // and this target builds for the host so the suite can run there.
+          ToolbarItem(placement: .primaryAction) {
+            Button {
+              isShowingSettings = true
+            } label: {
+              Label("Settings", systemImage: "gearshape")
+            }
+          }
+        }
+        .sheet(isPresented: $isShowingSettings) {
+          SettingsSheet(
+            useImperial: $useImperial,
+            restSeconds: $restSeconds,
+            tracksRPE: $tracksRPE
+          ) { isShowingSettings = false }
+        }
+    }
+  }
+
+  @ViewBuilder private var volumeNavigation: some View {
+    NavigationStack {
+      WeeklyVolumeScreen(store: environment.volume)
+        .navigationTitle("This week")
+    }
+  }
+
+  @ViewBuilder private var historyNavigation: some View {
+    NavigationStack {
+      HistoryScreen(store: environment.history, unit: unit, onRepeat: repeatHandler)
+        .navigationTitle("History")
+    }
+  }
+
   @ViewBuilder private var tabs: some View {
-    let content = TabView {
-      Tab("Train", systemImage: "figure.strengthtraining.traditional") {
-        NavigationStack {
-          trainTab
-            .toolbar {
-              // `.primaryAction` rather than `.topBarTrailing`: the latter does not exist on
-              // macOS, and this target builds for the host so the suite can run there.
-              ToolbarItem(placement: .primaryAction) {
-                Button {
-                  isShowingSettings = true
-                } label: {
-                  Label("Settings", systemImage: "gearshape")
-                }
-              }
-            }
-            .sheet(isPresented: $isShowingSettings) {
-              SettingsSheet(
-                useImperial: $useImperial,
-                restSeconds: $restSeconds,
-                tracksRPE: $tracksRPE
-              ) { isShowingSettings = false }
-            }
-        }
+    // Each tab's content is its own property. Inlining all three made one expression large enough
+    // that the type checker gave up with "failed to produce diagnostic" rather than naming a cause.
+    let content = TabView(selection: $selectedTab) {
+      Tab("Train", systemImage: "figure.strengthtraining.traditional", value: RootTab.train) {
+        trainNavigation
       }
-      Tab("Volume", systemImage: "chart.bar") {
-        NavigationStack {
-          WeeklyVolumeScreen(store: environment.volume)
-            .navigationTitle("This week")
-        }
+      Tab("Volume", systemImage: "chart.bar", value: RootTab.volume) {
+        volumeNavigation
       }
-      Tab("History", systemImage: "clock.arrow.circlepath") {
-        NavigationStack {
-          HistoryScreen(store: environment.history, unit: unit)
-            .navigationTitle("History")
-        }
+      Tab("History", systemImage: "clock.arrow.circlepath", value: RootTab.history) {
+        historyNavigation
       }
     }
 
@@ -457,6 +485,37 @@ public struct HardsetRootView: View {
     }
   }
 
+  /// Starts a new workout shaped like a past one, then moves to the logger.
+  ///
+  /// Each movement comes back on the same machine with the same number of rows, so the loads
+  /// prefill from that machine's history and the lifter starts one tap from their first set.
+  private func repeatWorkout(_ plan: [RepeatableExercise]) {
+    guard coordinator == nil, !plan.isEmpty else { return }
+    do {
+      coordinator = try SessionCoordinator.start(
+        store: environment.logger,
+        gymID: selectedGym,
+        plan: plan.map {
+          PlannedExercise(
+            exerciseID: $0.exerciseID,
+            machineID: $0.machineID,
+            exerciseName: $0.exerciseName,
+            machineName: $0.machineName,
+            plannedSets: $0.workingSets
+          )
+        },
+        restAfterSet: resolvedRest,
+        hooks: hooks
+      )
+      startFailed = false
+      // Moved deliberately. Starting a workout the lifter cannot see would be the same class of
+      // defect as a button that appears to do nothing.
+      selectedTab = .train
+    } catch {
+      startFailed = true
+    }
+  }
+
   private func startEmptyWorkout() {
     do {
       // An empty plan on purpose: the app does not invent a program, and there is no generator
@@ -515,4 +574,9 @@ struct FinishedSession {
 /// `sheet(item:)` needs an `Identifiable`, and an id is a value with no natural one of its own.
 struct RenameTarget: Identifiable, Hashable {
   let id: UUID
+}
+
+/// The three tabs, as a value the root can set.
+enum RootTab: Hashable {
+  case train, volume, history
 }

@@ -185,6 +185,33 @@ public nonisolated struct ProgressionHistory: Hashable, Sendable {
 }
 
 /// One past session, summarised for a list.
+/// One movement from a past workout, ready to be planned again.
+public nonisolated struct RepeatableExercise: Hashable, Sendable, Identifiable {
+  public let exerciseID: ExerciseID
+  public let exerciseName: String
+  public let machineID: MachineID?
+  public let machineName: String?
+  /// How many working sets were actually done, so the new session opens with the same number of
+  /// rows rather than an invented default.
+  public let workingSets: Int
+
+  public var id: String { "\(exerciseID.rawValue)|\(machineID?.rawValue.uuidString ?? "-")" }
+
+  public init(
+    exerciseID: ExerciseID,
+    exerciseName: String,
+    machineID: MachineID?,
+    machineName: String?,
+    workingSets: Int
+  ) {
+    self.exerciseID = exerciseID
+    self.exerciseName = exerciseName
+    self.machineID = machineID
+    self.machineName = machineName
+    self.workingSets = workingSets
+  }
+}
+
 /// One logged set, as history reads it back.
 public nonisolated struct LoggedSetDetail: Hashable, Sendable, Identifiable {
   public let id: SetID
@@ -192,6 +219,8 @@ public nonisolated struct LoggedSetDetail: Hashable, Sendable, Identifiable {
   public let exerciseName: String
   /// How the movement is loaded. Needed so history does not read back a pull-up as "0 kg".
   public let modality: ExerciseModality?
+  /// Which machine, so a repeated workout returns to the same equipment.
+  public let machineID: MachineID?
   /// `nil` for free weights, or a machine whose row has been removed.
   public let machineName: String?
   public let weightKg: Double
@@ -206,6 +235,7 @@ public nonisolated struct LoggedSetDetail: Hashable, Sendable, Identifiable {
     exerciseID: ExerciseID,
     exerciseName: String,
     modality: ExerciseModality? = nil,
+    machineID: MachineID? = nil,
     machineName: String?,
     weightKg: Double,
     reps: Int,
@@ -217,6 +247,7 @@ public nonisolated struct LoggedSetDetail: Hashable, Sendable, Identifiable {
     self.exerciseID = exerciseID
     self.exerciseName = exerciseName
     self.modality = modality
+    self.machineID = machineID
     self.machineName = machineName
     self.weightKg = weightKg
     self.reps = reps
@@ -261,6 +292,45 @@ public nonisolated struct HistoryStore {
     self.database = database
   }
 
+  /// The shape of a past workout, ready to start again.
+  ///
+  /// Rebuilt from the sets that were actually logged rather than from the plan rows, because the
+  /// plan is what was intended and the sets are what happened -- a movement added and never used
+  /// should not come back, and one added mid-session should.
+  ///
+  /// Machine is carried per movement, which is the point: repeating leg day at the same gym should
+  /// put you back on the same leg press, and that is what makes the prefilled loads meaningful.
+  public func plan(for sessionID: SessionID) throws -> [RepeatableExercise] {
+    let logged = try sets(in: sessionID)
+    var order: [String] = []
+    var byKey: [String: RepeatableExercise] = [:]
+
+    for set in logged where !set.isWarmup {
+      // Keyed on movement *and* machine, so two blocks on different equipment come back as two
+      // entries rather than merging -- the same rule the chart follows.
+      let key = "\(set.exerciseID.rawValue)|\(set.machineID?.rawValue.uuidString ?? "-")"
+      if let existing = byKey[key] {
+        byKey[key] = RepeatableExercise(
+          exerciseID: existing.exerciseID,
+          exerciseName: existing.exerciseName,
+          machineID: existing.machineID,
+          machineName: existing.machineName,
+          workingSets: existing.workingSets + 1
+        )
+      } else {
+        order.append(key)
+        byKey[key] = RepeatableExercise(
+          exerciseID: set.exerciseID,
+          exerciseName: set.exerciseName,
+          machineID: set.machineID,
+          machineName: set.machineName,
+          workingSets: 1
+        )
+      }
+    }
+    return order.compactMap { byKey[$0] }
+  }
+
   /// Discards a workout and, by cascade, its sets and plan rows.
   ///
   /// Exposed on `HistoryStore` so the history screen does not need a `LoggerStore` just to delete
@@ -281,9 +351,14 @@ public nonisolated struct HistoryStore {
   /// lifted on, which is the whole premise of tracking per machine.
   public func sets(in sessionID: SessionID) throws -> [LoggedSetDetail] {
     try database.read { db in
+      // Logging order, not `setOrdinal`. Ordering by the ordinal interleaves movements: a warm-up
+      // and the first working set both sit at 0, so three movements of three sets each came back as
+      // ordinal-0-of-all-three, then ordinal-1-of-all-three. The screen groups consecutive runs, so
+      // every movement shattered into one group per set and the same names repeated down the page.
+      // `completedAt` is the order the workout actually happened in, with the ordinal breaking ties.
       let rows = try LoggedSet
         .where { $0.sessionID.eq(sessionID.rawValue) }
-        .order { $0.setOrdinal }
+        .order { ($0.completedAt, $0.setOrdinal) }
         .fetchAll(db)
       guard !rows.isEmpty else { return [] }
 
@@ -306,6 +381,7 @@ public nonisolated struct HistoryStore {
           exerciseID: ExerciseID(rawValue: row.exerciseID),
           exerciseName: exercises[row.exerciseID]?.name ?? "Unknown movement",
           modality: exercises[row.exerciseID].flatMap { ExerciseModality(rawValue: $0.modality) },
+          machineID: row.machineID.map(MachineID.init(rawValue:)),
           machineName: row.machineID.flatMap { machineNames[$0] },
           weightKg: row.weightKg,
           reps: row.reps,
@@ -331,9 +407,11 @@ public nonisolated struct HistoryStore {
       guard !sessions.isEmpty else { return [] }
 
       let sessionIDs = sessions.map(\.id)
+      // Logging order for the same reason as `sets(in:)`: the movement names under each row are
+      // collected first-seen, and ordering by ordinal would list them interleaved.
       let sets = try LoggedSet
         .where { $0.sessionID.in(sessionIDs) }
-        .order { $0.setOrdinal }
+        .order { ($0.completedAt, $0.setOrdinal) }
         .fetchAll(db)
 
       let exerciseIDs = Array(Set(sets.map(\.exerciseID)))

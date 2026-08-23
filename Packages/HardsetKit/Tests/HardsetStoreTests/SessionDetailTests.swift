@@ -148,3 +148,160 @@ extension SessionDetailTests {
     #expect(try history.sets(in: session).first?.modality == .barbell)
   }
 }
+
+/// Repeating a past workout. Lifters do this constantly, and the plan has to come from what
+/// actually happened rather than from what was intended.
+@Suite("A past workout can be turned back into a plan")
+struct RepeatWorkoutTests {
+  let now = Date(timeIntervalSince1970: 12_000_000)
+
+  private func fixture() throws -> (any DatabaseWriter, LoggerStore, HistoryStore, GymStore) {
+    var configuration = Configuration()
+    configuration.foreignKeysEnabled = true
+    let queue = try DatabaseQueue(configuration: configuration)
+    try HardsetMigrations.migrator().migrate(queue)
+    try CatalogSeeder(database: queue).seed(now: now)
+    return (
+      queue, LoggerStore(database: queue), HistoryStore(database: queue),
+      GymStore(database: queue)
+    )
+  }
+
+  private func exercise(_ db: any DatabaseWriter, _ slug: String) throws -> ExerciseID {
+    let row = try db.read { d in try Exercise.where { $0.catalogSlug.eq(slug) }.fetchOne(d) }
+    return ExerciseID(rawValue: try #require(row).id)
+  }
+
+  @MainActor
+  @Test("The plan carries each movement, its machine, and how many sets were done")
+  func planCarriesMachineAndCount() throws {
+    let (db, logger, history, gyms) = try fixture()
+    let gym = try gyms.createGym(name: "Iron Works")
+    let machine = try gyms.createMachine(at: gym, name: "Hammer Strength")
+    let press = try exercise(db, "chest-press-machine")
+
+    let session = try logger.startSession(gymID: gym, at: now)
+    for index in 0..<3 {
+      _ = try logger.logSet(
+        sessionID: session, exerciseID: press, machineID: machine,
+        draft: SetEntryDraft(weightKg: 70, reps: 8),
+        at: now.addingTimeInterval(Double(index) * 90)
+      )
+    }
+    try logger.finishSession(session, at: now.addingTimeInterval(600))
+
+    let plan = try history.plan(for: session)
+    #expect(plan.count == 1)
+    #expect(plan.first?.workingSets == 3)
+    // Returning to the same equipment is the point: it is what makes the prefilled loads mean
+    // anything.
+    #expect(plan.first?.machineID == machine)
+    #expect(plan.first?.machineName == "Hammer Strength")
+  }
+
+  @MainActor
+  @Test("Warm-ups are not planned again")
+  func warmupsAreExcluded() throws {
+    let (db, logger, history, _) = try fixture()
+    let squat = try exercise(db, "barbell-back-squat")
+    let session = try logger.startSession(at: now)
+    _ = try logger.logSet(
+      sessionID: session, exerciseID: squat,
+      draft: SetEntryDraft(weightKg: 40, reps: 10), isWarmup: true, at: now
+    )
+    _ = try logger.logSet(
+      sessionID: session, exerciseID: squat,
+      draft: SetEntryDraft(weightKg: 100, reps: 5), at: now.addingTimeInterval(120)
+    )
+    try logger.finishSession(session, at: now.addingTimeInterval(600))
+
+    // One working set, so one row -- the warm-up is how you got there, not part of the plan.
+    #expect(try history.plan(for: session).first?.workingSets == 1)
+  }
+
+  @MainActor
+  @Test("The same movement on two machines comes back as two entries")
+  func machinesDoNotMerge() throws {
+    let (db, logger, history, gyms) = try fixture()
+    let gym = try gyms.createGym(name: "Iron Works")
+    let hammer = try gyms.createMachine(at: gym, name: "Hammer")
+    let cybex = try gyms.createMachine(at: gym, name: "Cybex")
+    let press = try exercise(db, "chest-press-machine")
+
+    let session = try logger.startSession(gymID: gym, at: now)
+    for (index, machine) in [hammer, cybex].enumerated() {
+      _ = try logger.logSet(
+        sessionID: session, exerciseID: press, machineID: machine,
+        draft: SetEntryDraft(weightKg: 70, reps: 8),
+        at: now.addingTimeInterval(Double(index) * 90)
+      )
+    }
+    try logger.finishSession(session, at: now.addingTimeInterval(600))
+
+    // Same rule the chart follows: two pieces of equipment are two things.
+    #expect(try history.plan(for: session).count == 2)
+  }
+
+  @MainActor
+  @Test("A workout with nothing logged yields an empty plan rather than a phantom one")
+  func emptySessionYieldsEmptyPlan() throws {
+    let (_, logger, history, _) = try fixture()
+    let session = try logger.startSession(at: now)
+    try logger.finishSession(session, at: now.addingTimeInterval(60))
+    #expect(try history.plan(for: session).isEmpty)
+  }
+
+  /// The ordering bug the single-movement test above could not see.
+  ///
+  /// Sets used to come back ordered by `setOrdinal`. A warm-up and the first working set both sit at
+  /// ordinal 0, so three movements of three sets returned as "ordinal 0 of all three, then ordinal 1
+  /// of all three" -- and the screen, which groups consecutive runs, showed nine headings with the
+  /// same three names repeating. Logging order is the only order this screen can be read in.
+  @MainActor
+  @Test("Three movements come back grouped in logging order, not interleaved by ordinal")
+  func multipleMovementsKeepLoggingOrder() throws {
+    let (db, logger, history, _) = try fixture()
+    let bench = try exercise(db, "barbell-bench-press")
+    let incline = try exercise(db, "incline-dumbbell-press")
+    let pushdown = try exercise(db, "cable-triceps-pushdown")
+
+    let session = try logger.startSession(at: now)
+    var minute = 0.0
+    /// Logged the way a lifter actually trains: all of one movement, then all of the next.
+    func block(_ exercise: ExerciseID, kg: Double, warmup: Bool) throws {
+      if warmup {
+        minute += 3
+        _ = try logger.logSet(
+          sessionID: session, exerciseID: exercise,
+          draft: SetEntryDraft(weightKg: kg / 2, reps: 12), setOrdinal: 0,
+          isWarmup: true, at: now.addingTimeInterval(minute * 60)
+        )
+      }
+      for ordinal in 0..<3 {
+        minute += 3
+        _ = try logger.logSet(
+          sessionID: session, exerciseID: exercise,
+          draft: SetEntryDraft(weightKg: kg, reps: 8), setOrdinal: ordinal,
+          isWarmup: false, at: now.addingTimeInterval(minute * 60)
+        )
+      }
+    }
+    try block(bench, kg: 84, warmup: true)
+    try block(incline, kg: 30, warmup: false)
+    try block(pushdown, kg: 25, warmup: false)
+    try logger.finishSession(session, at: now.addingTimeInterval(minute * 60 + 60))
+
+    let sets = try history.sets(in: session)
+    #expect(sets.count == 10)
+
+    // Each movement occupies one contiguous run. Collapsing consecutive equal names must leave
+    // exactly three -- ordering by `setOrdinal` left nine.
+    var runs: [String] = []
+    for set in sets where runs.last != set.exerciseName { runs.append(set.exerciseName) }
+    #expect(runs == ["Barbell Bench Press", "Incline Dumbbell Press", "Cable Triceps Pushdown"])
+
+    // And the warm-up still leads its own movement rather than floating to the front of the session.
+    #expect(sets.first?.isWarmup == true)
+    #expect(sets.first?.exerciseName == "Barbell Bench Press")
+  }
+}

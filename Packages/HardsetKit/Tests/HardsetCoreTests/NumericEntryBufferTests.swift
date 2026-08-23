@@ -34,4 +34,19 @@ struct NumericEntryBufferSeedTests {
     #expect(buffer.displayText.isEmpty)
     #expect(buffer.value == nil)
   }
+
+  /// A prefill has to be a load someone can actually put on a bar.
+  ///
+  /// 84 kg read back in pounds is 185.188…, and seeding two decimals put "185.19" in the field while
+  /// the same row printed "Last time 185.2 lb" two inches to the left. One decimal is what every
+  /// other readout in the app uses and is finer than any plate in either unit.
+  @Test("A converted prefill seeds a loadable number, not a raw conversion")
+  func convertedPrefillIsLoadable() {
+    let pounds = WeightUnit.pounds.fromKilograms(84)
+    #expect(NumericEntryBuffer(value: pounds, maximumFractionDigits: 1).displayText == "185.2")
+
+    // And a value that is exact in the display unit keeps no decimal point at all.
+    let exact = WeightUnit.pounds.fromKilograms(WeightUnit.pounds.toKilograms(185))
+    #expect(NumericEntryBuffer(value: exact, maximumFractionDigits: 1).displayText == "185")
+  }
 }

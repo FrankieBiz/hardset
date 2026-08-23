@@ -98,7 +98,7 @@ public struct SetRowView: View {
       initialValue: NumericEntryBuffer(
         value: draft.wrappedValue.weightKg.map(unit.fromKilograms),
         maximumIntegerDigits: 4,
-        maximumFractionDigits: 2
+        maximumFractionDigits: Self.loadFractionDigits
       )
     )
     self._repsBuffer = State(
@@ -181,12 +181,20 @@ public struct SetRowView: View {
     .onChange(of: unit) { reseedBuffers() }
   }
 
+  /// How much precision a load entry carries, in the unit on screen.
+  ///
+  /// One decimal, not two. Two made a prefill unloadable: a set stored as 84 kg and read back in
+  /// pounds seeded the field with "185.19", which is not a weight anyone can put on a bar, and it
+  /// disagreed with the "Last time 185.2 lb" printed on the same row. Every other readout in the app
+  /// shows one decimal, and no gym stocks a plate finer than that in either unit.
+  private static let loadFractionDigits = 1
+
   /// Rebuilds both display buffers from the draft, in the current unit.
   private func reseedBuffers() {
     weightBuffer = NumericEntryBuffer(
       value: draft.weightKg.map(unit.fromKilograms),
       maximumIntegerDigits: 4,
-      maximumFractionDigits: 2
+      maximumFractionDigits: Self.loadFractionDigits
     )
     repsBuffer = NumericEntryBuffer(
       value: draft.reps.map(Double.init),

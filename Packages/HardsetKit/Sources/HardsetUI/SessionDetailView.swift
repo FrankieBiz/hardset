@@ -55,7 +55,16 @@ public struct SessionDetailView: View {
     public let exerciseName: String
     public let machineName: String?
     public let sets: [LoggedSetRow]
-    public var id: String { "\(exerciseName)|\(machineName ?? "")" }
+    /// The first set's id, not the movement name.
+    ///
+    /// A movement can legitimately appear in two separate runs -- benching, doing something else,
+    /// then coming back -- and a name-based id is then duplicated inside one `ForEach`. SwiftUI does
+    /// not merge those; it renders the first group again for every later duplicate, so the page
+    /// showed the same three movements over and over with most sets missing. Set ids are unique.
+    ///
+    /// Stored rather than computed off `sets.first`, so identity cannot depend on a collection that
+    /// is allowed to be empty and cannot change as sets are appended to the group being built.
+    public let id: UUID
   }
 
   private let title: String
@@ -206,7 +215,14 @@ public struct SessionDetailView: View {
   /// Grouped in logging order, and a machine change inside one movement starts a new group --
   /// because it is a different piece of equipment and merging them is the thing this app refuses
   /// to do everywhere else.
-  private var groups: [Group_] {
+  private var groups: [Group_] { Self.groups(from: sets) }
+
+  /// Exposed as a pure function so the run-length rule can be tested without a view.
+  ///
+  /// It was only ever a private computed property, and the one test that covered this screen used a
+  /// single movement -- where every grouping rule looks identical. Three movements of three sets is
+  /// what exposed both the interleaved input order and the duplicate group ids.
+  public static func groups(from sets: [LoggedSetRow]) -> [Group_] {
     var result: [Group_] = []
     for set in sets {
       if let last = result.last,
@@ -216,11 +232,17 @@ public struct SessionDetailView: View {
         result[result.count - 1] = Group_(
           exerciseName: last.exerciseName,
           machineName: last.machineName,
-          sets: last.sets + [set]
+          sets: last.sets + [set],
+          id: last.id
         )
       } else {
         result.append(
-          Group_(exerciseName: set.exerciseName, machineName: set.machineName, sets: [set])
+          Group_(
+            exerciseName: set.exerciseName,
+            machineName: set.machineName,
+            sets: [set],
+            id: set.id
+          )
         )
       }
     }

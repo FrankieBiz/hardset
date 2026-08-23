@@ -14,10 +14,16 @@ public struct HistoryScreen: View {
 
   private let store: HistoryStore
   private let unit: WeightUnit
+  private let onRepeat: (([RepeatableExercise]) -> Void)?
 
-  public init(store: HistoryStore, unit: WeightUnit) {
+  public init(
+    store: HistoryStore,
+    unit: WeightUnit,
+    onRepeat: (([RepeatableExercise]) -> Void)? = nil
+  ) {
     self.store = store
     self.unit = unit
+    self.onRepeat = onRepeat
   }
 
   public var body: some View {
@@ -40,7 +46,7 @@ public struct HistoryScreen: View {
     .task { load() }
     .refreshable { load() }
     .navigationDestination(item: $opened) { row in
-      SessionDetailScreen(row: row, store: store, unit: unit)
+      SessionDetailScreen(row: row, store: store, unit: unit, onRepeat: onRepeat)
     }
   }
 
