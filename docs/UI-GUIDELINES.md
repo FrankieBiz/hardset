@@ -24,8 +24,9 @@ inconvenient, this is why it exists.
 Honest division, so nobody reads a specification as a description of the app.
 
 **Landed:** the whole of §1, §2 (every value in `Tokens`, verified against this document by
-script), §3's token definitions, §4.1's spacing additions, §5.2 including the `commit(intensity:)`
-signature, and the parts of §5.3 with a host today -- the logged row recedes, the log control
+script, including §2.5's gym-hue / machine-stroke rule on the progression chart), §3's token
+definitions, §4.1's spacing additions, §5.2 including the `commit(intensity:)` signature, §5.6's
+chart draw-on and volume bar reveal, and the parts of §5.3 with a host today -- the logged row recedes, the log control
 acknowledges on touch-*down*, and the check replaces the circle. The root forces `.dark`.
 
 **Specification only** -- nothing in the app does this yet: the focus-ring travel and glass morph in

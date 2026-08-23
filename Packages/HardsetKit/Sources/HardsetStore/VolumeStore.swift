@@ -109,12 +109,34 @@ public nonisolated struct ProgressionStore {
   }
 
   /// Everything a load-history chart needs for one exercise.
+  /// Which gym each machine belongs to.
+  ///
+  /// Read so the chart can spend colour on the gym and stroke on the machine. Two leg presses in
+  /// one gym are the same hue and different dashes; the same movement at another gym is a
+  /// different hue, which is the distinction the whole per-machine feature exists to draw.
+  public func machineGyms(_ ids: [MachineID]) throws -> [MachineID: GymID] {
+    guard !ids.isEmpty else { return [:] }
+    let raws = ids.map(\.rawValue)
+    return try database.read { db in
+      try Machine
+        .where { $0.id.in(raws) }
+        .fetchAll(db)
+        .reduce(into: [MachineID: GymID]()) {
+          $0[MachineID(rawValue: $1.id)] = GymID(rawValue: $1.gymID)
+        }
+    }
+  }
+
   public func history(for exerciseID: ExerciseID) throws -> ProgressionHistory {
     let samples = try samples(for: exerciseID)
     let series = ProgressionAnalyzer.series(from: samples, exerciseID: exerciseID)
     let changes = ProgressionAnalyzer.machineChanges(from: samples)
-    let names = try machineNames(series.compactMap(\.key.machineID))
-    return ProgressionHistory(series: series, machineChanges: changes, machineNames: names)
+    let machineIDs = series.compactMap(\.key.machineID)
+    let names = try machineNames(machineIDs)
+    let gyms = try machineGyms(machineIDs)
+    return ProgressionHistory(
+      series: series, machineChanges: changes, machineNames: names, machineGyms: gyms
+    )
   }
 }
 
@@ -123,15 +145,20 @@ public nonisolated struct ProgressionHistory: Hashable, Sendable {
   public let series: [ProgressionSeries]
   public let machineChanges: [MachineChange]
   public let machineNames: [MachineID: String]
+  /// Which gym each machine sits in. Empty for free-weight series, and for a machine whose gym
+  /// row has gone.
+  public let machineGyms: [MachineID: GymID]
 
   public init(
     series: [ProgressionSeries],
     machineChanges: [MachineChange],
-    machineNames: [MachineID: String]
+    machineNames: [MachineID: String],
+    machineGyms: [MachineID: GymID] = [:]
   ) {
     self.series = series
     self.machineChanges = machineChanges
     self.machineNames = machineNames
+    self.machineGyms = machineGyms
   }
 
   /// Label for a series. Free-weight work and a deleted machine are named rather than blank.
@@ -141,6 +168,20 @@ public nonisolated struct ProgressionHistory: Hashable, Sendable {
   }
 
   public var isEmpty: Bool { series.isEmpty }
+
+  /// Gyms in the order the caller's series mention them, so a hue attaches to a gym permanently
+  /// for one chart rather than shifting when a series is filtered out.
+  ///
+  /// Free-weight series -- and machines whose gym is unknown -- share the last slot rather than
+  /// claiming a hue, because "no gym" is one bucket, not several.
+  public func gymOrder(for keys: [ProgressionKey]) -> [GymID] {
+    var seen: [GymID] = []
+    for key in keys {
+      guard let machineID = key.machineID, let gym = machineGyms[machineID] else { continue }
+      if !seen.contains(gym) { seen.append(gym) }
+    }
+    return seen
+  }
 }
 
 /// One past session, summarised for a list.

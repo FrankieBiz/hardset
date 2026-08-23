@@ -66,13 +66,29 @@ public struct ExerciseProgressScreen: View {
   /// now reads first in the legend.
   private var seriesInputs: [ProgressionChartView.SeriesInput] {
     guard let history else { return [] }
-    return history.series
-      .sorted { lhs, rhs in
-        (lhs.points.last?.date ?? .distantPast) > (rhs.points.last?.date ?? .distantPast)
+    let ordered = history.series.sorted { lhs, rhs in
+      (lhs.points.last?.date ?? .distantPast) > (rhs.points.last?.date ?? .distantPast)
+    }
+    // Hue is assigned per gym, in the order this chart first mentions each one, so it is stable
+    // for the life of the chart and does not shift when a series drops out.
+    let gyms = history.gymOrder(for: ordered.map(\.key))
+    var machinesSeenPerGym: [GymID: Int] = [:]
+
+    return ordered.map { series in
+      let gym = series.key.machineID.flatMap { history.machineGyms[$0] }
+      let gymIndex = gym.flatMap { gyms.firstIndex(of: $0) }
+      var withinGym = 0
+      if let gym {
+        withinGym = machinesSeenPerGym[gym, default: 0]
+        machinesSeenPerGym[gym] = withinGym + 1
       }
-      .map {
-        ProgressionChartView.SeriesInput(label: history.label(for: $0.key), points: $0.points)
-      }
+      return ProgressionChartView.SeriesInput(
+        label: history.label(for: series.key),
+        points: series.points,
+        gymIndex: gymIndex,
+        machineIndexInGym: withinGym
+      )
+    }
   }
 
   private func load() {

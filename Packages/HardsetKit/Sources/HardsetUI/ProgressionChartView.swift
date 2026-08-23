@@ -34,6 +34,24 @@ public struct ProgressionChartView: View {
   @State private var metric: ProgressionMetric = .heaviestLoad
 
   @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+  /// Colour follows the gym, permanently for this chart. A series that disappears must not
+  /// repaint the survivors.
+  private func colour(for input: SeriesInput) -> SwiftUI.Color {
+    guard let index = input.gymIndex else { return Tokens.Color.Series.overflow }
+    return Tokens.Color.Series.hue(forGymIndex: index)
+  }
+
+  /// Stroke carries the machine inside the gym. The first machine is solid; later ones dash, so
+  /// they stay distinguishable without spending a hue that would fail colour-blind separation.
+  private func dash(for input: SeriesInput) -> [CGFloat] {
+    switch input.machineIndexInGym {
+    case 0: []
+    case 1: [6, 4]
+    case 2: [2, 3]
+    default: [8, 3, 2, 3]
+    }
+  }
   /// Left-to-right reveal of the plot area, once per visit.
   @State private var drawProgress: Double = 0
 
@@ -41,11 +59,25 @@ public struct ProgressionChartView: View {
   public struct SeriesInput: Identifiable, Hashable, Sendable {
     public let label: String
     public let points: [ProgressionPoint]
+    /// Which gym this series is at, as an index into the validated hue order. `nil` for free
+    /// weights or an unknown gym, which take the neutral rather than a hue.
+    public let gymIndex: Int?
+    /// Which machine this is *within* its gym. Two leg presses at one gym share a hue and differ
+    /// by stroke, because they are the same place and different equipment.
+    public let machineIndexInGym: Int
+
     public var id: String { label }
 
-    public init(label: String, points: [ProgressionPoint]) {
+    public init(
+      label: String,
+      points: [ProgressionPoint],
+      gymIndex: Int? = nil,
+      machineIndexInGym: Int = 0
+    ) {
       self.label = label
       self.points = points
+      self.gymIndex = gymIndex
+      self.machineIndexInGym = machineIndexInGym
     }
   }
 
@@ -117,11 +149,13 @@ public struct ProgressionChartView: View {
             series: .value("Machine", input.label)
           )
           .foregroundStyle(by: .value("Machine", input.label))
+          .lineStyle(StrokeStyle(lineWidth: 2, lineCap: .round, dash: dash(for: input)))
           PointMark(
             x: .value("Date", point.date),
             y: .value(metric.label, value(point))
           )
           .foregroundStyle(by: .value("Machine", input.label))
+          .symbol(by: .value("Machine", input.label))
         }
       }
       // A switch is drawn on the chart, not just described below it, so the eye meets the caveat
@@ -141,12 +175,13 @@ public struct ProgressionChartView: View {
     .chartLegend(position: .bottom)
     // The validated series palette rather than Swift Charts' defaults, which are not contrast
     // checked against this ground. Three hues, assigned in fixed order and never cycled; a
-    // fourth series folds to the neutral rather than inventing a hue that fails colour-blind
-    // separation. NOTE: the guidelines spend hue on the *gym*, and this view only knows machine
+    // fourth *gym* folds to the neutral rather than inventing a hue that fails colour-blind
+    // separation. Hue is the gym and the stroke is the machine within it, so two leg presses at
+    // one gym read as the same place with different equipment. NOTE: the guidelines spend hue on the *gym*, and this view only knows machine
     // labels -- closing that needs gym ids plumbed through `ProgressionHistory`.
     .chartForegroundStyleScale(
       domain: series.map(\.label),
-      range: series.indices.map { Tokens.Color.Series.hue(forGymIndex: $0) }
+      range: series.map { colour(for: $0) }
     )
     // Masking the plot area rather than the whole chart, so the axes and legend stay put while
     // the lines draw in. One animated value, and it cannot stair-step the way a point-prefix does.
