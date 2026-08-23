@@ -16,14 +16,31 @@ import SwiftUI
 public struct RestBarView: View {
   private let state: RestTimerState
   private let metadata: RestMetadata?
+  private let total: Duration?
   private let referenceDate: Date
+
+  /// How much rest is left, as a fraction. Driven by **one** animation, set when the state
+  /// changes and never ticked.
+  ///
+  /// This is the whole technique: `withAnimation(.linear(duration: remaining))` retargets the
+  /// value to zero once, and SwiftUI interpolates it for the entire rest period. There is no
+  /// timer, no `TimelineView` and no per-second redraw -- a 1 Hz publisher here is what made the
+  /// ancestor app re-run its database queries thirty times a second.
+  ///
+  /// Linear, not eased. The rule represents elapsed time, and easing it would show time slowing
+  /// down.
+  @State private var fraction: Double = 1
+  @Environment(\.accessibilityReduceMotion) private var reduceMotion
   private let onAdjust: (Duration) -> Void
   private let onPauseResume: () -> Void
   private let onSkip: () -> Void
 
+  /// - Parameter total: The full rest length, needed to turn "seconds remaining" into a fraction.
+  ///   `nil` hides the rule rather than guessing a denominator.
   public init(
     state: RestTimerState,
     metadata: RestMetadata? = nil,
+    total: Duration? = nil,
     referenceDate: Date = Date(),
     onAdjust: @escaping (Duration) -> Void,
     onPauseResume: @escaping () -> Void,
@@ -31,6 +48,7 @@ public struct RestBarView: View {
   ) {
     self.state = state
     self.metadata = metadata
+    self.total = total
     self.referenceDate = referenceDate
     self.onAdjust = onAdjust
     self.onPauseResume = onPauseResume
@@ -62,9 +80,64 @@ public struct RestBarView: View {
       .padding(.horizontal, Tokens.Spacing.regular)
       .padding(.vertical, Tokens.Spacing.snug)
       .background(Tokens.Color.surface)
+      // The rule sits on the top edge and retreats right to left. An overlay rather than a row so
+      // it cannot push the controls around as it shrinks.
+      .overlay(alignment: .top) { progressRule }
       .accessibilityElement(children: .combine)
+      // The rule is decoration *of* the countdown, which is already spoken. Hiding it keeps the
+      // bar one element instead of two.
       .accessibilityLabel(spokenLabel)
+      .onAppear { retarget() }
+      .onChange(of: state) { retarget() }
     }
+  }
+
+  @ViewBuilder private var progressRule: some View {
+    if total != nil {
+      GeometryReader { proxy in
+        Rectangle()
+          .fill(Tokens.Color.hairline)
+          .overlay(alignment: .leading) {
+            Rectangle()
+              .fill(Tokens.Color.textPrimary)
+              .frame(width: proxy.size.width * fraction)
+          }
+      }
+      .frame(height: 2)
+      .accessibilityHidden(true)
+    }
+  }
+
+  /// Snaps to the true position, then runs out linearly over exactly the time remaining.
+  ///
+  /// Two phases because they mean different things: the jump is a correction, and only the run-out
+  /// represents elapsed time. Re-derived from the deadline every time it is called, so returning
+  /// from the background or adjusting by fifteen seconds lands on the truth rather than on wherever
+  /// an animation happened to be.
+  private func retarget() {
+    guard let total, total.seconds > 0 else { return }
+
+    switch state {
+    case .running(let endsAt):
+      let remaining = endsAt.timeIntervalSince(Date())
+      guard remaining > 0 else { snap(to: 0); return }
+      snap(to: min(1, remaining / total.seconds))
+      guard !reduceMotion else { return }
+      withAnimation(Tokens.Motion.decay(remaining: remaining)) { fraction = 0 }
+
+    case .paused(let remaining):
+      // Frozen at the truth, not at wherever the interpolation had reached.
+      snap(to: min(1, max(0, remaining.seconds / total.seconds)))
+
+    case .idle:
+      snap(to: 1)
+    }
+  }
+
+  private func snap(to value: Double) {
+    var transaction = Transaction(animation: nil)
+    transaction.disablesAnimations = true
+    withTransaction(transaction) { fraction = value }
   }
 
   @ViewBuilder private var countdown: some View {

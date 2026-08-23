@@ -71,7 +71,12 @@ The flagship feature, and the one competitors lose stars over. Test 4 is the sin
 line in this document: a rest timer silenced by Focus is the exact defect the positioning is built
 on avoiding.
 
-- [ ] **Authorization.** First schedule prompts for alarm permission. Grant it.
+- [x] **Authorization.** First schedule prompts for alarm permission. Grant it.
+      Done in the **simulator**, not on a device: scheduling now happens at all, the system prompt
+      appears with our own usage string ("Hardset uses alarms so your rest timer still alerts you
+      when the app is closed, silenced, or in Focus"), and granting it lets the bar run. This box
+      was previously unreachable -- `restAfterSet` was hardcoded nil, so AlarmKit was never asked
+      for anything. Everything below still needs a phone.
 - [ ] **Denied path.** Reinstall, deny permission, schedule a rest timer. The app degrades to a
       local notification and tells the user plainly — it does not crash and does not silently
       no-op.

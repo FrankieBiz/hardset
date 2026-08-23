@@ -103,6 +103,7 @@ public struct LiveSessionScreen: View {
       unit: unit,
       restState: hooks.state(),
       restMetadata: restMetadata,
+      restTotal: coordinator.restAfterSet,
       errorMessage: errorMessage,
       records: coordinator.lastRecords,
       onLogSet: { exerciseStateID, slot in

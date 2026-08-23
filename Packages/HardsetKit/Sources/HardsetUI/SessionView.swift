@@ -16,6 +16,8 @@ public struct SessionView: View {
   private let unit: WeightUnit
   private let restState: RestTimerState
   private let restMetadata: RestMetadata?
+  /// The full rest length, so the bar can draw a fraction rather than guess one.
+  private let restTotal: Duration?
   private let errorMessage: String?
   private let records: [PersonalRecord]
   private let onLogSet: (UUID, SetSlot) -> Void
@@ -32,6 +34,7 @@ public struct SessionView: View {
     unit: WeightUnit,
     restState: RestTimerState = .idle,
     restMetadata: RestMetadata? = nil,
+    restTotal: Duration? = nil,
     errorMessage: String? = nil,
     records: [PersonalRecord] = [],
     onLogSet: @escaping (UUID, SetSlot) -> Void,
@@ -47,6 +50,7 @@ public struct SessionView: View {
     self.unit = unit
     self.restState = restState
     self.restMetadata = restMetadata
+    self.restTotal = restTotal
     self.errorMessage = errorMessage
     self.records = records
     self.onLogSet = onLogSet
@@ -151,6 +155,7 @@ public struct SessionView: View {
       RestBarView(
         state: restState,
         metadata: restMetadata,
+        total: restTotal,
         onAdjust: onAdjustRest,
         onPauseResume: onPauseResumeRest,
         onSkip: onSkipRest
