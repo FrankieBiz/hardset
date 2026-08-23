@@ -58,6 +58,10 @@ public struct SetRowView: View {
   private let isBodyweight: Bool
   /// Whether to offer the effort field at all. Off unless the lifter asked for it.
   private let tracksRPE: Bool
+  /// How much one press of the keypad's minus or plus moves the load, in the unit on screen.
+  /// Resolved by the caller through `PlateMath`, which is the layer that knows the movement's
+  /// modality and the machine's real step. `nil` hides the control.
+  private let loadStep: Double?
   private let onLog: () -> Void
   /// Takes a logged set back. `nil` hides the affordance, which is correct wherever un-logging is
   /// not supported.
@@ -77,6 +81,7 @@ public struct SetRowView: View {
     loadFraction: Double? = nil,
     isBodyweight: Bool = false,
     tracksRPE: Bool = false,
+    loadStep: Double? = nil,
     onLog: @escaping () -> Void,
     onUnlog: (() -> Void)? = nil,
     onRemove: (() -> Void)? = nil
@@ -91,6 +96,7 @@ public struct SetRowView: View {
     self.loadFraction = loadFraction
     self.isBodyweight = isBodyweight
     self.tracksRPE = tracksRPE
+    self.loadStep = loadStep
     self.onLog = onLog
     self.onUnlog = onUnlog
     self.onRemove = onRemove
@@ -99,9 +105,14 @@ public struct SetRowView: View {
     // conversion: the draft is canonical kilograms, the buffer is what the user reads.
     self._weightBuffer = State(
       initialValue: NumericEntryBuffer(
-        value: draft.wrappedValue.weightKg.map(unit.fromKilograms),
+        // `displayValue(fromKilograms:)`, not `fromKilograms`: the conversion has to be rounded to
+        // what the app displays before it becomes a prefill, or 84 kg seeds "185.19 lb". The field
+        // still holds two decimals so a lifter with micro-plates can type 62.75 -- what the app
+        // *produces* and what it *accepts* are different questions, and conflating them is what put
+        // an unloadable number in the field.
+        value: draft.wrappedValue.weightKg.map(unit.displayValue(fromKilograms:)),
         maximumIntegerDigits: 4,
-        maximumFractionDigits: Self.loadFractionDigits
+        maximumFractionDigits: 2
       )
     )
     self._repsBuffer = State(
@@ -184,20 +195,12 @@ public struct SetRowView: View {
     .onChange(of: unit) { reseedBuffers() }
   }
 
-  /// How much precision a load entry carries, in the unit on screen.
-  ///
-  /// One decimal, not two. Two made a prefill unloadable: a set stored as 84 kg and read back in
-  /// pounds seeded the field with "185.19", which is not a weight anyone can put on a bar, and it
-  /// disagreed with the "Last time 185.2 lb" printed on the same row. Every other readout in the app
-  /// shows one decimal, and no gym stocks a plate finer than that in either unit.
-  private static let loadFractionDigits = 1
-
   /// Rebuilds both display buffers from the draft, in the current unit.
   private func reseedBuffers() {
     weightBuffer = NumericEntryBuffer(
-      value: draft.weightKg.map(unit.fromKilograms),
+      value: draft.weightKg.map(unit.displayValue(fromKilograms:)),
       maximumIntegerDigits: 4,
-      maximumFractionDigits: Self.loadFractionDigits
+      maximumFractionDigits: 2
     )
     repsBuffer = NumericEntryBuffer(
       value: draft.reps.map(Double.init),
@@ -389,13 +392,23 @@ public struct SetRowView: View {
       binding = Binding(get: { rpeBuffer }, set: { rpeBuffer = $0; pushToDraft() })
     }
 
-    return NumericPad(buffer: binding) { editing = nil }
+    return NumericPad(buffer: binding, step: step(for: field)) { editing = nil }
       .presentationDetents([.height(360)])
       // The row stays visible and tappable behind the pad, so this reads as a keyboard
       // replacement rather than a modal that interrupts the set.
       #if os(iOS)
         .presentationBackgroundInteraction(.enabled(upThrough: .height(360)))
       #endif
+  }
+
+  /// The step for each field. Reps move by one and effort by half a point, which are the only
+  /// increments those scales have; a load's step depends on the equipment and comes from the caller.
+  private func step(for field: SetRowField) -> Double? {
+    switch field {
+    case .weight: loadStep
+    case .reps: 1
+    case .rpe: 0.5
+    }
   }
 
   // MARK: - Wiring

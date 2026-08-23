@@ -36,6 +36,22 @@ public enum WeightUnit: String, Sendable, CaseIterable, Codable {
     }
   }
 
+  /// Decimals a load is displayed and seeded with.
+  ///
+  /// One, which is finer than any plate stocked in either unit. Entry fields hold more than this so
+  /// a lifter with micro-plates can type 62.75; this is about what the app *produces*.
+  public static let displayFractionDigits = 1
+
+  /// Canonical kilograms to a value the entry field can show exactly.
+  ///
+  /// The conversion and its rounding in one place, because separating them is how "185.19 lb"
+  /// reached a set row: 84 kg read in pounds is 185.188..., and a prefill carrying that precision is
+  /// both unloadable and inconsistent with the "185.2 lb" printed beside it.
+  public func displayValue(fromKilograms kilograms: Double) -> Double {
+    let scale = pow(10.0, Double(Self.displayFractionDigits))
+    return (fromKilograms(kilograms) * scale).rounded() / scale
+  }
+
   /// Smallest step the plate stack realistically moves in, in this unit.
   ///
   /// Used for stepper increments and for rounding a suggested load. Proposing 62.3 kg is a

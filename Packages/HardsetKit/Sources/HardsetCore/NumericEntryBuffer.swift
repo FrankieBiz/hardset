@@ -73,6 +73,20 @@ public struct NumericEntryBuffer: Hashable, Sendable {
     return text
   }
 
+  /// The same field, holding a different number.
+  ///
+  /// Exists so a stepper can move the value without knowing how the field was configured. Rebuilding
+  /// the buffer by hand at the call site is how `allowsDecimal` gets dropped and a reps field starts
+  /// accepting a decimal point.
+  public func replacingValue(_ value: Double?) -> NumericEntryBuffer {
+    NumericEntryBuffer(
+      value: value,
+      allowsDecimal: allowsDecimal,
+      maximumIntegerDigits: maximumIntegerDigits,
+      maximumFractionDigits: maximumFractionDigits
+    )
+  }
+
   /// The number entered, or `nil` when nothing usable has been typed.
   ///
   /// Deliberately not `Double`. There is no zero default, because "no weight entered" and

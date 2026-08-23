@@ -37,16 +37,20 @@ struct NumericEntryBufferSeedTests {
 
   /// A prefill has to be a load someone can actually put on a bar.
   ///
-  /// 84 kg read back in pounds is 185.188…, and seeding two decimals put "185.19" in the field while
-  /// the same row printed "Last time 185.2 lb" two inches to the left. One decimal is what every
-  /// other readout in the app uses and is finer than any plate in either unit.
+  /// 84 kg read back in pounds is 185.188…, and seeding the raw conversion put "185.19" in the field
+  /// while the same row printed "Last time 185.2 lb" two inches to the left. The rounding belongs to
+  /// the conversion, not to the field: the field still accepts two decimals, because 62.75 kg is a
+  /// real load for anyone with micro-plates.
   @Test("A converted prefill seeds a loadable number, not a raw conversion")
   func convertedPrefillIsLoadable() {
-    let pounds = WeightUnit.pounds.fromKilograms(84)
-    #expect(NumericEntryBuffer(value: pounds, maximumFractionDigits: 1).displayText == "185.2")
+    let seeded = WeightUnit.pounds.displayValue(fromKilograms: 84)
+    #expect(NumericEntryBuffer(value: seeded, maximumFractionDigits: 2).displayText == "185.2")
 
-    // And a value that is exact in the display unit keeps no decimal point at all.
-    let exact = WeightUnit.pounds.fromKilograms(WeightUnit.pounds.toKilograms(185))
-    #expect(NumericEntryBuffer(value: exact, maximumFractionDigits: 1).displayText == "185")
+    // A value that is exact in the display unit keeps no decimal point at all.
+    let exact = WeightUnit.pounds.displayValue(fromKilograms: WeightUnit.pounds.toKilograms(185))
+    #expect(NumericEntryBuffer(value: exact, maximumFractionDigits: 2).displayText == "185")
+
+    // And the field itself still holds finer entry than the app ever produces.
+    #expect(NumericEntryBuffer(value: 62.75, maximumFractionDigits: 2).displayText == "62.75")
   }
 }

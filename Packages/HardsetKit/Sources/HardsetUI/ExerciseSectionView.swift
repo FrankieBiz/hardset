@@ -74,6 +74,13 @@ public struct ExerciseSectionView: View {
             },
             isBodyweight: state.modality == .bodyweight,
             tracksRPE: tracksRPE,
+            // Resolved here rather than in the row, because this is the layer that knows the
+            // movement's modality and whether the machine's own step has been recorded.
+            loadStep: PlateMath.step(
+              modality: state.modality,
+              machineIncrementKg: state.machineIncrementKg,
+              unit: unit
+            ),
             onLog: { onLogSet(slot) },
             onUnlog: onUnlogSet.map { handler in { handler(slot) } },
             // Only offered when there is more than one row: removing the last one would leave a
