@@ -78,6 +78,7 @@ public struct LiveSessionScreen: View {
   @State private var machineOptions: (recent: [MachineOption], others: [MachineOption]) = ([], [])
   @State private var isAddingMachine = false
   private let unit: WeightUnit
+  private let tracksRPE: Bool
   private let hooks: RestTimerHooks
   @State private var historyTarget: MachineTarget?
   private let catalog: CatalogSeeder?
@@ -92,6 +93,7 @@ public struct LiveSessionScreen: View {
   public init(
     coordinator: SessionCoordinator,
     unit: WeightUnit,
+    tracksRPE: Bool = false,
     hooks: RestTimerHooks = .inert,
     catalog: CatalogSeeder? = nil,
     gyms: GymStore? = nil,
@@ -100,6 +102,7 @@ public struct LiveSessionScreen: View {
   ) {
     self._coordinator = State(initialValue: coordinator)
     self.unit = unit
+    self.tracksRPE = tracksRPE
     self.hooks = hooks
     self.catalog = catalog
     self.gyms = gyms
@@ -113,6 +116,7 @@ public struct LiveSessionScreen: View {
     SessionView(
       exercises: $bindable.exercises,
       unit: unit,
+      tracksRPE: tracksRPE,
       restState: hooks.state(),
       restMetadata: restMetadata,
       restTotal: coordinator.restAfterSet,

@@ -12,6 +12,7 @@ import SwiftUI
 public struct SettingsSheet: View {
   @Binding private var useImperial: Bool
   @Binding private var restSeconds: Int
+  @Binding private var tracksRPE: Bool
   private let onDone: () -> Void
 
   /// Rest options the user can pick from. **Off is first and is the default**, because the app has
@@ -23,10 +24,12 @@ public struct SettingsSheet: View {
   public init(
     useImperial: Binding<Bool>,
     restSeconds: Binding<Int>,
+    tracksRPE: Binding<Bool>,
     onDone: @escaping () -> Void
   ) {
     self._useImperial = useImperial
     self._restSeconds = restSeconds
+    self._tracksRPE = tracksRPE
     self.onDone = onDone
   }
 
@@ -81,6 +84,20 @@ public struct SettingsSheet: View {
                 + "running if you leave the app or force-quit it."
           )
         }
+
+        Section {
+          Toggle("Record RPE", isOn: $tracksRPE)
+        } header: {
+          Text("Effort")
+        } footer: {
+          // Says what it does and, as everywhere else, what it refuses to do.
+          Text(
+            "Adds an optional effort field to every set, on the 1\u{2013}10 scale. Off by default, "
+              + "because a field nobody fills is clutter in the one place this app cannot afford "
+              + "it. The app records what you enter and nothing more \u{2014} there is no target "
+              + "RPE and no warning for being far from failure, because neither is established."
+          )
+        }
       }
       .navigationTitle("Settings")
       .toolbar {
@@ -96,8 +113,11 @@ public struct SettingsSheet: View {
   private struct SettingsHarness: View {
     @State private var useImperial = true
     @State private var restSeconds = 90
+    @State private var tracksRPE = true
     var body: some View {
-      SettingsSheet(useImperial: $useImperial, restSeconds: $restSeconds) {}
+      SettingsSheet(
+        useImperial: $useImperial, restSeconds: $restSeconds, tracksRPE: $tracksRPE
+      ) {}
     }
   }
 

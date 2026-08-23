@@ -25,6 +25,8 @@ public struct LoggedSetRow: Identifiable, Hashable, Sendable {
   public let machineName: String?
   public let weightKg: Double
   public let reps: Int
+  /// Effort as recorded, or `nil`. Shown only when it exists -- an absent RPE is not a zero.
+  public let rpe: Double?
   public let isWarmup: Bool
 
   public init(
@@ -34,6 +36,7 @@ public struct LoggedSetRow: Identifiable, Hashable, Sendable {
     machineName: String?,
     weightKg: Double,
     reps: Int,
+    rpe: Double? = nil,
     isWarmup: Bool
   ) {
     self.id = id
@@ -42,6 +45,7 @@ public struct LoggedSetRow: Identifiable, Hashable, Sendable {
     self.machineName = machineName
     self.weightKg = weightKg
     self.reps = reps
+    self.rpe = rpe
     self.isWarmup = isWarmup
   }
 }
@@ -149,6 +153,11 @@ public struct SessionDetailView: View {
           Text("\u{00D7} \(set.reps)")
             .font(Tokens.Text.setEntry)
             .foregroundStyle(Tokens.Color.textPrimary)
+          if let rpe = set.rpe {
+            Text("RPE \(Self.format(rpe))")
+              .font(Tokens.Text.caption)
+              .foregroundStyle(Tokens.Color.textSecondary)
+          }
           Spacer(minLength: 0)
           if set.isWarmup {
             // Marked, and excluded from the count above, because a warm-up is not training volume.
@@ -190,7 +199,8 @@ public struct SessionDetailView: View {
     let which = set.isWarmup
       ? "Warm-up set"
       : "Set \(workingOrdinal(of: set, in: group) ?? fallbackIndex + 1)"
-    return "\(which), \(loadText(set)), \(set.reps) reps"
+    let effort = set.rpe.map { ", RPE \(Self.format($0))" } ?? ""
+    return "\(which), \(loadText(set)), \(set.reps) reps\(effort)"
   }
 
   /// Grouped in logging order, and a machine change inside one movement starts a new group --

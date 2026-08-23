@@ -56,6 +56,7 @@ public struct SessionDetailScreen: View {
           machineName: $0.machineName,
           weightKg: $0.weightKg,
           reps: $0.reps,
+          rpe: $0.rpe,
           isWarmup: $0.isWarmup
         )
       }

@@ -380,6 +380,9 @@ public final class SessionCoordinator {
         // slots are renumbered, so a slot-index ordinal reissues one that is already taken.
         setOrdinal: nil,
         isWarmup: slot.isWarmup,
+        // Recorded when the lifter supplied one. The column has existed unused since the first
+        // migration.
+        rpe: slot.draft.validatedRPE,
         at: now()
       )
       exercises[exerciseIndex].markLogged(slotID: slotID, setID: setID)

@@ -196,6 +196,8 @@ public nonisolated struct LoggedSetDetail: Hashable, Sendable, Identifiable {
   public let machineName: String?
   public let weightKg: Double
   public let reps: Int
+  /// Effort as recorded, or `nil` if none was.
+  public let rpe: Double?
   public let isWarmup: Bool
   public let completedAt: Date
 
@@ -207,6 +209,7 @@ public nonisolated struct LoggedSetDetail: Hashable, Sendable, Identifiable {
     machineName: String?,
     weightKg: Double,
     reps: Int,
+    rpe: Double? = nil,
     isWarmup: Bool,
     completedAt: Date
   ) {
@@ -217,6 +220,7 @@ public nonisolated struct LoggedSetDetail: Hashable, Sendable, Identifiable {
     self.machineName = machineName
     self.weightKg = weightKg
     self.reps = reps
+    self.rpe = rpe
     self.isWarmup = isWarmup
     self.completedAt = completedAt
   }
@@ -305,6 +309,7 @@ public nonisolated struct HistoryStore {
           machineName: row.machineID.flatMap { machineNames[$0] },
           weightKg: row.weightKg,
           reps: row.reps,
+          rpe: row.rpe,
           isWarmup: row.isWarmup,
           completedAt: row.completedAt
         )

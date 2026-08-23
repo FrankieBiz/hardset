@@ -84,6 +84,16 @@ public struct PriorPerformanceSnapshot: Hashable, Sendable {
 public struct SetEntryDraft: Hashable, Sendable {
   public var weightKg: Double?
   public var reps: Int?
+  /// How hard the set was, on the 1-10 RPE scale, when the lifter chose to record it.
+  ///
+  /// Optional and **never required to log**: a set with no RPE is a complete set. The column has
+  /// existed since the first migration and nothing ever wrote to it, which for an app aimed at
+  /// people who read the training literature is a strange omission -- proximity to failure is the
+  /// variable they actually manipulate.
+  ///
+  /// The app records it and does not prescribe it. There is no target RPE, no warning for being
+  /// too far from failure, and no inference drawn from it, because none of that is established.
+  public var rpe: Double?
   /// What history suggested, retained so the UI can show "same as last time" affordances.
   public let suggestion: PriorSetRecord?
 
@@ -92,17 +102,34 @@ public struct SetEntryDraft: Hashable, Sendable {
     self.suggestion = suggestion
     self.weightKg = suggestion?.weightKg
     self.reps = suggestion?.reps
+    // Deliberately not carried forward from history. Last week's effort is not this week's, and
+    // prefilling it would put a number the lifter did not feel into their own record.
+    self.rpe = nil
   }
 
-  public init(weightKg: Double?, reps: Int?, suggestion: PriorSetRecord? = nil) {
+  public init(
+    weightKg: Double?, reps: Int?, rpe: Double? = nil, suggestion: PriorSetRecord? = nil
+  ) {
     self.weightKg = weightKg
     self.reps = reps
+    self.rpe = rpe
     self.suggestion = suggestion
   }
 
   /// True only when both fields hold a real, usable value. Bind the log control's
   /// enabled state to this so an untouched row can never be written.
+  ///
+  /// RPE is not part of this. Requiring it would make an optional field mandatory by the back door.
   public var isLoggable: Bool { resolved() != nil }
+
+  /// A recorded RPE, if it is one the scale actually has.
+  ///
+  /// Clamped rather than trusted: the scale runs 1 to 10 in half points, and a value outside that
+  /// is an input error rather than a very hard set.
+  public var validatedRPE: Double? {
+    guard let rpe, rpe >= 1, rpe <= 10 else { return nil }
+    return (rpe * 2).rounded() / 2
+  }
 
   /// The values to persist, or `nil` if this row is not complete.
   /// Zero reps is not a logged set, and negative load is not a load.

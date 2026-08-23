@@ -13,6 +13,7 @@ import SwiftUI
 public struct ExerciseSectionView: View {
   @Binding private var state: ExerciseLogState
   private let unit: WeightUnit
+  private let tracksRPE: Bool
   private let onLogSet: (SetSlot) -> Void
   private let onUnlogSet: ((SetSlot) -> Void)?
   private let onRemoveSlot: ((SetSlot) -> Void)?
@@ -26,6 +27,7 @@ public struct ExerciseSectionView: View {
   public init(
     state: Binding<ExerciseLogState>,
     unit: WeightUnit,
+    tracksRPE: Bool = false,
     onLogSet: @escaping (SetSlot) -> Void,
     onUnlogSet: ((SetSlot) -> Void)? = nil,
     onRemoveSlot: ((SetSlot) -> Void)? = nil,
@@ -35,6 +37,7 @@ public struct ExerciseSectionView: View {
   ) {
     self._state = state
     self.unit = unit
+    self.tracksRPE = tracksRPE
     self.onLogSet = onLogSet
     self.onUnlogSet = onUnlogSet
     self.onRemoveSlot = onRemoveSlot
@@ -66,6 +69,7 @@ public struct ExerciseSectionView: View {
               LoadIntensity.fraction(weightKg: $0, heaviestKg: state.heaviestPriorKg)
             },
             isBodyweight: state.modality == .bodyweight,
+            tracksRPE: tracksRPE,
             onLog: { onLogSet(slot) },
             onUnlog: onUnlogSet.map { handler in { handler(slot) } },
             // Only offered when there is more than one row: removing the last one would leave a

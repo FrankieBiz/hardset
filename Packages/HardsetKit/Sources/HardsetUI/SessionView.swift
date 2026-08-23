@@ -14,6 +14,7 @@ import SwiftUI
 public struct SessionView: View {
   @Binding private var exercises: [ExerciseLogState]
   private let unit: WeightUnit
+  private let tracksRPE: Bool
   private let restState: RestTimerState
   private let restMetadata: RestMetadata?
   /// The full rest length, so the bar can draw a fraction rather than guess one.
@@ -35,6 +36,7 @@ public struct SessionView: View {
   public init(
     exercises: Binding<[ExerciseLogState]>,
     unit: WeightUnit,
+    tracksRPE: Bool = false,
     restState: RestTimerState = .idle,
     restMetadata: RestMetadata? = nil,
     restTotal: Duration? = nil,
@@ -54,6 +56,7 @@ public struct SessionView: View {
   ) {
     self._exercises = exercises
     self.unit = unit
+    self.tracksRPE = tracksRPE
     self.restState = restState
     self.restMetadata = restMetadata
     self.restTotal = restTotal
@@ -116,6 +119,7 @@ public struct SessionView: View {
           ExerciseSectionView(
             state: $exercise,
             unit: unit,
+            tracksRPE: tracksRPE,
             onLogSet: { slot in onLogSet(exercise.id, slot) },
             onUnlogSet: onUnlogSet.map { handler in
               { slot in handler(exercise.id, slot) }

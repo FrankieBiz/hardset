@@ -5,6 +5,8 @@ import SwiftUI
 public enum SetRowField: Hashable, Sendable {
   case weight
   case reps
+  /// Effort, 1-10. Optional everywhere: a set with no RPE is a complete set.
+  case rpe
 }
 
 /// One set, ready to log in a single tap.
@@ -26,6 +28,7 @@ public struct SetRowView: View {
   @Binding private var draft: SetEntryDraft
   @State private var weightBuffer: NumericEntryBuffer
   @State private var repsBuffer: NumericEntryBuffer
+  @State private var rpeBuffer: NumericEntryBuffer
   @State private var editing: SetRowField?
 
   /// Chosen layout depends on this. At accessibility sizes the horizontal row cannot hold its
@@ -50,6 +53,8 @@ public struct SetRowView: View {
   /// True when the movement is loaded by the lifter's own body, so an empty or zero weight field
   /// means "bodyweight only" and not "no load".
   private let isBodyweight: Bool
+  /// Whether to offer the effort field at all. Off unless the lifter asked for it.
+  private let tracksRPE: Bool
   private let onLog: () -> Void
   /// Takes a logged set back. `nil` hides the affordance, which is correct wherever un-logging is
   /// not supported.
@@ -68,6 +73,7 @@ public struct SetRowView: View {
     priorNote: String? = nil,
     loadFraction: Double? = nil,
     isBodyweight: Bool = false,
+    tracksRPE: Bool = false,
     onLog: @escaping () -> Void,
     onUnlog: (() -> Void)? = nil,
     onRemove: (() -> Void)? = nil
@@ -81,6 +87,7 @@ public struct SetRowView: View {
     self.priorNote = priorNote
     self.loadFraction = loadFraction
     self.isBodyweight = isBodyweight
+    self.tracksRPE = tracksRPE
     self.onLog = onLog
     self.onUnlog = onUnlog
     self.onRemove = onRemove
@@ -100,6 +107,14 @@ public struct SetRowView: View {
         allowsDecimal: false,
         maximumIntegerDigits: 3,
         maximumFractionDigits: 0
+      )
+    )
+    // Two digits and one decimal place: the scale runs to 10 and moves in halves.
+    self._rpeBuffer = State(
+      initialValue: NumericEntryBuffer(
+        value: draft.wrappedValue.rpe,
+        maximumIntegerDigits: 2,
+        maximumFractionDigits: 1
       )
     )
   }
@@ -146,6 +161,7 @@ public struct SetRowView: View {
     }
     .accessibilityAction(named: Text("Edit weight")) { editing = .weight }
     .accessibilityAction(named: Text("Edit reps")) { editing = .reps }
+    .accessibilityAction(named: Text("Edit effort")) { if tracksRPE { editing = .rpe } }
     // VoiceOver cannot long-press, so the same action is named here. Without this the row would be
     // uncorrectable for anyone using it.
     .accessibilityActions {
@@ -178,6 +194,11 @@ public struct SetRowView: View {
       maximumIntegerDigits: 3,
       maximumFractionDigits: 0
     )
+    rpeBuffer = NumericEntryBuffer(
+      value: draft.rpe,
+      maximumIntegerDigits: 2,
+      maximumFractionDigits: 1
+    )
   }
 
   // MARK: - Layouts
@@ -191,6 +212,7 @@ public struct SetRowView: View {
         .frame(minWidth: 78, alignment: .leading)
       valueField(.weight, buffer: weightBuffer, suffix: weightSuffix)
       valueField(.reps, buffer: repsBuffer, suffix: "reps")
+      if tracksRPE { valueField(.rpe, buffer: rpeBuffer, suffix: "RPE") }
       logButton
     }
   }
@@ -207,6 +229,7 @@ public struct SetRowView: View {
       }
       valueField(.weight, buffer: weightBuffer, suffix: weightSuffix)
       valueField(.reps, buffer: repsBuffer, suffix: "reps")
+      if tracksRPE { valueField(.rpe, buffer: rpeBuffer, suffix: "RPE") }
       logButton
         .frame(maxWidth: .infinity)
     }
@@ -343,10 +366,15 @@ public struct SetRowView: View {
   }
 
   private func padSheet(for field: SetRowField) -> some View {
-    let binding: Binding<NumericEntryBuffer> =
-      field == .weight
-      ? Binding(get: { weightBuffer }, set: { weightBuffer = $0; pushToDraft() })
-      : Binding(get: { repsBuffer }, set: { repsBuffer = $0; pushToDraft() })
+    let binding: Binding<NumericEntryBuffer>
+    switch field {
+    case .weight:
+      binding = Binding(get: { weightBuffer }, set: { weightBuffer = $0; pushToDraft() })
+    case .reps:
+      binding = Binding(get: { repsBuffer }, set: { repsBuffer = $0; pushToDraft() })
+    case .rpe:
+      binding = Binding(get: { rpeBuffer }, set: { rpeBuffer = $0; pushToDraft() })
+    }
 
     return NumericPad(buffer: binding) { editing = nil }
       .presentationDetents([.height(360)])
@@ -365,6 +393,8 @@ public struct SetRowView: View {
   private func pushToDraft() {
     draft.weightKg = weightBuffer.value.map(unit.toKilograms)
     draft.reps = repsBuffer.value.map { Int($0) }
+    // No `?? 0` here either: an untouched effort field means no RPE, not an RPE of zero.
+    draft.rpe = rpeBuffer.value
   }
 
   private var previousDescription: String {

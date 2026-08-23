@@ -257,3 +257,51 @@ struct BodyweightLoggingTests {
     #expect(state(modality: .barbell).modality == .barbell)
   }
 }
+
+/// Effort. The column has existed since the first migration and nothing ever wrote to it, which
+/// for an app aimed at people who read the training literature is a strange omission -- proximity
+/// to failure is the variable they actually manipulate.
+@Suite("RPE is recorded, optional, and never prescribed")
+struct RPETests {
+  @Test("A set with no RPE is still a complete set")
+  func rpeIsNeverRequired() {
+    var draft = SetEntryDraft(weightKg: 100, reps: 5)
+    #expect(draft.rpe == nil)
+    #expect(draft.isLoggable)
+
+    draft.rpe = 8
+    #expect(draft.isLoggable)
+  }
+
+  @Test("Values are snapped to the half point the scale actually uses")
+  func snapsToHalfPoints() {
+    #expect(SetEntryDraft(weightKg: 100, reps: 5, rpe: 8.4).validatedRPE == 8.5)
+    #expect(SetEntryDraft(weightKg: 100, reps: 5, rpe: 8.2).validatedRPE == 8.0)
+    #expect(SetEntryDraft(weightKg: 100, reps: 5, rpe: 7.5).validatedRPE == 7.5)
+  }
+
+  @Test("Anything off the scale is an input error, not a very hard set")
+  func rejectsOffScaleValues() {
+    #expect(SetEntryDraft(weightKg: 100, reps: 5, rpe: 0).validatedRPE == nil)
+    #expect(SetEntryDraft(weightKg: 100, reps: 5, rpe: 11).validatedRPE == nil)
+    #expect(SetEntryDraft(weightKg: 100, reps: 5, rpe: -3).validatedRPE == nil)
+    #expect(SetEntryDraft(weightKg: 100, reps: 5, rpe: nil).validatedRPE == nil)
+  }
+
+  @Test("The ends of the scale are inside it")
+  func boundsAreInclusive() {
+    #expect(SetEntryDraft(weightKg: 100, reps: 5, rpe: 1).validatedRPE == 1)
+    #expect(SetEntryDraft(weightKg: 100, reps: 5, rpe: 10).validatedRPE == 10)
+  }
+
+  @Test("Effort is never carried forward from history")
+  func notPrefilledFromSuggestion() {
+    let draft = SetEntryDraft(
+      suggestion: PriorSetRecord(weightKg: 100, reps: 5, completedAt: .distantPast)
+    )
+    // Last week's effort is not this week's. Prefilling it would put a number the lifter did not
+    // feel into their own record.
+    #expect(draft.weightKg == 100)
+    #expect(draft.rpe == nil)
+  }
+}

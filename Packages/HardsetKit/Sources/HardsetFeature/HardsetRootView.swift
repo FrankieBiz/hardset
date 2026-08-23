@@ -61,6 +61,9 @@ public struct HardsetRootView: View {
   /// no basis for prescribing a rest length, so it waits to be told one. Stored in seconds rather
   /// than as a `Duration` because `@AppStorage` cannot hold one.
   @AppStorage("hardset.restSeconds") private var restSeconds = 0
+  /// Whether the set row offers an effort field. Off by default: an unused column in the logger is
+  /// clutter in the one place the app cannot afford it.
+  @AppStorage("hardset.tracksRPE") private var tracksRPE = false
   /// Why the last gym write failed, in the user's words. A `try?` here hid a real failure behind a
   /// button that appeared to do nothing, which is precisely what this app is not allowed to do.
   @State private var gymError: String?
@@ -151,7 +154,8 @@ public struct HardsetRootView: View {
             .sheet(isPresented: $isShowingSettings) {
               SettingsSheet(
                 useImperial: $useImperial,
-                restSeconds: $restSeconds
+                restSeconds: $restSeconds,
+                tracksRPE: $tracksRPE
               ) { isShowingSettings = false }
             }
         }
@@ -204,6 +208,7 @@ public struct HardsetRootView: View {
       LiveSessionScreen(
         coordinator: coordinator,
         unit: unit,
+        tracksRPE: tracksRPE,
         hooks: hooks,
         catalog: environment.catalog,
         gyms: environment.gyms,
