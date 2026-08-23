@@ -30,6 +30,10 @@ public struct RestBarView: View {
   /// Linear, not eased. The rule represents elapsed time, and easing it would show time slowing
   /// down.
   @State private var fraction: Double = 1
+  /// Bumped at T-3, T-2 and T-1 so a haptic can fire without anything polling.
+  @State private var finalSecondsPulse = 0
+  /// Bumped once when the rest actually runs out, as opposed to being skipped.
+  @State private var completions = 0
   @Environment(\.accessibilityReduceMotion) private var reduceMotion
   private let onAdjust: (Duration) -> Void
   private let onPauseResume: () -> Void
@@ -89,6 +93,15 @@ public struct RestBarView: View {
       .accessibilityLabel(spokenLabel)
       .onAppear { retarget() }
       .onChange(of: state) { retarget() }
+      // Four one-shot sleeps derived from the deadline, not a ticking clock: nothing redraws, and
+      // `.task(id:)` cancels the whole thing the moment the state changes -- so skipping or
+      // pausing silences the cues rather than needing to be handled.
+      .task(id: state) { await scheduleCues() }
+      // A tap at three, two and one second left. In the foreground only, and that is a courtesy
+      // rather than the mechanism: AlarmKit owns the alert that reaches a lifter whose phone is in
+      // their pocket, and it is the only thing that survives Focus and a force-quit.
+      .sensoryFeedback(.impact(weight: .light), trigger: finalSecondsPulse)
+      .sensoryFeedback(.success, trigger: completions)
     }
   }
 
@@ -106,6 +119,29 @@ public struct RestBarView: View {
       .frame(height: 2)
       .accessibilityHidden(true)
     }
+  }
+
+  /// Waits out the last three seconds and the finish, one sleep at a time.
+  ///
+  /// Deliberately not a loop and not a timer. Each cue is a single suspension until an absolute
+  /// instant, so the view never re-renders on its account, and cancellation is automatic.
+  private func scheduleCues() async {
+    guard case .running(let endsAt) = state else { return }
+
+    for secondsRemaining in [3.0, 2.0, 1.0] {
+      let wait = endsAt.addingTimeInterval(-secondsRemaining).timeIntervalSinceNow
+      guard wait > 0 else { continue }
+      try? await Task.sleep(for: .seconds(wait))
+      guard !Task.isCancelled else { return }
+      finalSecondsPulse += 1
+    }
+
+    let toEnd = endsAt.timeIntervalSinceNow
+    if toEnd > 0 {
+      try? await Task.sleep(for: .seconds(toEnd))
+      guard !Task.isCancelled else { return }
+    }
+    completions += 1
   }
 
   /// Snaps to the true position, then runs out linearly over exactly the time remaining.

@@ -52,6 +52,8 @@ public struct RestTimerHooks {
 public struct LiveSessionScreen: View {
   @State private var coordinator: SessionCoordinator
   @State private var restMetadata: RestMetadata?
+  /// Bumped on every accepted machine change, purely to drive the haptic.
+  @State private var machineChangeCount = 0
   @State private var isPickerPresented = false
   /// Set when finishing failed and the session is still open, so the user is told rather than
   /// silently returned to a start screen while their workout is stranded.
@@ -122,6 +124,9 @@ public struct LiveSessionScreen: View {
       onShowHistory: progression == nil ? nil : { historyTarget = MachineTarget(id: $0) },
       onFinish: finish
     )
+    // Changing equipment mid-exercise re-prefills every unlogged row from the new machine's
+    // history, which is a big enough change to confirm by feel.
+    .sensoryFeedback(.selection, trigger: machineChangeCount)
     .sheet(isPresented: $isPickerPresented) {
       NavigationStack {
         ExercisePickerView(query: $pickerQuery, entries: pickerEntries) { entry in
@@ -236,7 +241,10 @@ public struct LiveSessionScreen: View {
       }
     // The coordinator persists before it mutates memory, and reads the increment from the machines
     // table itself, so nothing here needs to know either.
-    _ = coordinator.changeMachine(to: machineID, machineName: name, inExercise: target)
+    if coordinator.changeMachine(to: machineID, machineName: name, inExercise: target) {
+      // Only on a change that actually took. A failed write must not feel like a success.
+      machineChangeCount += 1
+    }
   }
 
   /// Same argument-passing rule as `addGym`: the name arrives as a parameter, because reading it

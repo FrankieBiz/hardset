@@ -564,15 +564,21 @@ the set) is right.
 `.sensoryFeedback(_:trigger:)` only. No `UIFeedbackGenerator` — it cannot be tied to a state change
 and so cannot satisfy M4.
 
-| Event | Feedback |
-|---|---|
-| Set logged | `.success` |
-| Set un-logged / removed | `.impact(weight: .light)` |
-| Rest complete, foreground | `.success` |
-| Rest final 3 s | `.impact(weight: .light)` ×3 |
-| Personal record | `.impact(flexibility: .solid, intensity: 0.7)` |
-| Machine changed mid-exercise | `.selection` |
-| Destructive confirmed | `.warning` |
+| Event | Feedback | Status |
+|---|---|---|
+| Set logged | `.success` | shipped |
+| Rest final 3 s | `.impact(weight: .light)` ×3 | shipped |
+| Rest complete, foreground | `.success` | shipped |
+| Personal record | `.impact(flexibility: .solid, intensity: 0.7)` | shipped |
+| Machine changed mid-exercise | `.selection` | shipped |
+| Set un-logged / removed | `.impact(weight: .light)` | **no host** — there is no un-log path |
+| Destructive confirmed | `.warning` | **no host** — nothing destructive exists yet |
+
+The rest cues are scheduled as individual suspensions until an absolute instant, never as a timer:
+nothing re-renders on their account, and `.task(id:)` cancels them when the state changes, so
+skipping or pausing silences them without a special case. They fire in the foreground only, which
+is a courtesy rather than the mechanism — AlarmKit owns the alert that reaches a lifter whose phone
+is in their pocket.
 
 A haptic marks a *committed state change*. Never on scroll, never on appear, never on a value the
 app merely recalculated.

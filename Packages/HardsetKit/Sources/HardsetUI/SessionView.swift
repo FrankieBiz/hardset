@@ -151,6 +151,10 @@ public struct SessionView: View {
       .safeAreaPadding(.bottom, restState == .idle ? 0 : 72)
     }
     .background(Tokens.Color.ground)
+    // A record is stated, not celebrated -- but it is worth feeling, because the lifter is looking
+    // at the bar and not at the screen. Keyed on the count so a second record in the same session
+    // fires again.
+    .sensoryFeedback(.impact(flexibility: .solid, intensity: 0.7), trigger: records.count)
     .safeAreaInset(edge: .bottom) {
       RestBarView(
         state: restState,
