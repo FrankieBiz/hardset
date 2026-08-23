@@ -206,3 +206,54 @@ struct CommitSettlingTests {
     #expect(settleMilliseconds(forIntensity: nil) == settleMilliseconds(forIntensity: 0))
   }
 }
+
+/// Bodyweight movements. Five ship in the catalogue, and before this a pull-up was recorded as
+/// "0 kg x 8" -- a number that reads as no load at all.
+@Suite("A bodyweight set is not an unloaded set")
+struct BodyweightLoggingTests {
+  private func state(modality: ExerciseModality?) -> ExerciseLogState {
+    ExerciseLogState.build(
+      exerciseID: ExerciseID(),
+      exerciseName: "Pull-up",
+      modality: modality,
+      snapshot: .empty(capturedAt: .distantPast)
+    )
+  }
+
+  @Test("A bodyweight movement with no history starts at zero added load")
+  func bodyweightStartsAtZero() {
+    let row = state(modality: .bodyweight)
+    // Zero, not nil. Nil would leave the row unloggable until the lifter typed a "0" for a set
+    // that genuinely had no added weight.
+    #expect(row.slots.first?.draft.weightKg == 0)
+  }
+
+  @Test("Only reps are missing, so one entry makes it loggable")
+  func onlyRepsAreOutstanding() {
+    var row = state(modality: .bodyweight)
+    #expect(row.slots.first?.draft.isLoggable == false)
+    row.slots[0].draft.reps = 8
+    #expect(row.slots[0].draft.isLoggable)
+  }
+
+  @Test("A loaded movement with no history stays empty rather than claiming zero")
+  func loadedMovementDoesNotAssumeZero() {
+    for modality in [ExerciseModality.barbell, .dumbbell, .machine, .cable] {
+      let row = state(modality: modality)
+      // Zero kilograms on a barbell movement is a claim about the lift. Absence is the honest
+      // starting state.
+      #expect(row.slots.first?.draft.weightKg == nil, "\(modality) should not assume 0 kg")
+    }
+  }
+
+  @Test("An unknown modality is treated as loaded, which is the safe direction")
+  func unknownModalityStaysEmpty() {
+    #expect(state(modality: nil).slots.first?.draft.weightKg == nil)
+  }
+
+  @Test("Modality survives onto the log state so the row can render it")
+  func modalityIsCarried() {
+    #expect(state(modality: .bodyweight).modality == .bodyweight)
+    #expect(state(modality: .barbell).modality == .barbell)
+  }
+}

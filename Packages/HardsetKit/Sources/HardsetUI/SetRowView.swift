@@ -47,6 +47,9 @@ public struct SetRowView: View {
   /// there is no history to measure against. Drives the weight of the commit animation only --
   /// it is never displayed, and `nil` deliberately produces no effect rather than a middle.
   private let loadFraction: Double?
+  /// True when the movement is loaded by the lifter's own body, so an empty or zero weight field
+  /// means "bodyweight only" and not "no load".
+  private let isBodyweight: Bool
   private let onLog: () -> Void
 
   public init(
@@ -58,6 +61,7 @@ public struct SetRowView: View {
     previous: PriorSetRecord? = nil,
     priorNote: String? = nil,
     loadFraction: Double? = nil,
+    isBodyweight: Bool = false,
     onLog: @escaping () -> Void
   ) {
     self._draft = draft
@@ -68,6 +72,7 @@ public struct SetRowView: View {
     self.previous = previous
     self.priorNote = priorNote
     self.loadFraction = loadFraction
+    self.isBodyweight = isBodyweight
     self.onLog = onLog
 
     // Seeded once, from whatever the caller already resolved as the suggestion. Note the
@@ -146,7 +151,7 @@ public struct SetRowView: View {
       ordinalBadge
       previousBlock
         .frame(minWidth: 78, alignment: .leading)
-      valueField(.weight, buffer: weightBuffer, suffix: unit.abbreviation)
+      valueField(.weight, buffer: weightBuffer, suffix: weightSuffix)
       valueField(.reps, buffer: repsBuffer, suffix: "reps")
       logButton
     }
@@ -162,7 +167,7 @@ public struct SetRowView: View {
         previousBlock
         Spacer(minLength: 0)
       }
-      valueField(.weight, buffer: weightBuffer, suffix: unit.abbreviation)
+      valueField(.weight, buffer: weightBuffer, suffix: weightSuffix)
       valueField(.reps, buffer: repsBuffer, suffix: "reps")
       logButton
         .frame(maxWidth: .infinity)
@@ -213,6 +218,28 @@ public struct SetRowView: View {
     return isLogged ? Tokens.Color.textSecondary : Tokens.Color.textPrimary
   }
 
+  /// "+ kg" on a bodyweight movement, because whatever is typed there is *added* load. A pull-up
+  /// logged with an empty field is not an unloaded set.
+  private var weightSuffix: String {
+    isBodyweight ? "+ \(unit.abbreviation)" : unit.abbreviation
+  }
+
+  /// What a weight field says when it holds nothing, or holds zero on a bodyweight movement.
+  ///
+  /// "Body" rather than "0" or an em dash: zero *added* load on a pull-up is the truth, and a bare
+  /// "0" reads as no load at all. Reps keep the em dash, because a set with no reps is genuinely
+  /// unrecorded.
+  private func emptyText(for field: SetRowField) -> String {
+    field == .weight && isBodyweight ? "Body" : "\u{2014}"
+  }
+
+  /// A zero on a bodyweight movement is a real value, so it renders as "Body" rather than "0".
+  private func displayText(for field: SetRowField, buffer: NumericEntryBuffer) -> String {
+    if buffer.isEmpty { return emptyText(for: field) }
+    if field == .weight, isBodyweight, buffer.value == 0 { return "Body" }
+    return buffer.displayText
+  }
+
   private func valueField(
     _ field: SetRowField,
     buffer: NumericEntryBuffer,
@@ -223,7 +250,7 @@ public struct SetRowView: View {
     } label: {
       HStack(alignment: .firstTextBaseline, spacing: Tokens.Spacing.tight) {
         // An empty field shows an em dash, never "0" — a zero on screen reads as a value.
-        Text(buffer.isEmpty ? "—" : buffer.displayText)
+        Text(displayText(for: field, buffer: buffer))
           .font(Tokens.Text.setEntry)
           .foregroundStyle(valueInk(isEmpty: buffer.isEmpty))
           // Kilograms fit in four characters; pounds need six ("132.28"), and the field wrapped
@@ -231,9 +258,12 @@ public struct SetRowView: View {
           // between sets.
           .lineLimit(1)
           .minimumScaleFactor(0.6)
-        Text(suffix)
-          .font(Tokens.Text.caption)
-          .foregroundStyle(Tokens.Color.textSecondary)
+        // Suppressed while the field reads "Body": "Body + kg" is not a thing.
+        if !(field == .weight && isBodyweight && (buffer.isEmpty || buffer.value == 0)) {
+          Text(suffix)
+            .font(Tokens.Text.caption)
+            .foregroundStyle(Tokens.Color.textSecondary)
+        }
       }
       .frame(maxWidth: .infinity, minHeight: Tokens.loggerTapTarget)
       .contentShape(Rectangle())

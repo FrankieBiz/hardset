@@ -39,6 +39,12 @@ public struct ExerciseLogState: Hashable, Sendable, Identifiable {
   /// `changeMachine`.
   public private(set) var machineID: MachineID?
   public let exerciseName: String
+  /// How the movement is loaded, when known.
+  ///
+  /// Needed because a bodyweight set is not an unloaded set. Five bodyweight movements ship, and
+  /// logging a pull-up produced "0 kg x 8" -- indistinguishable from no load at all. The row uses
+  /// this to say "added" instead, so zero reads as bodyweight rather than as nothing.
+  public let modality: ExerciseModality?
   /// Shown on the Lock Screen while resting, so the user knows which station they left.
   public private(set) var machineName: String?
   /// Set to the machine's real load step when known, so a suggested load is achievable.
@@ -69,6 +75,7 @@ public struct ExerciseLogState: Hashable, Sendable, Identifiable {
     exerciseID: ExerciseID,
     machineID: MachineID? = nil,
     exerciseName: String,
+    modality: ExerciseModality? = nil,
     machineName: String? = nil,
     machineIncrementKg: Double? = nil,
     prior: PriorPerformance?,
@@ -79,6 +86,7 @@ public struct ExerciseLogState: Hashable, Sendable, Identifiable {
     self.exerciseID = exerciseID
     self.machineID = machineID
     self.exerciseName = exerciseName
+    self.modality = modality
     self.machineName = machineName
     self.machineIncrementKg = machineIncrementKg
     self.prior = prior
@@ -99,6 +107,7 @@ public struct ExerciseLogState: Hashable, Sendable, Identifiable {
     exerciseID: ExerciseID,
     machineID: MachineID? = nil,
     exerciseName: String,
+    modality: ExerciseModality? = nil,
     machineName: String? = nil,
     machineIncrementKg: Double? = nil,
     snapshot: PriorPerformanceSnapshot,
@@ -120,13 +129,22 @@ public struct ExerciseLogState: Hashable, Sendable, Identifiable {
 
     let rowCount = plannedSets ?? prior.map { max($0.lastSets.count, 1) } ?? 1
     let slots = (0..<max(rowCount, 1)).map { index in
-      SetSlot(draft: SetEntryDraft(suggestion: prior?.suggestion(forSetIndex: index)))
+      let suggestion = prior?.suggestion(forSetIndex: index)
+      // A bodyweight movement with no history starts at zero *added* load, which is the truth
+      // rather than a guess -- and it is what makes a pull-up loggable by typing only reps.
+      // Without it the weight field is empty, `isLoggable` is false, and the lifter has to type a
+      // "0" to record a set that had no added weight.
+      if suggestion == nil, modality == .bodyweight {
+        return SetSlot(draft: SetEntryDraft(weightKg: 0, reps: nil))
+      }
+      return SetSlot(draft: SetEntryDraft(suggestion: suggestion))
     }
 
     return ExerciseLogState(
       exerciseID: exerciseID,
       machineID: machineID,
       exerciseName: exerciseName,
+      modality: modality,
       machineName: machineName,
       machineIncrementKg: machineIncrementKg,
       prior: prior,

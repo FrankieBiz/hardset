@@ -56,6 +56,7 @@ public struct ExerciseSectionView: View {
             loadFraction: slot.draft.weightKg.flatMap {
               LoadIntensity.fraction(weightKg: $0, heaviestKg: state.heaviestPriorKg)
             },
+            isBodyweight: state.modality == .bodyweight,
             onLog: { onLogSet(slot) }
           )
           .clipShape(RoundedRectangle(cornerRadius: Tokens.Radius.control))

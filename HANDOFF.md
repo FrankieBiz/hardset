@@ -238,6 +238,14 @@ by a future session that finds them in the Elos code and assumes they were an ov
   the repo's Unlicense never covered the scraped photos.
 - **Streaks, a feed, and social.**
 
+**Known limit, deliberate.** Tonnage for a bodyweight set counts added load only, so a session of
+pull-ups reports close to zero volume. Converting bodyweight into a load would need a per-exercise
+fraction of the lifter's mass -- a pull-up is not a push-up -- and no such figure is established
+here. Set counts and per-muscle volume are unaffected, and the summary's hero number is working
+sets rather than tonnage, so nothing on screen is wrong; it is simply narrower than it looks.
+Recording bodyweight (`bodyweightEntries` exists, deliberately unsynced per DECISIONS #5) is the
+prerequisite if that ever changes.
+
 **Worth taking later, in this order.**
 1. **How-to text** -- instructions without the unlicensed imagery. Cheap, useful, and it needs a
    licence decision rather than engineering.

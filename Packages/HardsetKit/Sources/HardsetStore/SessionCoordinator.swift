@@ -148,6 +148,7 @@ public final class SessionCoordinator {
         exerciseID: planned.exerciseID,
         machineID: planned.machineID,
         exerciseName: planned.exerciseName,
+        modality: planned.modality,
         machineName: planned.machineName,
         machineIncrementKg: planned.machineID.flatMap { increments[$0] }
           ?? planned.machineIncrementKg,
@@ -280,6 +281,7 @@ public final class SessionCoordinator {
   public func addExercise(
     exerciseID: ExerciseID,
     exerciseName: String,
+    modality: ExerciseModality? = nil,
     machineID: MachineID? = nil,
     machineName: String? = nil,
     machineIncrementKg: Double? = nil,
@@ -304,6 +306,7 @@ public final class SessionCoordinator {
         exerciseID: exerciseID,
         machineID: machineID,
         exerciseName: exerciseName,
+        modality: modality,
         machineName: machineName,
         machineIncrementKg: resolvedIncrement,
         snapshot: snapshot,
@@ -331,6 +334,7 @@ public final class SessionCoordinator {
     addExercise(
       exerciseID: entry.id,
       exerciseName: entry.name,
+      modality: entry.modality,
       machineID: machineID,
       machineName: machineName,
       machineIncrementKg: machineIncrementKg,
@@ -499,6 +503,9 @@ public struct PlannedExercise: Hashable, Sendable {
   public let exerciseID: ExerciseID
   public let machineID: MachineID?
   public let exerciseName: String
+  /// How the movement is loaded, when known. Carried so a planned pull-up is still a bodyweight
+  /// movement by the time it reaches the set row.
+  public var modality: ExerciseModality?
   public let machineName: String?
   public let machineIncrementKg: Double?
   public let plannedSets: Int?
@@ -507,6 +514,7 @@ public struct PlannedExercise: Hashable, Sendable {
     exerciseID: ExerciseID,
     machineID: MachineID? = nil,
     exerciseName: String,
+    modality: ExerciseModality? = nil,
     machineName: String? = nil,
     machineIncrementKg: Double? = nil,
     plannedSets: Int? = nil
@@ -514,6 +522,7 @@ public struct PlannedExercise: Hashable, Sendable {
     self.exerciseID = exerciseID
     self.machineID = machineID
     self.exerciseName = exerciseName
+    self.modality = modality
     self.machineName = machineName
     self.machineIncrementKg = machineIncrementKg
     self.plannedSets = plannedSets

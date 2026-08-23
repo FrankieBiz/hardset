@@ -230,10 +230,10 @@ public nonisolated struct LoggerStore {
       guard !rows.isEmpty else { return [] }
 
       let exerciseIDs = Array(Set(rows.map(\.exerciseID)))
-      let names = try Exercise
+      let exercises = try Exercise
         .where { $0.id.in(exerciseIDs) }
         .fetchAll(db)
-        .reduce(into: [UUID: String]()) { $0[$1.id] = $1.name }
+        .reduce(into: [UUID: Exercise]()) { $0[$1.id] = $1 }
 
       let machineIDs = Array(Set(rows.compactMap(\.machineID)))
       let machines =
@@ -251,7 +251,9 @@ public nonisolated struct LoggerStore {
           machineID: row.machineID.map(MachineID.init(rawValue:)),
           // A missing name means a deleted exercise row, which the foreign key should prevent.
           // Shown as unknown rather than crashing a recovery path.
-          exerciseName: names[row.exerciseID] ?? "Unknown movement",
+          exerciseName: exercises[row.exerciseID]?.name ?? "Unknown movement",
+          // Read back from storage so a recovered session still knows a pull-up is bodyweight.
+          modality: exercises[row.exerciseID].flatMap { ExerciseModality(rawValue: $0.modality) },
           machineName: row.machineID.flatMap { machines[$0]?.name },
           position: row.position,
           plannedSets: row.plannedSets,
@@ -429,6 +431,8 @@ public nonisolated struct PlannedExerciseRecord: Hashable, Sendable, Identifiabl
   public let exerciseID: ExerciseID
   public let machineID: MachineID?
   public let exerciseName: String
+  /// How the movement is loaded, when the stored value is a modality this build knows.
+  public let modality: ExerciseModality?
   public let machineName: String?
   public let position: Int
   public let plannedSets: Int?
