@@ -123,7 +123,13 @@ public struct HardsetRootView: View {
       // is cheap because `Tokens.Color.dynamic` already has a slot waiting for it.
       // Keeps a live session in step with the setting. Without this, turning the rest timer on
       // mid-workout silently does nothing until the next session.
-      .onChange(of: resolvedRest) { _, updated in coordinator?.restAfterSet = updated }
+      .onChange(of: resolvedRest) { _, updated in
+        coordinator?.restAfterSet = updated
+        // Asked for the first time the lifter actually chooses a rest length. Nothing in the app
+        // ever requested AlarmKit permission, so every schedule on a fresh install was refused and
+        // the timer counted down in silence.
+        if updated != nil { Task { await hooks.requestAuthorization() } }
+      }
       // The screen stays awake while a workout is open, and only while one is open.
       //
       // A lifter sets the phone down between sets and picks it up ninety seconds later. Without
@@ -185,7 +191,8 @@ public struct HardsetRootView: View {
             restSeconds: $restSeconds,
             tracksRPE: $tracksRPE,
             bodyweight: environment.bodyweight,
-            unit: unit
+            unit: unit,
+            restAlertsDenied: hooks.isDenied()
           ) { isShowingSettings = false }
         }
     }

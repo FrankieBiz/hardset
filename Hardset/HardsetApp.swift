@@ -76,6 +76,14 @@ private struct RootView: View {
 
   @Dependency(\.defaultDatabase) private var database
 
+  /// Persists the rest timer so it survives the app being killed.
+  ///
+  /// `deviceRestTimer` had no reader and no writer while Settings promised the timer keeps running
+  /// through a force-quit. AlarmKit's alert did survive; the app's own state did not, so on relaunch
+  /// the bar was gone and the alarm's id was lost with it -- leaving an alert scheduled that nothing
+  /// could cancel.
+  private var restStore: RestTimerStore { RestTimerStore(database: database) }
+
   var body: some View {
     HardsetRootView(
       environment: HardsetEnvironment(database: database),
@@ -94,7 +102,11 @@ private struct RootView: View {
           // avoid a second copy of that state here.
           if restTimer.state.isRunning { restTimer.pause() } else { restTimer.resume() }
         },
-        cancel: { restTimer.cancel() }
+        cancel: { restTimer.cancel() },
+        // Nothing requested AlarmKit permission anywhere in the app, so every schedule on a fresh
+        // install was refused and the rest timer counted down without ever alerting.
+        requestAuthorization: { await restTimer.requestAuthorizationIfNeeded() },
+        isDenied: { restTimer.isDenied }
       ),
       // No default rest prescription. A rest duration is a training decision, and inventing 90
       // seconds here would be the app asserting something it has no basis for. This becomes a
@@ -102,6 +114,15 @@ private struct RootView: View {
       restAfterSet: nil
     )
     .task {
+      // Restored before anything else, so a rest still running when the app was killed comes back
+      // instead of silently continuing as an alarm with no visible countdown.
+      restTimer.persist = { state, alarmID in
+        try? restStore.save(state: state, alarmID: alarmID, sessionID: nil)
+      }
+      if let stored = try? restStore.load() {
+        restTimer.restore(state: stored.state, alarmID: stored.alarmID)
+      }
+
       // Sync starts after the UI exists, so a CloudKit hiccup cannot block launch.
       do {
         syncEngine = try HardsetDatabase.makeSyncEngine(for: database, delegate: syncDelegate)

@@ -18,6 +18,11 @@ public struct SettingsSheet: View {
   /// affordance that opens a screen with no store behind it is worse than no affordance.
   private let bodyweight: BodyweightStore?
   private let unit: WeightUnit
+  /// Whether AlarmKit has refused permission to alert.
+  ///
+  /// Shown here because this is where the promise is made: the footer below says the timer keeps
+  /// running if you leave the app, and without permission it cannot alert at all.
+  private let restAlertsDenied: Bool
   private let onDone: () -> Void
 
   /// Rest options the user can pick from. **Off is first and is the default**, because the app has
@@ -32,6 +37,7 @@ public struct SettingsSheet: View {
     tracksRPE: Binding<Bool>,
     bodyweight: BodyweightStore? = nil,
     unit: WeightUnit = .kilograms,
+    restAlertsDenied: Bool = false,
     onDone: @escaping () -> Void
   ) {
     self._useImperial = useImperial
@@ -39,6 +45,7 @@ public struct SettingsSheet: View {
     self._tracksRPE = tracksRPE
     self.bodyweight = bodyweight
     self.unit = unit
+    self.restAlertsDenied = restAlertsDenied
     self.onDone = onDone
   }
 
@@ -92,6 +99,16 @@ public struct SettingsSheet: View {
               : "A timer starts when you log a working set, never after a warm-up. It keeps "
                 + "running if you leave the app or force-quit it."
           )
+          if restSeconds != 0, restAlertsDenied {
+            // The claim directly above this is false without permission, so it is corrected in
+            // place rather than left standing.
+            Text(
+              "Hardset cannot alert you: alarm permission was declined. The countdown still runs "
+                + "on screen, but nothing will sound when it ends. You can allow alarms for "
+                + "Hardset in the Settings app."
+            )
+            .foregroundStyle(Tokens.Color.certainty(.low))
+          }
         }
 
         Section {

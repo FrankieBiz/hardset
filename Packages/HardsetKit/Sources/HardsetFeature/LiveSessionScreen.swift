@@ -24,19 +24,29 @@ public struct RestTimerHooks {
   public var adjust: (Duration) -> Void
   public var pauseOrResume: () -> Void
   public var cancel: () -> Void
+  /// Asks for permission to alert. Called when the lifter chooses a rest length, because that is
+  /// when they have just asked for the feature and a prompt makes sense.
+  public var requestAuthorization: () async -> Void
+  /// True once permission has been refused, so the app can say the timer cannot alert rather than
+  /// showing a countdown that will never make a sound.
+  public var isDenied: () -> Bool
 
   public init(
     state: @escaping () -> RestTimerState = { .idle },
     start: @escaping (Duration, RestMetadata) -> Void = { _, _ in },
     adjust: @escaping (Duration) -> Void = { _ in },
     pauseOrResume: @escaping () -> Void = {},
-    cancel: @escaping () -> Void = {}
+    cancel: @escaping () -> Void = {},
+    requestAuthorization: @escaping () async -> Void = {},
+    isDenied: @escaping () -> Bool = { false }
   ) {
     self.state = state
     self.start = start
     self.adjust = adjust
     self.pauseOrResume = pauseOrResume
     self.cancel = cancel
+    self.requestAuthorization = requestAuthorization
+    self.isDenied = isDenied
   }
 
   public static var inert: RestTimerHooks { RestTimerHooks() }
