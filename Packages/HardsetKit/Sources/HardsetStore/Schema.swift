@@ -107,6 +107,42 @@ nonisolated struct LoggedSet: Hashable, Identifiable, Sendable {
   var completedAt = Date(timeIntervalSince1970: 0)
 }
 
+// MARK: - Splits
+//
+// A partition of movements the lifter already trains, across days they chose. Note the absence of
+// any set-count column on `SplitEntry`: see the migration's note, and `docs/SPLITS-spec.md`.
+
+@Table("splits")
+nonisolated struct Split: Hashable, Identifiable, Sendable {
+  let id: UUID
+  var name = ""
+  /// Soft delete, so a plan can be put away without taking its history of edits with it.
+  var isArchived = false
+  var createdAt = Date(timeIntervalSince1970: 0)
+}
+
+@Table("splitDays")
+nonisolated struct SplitDay: Hashable, Identifiable, Sendable {
+  let id: UUID
+  var splitID: UUID
+  /// The lifter's. Two days may share a name, so this may never be used for ordering.
+  var name = ""
+  var position = 0
+  var createdAt = Date(timeIntervalSince1970: 0)
+}
+
+@Table("splitEntries")
+nonisolated struct SplitEntry: Hashable, Identifiable, Sendable {
+  let id: UUID
+  var splitDayID: UUID
+  var exerciseID: UUID
+  /// Which physical machine this movement is planned on, when the lifter has said. Naming one here
+  /// is what adds it to the gym's library — see `SplitStore.addEntry`.
+  var machineID: UUID?
+  var position = 0
+  var createdAt = Date(timeIntervalSince1970: 0)
+}
+
 @Table("bodyweightEntries")
 nonisolated struct BodyweightEntry: Hashable, Identifiable, Sendable {
   let id: UUID

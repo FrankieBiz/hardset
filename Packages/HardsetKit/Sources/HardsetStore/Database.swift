@@ -67,6 +67,9 @@ public nonisolated enum HardsetDatabase {
       Session.self,
       SessionExercise.self,
       LoggedSet.self,
+      Split.self,
+      SplitDay.self,
+      SplitEntry.self,
       containerIdentifier: containerIdentifier,
       delegate: delegate
     )

@@ -43,6 +43,9 @@ public nonisolated enum HardsetMigrations {
     "sessions",
     "sessionExercises",
     "loggedSets",
+    "splits",
+    "splitDays",
+    "splitEntries",
   ]
 
   /// Device-local tables, permanently excluded from synchronization.
@@ -232,6 +235,69 @@ public nonisolated enum HardsetMigrations {
       )
       .execute(db)
 
+      // MARK: Splits
+      //
+      // A split is a PARTITION of movements the lifter already trains, across days they chose.
+      // It is not a program and it does not prescribe. See `docs/SPLITS-spec.md`.
+      //
+      // Note what is absent: there is no `plannedSets` column anywhere below, and there never
+      // will be. `sessionExercises` has one because that is the lifter typing what they intend to
+      // do today; a split is the surface where the APP does the arranging, so a set-count column
+      // here is the hole a prescription engine climbs through. The app has no weekly set target
+      // for any muscle -- `VolumeAnalyzer.weeklyTarget` returns `.unevaluated` for all 22, and
+      // that is a finding rather than a gap -- so a generated set count would be invented. Leaving
+      // the column out makes it unrepresentable rather than merely discouraged, which is the same
+      // move as `sessions` having no duration.
+      //
+      // Adding a column later is the permitted direction under the rules at the top of this file,
+      // so recording a lifter's OWN per-movement set target stays available as a deliberate
+      // additive change.
+      try #sql(
+        """
+        CREATE TABLE "splits" (
+          "id" TEXT PRIMARY KEY NOT NULL ON CONFLICT REPLACE DEFAULT (uuid()),
+          "name" TEXT NOT NULL ON CONFLICT REPLACE DEFAULT '',
+          "isArchived" INTEGER NOT NULL ON CONFLICT REPLACE DEFAULT 0,
+          "createdAt" TEXT NOT NULL ON CONFLICT REPLACE DEFAULT (datetime('now', 'subsec'))
+        ) STRICT
+        """
+      )
+      .execute(db)
+
+      // `position` orders the days and is the only thing that does. Day names are the lifter's,
+      // and two days may legitimately share one -- so ordering may not be derived from the name.
+      try #sql(
+        """
+        CREATE TABLE "splitDays" (
+          "id" TEXT PRIMARY KEY NOT NULL ON CONFLICT REPLACE DEFAULT (uuid()),
+          "splitID" TEXT NOT NULL REFERENCES "splits"("id") ON DELETE CASCADE,
+          "name" TEXT NOT NULL ON CONFLICT REPLACE DEFAULT '',
+          "position" INTEGER NOT NULL ON CONFLICT REPLACE DEFAULT 0,
+          "createdAt" TEXT NOT NULL ON CONFLICT REPLACE DEFAULT (datetime('now', 'subsec'))
+        ) STRICT
+        """
+      )
+      .execute(db)
+
+      // Three foreign keys, which puts this table in the set SQLiteData's own ON DELETE validator
+      // SKIPS -- that check is gated on `foreignKeys.count == 1`. `SchemaTests` covers it instead.
+      //
+      // `machineID` is SET NULL rather than CASCADE, mirroring `sessionExercises`: retiring a
+      // machine must not silently delete the movement from someone's plan.
+      try #sql(
+        """
+        CREATE TABLE "splitEntries" (
+          "id" TEXT PRIMARY KEY NOT NULL ON CONFLICT REPLACE DEFAULT (uuid()),
+          "splitDayID" TEXT NOT NULL REFERENCES "splitDays"("id") ON DELETE CASCADE,
+          "exerciseID" TEXT NOT NULL REFERENCES "exercises"("id") ON DELETE CASCADE,
+          "machineID" TEXT REFERENCES "machines"("id") ON DELETE SET NULL,
+          "position" INTEGER NOT NULL ON CONFLICT REPLACE DEFAULT 0,
+          "createdAt" TEXT NOT NULL ON CONFLICT REPLACE DEFAULT (datetime('now', 'subsec'))
+        ) STRICT
+        """
+      )
+      .execute(db)
+
       // MARK: Bodyweight
       //
       // User-TYPED bodyweight only. This is the app's own data and may synchronize.
@@ -308,6 +374,19 @@ public nonisolated enum HardsetMigrations {
       try #sql(
         """
         CREATE INDEX "sessions_on_startedAt" ON "sessions"("startedAt")
+        """
+      )
+      .execute(db)
+      // Loading a split reads every day of one split, then every entry of those days.
+      try #sql(
+        """
+        CREATE INDEX "splitDays_on_splitID" ON "splitDays"("splitID")
+        """
+      )
+      .execute(db)
+      try #sql(
+        """
+        CREATE INDEX "splitEntries_on_splitDayID" ON "splitEntries"("splitDayID")
         """
       )
       .execute(db)

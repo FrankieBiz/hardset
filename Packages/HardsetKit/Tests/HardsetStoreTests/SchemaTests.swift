@@ -246,6 +246,34 @@ struct SchemaTests {
     #expect(!SchemaRules.isValidColumnName("recordID"))
   }
 
+  /// The refusal, asserted at the layer that makes it permanent.
+  ///
+  /// A split may not carry a set count. The app has no weekly set target for any muscle --
+  /// `VolumeAnalyzer.weeklyTarget` is `.unevaluated` for all 22 -- so a set count the app itself
+  /// dealt out would be invented. `columnInventoryIsPinned` would catch the column arriving, but it
+  /// would read as one more inventory line; this says why out loud, so a future session adding
+  /// `plannedSets` to a split table has to argue with a named test rather than edit a list.
+  ///
+  /// `sessionExercises.plannedSets` is deliberately exempt: that is the lifter typing what they
+  /// intend to do today, not the app arranging their week.
+  @Test("No split table carries a set count")
+  func splitsCarryNoPrescription() throws {
+    let queue = try DatabaseQueue()
+    try HardsetMigrations.migrator().migrate(queue)
+    let forbidden = ["plannedSets", "sets", "setCount", "targetSets", "reps", "weightKg"]
+    try queue.read { db in
+      for table in ["splits", "splitDays", "splitEntries"] {
+        let columns = try db.columns(in: table).map(\.name)
+        for column in columns {
+          #expect(
+            !forbidden.contains(column),
+            "\(table).\(column) makes the app able to prescribe volume it has no basis for"
+          )
+        }
+      }
+    }
+  }
+
   /// The exact column inventory, pinned.
   ///
   /// Not a structural rule like the tests above -- an inventory, and deliberately tedious to
@@ -277,6 +305,12 @@ struct SchemaTests {
       "machines": ["id", "gymID", "name", "stackIncrementKg", "isArchived", "createdAt"],
       "sessionExercises": ["id", "sessionID", "exerciseID", "machineID", "position", "plannedSets"],
       "sessions": ["id", "gymID", "title", "notes", "startedAt", "finishedAt"],
+      // No set-count column on splitEntries, deliberately. See the migration's note.
+      "splitDays": ["id", "splitID", "name", "position", "createdAt"],
+      "splitEntries": [
+        "id", "splitDayID", "exerciseID", "machineID", "position", "createdAt",
+      ],
+      "splits": ["id", "name", "isArchived", "createdAt"],
     ]
 
     let queue = try DatabaseQueue()

@@ -40,6 +40,25 @@ public struct SetID: HardsetID {
   public init(rawValue: UUID) { self.rawValue = rawValue }
 }
 
+/// A named plan: an arrangement of movements the lifter already trains, across days they chose.
+///
+/// Not a program. See `docs/SPLITS-spec.md` — a split carries no set counts, by design and by
+/// schema.
+public struct SplitID: HardsetID {
+  public let rawValue: UUID
+  public init(rawValue: UUID) { self.rawValue = rawValue }
+}
+
+public struct SplitDayID: HardsetID {
+  public let rawValue: UUID
+  public init(rawValue: UUID) { self.rawValue = rawValue }
+}
+
+public struct SplitEntryID: HardsetID {
+  public let rawValue: UUID
+  public init(rawValue: UUID) { self.rawValue = rawValue }
+}
+
 /// The unit progression is tracked against.
 ///
 /// Machine-level awareness is a product differentiator, not a detail: 80 kg on one brand's
