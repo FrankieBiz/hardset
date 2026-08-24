@@ -29,6 +29,11 @@ public struct ExercisePickerView: View {
   @Binding private var query: String
   private let entries: [CatalogEntry]
   private let onSelect: (CatalogEntry) -> Void
+  /// Defines a movement the catalogue does not have. `nil` hides the affordance.
+  ///
+  /// The catalogue is 81 entries against a defensible v1 of roughly 240, so "nothing matches" is a
+  /// routine outcome rather than an edge case -- and until now it was a dead end.
+  private let onCreate: (() -> Void)?
 
   public init(
     query: Binding<String>,
@@ -36,7 +41,8 @@ public struct ExercisePickerView: View {
     recent: [ExerciseID] = [],
     availableHere: Set<ExerciseID> = [],
     gymName: String? = nil,
-    onSelect: @escaping (CatalogEntry) -> Void
+    onSelect: @escaping (CatalogEntry) -> Void,
+    onCreate: (() -> Void)? = nil
   ) {
     self._query = query
     self.entries = entries
@@ -44,6 +50,7 @@ public struct ExercisePickerView: View {
     self.availableHere = availableHere
     self.gymName = gymName
     self.onSelect = onSelect
+    self.onCreate = onCreate
   }
 
   public var body: some View {
@@ -59,6 +66,12 @@ public struct ExercisePickerView: View {
               ? "The catalogue is empty."
               : "Nothing in the catalogue matches “\(query)”."
           )
+        } actions: {
+          // The action that actually resolves it. The empty state named the problem and offered
+          // nothing, on a catalogue that is knowingly a third of its intended size.
+          if let onCreate {
+            Button("Add it yourself", action: onCreate)
+          }
         }
       } else {
         // Relevance first, vocabulary second. Neither of these sections is a recommendation --
@@ -84,6 +97,15 @@ public struct ExercisePickerView: View {
       }
     }
     .searchable(text: $query, prompt: "Search movements")
+    .toolbar {
+      if let onCreate {
+        ToolbarItem(placement: .primaryAction) {
+          Button(action: onCreate) {
+            Label("Your own movement", systemImage: "plus")
+          }
+        }
+      }
+    }
   }
 
   private func row(_ entry: CatalogEntry) -> some View {

@@ -76,6 +76,13 @@ public struct NameEntrySheet: View {
             // there, and `keyboardType` does not exist on macOS.
             #if os(iOS)
               .keyboardType(isDecimal ? .decimalPad : .default)
+              // Autocorrect follows what the field holds, inferred from `isMultiline`: a single line
+              // here is always a *name* -- a machine, a gym, a workout -- and names are proper nouns,
+              // which is exactly what autocorrect rewrites. "Panatta" became "Panama" in the sibling
+              // sheet. A multiline field is prose, where autocorrect is wanted and capitalising every
+              // word would be wrong.
+              .autocorrectionDisabled(!isMultiline)
+              .textInputAutocapitalization(isMultiline ? .sentences : .words)
             #endif
         } footer: {
           if let footnote {

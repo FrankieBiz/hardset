@@ -80,6 +80,8 @@ public struct LiveSessionScreen: View {
   @State private var availableHere: Set<ExerciseID> = []
   @State private var gymName: String?
   @State private var isPickerPresented = false
+  /// Whether the define-your-own-movement sheet is up.
+  @State private var isCreatingExercise = false
   /// Set when finishing failed and the session is still open, so the user is told rather than
   /// silently returned to a start screen while their workout is stranded.
   @State private var finishFailed = false
@@ -101,6 +103,8 @@ public struct LiveSessionScreen: View {
   private let catalog: CatalogSeeder?
   private let gyms: GymStore?
   private let progression: ProgressionStore?
+  /// Creating the lifter's own movements. `nil` hides the affordance, which is correct in previews.
+  private let exercises: ExerciseStore?
   private let onFinished: (SessionOutcome) -> Void
 
   /// - Parameter catalog: Supplies the picker. Passing `nil` hides the add-movement affordance
@@ -115,6 +119,7 @@ public struct LiveSessionScreen: View {
     catalog: CatalogSeeder? = nil,
     gyms: GymStore? = nil,
     progression: ProgressionStore? = nil,
+    exercises: ExerciseStore? = nil,
     onFinished: @escaping (SessionOutcome) -> Void = { _ in }
   ) {
     self._coordinator = State(initialValue: coordinator)
@@ -124,6 +129,7 @@ public struct LiveSessionScreen: View {
     self.catalog = catalog
     self.gyms = gyms
     self.progression = progression
+    self.exercises = exercises
     self.onFinished = onFinished
   }
 
@@ -262,11 +268,26 @@ public struct LiveSessionScreen: View {
           entries: pickerEntries,
           recent: recentExercises,
           availableHere: availableHere,
-          gymName: gymName
-        ) { entry in
-          coordinator.addExercise(entry)
-          isPickerPresented = false
-          pickerQuery = ""
+          gymName: gymName,
+          onSelect: { entry in
+            coordinator.addExercise(entry)
+            isPickerPresented = false
+            pickerQuery = ""
+          },
+          // The catalogue is knowingly a third of its intended size, so "nothing matches" is a
+          // routine outcome. It used to be a dead end.
+          onCreate: exercises == nil ? nil : { isCreatingExercise = true }
+        )
+        .sheet(isPresented: $isCreatingExercise) {
+          NewExerciseSheet(
+            // Prefilled from the search that found nothing, so the name is not typed twice.
+            initialName: pickerQuery,
+            onCreate: { name, modality, muscle in
+              isCreatingExercise = false
+              createExercise(name: name, modality: modality, muscle: muscle)
+            },
+            onCancel: { isCreatingExercise = false }
+          )
         }
         .navigationTitle("Add movement")
         // Inline rather than large. A large title truncates instead of wrapping, so at
@@ -484,6 +505,25 @@ public struct LiveSessionScreen: View {
 
   static func format(_ value: Double) -> String {
     value == value.rounded() ? String(Int(value)) : String(format: "%.2f", value)
+  }
+
+  /// Records a movement the lifter defined, then adds it to the workout in progress.
+  ///
+  /// Added immediately rather than returned to the list: they described it in order to log it, and
+  /// making them find it again afterwards is a second decision for no reason.
+  private func createExercise(name: String, modality: ExerciseModality?, muscle: Muscle) {
+    guard let exercises else { return }
+    do {
+      let id = try exercises.createExercise(
+        name: name, modality: modality, primaryMuscle: muscle
+      )
+      coordinator.addExercise(exerciseID: id, exerciseName: name, modality: modality)
+      isPickerPresented = false
+      pickerQuery = ""
+      equipmentError = nil
+    } catch {
+      equipmentError = "That movement could not be saved. Nothing was added."
+    }
   }
 
   private func addMachine(named name: String, forExercise target: UUID) {

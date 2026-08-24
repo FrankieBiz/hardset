@@ -19,6 +19,8 @@ public struct HardsetEnvironment {
   public let volume: VolumeStore
   public let history: HistoryStore
   public let progression: ProgressionStore
+  /// Creating and retiring the lifter's own movements.
+  public let exercises: ExerciseStore
   public let gyms: GymStore
   /// Device-local, and never registered with the sync engine. See `BodyweightStore`.
   public let bodyweight: BodyweightStore
@@ -29,6 +31,7 @@ public struct HardsetEnvironment {
     self.volume = VolumeStore(database: database)
     self.history = HistoryStore(database: database)
     self.progression = ProgressionStore(database: database)
+    self.exercises = ExerciseStore(database: database)
     self.gyms = GymStore(database: database)
     self.bodyweight = BodyweightStore(database: database)
   }
@@ -274,6 +277,7 @@ public struct HardsetRootView: View {
         catalog: environment.catalog,
         gyms: environment.gyms,
         progression: environment.progression,
+        exercises: environment.exercises,
         onFinished: { outcome in
           self.finished = FinishedSession(
             outcome: outcome,
