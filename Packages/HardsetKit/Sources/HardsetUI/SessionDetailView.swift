@@ -84,6 +84,10 @@ public struct SessionDetailView: View {
   /// Opens one movement's load history. `nil` leaves the headings inert.
   private let onShowProgress: ((ExerciseID) -> Void)?
 
+  @Environment(\.dynamicTypeSize) private var typeSize
+  /// Scales with the text beside it, rather than pinning the column at 22 pt while the digits grow.
+  @ScaledMetric(relativeTo: .subheadline) private var ordinalWidth: CGFloat = 22
+
   public init(
     title: String,
     date: Date,
@@ -183,29 +187,11 @@ public struct SessionDetailView: View {
       }
 
       ForEach(Array(group.sets.enumerated()), id: \.element.id) { index, set in
-        HStack(spacing: Tokens.Spacing.regular) {
-          Text(set.isWarmup ? "W" : "\(workingOrdinal(of: set, in: group) ?? index + 1)")
-            .font(Tokens.Text.label)
-            .monospacedDigit()
-            .foregroundStyle(Tokens.Color.textSecondary)
-            .frame(minWidth: 22, alignment: .leading)
-          Text(loadText(set))
-            .font(Tokens.Text.setEntry)
-            .foregroundStyle(Tokens.Color.textPrimary)
-          Text("\u{00D7} \(set.reps)")
-            .font(Tokens.Text.setEntry)
-            .foregroundStyle(Tokens.Color.textPrimary)
-          if let rpe = set.rpe {
-            Text("RPE \(Self.format(rpe))")
-              .font(Tokens.Text.caption)
-              .foregroundStyle(Tokens.Color.textSecondary)
-          }
-          Spacer(minLength: 0)
-          if set.isWarmup {
-            // Marked, and excluded from the count above, because a warm-up is not training volume.
-            Text("warm-up")
-              .font(Tokens.Text.caption)
-              .foregroundStyle(Tokens.Color.textSecondary)
+        Group {
+          if typeSize.isAccessibilitySize {
+            stackedSetRow(set, in: group, index: index)
+          } else {
+            compactSetRow(set, in: group, index: index)
           }
         }
         .padding(.horizontal, Tokens.Spacing.regular)
@@ -221,6 +207,70 @@ public struct SessionDetailView: View {
 
   private func canShowProgress(_ group: Group_) -> Bool {
     onShowProgress != nil && group.exerciseID != nil
+  }
+
+  /// Up to five columns on one line, which fits at ordinary text sizes.
+  @ViewBuilder private func compactSetRow(
+    _ set: LoggedSetRow, in group: Group_, index: Int
+  ) -> some View {
+    HStack(spacing: Tokens.Spacing.regular) {
+      ordinal(set, in: group, index: index)
+        .frame(minWidth: ordinalWidth, alignment: .leading)
+      Text(loadText(set))
+        .font(Tokens.Text.setEntry)
+        .foregroundStyle(Tokens.Color.textPrimary)
+      Text("\u{00D7} \(set.reps)")
+        .font(Tokens.Text.setEntry)
+        .foregroundStyle(Tokens.Color.textPrimary)
+      if let rpe = set.rpe {
+        Text("RPE \(Self.format(rpe))")
+          .font(Tokens.Text.caption)
+          .foregroundStyle(Tokens.Color.textSecondary)
+      }
+      Spacer(minLength: 0)
+      if set.isWarmup { warmupTag }
+    }
+  }
+
+  /// The same values, stacked, so none of them truncates.
+  ///
+  /// Five columns of growing text on one line is the layout that produced "Las / t / tim / e" in the
+  /// live set row at AX5. This screen had the same shape and never got the same treatment.
+  @ViewBuilder private func stackedSetRow(
+    _ set: LoggedSetRow, in group: Group_, index: Int
+  ) -> some View {
+    VStack(alignment: .leading, spacing: Tokens.Spacing.hairline) {
+      HStack(spacing: Tokens.Spacing.snug) {
+        ordinal(set, in: group, index: index)
+        if set.isWarmup { warmupTag }
+      }
+      Text("\(loadText(set)) \u{00D7} \(set.reps)")
+        .font(Tokens.Text.setEntry)
+        .foregroundStyle(Tokens.Color.textPrimary)
+        .fixedSize(horizontal: false, vertical: true)
+      if let rpe = set.rpe {
+        Text("RPE \(Self.format(rpe))")
+          .font(Tokens.Text.caption)
+          .foregroundStyle(Tokens.Color.textSecondary)
+      }
+    }
+    .frame(maxWidth: .infinity, alignment: .leading)
+  }
+
+  @ViewBuilder private func ordinal(
+    _ set: LoggedSetRow, in group: Group_, index: Int
+  ) -> some View {
+    Text(set.isWarmup ? "W" : "\(workingOrdinal(of: set, in: group) ?? index + 1)")
+      .font(Tokens.Text.label)
+      .monospacedDigit()
+      .foregroundStyle(Tokens.Color.textSecondary)
+  }
+
+  private var warmupTag: some View {
+    // Marked, and excluded from the count above, because a warm-up is not training volume.
+    Text("warm-up")
+      .font(Tokens.Text.caption)
+      .foregroundStyle(Tokens.Color.textSecondary)
   }
 
   /// "Body" for a bodyweight set with no added load, "Body + 10 kg" when there was some, and the

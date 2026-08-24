@@ -173,6 +173,11 @@ public struct HistoryView: View {
     } else if let duration = row.duration {
       parts.append(duration.clockString)
     }
+    // The movements are printed on every row and were absent from the spoken label, so the one
+    // detail that tells two workouts apart was the one detail VoiceOver did not get.
+    if !row.exerciseNames.isEmpty {
+      parts.append(row.exerciseNames.joined(separator: ", "))
+    }
     return parts.joined(separator: ", ")
   }
 }

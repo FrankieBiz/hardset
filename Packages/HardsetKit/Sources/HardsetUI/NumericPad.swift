@@ -146,25 +146,21 @@ public struct NumericPad: View {
     // name or nothing at all -- on the keypad used to enter every weight and every rep in the app.
     .accessibilityLabel(Self.spokenLabel(for: key, decimalSeparator: decimalSeparator))
     .opacity(key == .disabledDecimal ? 0 : 1)
+    // Invisible *and* unreachable. The placeholder exists so the grid does not change shape between
+    // an integer field and a decimal one -- which would move the other keys under the user's thumb
+    // -- but at zero opacity it stayed focusable, so VoiceOver on a reps field announced a
+    // "Decimal point" button that does nothing and cannot be seen.
+    .accessibilityHidden(key == .disabledDecimal)
     .background(
       Tokens.Color.ground,
       in: RoundedRectangle(cornerRadius: Tokens.Radius.control)
     )
-    .accessibilityLabel(accessibilityLabel(for: key))
   }
 
   /// The user's locale decides how a decimal point looks, even though the stored buffer is
   /// always a period.
   private var decimalSeparator: String {
     Locale.current.decimalSeparator ?? "."
-  }
-
-  private func accessibilityLabel(for key: Key) -> String {
-    switch key {
-    case .digit(let value): String(value)
-    case .decimal, .disabledDecimal: "Decimal point"
-    case .delete: "Delete"
-    }
   }
 
   private func apply(_ key: Key) {

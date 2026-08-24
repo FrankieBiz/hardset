@@ -226,9 +226,12 @@ public struct ExerciseSectionView: View {
       .contentShape(Rectangle())
     }
     .buttonStyle(.plain)
-    .accessibilityLabel(
-      state.machineName.map { "Machine: \($0). Change." } ?? "No machine recorded. Choose one."
-    )
+    // One label, on the button.
+    //
+    // There were two: `machineChipLabel` inside the label view and a second one out here. The outer
+    // wins, so the authored sentence -- the only place the stack step is ever spoken -- never
+    // reached VoiceOver. The action belongs in a hint rather than being welded onto the label.
+    .accessibilityHint(state.machineID == nil ? "Double tap to choose." : "Double tap to change.")
   }
 
   static func format(_ value: Double) -> String {

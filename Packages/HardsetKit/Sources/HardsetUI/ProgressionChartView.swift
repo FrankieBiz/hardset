@@ -183,6 +183,12 @@ public struct ProgressionChartView: View {
     // make visible. Nobody reads a load chart to be reminded that zero exists.
     .chartYScale(domain: .automatic(includesZero: false))
     .chartYAxisLabel(unit.abbreviation)
+    // Named for VoiceOver, which otherwise reaches a chart that announces nothing. The bodyweight
+    // chart has carried one since it was written; this one, the older of the two, never did.
+    .accessibilityLabel(
+      "\(metric.label) over time, in \(unit.abbreviation)"
+        + (series.count > 1 ? ", one line per machine" : "")
+    )
     // No legend for a single series: the screen's own title names it, and a one-row legend reading
     // "Free weight" tells the reader nothing they did not already know.
     .chartLegend(series.count > 1 ? .visible : .hidden)

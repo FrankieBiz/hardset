@@ -35,6 +35,12 @@ public struct RestBarView: View {
   /// Bumped once when the rest actually runs out, as opposed to being skipped.
   @State private var completions = 0
   @Environment(\.accessibilityReduceMotion) private var reduceMotion
+  /// Drives the stacked layout. The controls are four hard 56 pt targets plus spacing and padding --
+  /// 284 pt that cannot yield -- and the countdown is the only flexible child, so at accessibility
+  /// sizes the one thing this bar exists to show was the thing that got compressed. `SetRowView`
+  /// already restacks for exactly this reason; the bar pinned to the bottom of the same screen did
+  /// not.
+  @Environment(\.dynamicTypeSize) private var typeSize
   private let onAdjust: (Duration) -> Void
   private let onPauseResume: () -> Void
   private let onSkip: () -> Void
@@ -63,23 +69,8 @@ public struct RestBarView: View {
     if case .idle = state {
       EmptyView()
     } else {
-      HStack(spacing: Tokens.Spacing.regular) {
-        VStack(alignment: .leading, spacing: Tokens.Spacing.hairline) {
-          countdown
-          if let metadata {
-            Text("\(metadata.exerciseName) · \(metadata.setLabel)")
-              .font(Tokens.Text.caption)
-              .foregroundStyle(Tokens.Color.textSecondary)
-              .lineLimit(1)
-          }
-        }
-
-        Spacer(minLength: 0)
-
-        adjustButton(label: "−15", delta: .seconds(-15))
-        adjustButton(label: "+15", delta: .seconds(15))
-        pauseResumeButton
-        skipButton
+      Group {
+        if typeSize.isAccessibilitySize { stackedBar } else { compactBar }
       }
       .padding(.horizontal, Tokens.Spacing.regular)
       .padding(.vertical, Tokens.Spacing.snug)
@@ -87,9 +78,8 @@ public struct RestBarView: View {
       // The rule sits on the top edge and retreats right to left. An overlay rather than a row so
       // it cannot push the controls around as it shrinks.
       .overlay(alignment: .top) { progressRule }
-      .accessibilityElement(children: .combine)
-      // The rule is decoration *of* the countdown, which is already spoken. Hiding it keeps the
-      // bar one element instead of two.
+      // `.contain`, not `.combine`: combining flattened the live countdown into a static string.
+      .accessibilityElement(children: .contain)
       .accessibilityLabel(spokenLabel)
       .onAppear { retarget() }
       .onChange(of: state) { retarget() }
@@ -102,6 +92,50 @@ public struct RestBarView: View {
       // their pocket, and it is the only thing that survives Focus and a force-quit.
       .sensoryFeedback(.impact(weight: .light), trigger: finalSecondsPulse)
       .sensoryFeedback(.success, trigger: completions)
+    }
+  }
+
+  /// Countdown and controls on one row, which fits at ordinary text sizes.
+  @ViewBuilder private var compactBar: some View {
+    HStack(spacing: Tokens.Spacing.regular) {
+      VStack(alignment: .leading, spacing: Tokens.Spacing.hairline) {
+        countdown
+        stationLabel.lineLimit(1)
+      }
+
+      Spacer(minLength: 0)
+
+      adjustButton(label: "\u{2212}15", delta: .seconds(-15))
+      adjustButton(label: "+15", delta: .seconds(15))
+      pauseResumeButton
+      skipButton
+    }
+  }
+
+  /// Countdown above, controls below, both allowed their full size.
+  ///
+  /// The station line drops its `lineLimit` here: "Leg…" is worse than two lines, and the whole
+  /// reason to restack is that there is room once the controls are not competing for it.
+  @ViewBuilder private var stackedBar: some View {
+    VStack(alignment: .leading, spacing: Tokens.Spacing.snug) {
+      countdown
+      stationLabel
+      HStack(spacing: Tokens.Spacing.snug) {
+        adjustButton(label: "\u{2212}15", delta: .seconds(-15))
+        adjustButton(label: "+15", delta: .seconds(15))
+        pauseResumeButton
+        skipButton
+      }
+    }
+    .frame(maxWidth: .infinity, alignment: .leading)
+  }
+
+  @ViewBuilder private var stationLabel: some View {
+    if let metadata {
+      Text("\(metadata.exerciseName) \u{00B7} \(metadata.setLabel)")
+        .font(Tokens.Text.caption)
+        .foregroundStyle(Tokens.Color.textSecondary)
+        .fixedSize(horizontal: false, vertical: true)
     }
   }
 
@@ -186,6 +220,12 @@ public struct RestBarView: View {
       Text(timerInterval: referenceDate...max(endsAt, referenceDate), countsDown: true)
         .font(Tokens.Text.readout)
         .foregroundStyle(Tokens.Color.textPrimary)
+        // Left as its own accessible element, with the trait that tells VoiceOver to re-read it.
+        // The container used to `.combine` its children and replace them with one authored string,
+        // and that string was computed from `referenceDate` -- a `let` fixed when the view was
+        // built. Since this view deliberately never re-renders while resting, a blind lifter heard
+        // one figure for the entire rest period while a sighted one watched it count down.
+        .accessibilityAddTraits(.updatesFrequently)
     case .paused(let remaining):
       HStack(spacing: Tokens.Spacing.tight) {
         Text(remaining.clockString)
@@ -234,12 +274,25 @@ public struct RestBarView: View {
     .accessibilityLabel("Skip rest")
   }
 
+  /// Describes the rest without stating how much is left.
+  ///
+  /// The figure is deliberately absent while running: this view has no timer by design, so any
+  /// number baked in here is the one that happened to be true when the view was last built. The
+  /// live countdown is its own element and speaks for itself. A paused remainder *is* static, so
+  /// there it is stated.
   private var spokenLabel: String {
-    guard let remaining = state.remaining(at: referenceDate) else { return "Not resting" }
-    let status = state.isRunning ? "Resting" : "Rest paused"
-    var parts = ["\(status), \(remaining.clockString) remaining"]
-    if let metadata { parts.append("after \(metadata.exerciseName), \(metadata.setLabel)") }
-    return parts.joined(separator: ", ")
+    switch state {
+    case .idle:
+      return "Not resting"
+    case .running:
+      var parts = ["Resting"]
+      if let metadata { parts.append("after \(metadata.exerciseName), \(metadata.setLabel)") }
+      return parts.joined(separator: ", ")
+    case .paused(let remaining):
+      var parts = ["Rest paused, \(remaining.clockString) remaining"]
+      if let metadata { parts.append("after \(metadata.exerciseName), \(metadata.setLabel)") }
+      return parts.joined(separator: ", ")
+    }
   }
 
 }

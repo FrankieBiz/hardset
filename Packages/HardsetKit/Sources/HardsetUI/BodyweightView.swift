@@ -107,6 +107,10 @@ public struct BodyweightView: View {
           Image(systemName: "info.circle")
             .font(Tokens.Text.caption)
             .foregroundStyle(Tokens.Color.textSecondary)
+            // A caption-sized glyph is about 13 pt. This is the only route to the 1.4.1 disclosure
+            // for the figure above it, so it gets a real target.
+            .frame(minWidth: Tokens.minimumTapTarget, minHeight: Tokens.minimumTapTarget)
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .accessibilityLabel("How this figure is calculated")

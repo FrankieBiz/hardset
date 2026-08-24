@@ -29,6 +29,10 @@ public struct CertaintyBadge: View {
       }
       .font(Tokens.Text.caption)
       .foregroundStyle(Tokens.Color.certainty(level))
+      // A caption-height row of text is roughly 16 pt tall. The badge is the only way to reach the
+      // methodology behind a number, so it gets a real target rather than the size of its glyphs.
+      .frame(minHeight: Tokens.minimumTapTarget)
+      .contentShape(Rectangle())
     }
     .buttonStyle(.plain)
     .accessibilityLabel("\(level.label). How this was calculated.")

@@ -241,6 +241,12 @@ public struct ExercisePickerView: View {
 
   static func spokenLabel(for entry: CatalogEntry) -> String {
     var parts = [entry.name, displayName(entry.primaryMuscle)]
+    // The supporting muscles. Printed under every row and previously absent from the spoken label,
+    // even though this file's own comments call that line what distinguishes one press from another.
+    let others = entry.creditedMuscles.filter { $0.key != entry.primaryMuscle }
+    if !others.isEmpty {
+      parts.append("also " + others.map { displayName($0.key) }.joined(separator: ", "))
+    }
     if let modality = entry.modality { parts.append(modality.label) }
     if !entry.isCurated { parts.append("your own movement") }
     return parts.joined(separator: ", ")
