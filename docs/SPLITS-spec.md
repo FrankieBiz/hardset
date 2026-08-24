@@ -141,13 +141,25 @@ somewhere is exactly that case.
 The link is idempotent (`GymStore.linkMachine(_:toExercise:)`, check-then-insert in one write) —
 there can be no UNIQUE constraint to lean on.
 
-## 6. Out of scope in this pass
+## 6. Scope
 
-No UI. The device gate is still open, nothing has run on a phone, and per HANDOFF §8 a new planning
-surface belongs after the logger is proven on hardware. What ships here is the schema — which wants
-settling *before* the first multi-device build — and the pure engine and store beneath it, all
-host-verifiable.
+**The UI ships in this pass.** An earlier draft of this spec deferred it behind the device gate,
+reasoning from HANDOFF §8. That was wrong, and worth recording why: §8's argument is specifically
+about *motion* — haptic-and-pixel co-timing and the 100 ms acknowledgement budget cannot be judged in
+a simulator, so tuning them before the gate means tuning them twice. None of that applies to whether
+a screen exists. Shipping the schema, the engine and the store with nothing able to reach them would
+have produced, deliberately, this app's single commonest defect: capability built and never wired
+(see `hardset-dead-capability-audit`). A `SplitStore` hanging off `HardsetEnvironment` with no
+consumer is that defect exactly.
 
-Also out: converting a split day into a live session. That is a real feature and a small one, but it
-touches `SessionCoordinator`, which is the most load-bearing type in the app; it deserves its own
-pass rather than riding along with a schema change.
+So the planner is a fourth tab, and it is verified in the simulator against a seeded database —
+which is the only way most of this app's real defects have ever been found.
+
+Still out of scope, and genuinely:
+
+- **Motion.** The planner uses the existing token vocabulary and adds no new animation. The four
+  hero moments in §5 of the guidelines stay where they are, behind the device gate.
+- **Converting a split day into a live session.** A real feature and a small one, but it touches
+  `SessionCoordinator`, the most load-bearing type in the app. It deserves its own pass rather than
+  riding along with a schema change.
+- **Per-movement set targets of the lifter's own.** Additive later if asked for; see §3.

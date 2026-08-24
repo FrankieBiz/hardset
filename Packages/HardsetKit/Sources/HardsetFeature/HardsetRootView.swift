@@ -21,6 +21,8 @@ public struct HardsetEnvironment {
   public let progression: ProgressionStore
   /// Creating and retiring the lifter's own movements.
   public let exercises: ExerciseStore
+  /// Plans: arrangements of movements the lifter already trains. Never prescriptions.
+  public let splits: SplitStore
   public let gyms: GymStore
   /// Device-local, and never registered with the sync engine. See `BodyweightStore`.
   public let bodyweight: BodyweightStore
@@ -32,6 +34,7 @@ public struct HardsetEnvironment {
     self.history = HistoryStore(database: database)
     self.progression = ProgressionStore(database: database)
     self.exercises = ExerciseStore(database: database)
+    self.splits = SplitStore(database: database)
     self.gyms = GymStore(database: database)
     self.bodyweight = BodyweightStore(database: database)
   }
@@ -201,6 +204,18 @@ public struct HardsetRootView: View {
     }
   }
 
+  @ViewBuilder private var planNavigation: some View {
+    NavigationStack {
+      SplitPlannerScreen(
+        splits: environment.splits,
+        catalog: environment.catalog,
+        gyms: environment.gyms,
+        volume: environment.volume
+      )
+      .navigationTitle("Plan")
+    }
+  }
+
   @ViewBuilder private var volumeNavigation: some View {
     NavigationStack {
       WeeklyVolumeScreen(store: environment.volume)
@@ -228,6 +243,9 @@ public struct HardsetRootView: View {
     let content = TabView(selection: $selectedTab) {
       Tab("Train", systemImage: "figure.strengthtraining.traditional", value: RootTab.train) {
         trainNavigation
+      }
+      Tab("Plan", systemImage: "square.split.2x2", value: RootTab.plan) {
+        planNavigation
       }
       Tab("Volume", systemImage: "chart.bar", value: RootTab.volume) {
         volumeNavigation
@@ -677,5 +695,5 @@ struct RenameTarget: Identifiable, Hashable {
 
 /// The three tabs, as a value the root can set.
 enum RootTab: Hashable {
-  case train, volume, history
+  case train, plan, volume, history
 }
