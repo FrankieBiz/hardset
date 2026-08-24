@@ -678,7 +678,12 @@ public final class SessionCoordinator {
 }
 
 /// One exercise on today's plan, before the session exists.
-public struct PlannedExercise: Hashable, Sendable {
+///
+/// `nonisolated` because it is a pure value type that stores build on database queues. This module
+/// defaults to MainActor isolation, which silently made this initialiser MainActor-only and
+/// unreachable from `SplitStore` -- the same leak the table types carry an explicit `nonisolated`
+/// for. Relaxing it cannot break a MainActor caller.
+public nonisolated struct PlannedExercise: Hashable, Sendable {
   public let exerciseID: ExerciseID
   public let machineID: MachineID?
   public let exerciseName: String

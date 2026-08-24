@@ -204,13 +204,21 @@ public struct HardsetRootView: View {
     }
   }
 
+  /// `nil` while a workout is open, which hides "Start this day" rather than offering a button that
+  /// would abandon the session in progress. Same shape and same reason as `repeatHandler`.
+  private var startDayHandler: (([PlannedExercise]) -> Void)? {
+    guard coordinator == nil else { return nil }
+    return { plan in startPlannedDay(plan) }
+  }
+
   @ViewBuilder private var planNavigation: some View {
     NavigationStack {
       SplitPlannerScreen(
         splits: environment.splits,
         catalog: environment.catalog,
         gyms: environment.gyms,
-        volume: environment.volume
+        volume: environment.volume,
+        onStartDay: startDayHandler
       )
       .navigationTitle("Plan")
     }
@@ -579,6 +587,27 @@ public struct HardsetRootView: View {
             plannedSets: $0.workingSets
           )
         },
+        restAfterSet: resolvedRest,
+        hooks: hooks
+      )
+    }
+  }
+
+  /// Starts a plan's day as today's workout.
+  ///
+  /// The one path from planning into the app's core loop. Deliberately thin: the movements arrive
+  /// already shaped as `PlannedExercise` from `SplitStore`, each with `plannedSets` nil, because a
+  /// plan carries no set counts and inventing one here would put a prescription into the logger by
+  /// the back door.
+  private func startPlannedDay(_ plan: [PlannedExercise]) {
+    guard coordinator == nil, !plan.isEmpty else { return }
+    // `start` moves to the Train tab on success -- starting a workout the lifter cannot see is the
+    // same class of defect as a button that appears to do nothing.
+    start {
+      try SessionCoordinator.start(
+        store: environment.logger,
+        gymID: selectedGym,
+        plan: plan,
         restAfterSet: resolvedRest,
         hooks: hooks
       )

@@ -40,16 +40,22 @@ public struct SplitPlannerScreen: View {
   /// appears to do nothing, which is the failure mode this codebase has already shipped once.
   @State private var failure: String?
 
+  /// Starts a day as today's workout. Supplied by the root, which owns the session, and nil while a
+  /// workout is already open.
+  private let onStartDay: (([PlannedExercise]) -> Void)?
+
   public init(
     splits: SplitStore,
     catalog: CatalogSeeder,
     gyms: GymStore,
-    volume: VolumeStore
+    volume: VolumeStore,
+    onStartDay: (([PlannedExercise]) -> Void)? = nil
   ) {
     self.splits = splits
     self.catalog = catalog
     self.gyms = gyms
     self.volume = volume
+    self.onStartDay = onStartDay
   }
 
   public var body: some View {
@@ -92,7 +98,8 @@ public struct SplitPlannerScreen: View {
       onRenameDay: { renamingDay = $0 },
       onAddDay: addDay,
       onDeleteDay: deleteDay,
-      onMoveMovement: moveMovement
+      onMoveMovement: moveMovement,
+      onStartDay: startDayHandler
     )
     .toolbar {
       ToolbarItem(placement: .primaryAction) {
@@ -269,6 +276,35 @@ public struct SplitPlannerScreen: View {
 
   private func moveMovement(_ movement: PlannedMovementRow, to dayID: SplitDayID) {
     write { try splits.moveEntry(movement.id, toDay: dayID) }
+  }
+
+  /// `nil` when the root supplied no handler, so the button is absent rather than inert.
+  ///
+  /// Spelled as a property with an explicit type rather than
+  /// `onStartDay == nil ? nil : startDay` inline: a ternary between a method reference and `nil`
+  /// needs an optional-closure conversion the type checker cannot do, and it fails with "failed to
+  /// produce diagnostic" rather than naming a cause. The same trap is recorded for `repeatHandler`.
+  private var startDayHandler: ((PlannedDay) -> Void)? {
+    guard onStartDay != nil else { return nil }
+    return { day in startDay(day) }
+  }
+
+  /// Hands the day's movements to the root, which owns the session.
+  ///
+  /// A failure here must be stated rather than swallowed: a "Start this day" that silently does
+  /// nothing is the same defect class as the empty-plan deal button.
+  private func startDay(_ day: PlannedDay) {
+    guard let onStartDay else { return }
+    do {
+      let plan = try splits.plannedExercises(for: day.id)
+      guard !plan.isEmpty else {
+        failure = "There is nothing on \(day.name) to start."
+        return
+      }
+      onStartDay(plan)
+    } catch {
+      failure = error.localizedDescription
+    }
   }
 
   private func redeal(_ dayCount: Int) {

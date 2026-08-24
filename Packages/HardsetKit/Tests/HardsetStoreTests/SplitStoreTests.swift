@@ -325,6 +325,97 @@ struct SplitStoreTests {
     #expect(loaded.movementCount == 0)
   }
 
+  // MARK: - Starting a day
+
+  /// The one path from planning into the app's core loop. Without it the planner is a document.
+  @Test("A day becomes today's plan, in order, carrying its machines")
+  func dayBecomesAPlan() throws {
+    let f = try fixture()
+    let gym = try f.gyms.createGym(name: "PureGym", now: now)
+    let machine = try f.gyms.createMachine(
+      at: gym, name: "Hammer Strength Bench", stackIncrementKg: 5, now: now
+    )
+    let split = try f.splits.createSplit(name: "Week", now: now)
+    let day = try f.splits.addDay(to: split, name: "Push", now: now)
+    try f.splits.addEntry(to: day, exercise: f.bench, machine: machine, now: now)
+    try f.splits.addEntry(to: day, exercise: f.curl, now: now)
+
+    let plan = try f.splits.plannedExercises(for: day)
+
+    #expect(plan.map(\.exerciseID) == [f.bench, f.curl])
+    #expect(plan.map(\.exerciseName) == ["Bench Press", "Barbell Curl"])
+    #expect(plan[0].machineID == machine)
+    #expect(plan[0].machineName == "Hammer Strength Bench")
+    // Carried so a progression suggestion cannot propose a step the equipment will not honour.
+    #expect(plan[0].machineIncrementKg == 5)
+    #expect(plan[1].machineID == nil)
+  }
+
+  /// The invariant that makes this path safe. `VolumeStore.plan(for:)` carries a set count because a
+  /// past workout has one; a split day does not, and `RepeatableExercise.workingSets` being
+  /// non-optional is why this returns `PlannedExercise` directly instead. A number here would be a
+  /// prescription entering the logger by the back door.
+  @Test("Every movement from a plan has no set count")
+  func plansCarryNoSetCounts() throws {
+    let f = try fixture()
+    let split = try f.splits.createSplit(name: "Week", now: now)
+    let day = try f.splits.addDay(to: split, name: "Push", now: now)
+    for exercise in [f.bench, f.squat, f.curl] {
+      try f.splits.addEntry(to: day, exercise: exercise, now: now)
+    }
+
+    let plan = try f.splits.plannedExercises(for: day)
+    #expect(plan.count == 3)
+    for movement in plan {
+      #expect(movement.plannedSets == nil, "\(movement.exerciseName) arrived with a set count")
+    }
+  }
+
+  /// Modality has to survive the hop, or a planned pull-up opens as a loaded row demanding a weight
+  /// -- a defect the "do it again" path already shipped once.
+  @Test("A bodyweight movement stays bodyweight on the way into a session")
+  func modalitySurvives() throws {
+    let f = try fixture()
+    let pullUp = ExerciseID()
+    try f.database.write { db in
+      try Exercise.insert {
+        Exercise.Draft(id: pullUp.rawValue, name: "Pull-Up", modality: "bodyweight")
+      }
+      .execute(db)
+    }
+    let split = try f.splits.createSplit(name: "Week", now: now)
+    let day = try f.splits.addDay(to: split, name: "Pull", now: now)
+    try f.splits.addEntry(to: day, exercise: pullUp, now: now)
+
+    let plan = try f.splits.plannedExercises(for: day)
+    #expect(plan.first?.modality == .bodyweight)
+  }
+
+  @Test("An empty day yields an empty plan rather than throwing")
+  func emptyDayYieldsEmptyPlan() throws {
+    let f = try fixture()
+    let split = try f.splits.createSplit(name: "Week", now: now)
+    let day = try f.splits.addDay(to: split, name: "Rest", now: now)
+    #expect(try f.splits.plannedExercises(for: day).isEmpty)
+  }
+
+  /// Reordering the day reorders the workout. The plan is what the lifter arranged, so the session
+  /// must open in that order rather than in insertion order.
+  @Test("Moving a movement changes the order the workout opens in")
+  func planFollowsTheArrangedOrder() throws {
+    let f = try fixture()
+    let split = try f.splits.createSplit(name: "Week", now: now)
+    let day = try f.splits.addDay(to: split, name: "Push", now: now)
+    let bench = try f.splits.addEntry(to: day, exercise: f.bench, now: now)
+    try f.splits.addEntry(to: day, exercise: f.squat, now: now)
+    try f.splits.addEntry(to: day, exercise: f.curl, now: now)
+
+    try f.splits.moveEntry(bench, toDay: day, at: 2)
+
+    let plan = try f.splits.plannedExercises(for: day)
+    #expect(plan.map(\.exerciseID) == [f.squat, f.curl, f.bench])
+  }
+
   /// The dealer must be fed the lifter's own movements. Anything else and the plan is recommending
   /// exercises rather than arranging them.
   @Test("The movements offered to the dealer are ones the lifter actually logged")

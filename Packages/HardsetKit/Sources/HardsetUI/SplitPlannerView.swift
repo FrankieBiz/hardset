@@ -129,6 +129,10 @@ public struct SplitPlannerView: View {
   private let onDeleteDay: ((PlannedDay) -> Void)?
   /// Moves a movement to another day. The arrangement is a starting point, not a verdict.
   private let onMoveMovement: ((PlannedMovementRow, SplitDayID) -> Void)?
+  /// Starts this day as today's workout. `nil` hides the affordance -- which is what happens while
+  /// a workout is already open, because offering it would either abandon that session or do
+  /// nothing.
+  private let onStartDay: ((PlannedDay) -> Void)?
 
   @State private var redealDayCount: Int
   @State private var isConfirmingRedeal = false
@@ -144,7 +148,8 @@ public struct SplitPlannerView: View {
     onRenameDay: ((PlannedDay) -> Void)? = nil,
     onAddDay: (() -> Void)? = nil,
     onDeleteDay: ((PlannedDay) -> Void)? = nil,
-    onMoveMovement: ((PlannedMovementRow, SplitDayID) -> Void)? = nil
+    onMoveMovement: ((PlannedMovementRow, SplitDayID) -> Void)? = nil,
+    onStartDay: ((PlannedDay) -> Void)? = nil
   ) {
     self.days = days
     self.coverage = coverage
@@ -157,6 +162,7 @@ public struct SplitPlannerView: View {
     self.onAddDay = onAddDay
     self.onDeleteDay = onDeleteDay
     self.onMoveMovement = onMoveMovement
+    self.onStartDay = onStartDay
     self._redealDayCount = State(initialValue: max(1, days.count))
   }
 
@@ -189,6 +195,14 @@ public struct SplitPlannerView: View {
       }
       ForEach(day.movements) { movement in
         movementRow(movement, on: day)
+      }
+      if let onStartDay, !day.movements.isEmpty {
+        Button {
+          onStartDay(day)
+        } label: {
+          Label("Start this day", systemImage: "figure.strengthtraining.traditional")
+            .font(Tokens.Text.label.weight(.semibold))
+        }
       }
       if let onAddMovement {
         Button {

@@ -361,6 +361,55 @@ public nonisolated struct SplitStore {
     }
   }
 
+  /// A day of a plan, as today's workout.
+  ///
+  /// This is what makes a plan more than a readback: it is the one path from planning into the
+  /// app's core loop. Without it the planner is a document.
+  ///
+  /// **Every `plannedSets` is nil, and that is the design.** `VolumeStore.plan(for:)` -- the
+  /// "do it again" path -- carries a set count because a past workout genuinely has one: it counts
+  /// the sets that were logged. A split day genuinely does not, and `RepeatableExercise` cannot
+  /// express that, because its `workingSets` is non-optional. Routing through that type would have
+  /// forced a number to be invented here, which is the exact thing this whole feature refuses. So
+  /// this returns `PlannedExercise` directly, where `plannedSets` is `Int?` and nil means what it
+  /// says.
+  ///
+  /// Machine, name and modality are carried per movement -- modality because without it a planned
+  /// pull-up opens as a loaded row demanding a weight, which is a defect the repeat path already
+  /// shipped once.
+  public func plannedExercises(for dayID: SplitDayID) throws -> [PlannedExercise] {
+    try database.read { db in
+      let entries = try SplitEntry.ordered(dayID: dayID.rawValue, in: db)
+      guard !entries.isEmpty else { return [] }
+
+      let exercises = try Exercise.where { $0.id.in(entries.map(\.exerciseID)) }.fetchAll(db)
+      let exercisesByID = Dictionary(exercises.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
+
+      let machineIDs = entries.compactMap(\.machineID)
+      let machines =
+        machineIDs.isEmpty ? [] : try Machine.where { $0.id.in(machineIDs) }.fetchAll(db)
+      let machinesByID = Dictionary(machines.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
+
+      return entries.compactMap { entry in
+        // A movement whose exercise row has gone is skipped rather than started as "Unknown". The
+        // foreign key is CASCADE, so this should be unreachable; silently inventing a name for it
+        // would not be.
+        guard let exercise = exercisesByID[entry.exerciseID] else { return nil }
+        let machine = entry.machineID.flatMap { machinesByID[$0] }
+        return PlannedExercise(
+          exerciseID: ExerciseID(rawValue: entry.exerciseID),
+          machineID: machine.map { MachineID(rawValue: $0.id) },
+          exerciseName: exercise.name,
+          modality: ExerciseModality(rawValue: exercise.modality),
+          machineName: machine?.name,
+          machineIncrementKg: machine?.stackIncrementKg,
+          // Nil, always. See the note above.
+          plannedSets: nil
+        )
+      }
+    }
+  }
+
   /// Every distinct movement the lifter has actually logged, newest first.
   ///
   /// The input the dealer is meant to be given: their own movements, not a catalogue. A plan built
