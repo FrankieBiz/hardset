@@ -35,6 +35,20 @@ public nonisolated struct LoggerStore {
   ) throws -> SessionID {
     let id = SessionID()
     try database.write { db in
+      // At most one open session, enforced here rather than trusted to callers.
+      //
+      // `openSession()` reads the *newest* unfinished row, and history lists only finished ones,
+      // so a second open session makes the first permanently unreachable -- not resumable, not in
+      // history, while its sets still count toward the week. The lifter sees volume from a workout
+      // they cannot open.
+      //
+      // That was reachable: the launch task called `resume` through `try?`, so any failure left
+      // `coordinator` nil with a session still open in the database, and the next "Start workout"
+      // orphaned it. The check lives inside the write transaction because outside it, it is a race.
+      if let existing = try Self.openSessionID(in: db) {
+        throw LoggerStoreError.sessionAlreadyOpen(existing)
+      }
+
       try Session.insert {
         Session.Draft(
           id: id.rawValue,
@@ -292,6 +306,19 @@ public nonisolated struct LoggerStore {
   /// Used for crash recovery: the app was killed mid-workout and needs to offer to resume.
   /// Note it does not close anything on its own — an abandoned session is finished by an
   /// explicit user choice, never by assuming "now".
+  /// The newest unfinished session, if there is one.
+  ///
+  /// Takes the `Database` so it can run inside an existing transaction -- which is what
+  /// `startSession` needs, since checking outside the write is a race.
+  static func openSessionID(in db: Database) throws -> SessionID? {
+    try Session
+      .where { $0.finishedAt.is(nil) }
+      .order { $0.startedAt.desc() }
+      .limit(1)
+      .fetchOne(db)
+      .map { SessionID(rawValue: $0.id) }
+  }
+
   public func openSession() throws -> SessionRecord? {
     try database.read { db in
       try Session
@@ -548,4 +575,7 @@ public enum LoggerStoreError: Error, Equatable, Sendable {
   /// `SetEntryDraft.isLoggable` so this is unreachable from the UI.
   case incompleteSet
   case sessionNotFound
+  /// A workout is already open. Carries its id so the caller can offer it back rather than
+  /// dead-ending, which is what makes refusing safe.
+  case sessionAlreadyOpen(SessionID)
 }

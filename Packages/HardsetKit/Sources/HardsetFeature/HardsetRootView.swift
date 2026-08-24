@@ -48,6 +48,9 @@ public struct HardsetRootView: View {
   /// pill saying it is in progress.
   @State private var finished: FinishedSession?
   @State private var startFailed = false
+  /// A workout is open in the database but could not be reopened. Stated, because the alternative is
+  /// the lifter training a second time into a day whose sets they cannot see.
+  @State private var recoveryFailed = false
   /// Where the next workout will be. Preselected from the last one, changeable in one tap, and
   /// allowed to stay nil — training somewhere new must not require setup first.
   @State private var selectedGym: GymID?
@@ -130,13 +133,7 @@ public struct HardsetRootView: View {
         _ = try? environment.catalog.seed()
         // A workout left open is offered back before anything else. Nothing is closed on the
         // app's initiative.
-        if coordinator == nil {
-          coordinator = try? SessionCoordinator.resume(
-            store: environment.logger,
-            restAfterSet: resolvedRest,
-            onStartRest: { duration, metadata in hooks.start(duration, metadata) }
-          )
-        }
+        if coordinator == nil { adoptOpenSession() }
         refreshGyms()
       }
   }
@@ -287,6 +284,18 @@ public struct HardsetRootView: View {
         Text("Could not start a workout. Nothing has been lost — try again.")
           .font(Tokens.Text.caption)
           .foregroundStyle(Tokens.Color.certainty(.low))
+      }
+      if recoveryFailed {
+        // A workout exists and could not be reopened. Said plainly, because training a second time
+        // into a day whose sets are unreachable is the outcome this warns against.
+        Text(
+          "A workout from earlier is still open but could not be reopened. "
+            + "Its sets are saved. Try relaunching Hardset before starting another."
+        )
+        .font(Tokens.Text.caption)
+        .foregroundStyle(Tokens.Color.certainty(.low))
+        .multilineTextAlignment(.center)
+        .fixedSize(horizontal: false, vertical: true)
       }
     }
     .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -496,8 +505,10 @@ public struct HardsetRootView: View {
   /// prefill from that machine's history and the lifter starts one tap from their first set.
   private func repeatWorkout(_ plan: [RepeatableExercise]) {
     guard coordinator == nil, !plan.isEmpty else { return }
-    do {
-      coordinator = try SessionCoordinator.start(
+    // `start` moves to the Train tab on success. Starting a workout the lifter cannot see would be
+    // the same class of defect as a button that appears to do nothing.
+    start {
+      try SessionCoordinator.start(
         store: environment.logger,
         gymID: selectedGym,
         plan: plan.map {
@@ -505,6 +516,8 @@ public struct HardsetRootView: View {
             exerciseID: $0.exerciseID,
             machineID: $0.machineID,
             exerciseName: $0.exerciseName,
+            // Carried through, or a repeated bodyweight day opens with rows demanding a weight.
+            modality: $0.modality,
             machineName: $0.machineName,
             plannedSets: $0.workingSets
           )
@@ -512,29 +525,67 @@ public struct HardsetRootView: View {
         restAfterSet: resolvedRest,
         hooks: hooks
       )
+    }
+  }
+
+  /// Reopens whatever workout is still open, if any.
+  ///
+  /// The launch path used `try?` here, which is how the orphaning bug was reachable: a resume that
+  /// threw left `coordinator` nil while the session stayed open in the database, and the next
+  /// "Start workout" created a second one -- making the first unreachable forever, since
+  /// `openSession` reads only the newest and history lists only finished workouts.
+  ///
+  /// Now the failure is stated. A lifter whose session cannot be reopened needs to know that,
+  /// because the alternative is training a second time into a day whose sets they cannot see.
+  @discardableResult
+  private func adoptOpenSession() -> Bool {
+    do {
+      coordinator = try SessionCoordinator.resume(
+        store: environment.logger,
+        restAfterSet: resolvedRest,
+        onStartRest: { duration, metadata in hooks.start(duration, metadata) }
+      )
+      if coordinator != nil { startFailed = false }
+      return coordinator != nil
+    } catch {
+      recoveryFailed = true
+      return false
+    }
+  }
+
+  /// Turns the store's refusal into the thing the lifter actually wanted.
+  ///
+  /// `startSession` now refuses when a workout is already open, which is the invariant that stops
+  /// data being orphaned. Refusing is only safe if the app then offers that workout back instead of
+  /// showing an error next to a button that will never work.
+  private func start(_ makeCoordinator: () throws -> SessionCoordinator) {
+    do {
+      coordinator = try makeCoordinator()
       startFailed = false
-      // Moved deliberately. Starting a workout the lifter cannot see would be the same class of
-      // defect as a button that appears to do nothing.
       selectedTab = .train
+    } catch LoggerStoreError.sessionAlreadyOpen {
+      // Not an error the lifter caused or can act on. Their open workout is what they wanted.
+      if adoptOpenSession() {
+        selectedTab = .train
+      } else {
+        startFailed = true
+      }
     } catch {
       startFailed = true
     }
   }
 
   private func startEmptyWorkout() {
-    do {
+    start {
       // An empty plan on purpose: the app does not invent a program, and there is no generator
       // yet. Movements are added from the picker as the lifter goes.
-      coordinator = try SessionCoordinator.start(
+      try SessionCoordinator.start(
         store: environment.logger,
         gymID: selectedGym,
         plan: [],
         restAfterSet: resolvedRest,
         hooks: hooks
       )
-      startFailed = false
-    } catch {
-      startFailed = true
     }
   }
 

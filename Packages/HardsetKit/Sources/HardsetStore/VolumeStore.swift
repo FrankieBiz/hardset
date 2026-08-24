@@ -189,6 +189,13 @@ public nonisolated struct ProgressionHistory: Hashable, Sendable {
 public nonisolated struct RepeatableExercise: Hashable, Sendable, Identifiable {
   public let exerciseID: ExerciseID
   public let exerciseName: String
+  /// How the movement is loaded.
+  ///
+  /// Carried because the repeated session is a *logging* session: without it a bodyweight day came
+  /// back as loaded rows, so "Do it again" on a pull-up workout produced rows demanding a weight,
+  /// showing an empty field where "Body" belongs. `LoggedSetDetail` already carries the modality --
+  /// it was dropped building this.
+  public let modality: ExerciseModality?
   public let machineID: MachineID?
   public let machineName: String?
   /// How many working sets were actually done, so the new session opens with the same number of
@@ -200,12 +207,14 @@ public nonisolated struct RepeatableExercise: Hashable, Sendable, Identifiable {
   public init(
     exerciseID: ExerciseID,
     exerciseName: String,
+    modality: ExerciseModality? = nil,
     machineID: MachineID?,
     machineName: String?,
     workingSets: Int
   ) {
     self.exerciseID = exerciseID
     self.exerciseName = exerciseName
+    self.modality = modality
     self.machineID = machineID
     self.machineName = machineName
     self.workingSets = workingSets
@@ -313,6 +322,7 @@ public nonisolated struct HistoryStore {
         byKey[key] = RepeatableExercise(
           exerciseID: existing.exerciseID,
           exerciseName: existing.exerciseName,
+          modality: existing.modality,
           machineID: existing.machineID,
           machineName: existing.machineName,
           workingSets: existing.workingSets + 1
@@ -322,6 +332,7 @@ public nonisolated struct HistoryStore {
         byKey[key] = RepeatableExercise(
           exerciseID: set.exerciseID,
           exerciseName: set.exerciseName,
+          modality: set.modality,
           machineID: set.machineID,
           machineName: set.machineName,
           workingSets: 1

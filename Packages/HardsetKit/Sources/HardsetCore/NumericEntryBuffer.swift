@@ -92,7 +92,18 @@ public struct NumericEntryBuffer: Hashable, Sendable {
   /// Deliberately not `Double`. There is no zero default, because "no weight entered" and
   /// "zero added load" are different facts and must not share a representation.
   public var value: Double? {
-    guard !text.isEmpty, text != "." else { return nil }
+    // "0." is an incomplete entry, not zero.
+    //
+    // The old guard tested for a bare ".", which `appendDecimalSeparator` never produces -- it
+    // writes "0." so a leading separator is readable on a dense row. So the guard was dead and the
+    // hole it existed to close was open: one tap of the separator on an empty weight field made the
+    // field worth 0.0, and because reps are prefilled from history, that single tap was enough to
+    // make the row loggable. A barbell bench press could be written at 0 kg by one stray tap --
+    // exactly the missing-versus-zero defect this whole type exists to prevent.
+    //
+    // Nothing is lost by refusing it. A lifter who means zero types "0" and stops, which still
+    // reads as zero; a lifter part-way through "0.5" has not finished entering anything yet.
+    guard !text.isEmpty, text != ".", text != "0." else { return nil }
     return Double(text)
   }
 

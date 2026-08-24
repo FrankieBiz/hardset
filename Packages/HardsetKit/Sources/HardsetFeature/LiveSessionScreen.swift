@@ -454,6 +454,10 @@ public struct LiveSessionScreen: View {
         return "Enter a weight and reps before logging this set."
       case .sessionNotFound:
         return "This workout could not be found. Your logged sets are safe."
+      case .sessionAlreadyOpen:
+        // Not reachable from inside a live session -- this screen only exists because one is open
+        // -- but stated rather than left to the generic fallback, which would blame the set.
+        return "A workout is already open. Finish it before starting another."
       }
     }
     return "That set could not be saved. It has not been logged — tap to try again."

@@ -204,6 +204,9 @@ public final class SessionCoordinator {
 
     let planned = try store.sessionExercises(in: session.id)
     let written = try store.sets(in: session.id)
+    // One query for the whole session, matching what `start` does. Recovery previously dropped
+    // notes entirely, so a lifter who wrote down a seat height lost it to a crash.
+    let resumedNotes = try store.exerciseNotes(for: planned.map(\.exerciseID))
 
     // One history read for the whole session, excluding the session itself so a recovered
     // workout cannot suggest values from its own sets.
@@ -256,13 +259,17 @@ public final class SessionCoordinator {
         exerciseID: entry.exerciseID,
         machineID: entry.machineID,
         exerciseName: entry.exerciseName,
+        // Restored for the same reason as the increment below. Without it every recovered
+        // bodyweight movement came back as a loaded one, so a pull-up asked for a weight.
+        modality: entry.modality,
         machineName: entry.machineName,
         // Restored, not defaulted. Dropping it makes record detection fall back to a step size the
         // equipment may be unable to hit.
         machineIncrementKg: entry.machineIncrementKg,
         loggedSets: logged,
         snapshot: snapshot,
-        plannedSets: entry.plannedSets
+        plannedSets: entry.plannedSets,
+        notes: resumedNotes[entry.exerciseID] ?? ""
       )
       rowIDs[state.id] = entry.id
       return state

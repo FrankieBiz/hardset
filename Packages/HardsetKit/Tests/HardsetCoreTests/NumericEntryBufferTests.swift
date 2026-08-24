@@ -53,4 +53,50 @@ struct NumericEntryBufferSeedTests {
     // And the field itself still holds finer entry than the app ever produces.
     #expect(NumericEntryBuffer(value: 62.75, maximumFractionDigits: 2).displayText == "62.75")
   }
+
+  /// The one-tap path to a 0 kg barbell set.
+  ///
+  /// `appendDecimalSeparator` writes "0." into an empty field so a leading separator reads clearly.
+  /// `Double("0.")` is 0.0, and reps arrive prefilled from history -- so a single stray tap on the
+  /// weight field used to make the row loggable and write a bench press at zero. The guard that was
+  /// supposed to stop this tested for a bare ".", which the code never produces.
+  @Test("One tap of the decimal separator does not make an empty field worth zero")
+  func loneSeparatorIsNotZero() {
+    var buffer = NumericEntryBuffer(maximumFractionDigits: 2)
+    buffer.appendDecimalSeparator()
+
+    // Still shown, because a leading separator has to be readable.
+    #expect(buffer.displayText == "0.")
+    // But not a value, so nothing downstream can log it.
+    #expect(buffer.value == nil)
+  }
+
+  @Test("A deliberate zero still reads as zero")
+  func deliberateZeroSurvives() {
+    var buffer = NumericEntryBuffer(maximumFractionDigits: 2)
+    buffer.append(digit: 0)
+    #expect(buffer.value == 0)
+
+    // And continuing into a fraction resolves as soon as there is a digit to resolve.
+    buffer.appendDecimalSeparator()
+    #expect(buffer.value == nil)
+    buffer.append(digit: 5)
+    #expect(buffer.value == 0.5)
+  }
+
+  @Test("A bare separator is still refused")
+  func bareSeparatorRefused() {
+    #expect(NumericEntryBuffer(text: ".").value == nil)
+  }
+
+  /// A whole number followed by a separator is mid-entry too, but reads unambiguously, so it keeps
+  /// resolving -- only the zero cases are dangerous.
+  @Test("A non-zero value followed by a separator still resolves")
+  func trailingSeparatorOnRealValue() {
+    var buffer = NumericEntryBuffer(maximumFractionDigits: 2)
+    buffer.append(digit: 8)
+    buffer.append(digit: 5)
+    buffer.appendDecimalSeparator()
+    #expect(buffer.value == 85)
+  }
 }

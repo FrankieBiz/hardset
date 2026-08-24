@@ -188,25 +188,36 @@ public struct ExerciseLogState: Hashable, Sendable, Identifiable {
   /// Note what this deliberately does not do: it does not reopen a logged set for editing, and
   /// it does not drop a set because the plan said three and four were performed. The written
   /// record wins over the plan.
+  /// - Parameter modality: How the movement is loaded. Absent here, every recovered bodyweight
+  ///   movement came back as a loaded one: the row showed an empty weight field instead of "Body",
+  ///   and a logged pull-up at zero added load read as no load at all. `PlannedExerciseRecord`
+  ///   carries it and says in its own comment that it exists so a recovered session still knows a
+  ///   pull-up is bodyweight -- it was simply never passed on from here.
+  /// - Parameter notes: The lifter's own note for this movement, which otherwise vanished on
+  ///   recovery even though it is stored on the exercise and reread on every other path.
   public static func resume(
     exerciseID: ExerciseID,
     machineID: MachineID? = nil,
     exerciseName: String,
+    modality: ExerciseModality? = nil,
     machineName: String? = nil,
     machineIncrementKg: Double? = nil,
     loggedSets: [LoggedSetSummary],
     snapshot: PriorPerformanceSnapshot,
     plannedSets: Int? = nil,
+    notes: String = "",
     allowingOtherMachines: Bool = true
   ) -> ExerciseLogState {
     var state = build(
       exerciseID: exerciseID,
       machineID: machineID,
       exerciseName: exerciseName,
+      modality: modality,
       machineName: machineName,
       machineIncrementKg: machineIncrementKg,
       snapshot: snapshot,
       plannedSets: plannedSets,
+      notes: notes,
       allowingOtherMachines: allowingOtherMachines
     )
 

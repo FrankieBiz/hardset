@@ -2,6 +2,7 @@ import HardsetAlarm
 import HardsetCore
 import HardsetFeature
 import HardsetStore
+import HardsetUI
 import SQLiteData
 import SwiftUI
 
@@ -23,23 +24,40 @@ struct HardsetApp: App {
   /// methods as closures rather than importing it.
   @State private var restTimer = RestTimerController()
 
+  /// Why the store could not be opened, or `nil` when it opened.
+  ///
+  /// Load-bearing. Previously the failure path was `assertionFailure`, which does nothing in a
+  /// release build, and `defaultDatabase` was left unassigned -- so the app launched against an
+  /// empty fallback store and rendered a perfectly normal, completely blank logger. A lifter with
+  /// two years of history would see a fresh install, train into a store discarded on quit, and be
+  /// told nothing. Recording the failure is what makes it possible to say so instead.
+  private let storeFailure: String?
+
   init() {
+    var failure: String?
     // Exactly once per process. `prepareDependencies` is the supported place to install the
     // default database, and calling it more than once is a programmer error.
     prepareDependencies { dependencies in
       do {
         dependencies.defaultDatabase = try HardsetDatabase.open()
       } catch {
-        // Deliberately not a `fatalError`. A launch that cannot open the store should still start
-        // so the user can be told, rather than shown a crash.
-        assertionFailure("Could not open the Hardset database: \(error)")
+        // Not a `fatalError`: a crash tells the user less than the screen does, and it removes
+        // their chance to read the reason. Not swallowed either -- see `storeFailure`.
+        failure = String(describing: error)
       }
     }
+    self.storeFailure = failure
   }
 
   var body: some Scene {
     WindowGroup {
-      RootView(syncDelegate: syncDelegate, restTimer: restTimer)
+      if let storeFailure {
+        // Deliberately terminal. There is no "start fresh" affordance, because a store that failed
+        // to open once may well open on the next launch, and erasing it is not reversible.
+        StoreUnavailableView(detail: storeFailure)
+      } else {
+        RootView(syncDelegate: syncDelegate, restTimer: restTimer)
+      }
     }
   }
 }
