@@ -17,6 +17,7 @@ import SwiftUI
 public struct SessionSummaryScreen: View {
   private let outcome: SessionOutcome
   private let timeline: SessionTimeline
+  private let sessionID: SessionID
   private let store: VolumeStore
   private let unit: WeightUnit
   private let onDone: () -> Void
@@ -26,12 +27,14 @@ public struct SessionSummaryScreen: View {
   public init(
     outcome: SessionOutcome,
     timeline: SessionTimeline,
+    sessionID: SessionID,
     store: VolumeStore,
     unit: WeightUnit,
     onDone: @escaping () -> Void
   ) {
     self.outcome = outcome
     self.timeline = timeline
+    self.sessionID = sessionID
     self.store = store
     self.unit = unit
     self.onDone = onDone
@@ -40,11 +43,14 @@ public struct SessionSummaryScreen: View {
   public var body: some View {
     SessionSummaryView(outcome: outcome, muscles: muscles, unit: unit, onDone: onDone)
       .task {
-        guard let finishedAt = timeline.finishedAt else { return }
+        // Scoped by session, not by its time span. A window of `startedAt..<finishedAt` is half-open
+        // at the top, so a set logged in the same instant the workout was finished fell outside its
+        // own summary -- and the window could not tell whose sets it was counting either.
+        //
         // `try?` is acceptable here and nowhere near a write: the breakdown is additive, the view
         // renders its absence honestly, and there is nothing the user could do about a read
         // failure on a screen they are about to dismiss.
-        muscles = try? store.report(from: timeline.startedAt, to: finishedAt)
+        muscles = try? store.report(for: sessionID)
       }
   }
 }

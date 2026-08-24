@@ -259,6 +259,7 @@ public struct HardsetRootView: View {
       SessionSummaryScreen(
         outcome: finished.outcome,
         timeline: finished.timeline,
+        sessionID: finished.sessionID,
         store: environment.volume,
         unit: unit,
         onDone: { self.finished = nil }
@@ -274,7 +275,11 @@ public struct HardsetRootView: View {
         gyms: environment.gyms,
         progression: environment.progression,
         onFinished: { outcome in
-          self.finished = FinishedSession(outcome: outcome, timeline: coordinator.timeline)
+          self.finished = FinishedSession(
+            outcome: outcome,
+            timeline: coordinator.timeline,
+            sessionID: coordinator.sessionID
+          )
           // Cleared here, not after the summary is dismissed: the session is over, so the
           // in-progress accessory must go with it.
           self.coordinator = nil
@@ -655,6 +660,10 @@ public struct HardsetRootView: View {
 struct FinishedSession {
   let outcome: SessionOutcome
   let timeline: SessionTimeline
+  /// Carried so the summary's muscle breakdown can be scoped to this workout rather than to the
+  /// span between its start and finish, which is half-open at the top and cannot tell whose sets
+  /// it is counting.
+  let sessionID: SessionID
 }
 
 /// `sheet(item:)` needs an `Identifiable`, and an id is a value with no natural one of its own.

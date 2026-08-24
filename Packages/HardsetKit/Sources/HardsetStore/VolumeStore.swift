@@ -50,6 +50,33 @@ public nonisolated struct VolumeStore {
     )
   }
 
+  /// Every countable set belonging to one session, identified by the session rather than by time.
+  public func countableSets(in sessionID: SessionID) throws -> [CountableSet] {
+    try database.read { db in
+      try LoggedSet
+        .where { $0.sessionID.eq(sessionID.rawValue) }
+        .order { $0.completedAt }
+        .fetchAll(db)
+        .map { CountableSet(exerciseID: ExerciseID(rawValue: $0.exerciseID), isWarmup: $0.isWarmup) }
+    }
+  }
+
+  /// The report for one workout.
+  ///
+  /// Scoped by session id, not by its start and finish times. The summary screen used
+  /// `report(from: startedAt, to: finishedAt)`, and that window is half-open at the top -- so a set
+  /// logged in the same instant the workout was finished fell outside its own summary. It also could
+  /// not tell whose sets it was counting: anything else logged in that span, from an overlapping or
+  /// a back-dated session, was counted as part of this workout.
+  ///
+  /// The session id is the fact. The timestamps are a description of it.
+  public func report(for sessionID: SessionID) throws -> MuscleVolumeReport {
+    VolumeAnalyzer.report(
+      sets: try countableSets(in: sessionID),
+      attribution: try attributionIndex()
+    )
+  }
+
   /// The report for the seven days ending at `now`.
   ///
   /// A rolling window, not a calendar week. A calendar week makes Monday morning look like a
