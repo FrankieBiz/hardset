@@ -226,6 +226,40 @@ public nonisolated struct GymStore {
     return id
   }
 
+  /// Records that a machine is the equipment for a movement, if it is not recorded already.
+  ///
+  /// `createMachine(forExercise:)` writes this association when equipment is named at the rack.
+  /// This is the same association arriving from anywhere else -- planning a split names a machine
+  /// for a movement days before training on it, and that is exactly the case
+  /// `exercisesWithEquipment(at:)` exists to serve: it is what lets the picker know a gym has
+  /// equipment for a movement *before* a set has been logged there.
+  ///
+  /// Idempotent by hand, because it cannot be idempotent by constraint: SQLiteData forbids UNIQUE on
+  /// anything but the primary key, so there is no index to conflict against. The check and the
+  /// insert share one write so two callers cannot both find it missing.
+  ///
+  /// - Returns: `true` when a new association was written.
+  @discardableResult
+  public func linkMachine(
+    _ machineID: MachineID,
+    toExercise exerciseID: ExerciseID,
+    now: Date = Date()
+  ) throws -> Bool {
+    try database.write { db in
+      let existing = try MachineExercise.existing(
+        machineID: machineID.rawValue, exerciseID: exerciseID.rawValue, in: db
+      )
+      guard existing == nil else { return false }
+      try MachineExercise.insert {
+        MachineExercise.Draft(
+          id: UUID(), machineID: machineID.rawValue, exerciseID: exerciseID.rawValue, createdAt: now
+        )
+      }
+      .execute(db)
+      return true
+    }
+  }
+
   public func archiveMachine(_ id: MachineID) throws {
     try database.write { db in
       try Machine.where { $0.id.eq(id.rawValue) }.update { $0.isArchived = #bind(true) }.execute(db)

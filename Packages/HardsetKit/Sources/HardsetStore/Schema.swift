@@ -65,6 +65,22 @@ nonisolated struct MachineExercise: Hashable, Identifiable, Sendable {
   var createdAt = Date(timeIntervalSince1970: 0)
 }
 
+extension MachineExercise {
+  /// The existing association between one machine and one exercise, if there is one.
+  ///
+  /// A named `static func` taking `db` rather than an inline query, because inside
+  /// `database.write { db in ... }` an anonymous `$0` in a nested StructuredQueries closure binds
+  /// to the OUTER `db` and type-checks far enough to produce a misleading diagnostic. It also gives
+  /// the predicate one definition instead of one per caller.
+  nonisolated static func existing(machineID: UUID, exerciseID: UUID, in db: Database) throws
+    -> MachineExercise?
+  {
+    try MachineExercise
+      .where { $0.machineID.eq(machineID) && $0.exerciseID.eq(exerciseID) }
+      .fetchOne(db)
+  }
+}
+
 @Table("sessions")
 nonisolated struct Session: Hashable, Identifiable, Sendable {
   let id: UUID
