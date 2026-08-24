@@ -30,14 +30,19 @@ chart draw-on and volume bar reveal, and the parts of §5.3 with a host today --
 acknowledges on touch-*down*, and the check replaces the circle. The root forces `.dark`.
 
 **Specification only** -- nothing in the app does this yet: the focus-ring travel and glass morph in
-§5.3, the rest timer in §5.4, the summary choreography in §5.5, the chart reveals in §5.6, the zoom
-transition in §5.7, most of the haptics table in §5.8, the glass policy in §4.4, and the
-concentric-corner rule in §4.2.
+§5.3, the zoom transition in §5.7, most of the haptics table in §5.8, the glass policy in §4.4, and
+the concentric-corner rule in §4.2. (§5.6's reveals were listed here *and* under Landed, which
+cannot both be true; they are implemented. §5.4's rest bar and §5.5's summary choreography are also
+built, and the summary sequence is not yet skippable by tap as M12 requires.)
 
-**Reduce Motion** is honoured on the press path (`CommitButtonStyle` drops the scale and keeps the
-dim) and throughout `SessionSummaryView`. It is **not** yet honoured by `SetRowView`'s row-level
-recede and symbol replace, which still animate with the setting on. That file is being edited
-elsewhere; the gap is small (a colour crossfade and a symbol swap) but it is real.
+**Reduce Motion** is honoured everywhere that animates. `CommitButtonStyle` drops the scale and
+keeps the dim; `SessionSummaryView`, `VolumeReportView`, `ProgressionChartView` and `RestBarView`
+each read the setting; and `SetRowView`'s row-level recede and symbol replace -- which this section
+previously recorded as the one gap -- are switched off at the source, with the symbol falling back to
+`.identity` rather than a shorter travel, because the travel is the thing being asked about. Verified
+by sweeping every `withAnimation`, `.animation(`, `.transition(`, `.contentTransition` and
+`symbolEffect` in `HardsetUI` and `HardsetFeature`: each is either guarded directly or driven by a
+transaction that is already nilled.
 
 **Tuning is not verification.** Every animation above is implemented to specification and none has
 been felt on hardware. Haptic-and-pixel co-timing (M4) and 120 Hz cannot be judged in a simulator,

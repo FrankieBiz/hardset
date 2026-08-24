@@ -282,9 +282,14 @@ public enum Tokens {
     // Written as explicit springs rather than `.snappy`/`.smooth` so the numbers are visible and
     // so `commit(intensity:)` below is continuous with `tap` at zero intensity.
 
-    /// Press and release. Begins on touch-*down*, never on the action. Settles in ~98 ms.
+    /// Press and release. Begins on touch-*down*, never on the action. Settles in ~103 ms.
+    ///
+    /// 103, not 98. §5.2 of the guidelines records that 98 was computed from a prototype whose
+    /// bounce was 0.15 while the shipped value is 0.18 -- and then this comment kept the discredited
+    /// figure, which is how a corrected number survives in the one place a reader is most likely to
+    /// trust it.
     public static let tap = Animation.spring(duration: 0.09, bounce: 0.18)
-    /// Toggle, selection, focus-ring travel. Settles in ~132 ms.
+    /// Toggle, selection, focus-ring travel. Settles in ~131 ms.
     public static let control = Animation.spring(duration: 0.16, bounce: 0.12)
     /// Sheets, cards, rows settling. Critically damped -- no overshoot on a surface. ~284 ms.
     public static let surface = Animation.spring(duration: 0.24, bounce: 0)

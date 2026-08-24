@@ -196,8 +196,9 @@ public struct ProgressionChartView: View {
     // checked against this ground. Three hues, assigned in fixed order and never cycled; a
     // fourth *gym* folds to the neutral rather than inventing a hue that fails colour-blind
     // separation. Hue is the gym and the stroke is the machine within it, so two leg presses at
-    // one gym read as the same place with different equipment. NOTE: the guidelines spend hue on the *gym*, and this view only knows machine
-    // labels -- closing that needs gym ids plumbed through `ProgressionHistory`.
+    // one gym read as the same place with different equipment -- `SeriesInput.gymIndex` carries the
+    // gym and `ExerciseProgressScreen` fills it from `ProgressionHistory.gymOrder`. (A NOTE here
+    // claimed that plumbing did not exist, sitting directly above the line that reads it.)
     .chartForegroundStyleScale(
       domain: series.map(\.label),
       range: series.map { colour(for: $0) }
