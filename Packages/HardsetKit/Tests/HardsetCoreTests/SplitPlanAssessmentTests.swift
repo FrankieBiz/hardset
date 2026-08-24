@@ -293,17 +293,34 @@ struct SplitPlanAssessmentTests {
   // MARK: - Descriptive day subtitles
 
   /// A day may be described by what is on it, and may not be labelled with a training archetype.
-  @Test("A day's groups describe its contents, most-credited first")
-  func dominantGroupsDescribeContents() {
+  ///
+  /// The ranking must be by *credit*, not by how many movements touch a group. A bench press credits
+  /// chest directly and triceps indirectly, so a day of one bench press is a chest day -- counting
+  /// group touches makes it a tie and hands the lead to whichever name sorts first.
+  @Test("A day of one press leads with chest, not with arms")
+  func dominantGroupsRankByCredit() {
     let f = makeFixture()
+    let day = SplitPlanDay(position: 0, name: "Day 1", movements: [f.press])
+    let groups = day.dominantGroups(with: f.attribution)
+    #expect(groups.first == .chest, "ranked by group touches rather than by credit: \(groups)")
+    // Arms is still there -- the triceps credit is real, just smaller.
+    #expect(groups.contains(.arms))
+    // The stabiliser credits nothing, so its group must not appear at all from this movement.
+    #expect(groups == [.chest, .arms])
+  }
+
+  /// The regression this replaces, found by looking at a real dealt day rather than by any test: a
+  /// day of rows, bench, leg press and leg curls was described as "Arms · Legs · Shoulders",
+  /// omitting chest and back and leading with the least important thing on it.
+  @Test("A mixed day leads with the group it actually trains most")
+  func mixedDayLeadsWithItsRealEmphasis() {
+    let f = makeFixture()
+    // Two leg movements against one press: legs must lead.
     let day = SplitPlanDay(
-      position: 0, name: "Day 1", movements: [f.press, f.press, f.curl]
+      position: 0, name: "Day 1", movements: [f.squat, f.squat, f.press]
     )
     let groups = day.dominantGroups(with: f.attribution)
-    // Two presses credit chest and arms; one curl credits arms. Arms is touched by all three.
-    #expect(groups.first == .arms)
-    #expect(groups.contains(.chest))
-    #expect(!groups.contains(.legs))
+    #expect(groups.first == .legs, "expected legs to lead, got \(groups)")
   }
 
   @Test("A day of unattributed movements describes nothing rather than guessing")
@@ -312,5 +329,15 @@ struct SplitPlanAssessmentTests {
       position: 0, name: "Day 1", movements: [ExerciseID(), ExerciseID()]
     )
     #expect(day.dominantGroups(with: AttributionIndex([:])).isEmpty)
+  }
+
+  /// Ties must break deterministically, or a day's subtitle reshuffles between renders.
+  @Test("Equal credit breaks ties by name, so a subtitle does not reshuffle")
+  func tiesAreDeterministic() {
+    let f = makeFixture()
+    let day = SplitPlanDay(position: 0, name: "Day 1", movements: [f.press, f.curl])
+    let first = day.dominantGroups(with: f.attribution)
+    let second = day.dominantGroups(with: f.attribution)
+    #expect(first == second)
   }
 }

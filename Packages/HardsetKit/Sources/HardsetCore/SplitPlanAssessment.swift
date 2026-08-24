@@ -166,23 +166,34 @@ extension SplitPlan {
 extension SplitPlanDay {
   /// Muscle groups this day's movements credit, most-credited first, for a descriptive subtitle.
   ///
-  /// Describes what is on the day; it does not label the day as a training style. "chest,
-  /// shoulders" is a readback of the lifter's own choices, whereas calling it "Push" would assert
-  /// the app picked a split archetype for them.
+  /// Describes what is on the day; it does not label the day as a training style. "Legs · Back" is a
+  /// readback of the lifter's own choices, whereas calling it "Pull" would assert the app picked a
+  /// split archetype for them.
   ///
-  /// Counts each movement once per group, however many of that group's muscles it credits --
-  /// the same rule as `MuscleVolumeReport.setsTouchingGroup`, and for the same reason: summing a
-  /// group's members triple-counts a bench press.
+  /// ## Ranked by credit, not by how many movements touch a group
+  ///
+  /// Counting movements-per-group weights a bench press's triceps exactly as much as its chest, and
+  /// on a real dealt day that produced "Arms · Legs · Shoulders" for a day of rows, bench, leg press
+  /// and leg curls -- omitting chest and back entirely and leading with the least important thing
+  /// there. Found by looking at the screen; no test would have called it wrong.
+  ///
+  /// So the sort key is summed `setWeight`, which makes a direct credit outrank an indirect one.
+  /// Note this deliberately does NOT follow `MuscleVolumeReport.setsTouchingGroup`'s
+  /// count-once-never-sum rule. That rule exists because summing a group's members inflates a
+  /// *displayed volume total* -- a bench press would be counted three times in "upper body". Nothing
+  /// here is displayed as a quantity: it is a sort key for three words, so the double-counting that
+  /// rule prevents has no number to distort.
   public func dominantGroups(with attribution: AttributionIndex) -> [MuscleGroup] {
-    var counts: [MuscleGroup: Int] = [:]
+    var credit: [MuscleGroup: Double] = [:]
     for movement in movements {
       let contributions = (attribution.contributions(for: movement) ?? [])
         .filter { $0.setWeight > 0 }
-      for group in Set(contributions.compactMap(\.key.group)) {
-        counts[group, default: 0] += 1
+      for contribution in contributions {
+        guard let group = contribution.key.group else { continue }
+        credit[group, default: 0] += contribution.setWeight
       }
     }
-    return counts
+    return credit
       .sorted {
         $0.value != $1.value ? $0.value > $1.value : $0.key.rawValue < $1.key.rawValue
       }

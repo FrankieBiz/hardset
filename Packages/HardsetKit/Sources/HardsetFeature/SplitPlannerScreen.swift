@@ -23,6 +23,14 @@ public struct SplitPlannerScreen: View {
     leastCreditedModelledNames: [], isLowerBound: false
   )
 
+  /// What a deal would draw on. Held in state rather than recomputed in `body`, so reading the
+  /// lifter's logged movements is not a query per render.
+  @State private var dealSource: PlanDealSource = .planContents(count: 0)
+  /// The gym's machines, read once per reload. Resolving a machine name per row would be a database
+  /// read per render -- the exact thing `PriorPerformanceSnapshot` exists to make unrepresentable in
+  /// the logger, and no more acceptable here.
+  @State private var machineCache: [MachineRecord] = []
+
   @State private var isNamingPlan = false
   @State private var renamingDay: PlannedDay?
   @State private var addingToDay: DayTarget?
@@ -76,6 +84,7 @@ public struct SplitPlannerScreen: View {
     SplitPlannerView(
       days: days,
       coverage: coverage,
+      dealSource: dealSource,
       onRedeal: redeal,
       onAddMovement: { addingToDay = DayTarget(id: $0) },
       onRemoveMovement: removeMovement,
@@ -169,11 +178,17 @@ public struct SplitPlannerScreen: View {
   }
 
   @ViewBuilder private func machinePicker(for movement: PlannedMovementRow) -> some View {
-    let options = machineOptions()
+    // Split into the two lists the picker actually means. Passing every machine in the building as
+    // `recent` put them all under "You've used these", which is a false statement about equipment
+    // the lifter may never have touched for this movement -- and found only by reading the sheet.
+    let options = machineOptions(for: movement.exerciseID)
     NavigationStack {
       MachinePickerView(
-        recent: options,
-        selected: nil,
+        recent: options.recent,
+        others: options.others,
+        // The machine already named must show as chosen, or reopening the sheet looks like nothing
+        // was ever set.
+        selected: movement.machineID,
         onSelect: { machineID in
           choosingMachineFor = nil
           write {
@@ -188,12 +203,36 @@ public struct SplitPlannerScreen: View {
     }
   }
 
-  private func machineOptions() -> [MachineOption] {
-    guard let gym = try? gyms.lastUsedGym() else { return [] }
-    let machines = (try? gyms.machines(at: gym)) ?? []
-    return machines.map {
-      MachineOption(id: $0.id, displayName: $0.displayName, stackIncrementKg: $0.stackIncrementKg)
+  /// Machines this movement has actually been performed on, and then the rest of the gym.
+  ///
+  /// Same split as the live session's picker, so "You've used these" means the same thing in both
+  /// places.
+  private func machineOptions(for exerciseID: ExerciseID)
+    -> (recent: [MachineOption], others: [MachineOption])
+  {
+    guard let gym = try? gyms.lastUsedGym() else { return ([], []) }
+    do {
+      let recent = try gyms.recentMachines(for: exerciseID, at: gym)
+      let recentIDs = Set(recent.map(\.id))
+      let others = try gyms.machines(at: gym).filter { !recentIDs.contains($0.id) }
+      return (recent.map(Self.option(for:)), others.map(Self.option(for:)))
+    } catch {
+      // An unreadable gym must not block planning. The picker then offers only "Not recorded",
+      // which is a true statement about what can be offered rather than a fabricated list.
+      return ([], [])
     }
+  }
+
+  private static func option(for record: MachineRecord) -> MachineOption {
+    MachineOption(
+      id: record.id, displayName: record.displayName, stackIncrementKg: record.stackIncrementKg
+    )
+  }
+
+  /// Every machine at the current gym, for turning a stored id back into a name.
+  private func allMachines() -> [MachineRecord] {
+    guard let gym = try? gyms.lastUsedGym() else { return [] }
+    return (try? gyms.machines(at: gym)) ?? []
   }
 
   private func filtered(_ entries: [CatalogEntry]) -> [CatalogEntry] {
@@ -236,12 +275,18 @@ public struct SplitPlannerScreen: View {
     guard let selected else { return }
     write {
       let attribution = try volume.attributionIndex()
-      // The movements already in this plan, re-arranged. Deliberately NOT everything the lifter has
-      // ever logged: re-dealing rearranges what they put in the plan, and pulling in extra
-      // movements would be the app choosing their training.
+      // An empty plan has nothing to rearrange, so it is seeded from what the lifter has actually
+      // logged -- which is exactly what the empty state promises, and is still only their own
+      // training. Once a plan has movements, dealing rearranges *those*: pulling extra movements
+      // into a plan someone curated would be the app editing their training, not arranging it.
+      //
+      // This was the defect found by running the screen: the empty state said "deal the movements
+      // you already train" and the button read from the empty plan, so it did nothing at all.
       let existing = try splits.plan(for: selected).allMovements
+      let movements = existing.isEmpty ? try splits.loggedMovements() : existing
+      guard !movements.isEmpty else { return }
       let plan = SplitDealer.deal(
-        movements: existing,
+        movements: movements,
         across: dayCount,
         attribution: attribution
       )
@@ -262,6 +307,7 @@ public struct SplitPlannerScreen: View {
   private func reloadPlan() {
     guard let selected else {
       days = []
+      dealSource = .planContents(count: 0)
       coverage = PlanCoverageSummary(
         movementCount: 0, dayCount: 0, uncreditedMuscleNames: [],
         leastCreditedModelledNames: [], isLowerBound: false
@@ -270,6 +316,7 @@ public struct SplitPlannerScreen: View {
     }
 
     let attribution = (try? volume.attributionIndex()) ?? AttributionIndex([:])
+    machineCache = allMachines()
     let entries = (try? catalog.selectableExercises()) ?? []
     let byID = Dictionary(entries.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
     let dayRecords = (try? splits.days(in: selected)) ?? []
@@ -293,6 +340,10 @@ public struct SplitPlannerScreen: View {
 
     let plan = (try? splits.plan(for: selected)) ?? SplitPlan(days: [])
     let assessment = plan.assessed(with: attribution)
+    dealSource =
+      plan.movementCount > 0
+      ? .planContents(count: plan.movementCount)
+      : .loggedHistory(count: ((try? splits.loggedMovements()) ?? []).count)
     coverage = PlanCoverageSummary(
       movementCount: assessment.movementCount,
       dayCount: assessment.dayCount,
@@ -312,6 +363,7 @@ public struct SplitPlannerScreen: View {
       creditedMuscleNames: (entry?.creditedMuscles ?? []).compactMap {
         $0.key.muscle.map(MuscleVocabulary.displayName)
       },
+      machineID: record.machineID,
       machineName: machineName(record.machineID),
       isUnattributed: entry?.isUnattributed ?? true
     )
@@ -319,7 +371,7 @@ public struct SplitPlannerScreen: View {
 
   private func machineName(_ id: MachineID?) -> String? {
     guard let id else { return nil }
-    return machineOptions().first { $0.id == id }?.displayName
+    return machineCache.first { $0.id == id }?.displayName
   }
 
   // MARK: - Copy

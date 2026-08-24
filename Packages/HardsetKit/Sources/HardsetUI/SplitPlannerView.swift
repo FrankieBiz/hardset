@@ -9,6 +9,8 @@ public struct PlannedMovementRow: Hashable, Sendable, Identifiable {
   /// What the movement credits, for the line that makes this more than a list of names.
   public let creditedMuscleNames: [String]
   /// The machine this is planned on, when the lifter has named one.
+  public let machineID: MachineID?
+  /// Its name, resolved by the caller so a row never reads the database to draw itself.
   public let machineName: String?
   /// True when the app cannot attribute the movement at all, so the row must say so rather than
   /// render an empty muscle list as though it meant "trains nothing".
@@ -19,6 +21,7 @@ public struct PlannedMovementRow: Hashable, Sendable, Identifiable {
     exerciseID: ExerciseID,
     name: String,
     creditedMuscleNames: [String],
+    machineID: MachineID?,
     machineName: String?,
     isUnattributed: Bool
   ) {
@@ -26,6 +29,7 @@ public struct PlannedMovementRow: Hashable, Sendable, Identifiable {
     self.exerciseID = exerciseID
     self.name = name
     self.creditedMuscleNames = creditedMuscleNames
+    self.machineID = machineID
     self.machineName = machineName
     self.isUnattributed = isUnattributed
   }
@@ -77,6 +81,25 @@ public struct PlanCoverageSummary: Hashable, Sendable {
   }
 }
 
+/// Where a deal's movements come from.
+///
+/// An empty plan has nothing to rearrange, so dealing it draws on the movements the lifter has
+/// actually logged -- which is what its own empty state promises, and is still only ever their own
+/// training. Once a plan has movements, dealing rearranges *those*: pulling extra movements into a
+/// plan someone curated would be the app editing their training rather than arranging it.
+public enum PlanDealSource: Hashable, Sendable {
+  /// Rearrange what is already in the plan.
+  case planContents(count: Int)
+  /// Seed an empty plan from what the lifter has logged.
+  case loggedHistory(count: Int)
+
+  var count: Int {
+    switch self {
+    case .planContents(let count), .loggedHistory(let count): count
+    }
+  }
+}
+
 /// A plan: days, the movements on them, and what that covers.
 ///
 /// ## What this screen refuses to draw
@@ -94,6 +117,8 @@ public struct SplitPlannerView: View {
   private let coverage: PlanCoverageSummary
   /// Re-deals the plan across a chosen number of days. `nil` hides the affordance.
   private let onRedeal: ((Int) -> Void)?
+  /// What a deal would draw on, which decides both the wording and whether it can do anything.
+  private let dealSource: PlanDealSource
   /// Adds a movement to a day.
   private let onAddMovement: ((SplitDayID) -> Void)?
   private let onRemoveMovement: ((PlannedMovementRow) -> Void)?
@@ -111,6 +136,7 @@ public struct SplitPlannerView: View {
   public init(
     days: [PlannedDay],
     coverage: PlanCoverageSummary,
+    dealSource: PlanDealSource = .planContents(count: 0),
     onRedeal: ((Int) -> Void)? = nil,
     onAddMovement: ((SplitDayID) -> Void)? = nil,
     onRemoveMovement: ((PlannedMovementRow) -> Void)? = nil,
@@ -122,6 +148,7 @@ public struct SplitPlannerView: View {
   ) {
     self.days = days
     self.coverage = coverage
+    self.dealSource = dealSource
     self.onRedeal = onRedeal
     self.onAddMovement = onAddMovement
     self.onRemoveMovement = onRemoveMovement
@@ -305,8 +332,12 @@ public struct SplitPlannerView: View {
         }
 
         if !coverage.leastCreditedModelledNames.isEmpty {
+          // The scope has to be in the label. Bare "Fewest movements" reads as "fewest in the
+          // whole plan", when the claim is much narrower: of the six muscles the dose-response
+          // model covers, these get the fewest. Without the qualifier it looks like an arbitrary
+          // callout, or worse, like a verdict.
           statement(
-            title: "Fewest movements",
+            title: "Fewest movements, among the six the evidence covers",
             detail: coverage.leastCreditedModelledNames.joined(separator: ", ")
           )
         }
@@ -353,41 +384,40 @@ public struct SplitPlannerView: View {
     if let onRedeal {
       Section {
         Stepper(value: $redealDayCount, in: 1...7) {
-          // The count is the readout, so it is monospaced-digit to stop the row reflowing as it
-          // changes.
-          Text("\(redealDayCount) days")
+          // Monospaced digits so the row does not reflow as the count changes.
+          Text(Self.dayCountText(redealDayCount))
             .font(Tokens.Text.label)
             .monospacedDigit()
         }
         Button {
           isConfirmingRedeal = true
         } label: {
-          Label("Deal across \(redealDayCount) days", systemImage: "rectangle.3.group")
+          Label(Self.dealButtonText(redealDayCount), systemImage: "rectangle.3.group")
             .font(Tokens.Text.label)
         }
-        .disabled(coverage.movementCount == 0 && days.allSatisfy { $0.movements.isEmpty })
+        // Nothing to deal is nothing to deal. Enabled-but-inert is the failure this codebase has
+        // shipped before: a button that appears to work and silently does nothing.
+        .disabled(dealSource.count == 0)
       } header: {
         Text("Rearrange")
           .font(Tokens.Text.caption)
           .textCase(nil)
       } footer: {
-        Text("Spreads the movements already in this plan across the days you choose, evening out "
-          + "what each day trains. It does not add movements or decide how many sets you do.")
+        Text(Self.dealFootnote(dealSource))
           .font(Tokens.Text.caption)
           .foregroundStyle(Tokens.Color.textTertiary)
       }
-      // Replacing an arrangement someone built by hand is worth one tap of confirmation. It is not
-      // destructive to training history -- nothing logged is touched -- so the wording says what it
-      // actually replaces.
+      // Replacing an arrangement is worth one tap of confirmation. It is not destructive to
+      // training history -- nothing logged is touched -- so the wording says what it replaces.
       .confirmationDialog(
-        "Deal across \(redealDayCount) days?",
+        Self.dealButtonText(redealDayCount) + "?",
         isPresented: $isConfirmingRedeal,
         titleVisibility: .visible
       ) {
-        Button("Deal again") { onRedeal(redealDayCount) }
+        Button("Deal") { onRedeal(redealDayCount) }
         Button("Cancel", role: .cancel) {}
       } message: {
-        Text("This replaces the current arrangement. Your logged workouts are not affected.")
+        Text(Self.dealConfirmation(dealSource))
       }
     }
   }
@@ -395,8 +425,48 @@ public struct SplitPlannerView: View {
   // MARK: - Copy
 
   static func arrangementText(_ coverage: PlanCoverageSummary) -> String {
-    let movements = coverage.movementCount == 1 ? "1 movement" : "\(coverage.movementCount) movements"
-    let days = coverage.dayCount == 1 ? "1 day" : "\(coverage.dayCount) days"
-    return "\(movements) across \(days)."
+    "\(movementCountText(coverage.movementCount)) across \(dayCountText(coverage.dayCount))."
+  }
+
+  // Plurals are spelled out with a ternary on purpose. `^[\(n) day](inflect: true)` is only
+  // interpreted for a `LocalizedStringKey`, and putting it in an interpolated `String` shipped the
+  // markup to the screen verbatim -- which this app has already done once.
+  static func dayCountText(_ count: Int) -> String {
+    count == 1 ? "1 day" : "\(count) days"
+  }
+
+  static func movementCountText(_ count: Int) -> String {
+    count == 1 ? "1 movement" : "\(count) movements"
+  }
+
+  static func dealButtonText(_ days: Int) -> String {
+    "Deal across \(dayCountText(days))"
+  }
+
+  /// Says which movements a deal would use, because "deal" means two different things depending on
+  /// whether the plan already has any.
+  static func dealFootnote(_ source: PlanDealSource) -> String {
+    switch source {
+    case .planContents(let count) where count > 0:
+      return "Spreads the \(movementCountText(count)) already in this plan across the days you "
+        + "choose, evening out what each day trains. It does not add movements or decide how many "
+        + "sets you do."
+    case .planContents:
+      return "Add a movement, or log a workout, and this will spread them across the days you "
+        + "choose."
+    case .loggedHistory(let count):
+      return "This plan is empty, so dealing starts from the \(movementCountText(count)) you have "
+        + "logged. It adds nothing you have not trained, and decides no set counts."
+    }
+  }
+
+  static func dealConfirmation(_ source: PlanDealSource) -> String {
+    switch source {
+    case .planContents:
+      "This replaces the current arrangement. Your logged workouts are not affected."
+    case .loggedHistory:
+      "The movements you have logged will be arranged across these days. Nothing is added that you "
+        + "have not trained."
+    }
   }
 }
