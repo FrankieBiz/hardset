@@ -34,7 +34,9 @@ public struct RestBarView: View {
   @State private var finalSecondsPulse = 0
   /// Bumped once when the rest actually runs out, as opposed to being skipped.
   @State private var completions = 0
-  @Environment(\.accessibilityReduceMotion) private var reduceMotion
+  // No `accessibilityReduceMotion` here on purpose. The rule's retreat *is* the timer and runs
+  // regardless (§5.4, M7), and the only things the setting would switch off in this view -- §5.4's
+  // final-ten-seconds breathing and symbol pulse -- are not built yet. It comes back with them.
   /// Drives the stacked layout. The controls are four hard 56 pt targets plus spacing and padding --
   /// 284 pt that cannot yield -- and the countdown is the only flexible child, so at accessibility
   /// sizes the one thing this bar exists to show was the thing that got compressed. `SetRowView`
@@ -142,15 +144,17 @@ public struct RestBarView: View {
   @ViewBuilder private var progressRule: some View {
     if total != nil {
       GeometryReader { proxy in
-        Rectangle()
+        // Round caps, per §5.4. A square-ended rule reads as a progress *bar*; the spec asks for a
+        // rule, and at 2 pt the cap is most of what distinguishes the two.
+        Capsule()
           .fill(Tokens.Color.hairline)
           .overlay(alignment: .leading) {
-            Rectangle()
+            Capsule()
               .fill(Tokens.Color.textPrimary)
-              .frame(width: proxy.size.width * fraction)
+              .frame(width: max(Tokens.restRuleHeight, proxy.size.width * fraction))
           }
       }
-      .frame(height: 2)
+      .frame(height: Tokens.restRuleHeight)
       .accessibilityHidden(true)
     }
   }
@@ -192,7 +196,14 @@ public struct RestBarView: View {
       let remaining = endsAt.timeIntervalSince(Date())
       guard remaining > 0 else { snap(to: 0); return }
       snap(to: min(1, remaining / total.seconds))
-      guard !reduceMotion else { return }
+      // Runs regardless of Reduce Motion, and that is deliberate: §5.4 says "the rule still
+      // retreats -- it is the timer (M7)". This is not decoration. It is the only continuous
+      // depiction of how much rest is left, and freezing it leaves a bar that shows a static
+      // fraction while the clock beside it counts down. The setting asks for less *motion*, not for
+      // less information -- and what it does switch off here is the escalating haptics near zero.
+      //
+      // A previous sweep of this file counted the `guard !reduceMotion` that used to sit here as
+      // correct handling. Guarding an animation is only correct when the animation is ornament.
       withAnimation(Tokens.Motion.decay(remaining: remaining)) { fraction = 0 }
 
     case .paused(let remaining):

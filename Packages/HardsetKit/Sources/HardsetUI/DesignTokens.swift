@@ -331,6 +331,12 @@ public enum Tokens {
   /// Logging happens one-handed, with sweaty hands, at arm's length from a rack, between
   /// heavy sets. 44 pt is the accessibility floor for a calm user sitting still; the set row
   /// and the keypad get 56 because a missed tap there costs a set.
+  /// The rest bar's progress rule, per §5.4: a 2 pt rule with round caps along the top edge.
+  ///
+  /// A named token rather than a literal at the call site, which is where every other dimension in
+  /// this file already lives.
+  public static let restRuleHeight: CGFloat = 2
+
   public static let loggerTapTarget: CGFloat = 56
 }
 
