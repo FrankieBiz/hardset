@@ -72,6 +72,8 @@ public struct LiveSessionScreen: View {
   @State private var equipmentError: String?
   /// Whether the name-this-workout sheet is up.
   @State private var isNaming = false
+  /// Whether the workout-note sheet is up.
+  @State private var isNotingSession = false
   /// Relevance inputs for the picker: the user's own recent movements, and what this gym has
   /// equipment for. Loaded when the picker opens, not per render.
   @State private var recentExercises: [ExerciseID] = []
@@ -181,6 +183,36 @@ public struct LiveSessionScreen: View {
             : "Workout name, \(coordinator.title). Double tap to rename."
         )
       }
+    }
+    .toolbar {
+      ToolbarItem(placement: .primaryAction) {
+        Button {
+          isNotingSession = true
+        } label: {
+          Label(
+            coordinator.notes.isEmpty ? "Add a note" : "Edit note",
+            systemImage: coordinator.notes.isEmpty ? "square.and.pencil" : "note.text"
+          )
+        }
+      }
+    }
+    .sheet(isPresented: $isNotingSession) {
+      NameEntrySheet(
+        title: coordinator.notes.isEmpty ? "Note on this workout" : "Edit note",
+        prompt: "Slept badly, first session back, felt strong\u{2026}",
+        footnote:
+          "About the session rather than a movement \u{2014} how it went, how you felt, anything you "
+          + "will want to know when you read this back. Clear it to remove it.",
+        confirmLabel: "Save",
+        initialValue: coordinator.notes,
+        allowsEmpty: true,
+        isMultiline: true,
+        onConfirm: { text in
+          isNotingSession = false
+          _ = coordinator.setSessionNotes(text)
+        },
+        onCancel: { isNotingSession = false }
+      )
     }
     .sheet(isPresented: $isNaming) {
       NameEntrySheet(

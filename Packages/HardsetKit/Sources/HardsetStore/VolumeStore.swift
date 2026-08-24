@@ -369,6 +369,17 @@ public nonisolated struct HistoryStore {
     return order.compactMap { byKey[$0] }
   }
 
+  /// The workout's own note, or empty when it has none.
+  ///
+  /// A focused read rather than another field on every history row: the note is only ever displayed
+  /// on the one screen that opens a single workout, and carrying it through the list would load a
+  /// paragraph per row to show none of them.
+  public func notes(for sessionID: SessionID) throws -> String {
+    try database.read { db in
+      try Session.where { $0.id.eq(sessionID.rawValue) }.fetchOne(db)?.notes ?? ""
+    }
+  }
+
   /// Discards a workout and, by cascade, its sets and plan rows.
   ///
   /// Exposed on `HistoryStore` so the history screen does not need a `LoggerStore` just to delete

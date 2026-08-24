@@ -237,6 +237,23 @@ public nonisolated struct LoggerStore {
     }
   }
 
+  /// Writes, or clears, the workout's own note.
+  ///
+  /// `sessions.notes` shipped in the first migration and was written exactly once per workout, as
+  /// the empty string, by `startSession` -- and read nowhere. A note about the *session* rather than
+  /// the movement is the other half of a training log: slept badly, first session back, felt strong.
+  /// Trimmed, and whitespace-only stores as empty, so a note the lifter blanked out reads back as no
+  /// note rather than as a note made of spaces.
+  public func setSessionNotes(_ text: String, for sessionID: SessionID) throws {
+    let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+    try database.write { db in
+      try Session
+        .where { $0.id.eq(sessionID.rawValue) }
+        .update { $0.notes = #bind(trimmed) }
+        .execute(db)
+    }
+  }
+
   /// Removes a whole workout, with its sets and its plan rows.
   ///
   /// One statement: `sessions` is the parent and both `loggedSets.sessionID` and
@@ -507,12 +524,15 @@ public nonisolated struct SessionRecord: Hashable, Sendable {
   public let id: SessionID
   public let gymID: GymID?
   public let title: String
+  /// The workout's own note. Empty when there is none -- absent and empty are the same thing here.
+  public let notes: String
   public let timeline: SessionTimeline
 
   init(row: Session) {
     self.id = SessionID(rawValue: row.id)
     self.gymID = row.gymID.map(GymID.init(rawValue:))
     self.title = row.title
+    self.notes = row.notes
     self.timeline = SessionTimeline(startedAt: row.startedAt, finishedAt: row.finishedAt)
   }
 }

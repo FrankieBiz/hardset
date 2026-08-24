@@ -20,6 +20,8 @@ public struct SessionDetailScreen: View {
   private let progression: ProgressionStore?
 
   @State private var sets: [LoggedSetRow] = []
+  /// The workout's own note, read alongside its sets.
+  @State private var notes = ""
   @State private var loadFailed = false
   /// Which movement's load history is open.
   @State private var progressTarget: ProgressTarget?
@@ -57,6 +59,7 @@ public struct SessionDetailScreen: View {
           duration: row.duration,
           hasImplausibleDuration: row.hasImplausibleDuration,
           sets: sets,
+          notes: notes,
           unit: unit,
           onShowProgress: progression == nil ? nil : { progressTarget = ProgressTarget(id: $0) }
         )
@@ -104,9 +107,11 @@ public struct SessionDetailScreen: View {
           isWarmup: $0.isWarmup
         )
       }
+      notes = try store.notes(for: row.id)
       loadFailed = false
     } catch {
       sets = []
+      notes = ""
       loadFailed = true
     }
   }

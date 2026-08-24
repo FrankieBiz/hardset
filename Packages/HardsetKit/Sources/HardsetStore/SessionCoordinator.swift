@@ -88,6 +88,11 @@ public final class SessionCoordinator {
   /// What the lifter called this workout, or empty. Held here so the header can show it without a
   /// query per render.
   public private(set) var title: String = ""
+  /// The workout's own note: how the session went, rather than how a movement is set up.
+  ///
+  /// `sessions.notes` was written once per workout as the empty string and read nowhere. Slept
+  /// badly, first session back, felt strong -- the context that makes a log worth reading later.
+  public private(set) var notes: String = ""
 
   /// When this session began and, once closed, when it ended.
   ///
@@ -108,6 +113,7 @@ public final class SessionCoordinator {
     gymID: GymID? = nil,
     startedAt: Date? = nil,
     title: String = "",
+    notes: String = "",
     now: @escaping () -> Date = { Date() },
     restAfterSet: Duration? = nil,
     onStartRest: @escaping (Duration, RestMetadata) -> Void = { _, _ in }
@@ -118,6 +124,7 @@ public final class SessionCoordinator {
     self.gymID = gymID
     self.timeline = SessionTimeline(startedAt: startedAt ?? now())
     self.title = title
+    self.notes = notes
     self.now = now
     self.restAfterSet = restAfterSet
     self.onStartRest = onStartRest
@@ -297,6 +304,9 @@ public final class SessionCoordinator {
       // re-stamping it here is exactly how a workout becomes nine thousand minutes long.
       startedAt: session.timeline.startedAt,
       title: session.title,
+      // Restored with the rest of the session, or a recovered workout loses the note the lifter
+      // wrote about it.
+      notes: session.notes,
       now: now,
       restAfterSet: restAfterSet,
       onStartRest: onStartRest
@@ -524,6 +534,22 @@ public final class SessionCoordinator {
   /// label cannot outlive the timer it described.
   public func clearRestMetadata() {
     lastRestMetadata = nil
+  }
+
+  /// Writes the workout's own note, then reflects it on screen.
+  ///
+  /// Persists first, like `rename`: a note visible in the app is a note in the database.
+  @discardableResult
+  public func setSessionNotes(_ text: String) -> Bool {
+    do {
+      try store.setSessionNotes(text, for: sessionID)
+      notes = text.trimmingCharacters(in: .whitespacesAndNewlines)
+      lastError = nil
+      return true
+    } catch {
+      lastError = error
+      return false
+    }
   }
 
   /// Writes one movement's note, then reflects it on screen.

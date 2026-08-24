@@ -80,6 +80,8 @@ public struct SessionDetailView: View {
   private let duration: Duration?
   private let hasImplausibleDuration: Bool
   private let sets: [LoggedSetRow]
+  /// The workout's own note, empty when there is none.
+  private let notes: String
   private let unit: WeightUnit
   /// Opens one movement's load history. `nil` leaves the headings inert.
   private let onShowProgress: ((ExerciseID) -> Void)?
@@ -94,6 +96,7 @@ public struct SessionDetailView: View {
     duration: Duration?,
     hasImplausibleDuration: Bool,
     sets: [LoggedSetRow],
+    notes: String = "",
     unit: WeightUnit,
     onShowProgress: ((ExerciseID) -> Void)? = nil
   ) {
@@ -102,6 +105,7 @@ public struct SessionDetailView: View {
     self.duration = duration
     self.hasImplausibleDuration = hasImplausibleDuration
     self.sets = sets
+    self.notes = notes
     self.unit = unit
     self.onShowProgress = onShowProgress
   }
@@ -110,6 +114,21 @@ public struct SessionDetailView: View {
     ScrollView {
       VStack(alignment: .leading, spacing: Tokens.Spacing.section) {
         header
+        if !notes.isEmpty {
+          // The lifter's own account of the session, shown above the sets because it is the context
+          // the numbers are read in -- "felt awful, slept four hours" changes what 84 kg means.
+          Label(notes, systemImage: "note.text")
+            .font(Tokens.Text.label)
+            .foregroundStyle(Tokens.Color.textSecondary)
+            .multilineTextAlignment(.leading)
+            .fixedSize(horizontal: false, vertical: true)
+            .padding(Tokens.Spacing.regular)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(
+              Tokens.Color.surface, in: RoundedRectangle(cornerRadius: Tokens.Radius.card)
+            )
+            .accessibilityLabel("Note on this workout: \(notes)")
+        }
         if groups.isEmpty {
           Text("No sets were recorded in this workout.")
             .font(Tokens.Text.label)
