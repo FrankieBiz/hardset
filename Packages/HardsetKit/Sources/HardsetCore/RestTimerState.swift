@@ -45,6 +45,12 @@ public enum RestTimerState: Hashable, Sendable, Codable {
   /// Convert a frozen remainder back into a deadline measured from `now`.
   public func resumed(at now: Date) -> RestTimerState {
     guard case .paused(let remaining) = self else { return self }
+    // Nothing left to resume. A paused timer can reach zero -- pause with a second on the clock and
+    // adjust it down, or pause exactly at the end -- and resuming it used to produce
+    // `.running(endsAt: now)`: a running timer whose deadline has already passed. Nothing would
+    // schedule an alarm for it (the commit path requires a positive remainder) and nothing would end
+    // it, so the bar sat at zero claiming to be running.
+    guard remaining.seconds > 0 else { return .idle }
     return .running(endsAt: now.addingTimeInterval(remaining.seconds))
   }
 

@@ -57,6 +57,15 @@ public struct SessionSummaryView: View {
       .padding(.vertical, Tokens.Spacing.hero)
     }
     .background(Tokens.Color.ground)
+    // M12: anything over 400 ms is skippable, and a tap jumps to the end state. This sequence runs
+    // about 520 ms and plays on every finished workout, so sitting through it is not optional
+    // otherwise. The file previously argued no skip was needed because the stagger is *capped* --
+    // which answers the motion budget (M-something-else) and not this rule, which is about the
+    // lifter being able to get to the numbers.
+    //
+    // `simultaneousGesture`, so it fires alongside the Done button, the certainty badge and the
+    // scroll rather than swallowing them.
+    .simultaneousGesture(TapGesture().onEnded { skipReveal() })
     .safeAreaInset(edge: .bottom) { doneButton }
     .task {
       // Count-up on a value the app computed, which is what `.numericText` is for. Never on a
@@ -65,6 +74,20 @@ public struct SessionSummaryView: View {
         shownSets = outcome.volume.workingSets
       }
       withAnimation(reduceMotion ? nil : Tokens.Motion.surface) { revealed = true }
+    }
+  }
+
+  /// Jumps straight to the end state.
+  ///
+  /// Explicitly unanimated: the point of a skip is to stop waiting, so animating to the end would
+  /// replace one wait with a shorter one.
+  private func skipReveal() {
+    guard !revealed else { return }
+    var transaction = Transaction(animation: nil)
+    transaction.disablesAnimations = true
+    withTransaction(transaction) {
+      shownSets = outcome.volume.workingSets
+      revealed = true
     }
   }
 

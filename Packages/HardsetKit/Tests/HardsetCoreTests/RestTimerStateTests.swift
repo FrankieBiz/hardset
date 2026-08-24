@@ -87,4 +87,25 @@ struct RestTimerStateTests {
   func idleIgnoresAdjustment() {
     #expect(RestTimerState.idle.adjusted(by: .seconds(15), at: now) == .idle)
   }
+
+  /// A paused timer can reach zero -- pause with a second left and adjust it down, or pause exactly
+  /// at the end. Resuming that used to produce a running timer whose deadline had already passed:
+  /// nothing would schedule an alarm for it and nothing would end it, so the bar sat at zero
+  /// claiming to be running.
+  @Test("Resuming a paused timer with nothing left ends it rather than running it at zero")
+  func resumingAnExhaustedPauseGoesIdle() {
+    let exhausted = RestTimerState.paused(remaining: .seconds(0))
+    #expect(exhausted.resumed(at: now) == .idle)
+
+    // And a negative remainder, which `adjusted` clamps but a stored row could still hold.
+    #expect(RestTimerState.paused(remaining: .seconds(-5)).resumed(at: now) == .idle)
+  }
+
+  @Test("Resuming a paused timer with time left still runs")
+  func resumingALivePauseRuns() {
+    let paused = RestTimerState.paused(remaining: .seconds(30))
+    let resumed = paused.resumed(at: now)
+    #expect(resumed.isRunning)
+    #expect(resumed.remaining(at: now)?.seconds == 30)
+  }
 }
