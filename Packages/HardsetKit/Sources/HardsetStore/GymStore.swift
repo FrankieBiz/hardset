@@ -85,6 +85,23 @@ public nonisolated struct GymStore {
     }
   }
 
+  /// Records the smallest step a stack actually moves in, or clears it.
+  ///
+  /// `nil` means unknown, and unknown is a real answer: an invented increment would licence
+  /// progression suggestions the equipment cannot honour, which is the reason machine creation
+  /// leaves it unset. What was missing was any way to supply it afterwards.
+  public func setStackIncrement(_ increment: Double?, for machineID: MachineID) throws {
+    // A non-positive step is not a step. Stored as unknown rather than as zero, which would make
+    // every suggestion land on the same load forever.
+    let sanitised = increment.flatMap { $0 > 0 ? $0 : nil }
+    try database.write { db in
+      try Machine
+        .where { $0.id.eq(machineID.rawValue) }
+        .update { $0.stackIncrementKg = #bind(sanitised) }
+        .execute(db)
+    }
+  }
+
   /// Renames a machine.
   ///
   /// Machines are named at the rack, in a hurry, one-handed -- so typos are likely and this is the

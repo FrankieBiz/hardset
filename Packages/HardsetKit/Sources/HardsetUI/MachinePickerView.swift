@@ -38,6 +38,13 @@ public struct MachinePickerView: View {
   private let onRename: ((MachineID) -> Void)?
   /// Retires equipment that is gone. What was logged on it stays logged.
   private let onArchive: ((MachineID) -> Void)?
+  /// Records the smallest step this stack actually moves in.
+  ///
+  /// The column, every reader of it, and this row's own "5 kg steps" label all existed with nothing
+  /// that could ever write it -- machines were created with the step left deliberately unknown, and
+  /// there was no second chance to supply it. So the increment was always nil, the label never
+  /// appeared, and the ± control on the keypad could never use the equipment's real step.
+  private let onSetIncrement: ((MachineID) -> Void)?
 
   public init(
     recent: [MachineOption],
@@ -46,7 +53,8 @@ public struct MachinePickerView: View {
     onSelect: @escaping (MachineID?) -> Void,
     onAddMachine: (() -> Void)? = nil,
     onRename: ((MachineID) -> Void)? = nil,
-    onArchive: ((MachineID) -> Void)? = nil
+    onArchive: ((MachineID) -> Void)? = nil,
+    onSetIncrement: ((MachineID) -> Void)? = nil
   ) {
     self.recent = recent
     self.others = others
@@ -55,6 +63,7 @@ public struct MachinePickerView: View {
     self.onAddMachine = onAddMachine
     self.onRename = onRename
     self.onArchive = onArchive
+    self.onSetIncrement = onSetIncrement
   }
 
   public var body: some View {
@@ -141,6 +150,16 @@ public struct MachinePickerView: View {
           onRename(option.id)
         } label: {
           Label("Rename", systemImage: "pencil")
+        }
+      }
+      if let onSetIncrement {
+        Button {
+          onSetIncrement(option.id)
+        } label: {
+          Label(
+            option.stackIncrementKg == nil ? "Stack step" : "Change step",
+            systemImage: "arrow.up.arrow.down"
+          )
         }
       }
     }

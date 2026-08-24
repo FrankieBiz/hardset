@@ -65,6 +65,8 @@ public struct LiveSessionScreen: View {
   @State private var machineChangeCount = 0
   /// The machine whose name is being repaired.
   @State private var renamingMachine: MachineTarget?
+  /// The machine whose stack step is being recorded.
+  @State private var incrementMachine: MachineTarget?
   /// Why an equipment edit failed, in the user's words. Separate from the set-logging errors below
   /// because it has a different cause and a different remedy.
   @State private var equipmentError: String?
@@ -262,7 +264,8 @@ public struct LiveSessionScreen: View {
           },
           onAddMachine: { isAddingMachine = true },
           onRename: { renamingMachine = MachineTarget(id: $0.rawValue) },
-          onArchive: { archive($0, forExercise: target) }
+          onArchive: { archive($0, forExercise: target) },
+          onSetIncrement: { incrementMachine = MachineTarget(id: $0.rawValue) }
         )
         .navigationTitle("Machine")
         .toolbar {
@@ -284,6 +287,31 @@ public struct LiveSessionScreen: View {
               rename(id, to: newName, forExercise: target)
             },
             onCancel: { renamingMachine = nil }
+          )
+        }
+        // The step a stack moves in, recorded from the machine list because that is where the
+        // lifter is looking at the machine. Nothing could write this column before, so its label,
+        // its readers, and the keypad's use of it were all unreachable.
+        .sheet(item: $incrementMachine) { wrapped in
+          let id = MachineID(rawValue: wrapped.id)
+          let current = machineOptions.recent.first { $0.id == id }?.stackIncrementKg
+            ?? machineOptions.others.first { $0.id == id }?.stackIncrementKg
+          NameEntrySheet(
+            title: "Stack step",
+            prompt: "Smallest change in \(unit.abbreviation)",
+            footnote:
+              "The smallest jump this stack can make \u{2014} often 5 kg or 10 lb. Suggested loads "
+              + "and the +/- buttons stay on steps the machine can actually hit. Leave it empty if "
+              + "you are not sure; a guess would be worse than not knowing.",
+            confirmLabel: "Save",
+            initialValue: current.map { Self.format(unit.fromKilograms($0)) } ?? "",
+            allowsEmpty: true,
+            isDecimal: true,
+            onConfirm: { text in
+              incrementMachine = nil
+              setIncrement(text, for: id, forExercise: target)
+            },
+            onCancel: { incrementMachine = nil }
           )
         }
         .sheet(isPresented: $isAddingMachine) {
@@ -398,6 +426,34 @@ public struct LiveSessionScreen: View {
 
   /// Same argument-passing rule as `addGym`: the name arrives as a parameter, because reading it
   /// back out of state across a presentation boundary produced an empty string.
+  /// Writes the stack step, in the unit on screen, converted to kilograms like every other load.
+  ///
+  /// An empty field clears it back to unknown, which is a real answer rather than a failure: better
+  /// no step than a guessed one, because a wrong step makes every suggestion unreachable on the
+  /// equipment.
+  private func setIncrement(_ text: String, for machineID: MachineID, forExercise target: UUID) {
+    guard let gyms else { return }
+    let entered = TypedNumber.parse(text)
+    do {
+      try gyms.setStackIncrement(entered.map { unit.toKilograms($0) }, for: machineID)
+      refreshMachines(forExercise: target)
+      // Re-selected so the exercise picks up the new increment without the lifter reselecting it.
+      _ = coordinator.changeMachine(
+        to: machineID,
+        machineName: machineOptions.recent.first { $0.id == machineID }?.displayName
+          ?? machineOptions.others.first { $0.id == machineID }?.displayName,
+        inExercise: target
+      )
+      equipmentError = nil
+    } catch {
+      equipmentError = "That step could not be saved. The machine is unchanged."
+    }
+  }
+
+  static func format(_ value: Double) -> String {
+    value == value.rounded() ? String(Int(value)) : String(format: "%.2f", value)
+  }
+
   private func addMachine(named name: String, forExercise target: UUID) {
     guard let gyms, let gymID = coordinator.gymID, !name.isEmpty else { return }
     do {
