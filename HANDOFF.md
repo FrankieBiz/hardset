@@ -5,17 +5,15 @@ Read it before touching anything. Everything it claims is verifiable from the re
 
 ---
 
-## 0. DO THIS FIRST — the code may be in a temp directory
+## 0. Where the code lives
 
-If this repo is at a path containing `/private/tmp/` or `/tmp/`, it is in a session scratch
-directory that can be deleted without warning, taking 21 commits with it. Get it out:
+`/Users/frankbisignano/dev/hardset`, on a git remote at `github.com/FrankieBiz/hardset`. An earlier
+version of this file opened with a rescue procedure for a repo sitting in a session temp directory;
+that move happened long ago and the instruction is gone. If you ever do find this repo under
+`/private/tmp/` again, `rsync -a` it out before touching anything.
 
-```bash
-rsync -a --exclude='.build' <this-repo>/ /Users/frankbisignano/dev/hardset/
-```
-
-Then work in `/Users/frankbisignano/dev/hardset`. Confirm `git log` shows 21 commits ending at
-`ac224c7` before doing anything else.
+Work happens on feature branches. `main` is well behind — check `git log --oneline main..HEAD`
+before assuming anything about it.
 
 ---
 
@@ -46,7 +44,7 @@ cd Packages/HardsetKit && swift test --disable-sandbox
 ```
 
 Or `./test.sh` from the repo root, which also runs three tests that need isolated processes.
-**Current state: 274 tests, 34 suites, all passing, ~0.2s on the host.**
+**Current state: 571 tests, 80 suites, all passing, ~1.4s on the host.**
 
 Everything with behaviour lives in `Packages/HardsetKit` and builds on macOS. That is deliberate —
 see §7.
@@ -86,6 +84,7 @@ Packages/HardsetKit/
   HardsetStore    GRDB/SQLiteData. Schema, migrations, sync, all queries.
   HardsetUI       Design tokens + every view. Depends on Core ONLY, never on Store.
   HardsetFeature  Composition root. Depends on Core + Store + UI + SQLiteData.
+docs/SPLITS-spec.md          plans: what they are, and the four quality axes that do not exist
 docs/MuscleTaxonomy-spec.md  the taxonomy specification, implemented
 docs/research/               the full research corpus (~1.2MB) — grep it, do not read it whole
 DECISIONS.md                 21 numbered decisions of record. READ THIS.
@@ -150,21 +149,31 @@ reads, and a test asserts it keeps saying so. Never claim entitlement to the num
 
 ## 7. What has never been verified — be honest about this
 
-**The app and widget targets have never been compiled.** `xcodebuild` fails here with
-`swift-plugin-server produced malformed response` — the Swift macro plugin server does not survive
-the shell sandbox. `-skipMacroValidation` clears the trust gate but not this, and `-disable-sandbox`
-is not a valid xcodebuild option. SwiftPM *does* have that flag, which is why the package suite
-runs. The unblock is a one-time **Trust & Enable** in Xcode (`DEVICE-CHECKLIST.md` §A).
-
-Consequence: everything real was deliberately put in package targets. `HardsetApp.swift` is 86
-lines of wiring with no logic. **Keep it that way** — anything you add there that a test could cover
-belongs in the package.
-
-**Nothing has run on a device.** No AlarmKit alarm has ever fired. No CloudKit sync has ever
+**Nothing has run on a physical device.** No AlarmKit alarm has ever fired. No CloudKit sync has ever
 happened. `DEVICE-CHECKLIST.md` is the gate; its force-quit and Focus-breakthrough lines are where
-the flagship feature actually gets proven. The user has an iPhone and has agreed to run it.
+the flagship feature actually gets proven. The user has an iPhone and has agreed to run it. Device
+signing needs a team identifier the sandbox cannot supply, so this is blocked on the user, not on
+engineering.
 
----
+**The app target does now build and run — on the simulator.** It had never compiled until commit
+`6531c44`; see `DEVICE-CHECKLIST.md` §A for the four independent causes. Build it with the **iOS
+Simulator MCP `build` tool**, not a sandboxed `xcodebuild`: the latter still cannot run the Swift
+macro plugin server (`swift-plugin-server produced malformed response`), and `-skipMacroValidation`
+clears the trust gate but not that. The MCP tool's headless builds pass that flag and work.
+
+Consequence that still holds: everything real was deliberately put in package targets.
+`HardsetApp.swift` is ~136 lines of wiring with no logic. **Keep it that way** — anything you add
+there that a test could cover belongs in the package. And `HardsetTests` (the app-target test bundle)
+still cannot be compiled here at all, because the MCP tool builds for running, not testing.
+
+**Anything behind `#if canImport(AlarmKit)` is invisible to the host suite.** `HardsetAlarm` once
+carried a hard compile error that no `swift test` run could ever have caught. Treat "the package
+tests pass" as saying nothing whatsoever about iOS-only code.
+
+**Run the app.** Nearly every real defect in this repo was found by driving a screen, not by reading
+one — see §8's splits entry for five more. Seed the simulator database directly (python3 + sqlite3,
+registering a `uuid()` function first, since the table defaults call GRDB's) to get realistic history
+on screen in seconds.
 
 ## 8. Next steps, in order
 
@@ -192,7 +201,26 @@ The live sequence:
    every row was a disabled button and the app could tell you a session happened but not what was
    in it. The row's hit area was also only its glyphs, with no `contentShape`.
 
-4. **Motion**, in the order the hero moments' hosts become stable: set-log recede, then the rest
+4. **DONE — plans.** A split in this app is a *partition of movements the lifter already trains*
+   across days they chose, not a program. `docs/SPLITS-spec.md` is the spec; read its §1 before
+   entertaining any request for a "balanced split" or a plan rating, because the four candidate
+   quality axes are each closed off by a number in `SplitCalibrationProbe`. Three tables (added to
+   the v1 migration, deliberately with **no** set-count column), `SplitDealer` and
+   `SplitPlanAssessment` in Core, `SplitStore`, and a fourth tab.
+
+   Two things worth carrying forward. **A plan has no set counts, so it has no volume** — plan-level
+   figures count *movements* and *days*, and `MuscleVolumeReport` stays for logged weeks; running a
+   plan through `VolumeAnalyzer` would require inventing a set count per movement. And **naming a
+   machine in a plan writes `machineExercises`**, which is what lets the picker know a gym has
+   equipment for a movement before anything is logged there.
+
+   Five defects were found by running the screen and none by the suite: an empty plan whose own copy
+   promised to deal your logged movements while the button read from the empty plan and did nothing;
+   "1 days"; day subtitles ranked by group touches so a chest day read "Arms · Legs · Shoulders";
+   an unscoped "Fewest movements" label; and a machine sheet filing the whole gym under "You've used
+   these". This is the pattern, not a one-off.
+
+5. **Motion**, in the order the hero moments' hosts become stable: set-log recede, then the rest
    timer, then the summary choreography, then chart draw-on. `docs/UI-GUIDELINES.md` §5 specifies
    all four; `Tokens.Motion` already holds the vocabulary.
 
@@ -310,6 +338,16 @@ was nameless and history could only show a date.
 - **`ExerciseCatalog.swift` is machine-generated** and gets overwritten wholesale. Never hand-edit
   it; anything hand-written there is one regeneration from gone. `CatalogEntry` lives in its own
   file for exactly this reason.
+- **The Simulator MCP's screenshots are in pixels; its taps are in points.** The tool reports the
+  point space (e.g. 402x874) while the returned image is ~2.28x that. Tapping a coordinate read
+  straight off the screenshot lands off-screen and looks exactly like a dead button. Divide by the
+  ratio, or pass `scale` and do the arithmetic once.
+- **`#expect` cannot take a rethrowing call, and `filter`/`allSatisfy`/`contains` are all rethrows.**
+  Not just `allSatisfy` — hoist any of them to a `let` first.
+- **A negation trips a substring ban.** A test banning the word "score" in user-facing copy fails on
+  "no plan is graded or scored", which is the sentence App Review needs to read. Strip the known
+  denials first, then scan the remainder, and assert the denial still exists so stripping cannot be
+  a way to pass by deleting it.
 - **SourceKit constantly reports "No such module 'HardsetCore'" and similar.** It is noise — the
   package builds clean. Trust `swift build`, not the editor.
 

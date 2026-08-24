@@ -333,3 +333,55 @@ every set that references it.
 
 The lesson generalises past this file: a deterministic identifier scheme with no recorded
 derivation is a random scheme with extra steps.
+
+### 24. A split is a partition, and no plan may be graded
+
+A split in this app is an **arrangement of movements the lifter already trains, across days they
+chose**. It is not a program, it prescribes nothing, and it carries no set counts. Full spec in
+`docs/SPLITS-spec.md`; this records why the obvious feature — "build me a balanced split" — is not
+buildable rather than merely unbuilt.
+
+Four candidate quality axes, each closed off by a number computed in `SplitCalibrationProbe`:
+
+- **A weekly set target.** `VolumeAnalyzer.weeklyTarget` returns `.unevaluated` for all 22 muscles,
+  per #19. A generator that assigns set counts has nothing to optimise against.
+- **Muscle coverage.** Every conventional split leaves 6–8 muscles at zero credit, five of them
+  common to all of them (forearms, abs, obliques, neck, hip abductors). A coverage score marks down
+  a well-built PPL and a bro split identically, for not training necks.
+- **Total weekly volume.** A conventional PPL puts all six modelled muscles inside the studied range
+  at 90 weekly sets; a perfectly reasonable 3-day full body does it at 42. Any formula treating
+  volume as a quality axis must call one of those worse, and neither is.
+- **A composite grade.** Only 6 of 22 muscles are `.modelled`, so a whole-body grade would be
+  two-thirds territory the dose-response model refuses to speak about.
+
+**What is left is still useful, and is what shipped.** The lifter has already told the app every
+movement they train. Re-dealing that set across a different number of days is arithmetic over data
+they authored, so it asserts nothing. The line, stated once: the app **may** decide which day a
+movement they already do lands on; it **may not** decide how many sets of it they do, or introduce a
+movement they have never logged as a recommendation.
+
+**Two statements survive, and only two.** Which muscles nothing credits — a fact about a partition,
+needing no target. And which of the six modelled muscles the plan credits with the fewest movements
+— comparative and within-plan, because those six are the tokens where the literature supports a
+direction at all, and no target gives any of them a floor.
+
+**The load-bearing consequence: a plan has no set counts, so it has no volume.** Plan-level figures
+count *movements* and *days*, which are facts about the arrangement itself. Running a plan through
+`VolumeAnalyzer` would mean inventing a set count per movement, and a fractional-set figure derived
+from an invented input is exactly the laundered guess this app exists to refuse. So
+`SplitPlanAssessment` and `MuscleVolumeReport` are deliberately different types with different
+vocabularies — one describes a plan, the other a logged week, and they are not interchangeable.
+
+Enforced structurally rather than by discipline: **there is no `plannedSets` column on any split
+table, and there never will be.** `sessionExercises` has one because that is the lifter typing what
+they intend to do today; a split is the surface where the app does the arranging, so a set-count
+column there is the hole a prescription engine climbs through. Omitting it makes the prescribing
+version unrepresentable — the same move as `sessions` having no duration column, per #21.
+`SchemaTests.splitsCarryNoPrescription` says so as a named test, because the column inventory alone
+would let it back in as one more unremarkable line. Adding the column later is the permitted
+direction under #4, so recording a lifter's *own* per-movement target stays available as a
+deliberate additive change.
+
+The three tables went into the **v1 migration** rather than a v2, because nothing has shipped and no
+build has reached a device — v1 is still the single designed artefact it claims to be, and this was
+the last moment a column could be reconsidered for free.

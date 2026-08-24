@@ -5,17 +5,18 @@ A hypertrophy logger for intermediate lifters. Local-first, CloudKit-synced, no 
 Three things it is trying to be, in order: honest about what it knows, aware of the specific
 machines you train on, and fast to log a set.
 
-**Status: the logger and the analysis layer work, in the package.** Sessions, sets, prefill from
-history, the rest bar, recovery of an interrupted workout, personal records, a 50-movement seed
-catalogue and a picker; plus the permanent muscle vocabulary, fractional sets-per-muscle-per-week
-with coverage, per-machine load history, and a session history screen. 256 tests across 32 suites
-run on the host in about two tenths of a second.
+**Status: the logger, the analysis layer and the planner work, and the app runs in the simulator.**
+Sessions, sets, prefill from history, the rest bar, recovery of an interrupted workout, personal
+records, an 81-movement seed catalogue and a picker; the permanent muscle vocabulary, fractional
+sets-per-muscle-per-week with coverage, per-machine load history, a session history screen and a
+post-workout summary; and plans — arrangements of movements you already train, dealt across the days
+you choose. 571 tests across 80 suites run on the host in about 1.4 seconds.
 
-**Not yet true:** the app and widget targets have never been compiled. `xcodebuild` fails here
-because the Swift macro plugin server does not survive the shell sandbox, so everything real lives
-in package targets that build with `swift build`, and the `.xcodeproj` app target is a thin shell.
-Unblocking it is a one-time Trust & Enable inside Xcode — see `DEVICE-CHECKLIST.md`. Nothing in
-this repo has run on a device.
+**Not yet true: nothing has run on a physical device.** No AlarmKit alarm has ever fired and no
+CloudKit sync has ever happened, so the rest timer and the whole sync story are unverified. The app
+target does now build and run on the iOS simulator via a headless `xcodebuild`; what is still blocked
+is device signing, which needs a team identifier the sandbox cannot supply. `DEVICE-CHECKLIST.md` is
+the gate and most of its boxes are open — read it before believing any claim about the rest timer.
 
 ## Layout
 
@@ -29,7 +30,7 @@ Packages/HardsetKit/
   HardsetAlarm             iOS-only. AlarmKit conformance + rest-timer controller.
   HardsetStore             GRDB/SQLiteData. Schema, migration, sync.
   HardsetUI                Tokens, set row, keypad, rest bar, session screen, picker, volume
-                           report, per-machine chart, history, methodology disclosure.
+                           report, per-machine chart, history, planner, methodology disclosure.
   HardsetFeature           The composition root. Lives here, not in the app target, so it builds.
 ```
 
@@ -41,7 +42,7 @@ Packages/HardsetKit/
 ./test.sh
 ```
 
-54 tests, ~0.1 s. The script runs the engine-dependent tests in separate processes: SQLiteData's
+571 tests, ~1.4 s. The script runs the engine-dependent tests in separate processes: SQLiteData's
 non-live `SyncEngine` attaches an in-memory metadatabase at a fixed shared-cache path, and the task
 local that resets it between constructions is `package`-scoped, so two engines in one process
 contend for the same SQLite file.

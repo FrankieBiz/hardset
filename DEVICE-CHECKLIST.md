@@ -57,6 +57,23 @@ Walked end to end on iPhone 17 / iOS 26.4, with the database checked directly af
         than wrap; it is inline now.
       Verified after the fix: each label holds one line, the attribution renders in full, and the
       log control spans the row. The Volume screen and the start screen already passed unchanged.
+- [x] **The planner, end to end.** Against a seeded three-week upper/lower history (12 movements,
+      108 sets): created a plan, dealt it across 3 days (4/5/3), named a machine on a movement, and
+      confirmed in the database that the entry carried its `machineID` **and** that
+      `machineExercises` gained the library row — so a gym answers "I can do this here" with no set
+      ever logged on that machine. The coverage panel named seven uncredited muscles, inside the 6-8
+      `SplitCalibrationProbe` says every conventional split leaves.
+
+      Five defects found by looking, none visible to the 571-test suite: an empty plan whose own copy
+      promised to deal your logged movements while the button read from the empty plan and did
+      nothing; "1 days" in two places; day subtitles ranked by group touches, so a day of rows,
+      bench, leg press and leg curls read "Arms · Legs · Shoulders"; a "Fewest movements" label that
+      never said out of what; and a machine sheet filing every machine in the gym under "You've used
+      these", with no check mark on the one already chosen.
+- [x] **AX5 Dynamic Type on the planner** — clean, no defects. Movement names, the muscle attribution
+      line, day headers with their menu button, the day-count stepper and the deal button all wrap
+      without truncation. Designed against the three AX5 defects §A2 already records, so the fixes
+      were free rather than found.
 - [x] One crash found here, on the first tap that animated a colour: `Tokens.Color.dynamic` builds a
       `UIColor` dynamic provider, and `HardsetUI` compiles with `defaultIsolation(MainActor)`, so the
       provider closure was inferred `@MainActor`. SwiftUI resolves colours **off** the main actor
