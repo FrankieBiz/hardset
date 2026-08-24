@@ -3,6 +3,9 @@ import HardsetStore
 import HardsetUI
 import SQLiteData
 import SwiftUI
+#if canImport(UIKit)
+  import UIKit
+#endif
 
 /// Everything the app needs, constructed once.
 ///
@@ -121,6 +124,19 @@ public struct HardsetRootView: View {
       // Keeps a live session in step with the setting. Without this, turning the rest timer on
       // mid-workout silently does nothing until the next session.
       .onChange(of: resolvedRest) { _, updated in coordinator?.restAfterSet = updated }
+      // The screen stays awake while a workout is open, and only while one is open.
+      //
+      // A lifter sets the phone down between sets and picks it up ninety seconds later. Without
+      // this they unlock it, find their place, and tap the row -- for every set of every workout.
+      // Scoped to an open session rather than the whole app, because keeping the display awake on
+      // the history tab would be draining the battery for nothing.
+      #if os(iOS)
+        .onChange(of: coordinator == nil) { _, noSession in
+          UIApplication.shared.isIdleTimerDisabled = !noSession
+        }
+        .onAppear { UIApplication.shared.isIdleTimerDisabled = coordinator != nil }
+        .onDisappear { UIApplication.shared.isIdleTimerDisabled = false }
+      #endif
       .preferredColorScheme(.dark)
       // Pinning `Tokens.Color.accent` only fixed the colours *we* draw. System-drawn chrome --
       // the tab bar's selected item, toggles, the navigation back button -- reads its tint from

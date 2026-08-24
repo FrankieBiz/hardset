@@ -64,7 +64,16 @@ public struct BodyweightScreen: View {
   /// Entered in whichever unit is on screen, stored in kilograms. The single conversion boundary,
   /// same as every set.
   private func record(_ text: String) {
-    guard let entered = Double(text), entered > 0 else { return }
+    // Parsed through the locale, then through the plain form.
+    //
+    // The sheet presents the system decimal pad, which offers whatever separator the device uses.
+    // `Double("62,5")` is nil in every locale, so a lifter in France or Germany typed a fractional
+    // weight, tapped Save, and had nothing recorded and nothing said -- the guard returned in
+    // silence. A failed parse is now reported rather than swallowed.
+    guard let entered = TypedNumber.parse(text), entered > 0 else {
+      errorMessage = "\"\(text)\" is not a weight this can read. Try a number like 82.5."
+      return
+    }
     do {
       try store.record(weightKg: unit.toKilograms(entered))
       reload()

@@ -51,7 +51,6 @@ public struct RestTimerHooks {
 @MainActor
 public struct LiveSessionScreen: View {
   @State private var coordinator: SessionCoordinator
-  @State private var restMetadata: RestMetadata?
   /// Bumped on every accepted machine change, purely to drive the haptic.
   @State private var machineChangeCount = 0
   /// The machine whose name is being repaired.
@@ -122,7 +121,7 @@ public struct LiveSessionScreen: View {
       unit: unit,
       tracksRPE: tracksRPE,
       restState: hooks.state(),
-      restMetadata: restMetadata,
+      restMetadata: coordinator.lastRestMetadata,
       restTotal: coordinator.restAfterSet,
       errorMessage: errorMessage,
       records: coordinator.lastRecords,
@@ -142,7 +141,7 @@ public struct LiveSessionScreen: View {
       onPauseResumeRest: hooks.pauseOrResume,
       onSkipRest: {
         hooks.cancel()
-        restMetadata = nil
+        coordinator.clearRestMetadata()
       },
       onAddExercise: catalog == nil ? nil : { isPickerPresented = true },
       // Offered only when there is a gym to attach equipment to. Machines belong to a gym, so
@@ -465,7 +464,7 @@ public struct LiveSessionScreen: View {
 
   private func finish() {
     hooks.cancel()
-    restMetadata = nil
+    coordinator.clearRestMetadata()
     do {
       try coordinator.finish()
       // Read after the finish, so the timeline is closed and the summary has a duration.

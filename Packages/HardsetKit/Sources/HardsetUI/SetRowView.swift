@@ -39,6 +39,14 @@ public struct SetRowView: View {
   /// The commit animation is the app's signature moment, which is exactly why it has to be
   /// switchable off. The row moves on one curve; under Reduce Motion it changes state without one.
   @Environment(\.accessibilityReduceMotion) private var reduceMotion
+  /// One keypad row's height, scaled with the glyphs that sit in it.
+  ///
+  /// `@ScaledMetric` relative to `.title` because that is the font the keys use. The pad was
+  /// presented in a hard 360 pt sheet while its content floors at 56 pt a row -- six rows plus
+  /// spacing and padding is 400 pt at *default* text size, and the keys grow from there. So the
+  /// Done key was already being clipped before anyone touched an accessibility setting, on the one
+  /// control every weight and every rep in the app is typed on.
+  @ScaledMetric(relativeTo: .title) private var padRowHeight: CGFloat = Tokens.loggerTapTarget
 
   /// The ordinal's gutter, scaled. It was a hard 28 pt, which is narrower than a single AX5 digit.
   @ScaledMetric(relativeTo: .subheadline) private var ordinalWidth: CGFloat = 28
@@ -392,13 +400,29 @@ public struct SetRowView: View {
       binding = Binding(get: { rpeBuffer }, set: { rpeBuffer = $0; pushToDraft() })
     }
 
-    return NumericPad(buffer: binding, step: step(for: field)) { editing = nil }
-      .presentationDetents([.height(360)])
+    return NumericPad(buffer: binding, step: step(for: field)) {
+      editing = nil
+      // Snapped on dismissal, not while typing: the effort scale runs in half points, so
+      // `validatedRPE` rounds 8.3 to 8.5 -- and the row went on showing 8.3, a number the database
+      // does not hold. Snapping mid-keystroke would fight a lifter part-way through "8.5".
+      if field == .rpe { snapRPEToScale() }
+    }
+      .presentationDetents([.height(padHeight)])
       // The row stays visible and tappable behind the pad, so this reads as a keyboard
       // replacement rather than a modal that interrupts the set.
       #if os(iOS)
-        .presentationBackgroundInteraction(.enabled(upThrough: .height(360)))
+        .presentationBackgroundInteraction(.enabled(upThrough: .height(padHeight)))
       #endif
+  }
+
+  /// How tall the pad sheet has to be: the step row, four key rows, and Done.
+  ///
+  /// Derived rather than guessed, so the sheet tracks the text size instead of clipping at it.
+  private var padHeight: CGFloat {
+    let rows: CGFloat = 6
+    return rows * padRowHeight
+      + (rows - 1) * Tokens.Spacing.snug
+      + 2 * Tokens.Spacing.regular
   }
 
   /// The step for each field. Reps move by one and effort by half a point, which are the only
@@ -409,6 +433,15 @@ public struct SetRowView: View {
     case .reps: 1
     case .rpe: 0.5
     }
+  }
+
+  /// Rewrites the effort field as the value that will actually be stored.
+  ///
+  /// The alternative is a row that disagrees with its own record, which is the same class of defect
+  /// as a prefill no gym can load.
+  private func snapRPEToScale() {
+    guard let snapped = draft.validatedRPE else { return }
+    rpeBuffer = rpeBuffer.replacingValue(snapped)
   }
 
   // MARK: - Wiring

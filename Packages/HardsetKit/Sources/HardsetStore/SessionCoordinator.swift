@@ -35,6 +35,15 @@ public final class SessionCoordinator {
   /// Records set by the most recently logged set, or empty. Cleared on the next log so a
   /// celebration cannot linger onto a set that did not earn it.
   public private(set) var lastRecords: [PersonalRecord] = []
+  /// What the last rest request was for, so the rest bar can say which station the lifter left.
+  ///
+  /// Held here rather than in the view. The coordinator has always built a full `RestMetadata` --
+  /// exercise, working-set ordinal, planned count, machine -- and handed it to `onStartRest`, but
+  /// the only place that could display it kept its own `@State` copy that was never assigned from
+  /// anything. So the rest bar showed an unlabelled countdown while the data sat one layer away.
+  /// The coordinator is constructed before that view exists, which is exactly why the view could
+  /// not be the owner.
+  public private(set) var lastRestMetadata: RestMetadata?
 
   /// Every record set during this session, accumulated.
   ///
@@ -426,15 +435,14 @@ public final class SessionCoordinator {
 
       // Warm-ups do not start a rest timer: the user is still warming up.
       if let restAfterSet, !slot.isWarmup {
-        onStartRest(
-          restAfterSet,
-          RestMetadata(
-            exerciseName: exercise.exerciseName,
-            setOrdinal: exercises[exerciseIndex].workingOrdinal(ofSlotID: slotID) ?? 1,
-            plannedSets: exercises[exerciseIndex].workingSetCount,
-            machineName: exercise.machineName
-          )
+        let metadata = RestMetadata(
+          exerciseName: exercise.exerciseName,
+          setOrdinal: exercises[exerciseIndex].workingOrdinal(ofSlotID: slotID) ?? 1,
+          plannedSets: exercises[exerciseIndex].workingSetCount,
+          machineName: exercise.machineName
         )
+        lastRestMetadata = metadata
+        onStartRest(restAfterSet, metadata)
       }
       return true
     } catch {
@@ -507,6 +515,12 @@ public final class SessionCoordinator {
       lastError = error
       return false
     }
+  }
+
+  /// Forgets what the last rest was for. Called when rest is skipped or cancelled, so a stale
+  /// label cannot outlive the timer it described.
+  public func clearRestMetadata() {
+    lastRestMetadata = nil
   }
 
   /// Writes one movement's note, then reflects it on screen.
