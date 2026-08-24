@@ -261,7 +261,10 @@ public final class SessionCoordinator {
         .sorted { $0.setOrdinal < $1.setOrdinal }
         .map {
           ExerciseLogState.LoggedSetSummary(
-            setID: $0.id, weightKg: $0.weightKg, reps: $0.reps, isWarmup: $0.isWarmup
+            setID: $0.id, weightKg: $0.weightKg, reps: $0.reps,
+            // Restored, like the modality and the notes above it. The row otherwise came back
+            // claiming no effort was recorded for a set the lifter had rated.
+            rpe: $0.rpe, isWarmup: $0.isWarmup
           )
         }
       let state = ExerciseLogState.resume(

@@ -179,4 +179,68 @@ struct ProgressionTests {
     #expect(range.contains("not a change in strength"))
     #expect(ProgressionAnalyzer.source.methodology.contains("never merged"))
   }
+
+  // MARK: - Machine changes within one session
+
+  /// The merge this whole design refuses, appearing in the code whose job is to annotate it.
+  ///
+  /// Keying per session kept whichever machine was seen first and took the heaviest load across all
+  /// of them. A lifter who moved equipment mid-exercise had that session attributed to one machine
+  /// while carrying a load set on the other, so the delta against the next session compared two
+  /// different machines and reported it as one.
+  @Test("Moving machines inside one session is a real change, with each machine's own load")
+  func withinSessionMoveIsAChange() {
+    let input = samples([
+      // One session: two sets on the Hammer, then two heavier on the Cybex. Distinct days stand in
+      // for distinct set timestamps within the session, which is what real sets have.
+      (session: 1, machine: hammer, weight: 80, reps: 8, day: 0),
+      (session: 1, machine: hammer, weight: 80, reps: 8, day: 1),
+      (session: 1, machine: cybex, weight: 100, reps: 8, day: 2),
+      (session: 1, machine: cybex, weight: 105, reps: 6, day: 3),
+    ])
+
+    let changes = ProgressionAnalyzer.machineChanges(from: input)
+
+    // Previously invisible: one session collapsed to one entry, so no change could be seen at all.
+    #expect(changes.count == 1)
+    let change = try! #require(changes.first)
+    #expect(change.fromMachineID == hammer)
+    #expect(change.toMachineID == cybex)
+    // Each side carries its own machine's heaviest load: 105 on the Cybex against 80 on the Hammer.
+    #expect(change.heaviestLoadDeltaKg == 25)
+  }
+
+  /// The consequence for the *next* session's delta, which is what the chart annotates.
+  @Test("A within-session move does not contaminate the next session's delta")
+  func withinSessionMoveDoesNotContaminateTheNext() {
+    let input = samples([
+      // Session 1 starts on the Hammer and finishes on the Cybex at a much heavier load.
+      (session: 1, machine: hammer, weight: 80, reps: 8, day: 0),
+      (session: 1, machine: cybex, weight: 120, reps: 8, day: 1),
+      // Session 2 is back on the Hammer at 85 -- a 5 kg gain on that machine.
+      (session: 2, machine: hammer, weight: 85, reps: 8, day: 7),
+    ])
+
+    let changes = ProgressionAnalyzer.machineChanges(from: input)
+
+    // Two moves: Hammer to Cybex inside session 1, then Cybex back to Hammer.
+    #expect(changes.count == 2)
+    let back = try! #require(changes.last)
+    #expect(back.fromMachineID == cybex)
+    #expect(back.toMachineID == hammer)
+    // 85 on the Hammer against 120 on the Cybex. Keying per session compared 85 against the
+    // session's max of 120 while calling that session "the Hammer", so the same number came out
+    // labelled as a change on one machine rather than between two.
+    #expect(back.heaviestLoadDeltaKg == -35)
+  }
+
+  @Test("Staying on one machine across sessions reports no change")
+  func stayingPutIsNoChange() {
+    let input = samples([
+      (session: 1, machine: hammer, weight: 80, reps: 8, day: 0),
+      (session: 1, machine: hammer, weight: 85, reps: 6, day: 1),
+      (session: 2, machine: hammer, weight: 90, reps: 8, day: 7),
+    ])
+    #expect(ProgressionAnalyzer.machineChanges(from: input).isEmpty)
+  }
 }

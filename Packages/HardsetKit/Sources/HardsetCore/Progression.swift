@@ -178,21 +178,50 @@ public enum ProgressionAnalyzer {
   /// Computed across the whole exercise rather than within a series, because a machine change is
   /// by definition a move between series and would be invisible inside either one.
   public static func machineChanges(from samples: [ProgressionSample]) -> [MachineChange] {
-    // One entry per session: which machine, and the heaviest load on it.
-    var perSession: [SessionID: (date: Date, machineID: MachineID?, heaviest: Double)] = [:]
-    for sample in samples {
-      if let existing = perSession[sample.sessionID] {
-        perSession[sample.sessionID] = (
-          min(existing.date, sample.completedAt),
-          existing.machineID,
-          max(existing.heaviest, sample.weightKg)
-        )
-      } else {
-        perSession[sample.sessionID] = (sample.completedAt, sample.machineID, sample.weightKg)
-      }
+    // One entry per consecutive run of the same session-and-machine, not one per session.
+    //
+    // Keying on the session alone kept whichever machine was seen first and took the heaviest load
+    // across all of them, so a lifter who moved equipment mid-exercise had that session attributed
+    // to one machine while carrying a load set on the other. The delta against the next session was
+    // then a comparison between two different machines reported as one -- precisely the merge this
+    // per-machine design exists to refuse, in the code whose job is to annotate machine changes. A
+    // move made inside one session was also invisible, because the session collapsed to one entry.
+    //
+    // A run ends when the machine changes *or* the session does. Ending it on the session boundary
+    // too is what keeps the delta meaningful: it compares the last session on the old machine
+    // against the first on the new one, rather than against a maximum accumulated over months.
+    //
+    // Grouped by walking logging order rather than by collecting into a dictionary and re-sorting.
+    // Two blocks can share a timestamp, and sorting on date alone left their relative order to the
+    // dictionary's -- so whether a move was detected at all depended on hash ordering. Decorating
+    // with the input index makes the order total.
+    struct Run {
+      let sessionID: SessionID
+      let machineID: MachineID?
+      let date: Date
+      var heaviest: Double
     }
-
-    let ordered = perSession.values.sorted { $0.date < $1.date }
+    let ordered = samples
+      .enumerated()
+      .sorted { ($0.element.completedAt, $0.offset) < ($1.element.completedAt, $1.offset) }
+      .map(\.element)
+      .reduce(into: [Run]()) { runs, sample in
+        if let last = runs.last,
+          last.sessionID == sample.sessionID,
+          last.machineID == sample.machineID
+        {
+          runs[runs.count - 1].heaviest = max(last.heaviest, sample.weightKg)
+        } else {
+          runs.append(
+            Run(
+              sessionID: sample.sessionID,
+              machineID: sample.machineID,
+              date: sample.completedAt,
+              heaviest: sample.weightKg
+            )
+          )
+        }
+      }
     guard ordered.count > 1 else { return [] }
 
     var changes: [MachineChange] = []

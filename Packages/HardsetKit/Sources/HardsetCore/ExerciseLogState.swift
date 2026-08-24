@@ -168,12 +168,21 @@ public struct ExerciseLogState: Hashable, Sendable, Identifiable {
     public let setID: SetID
     public let weightKg: Double
     public let reps: Int
+    /// Effort as recorded, when the lifter recorded any.
+    ///
+    /// Absent here, a recovered workout showed every logged set as having no effort against it. The
+    /// value was safe in the database the whole time -- the row on screen simply stopped agreeing
+    /// with it, which for a field the lifter typed by hand reads exactly like losing it.
+    public let rpe: Double?
     public let isWarmup: Bool
 
-    public init(setID: SetID, weightKg: Double, reps: Int, isWarmup: Bool) {
+    public init(
+      setID: SetID, weightKg: Double, reps: Int, rpe: Double? = nil, isWarmup: Bool
+    ) {
       self.setID = setID
       self.weightKg = weightKg
       self.reps = reps
+      self.rpe = rpe
       self.isWarmup = isWarmup
     }
   }
@@ -224,7 +233,7 @@ public struct ExerciseLogState: Hashable, Sendable, Identifiable {
     // Written sets replace the opening rows, in the order they were performed.
     var slots: [SetSlot] = loggedSets.map { logged in
       SetSlot(
-        draft: SetEntryDraft(weightKg: logged.weightKg, reps: logged.reps),
+        draft: SetEntryDraft(weightKg: logged.weightKg, reps: logged.reps, rpe: logged.rpe),
         isWarmup: logged.isWarmup,
         loggedSetID: logged.setID
       )
