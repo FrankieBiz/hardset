@@ -15,15 +15,19 @@ public struct HistoryScreen: View {
   private let store: HistoryStore
   private let unit: WeightUnit
   private let onRepeat: (([RepeatableExercise]) -> Void)?
+  /// Passed through so a movement's heading in the detail can open its load history.
+  private let progression: ProgressionStore?
 
   public init(
     store: HistoryStore,
     unit: WeightUnit,
-    onRepeat: (([RepeatableExercise]) -> Void)? = nil
+    onRepeat: (([RepeatableExercise]) -> Void)? = nil,
+    progression: ProgressionStore? = nil
   ) {
     self.store = store
     self.unit = unit
     self.onRepeat = onRepeat
+    self.progression = progression
   }
 
   public var body: some View {
@@ -46,7 +50,9 @@ public struct HistoryScreen: View {
     .task { load() }
     .refreshable { load() }
     .navigationDestination(item: $opened) { row in
-      SessionDetailScreen(row: row, store: store, unit: unit, onRepeat: onRepeat)
+      SessionDetailScreen(
+        row: row, store: store, unit: unit, onRepeat: onRepeat, progression: progression
+      )
     }
   }
 

@@ -207,7 +207,14 @@ public struct HardsetRootView: View {
 
   @ViewBuilder private var historyNavigation: some View {
     NavigationStack {
-      HistoryScreen(store: environment.history, unit: unit, onRepeat: repeatHandler)
+      HistoryScreen(
+        store: environment.history,
+        unit: unit,
+        onRepeat: repeatHandler,
+        // The per-machine chart used to be reachable only from inside a live workout, so seeing
+        // your bench progression meant starting a session first.
+        progression: environment.progression
+      )
         .navigationTitle("History")
     }
   }

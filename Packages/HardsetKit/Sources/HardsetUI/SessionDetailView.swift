@@ -17,6 +17,10 @@ import SwiftUI
 /// feature layer maps across the boundary.
 public struct LoggedSetRow: Identifiable, Hashable, Sendable {
   public let id: UUID
+  /// Which movement this was. Carried so a heading can open that movement's load history: the chart
+  /// was previously reachable only from inside a live workout, so seeing your bench progression
+  /// meant starting a session first.
+  public let exerciseID: ExerciseID?
   public let exerciseName: String
   /// True when the movement is loaded by the lifter's own body, so zero means bodyweight and not
   /// nothing -- the same distinction the set row draws while logging.
@@ -31,6 +35,7 @@ public struct LoggedSetRow: Identifiable, Hashable, Sendable {
 
   public init(
     id: UUID,
+    exerciseID: ExerciseID? = nil,
     exerciseName: String,
     isBodyweight: Bool = false,
     machineName: String?,
@@ -40,6 +45,7 @@ public struct LoggedSetRow: Identifiable, Hashable, Sendable {
     isWarmup: Bool
   ) {
     self.id = id
+    self.exerciseID = exerciseID
     self.exerciseName = exerciseName
     self.isBodyweight = isBodyweight
     self.machineName = machineName
@@ -55,6 +61,8 @@ public struct SessionDetailView: View {
     public let exerciseName: String
     public let machineName: String?
     public let sets: [LoggedSetRow]
+    /// The movement, for opening its load history from the heading.
+    public var exerciseID: ExerciseID? { sets.first?.exerciseID }
     /// The first set's id, not the movement name.
     ///
     /// A movement can legitimately appear in two separate runs -- benching, doing something else,
@@ -73,6 +81,8 @@ public struct SessionDetailView: View {
   private let hasImplausibleDuration: Bool
   private let sets: [LoggedSetRow]
   private let unit: WeightUnit
+  /// Opens one movement's load history. `nil` leaves the headings inert.
+  private let onShowProgress: ((ExerciseID) -> Void)?
 
   public init(
     title: String,
@@ -80,7 +90,8 @@ public struct SessionDetailView: View {
     duration: Duration?,
     hasImplausibleDuration: Bool,
     sets: [LoggedSetRow],
-    unit: WeightUnit
+    unit: WeightUnit,
+    onShowProgress: ((ExerciseID) -> Void)? = nil
   ) {
     self.title = title
     self.date = date
@@ -88,6 +99,7 @@ public struct SessionDetailView: View {
     self.hasImplausibleDuration = hasImplausibleDuration
     self.sets = sets
     self.unit = unit
+    self.onShowProgress = onShowProgress
   }
 
   public var body: some View {
@@ -139,9 +151,30 @@ public struct SessionDetailView: View {
   @ViewBuilder private func groupView(_ group: Group_) -> some View {
     VStack(alignment: .leading, spacing: Tokens.Spacing.snug) {
       VStack(alignment: .leading, spacing: Tokens.Spacing.hairline) {
-        Text(group.exerciseName)
-          .font(Tokens.Text.title)
-          .foregroundStyle(Tokens.Color.textPrimary)
+        // The heading is the way into this movement's load history, mirroring the live session's
+        // header. Reviewing a past workout is exactly when "how have I been doing on this" gets
+        // asked, and the chart used to be unreachable without starting a workout.
+        Button {
+          if let id = group.exerciseID { onShowProgress?(id) }
+        } label: {
+          HStack(spacing: Tokens.Spacing.tight) {
+            Text(group.exerciseName)
+              .font(Tokens.Text.title)
+              .foregroundStyle(Tokens.Color.textPrimary)
+            if canShowProgress(group) {
+              Image(systemName: "chart.xyaxis.line")
+                .font(Tokens.Text.caption)
+                .foregroundStyle(Tokens.Color.accent)
+            }
+          }
+          .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .disabled(!canShowProgress(group))
+        .accessibilityLabel(
+          canShowProgress(group)
+            ? "\(group.exerciseName). Show load history." : group.exerciseName
+        )
         if let machine = group.machineName {
           Label(machine, systemImage: "dumbbell")
             .font(Tokens.Text.caption)
@@ -184,6 +217,10 @@ public struct SessionDetailView: View {
         .accessibilityLabel(spokenLabel(for: set, in: group, fallbackIndex: index))
       }
     }
+  }
+
+  private func canShowProgress(_ group: Group_) -> Bool {
+    onShowProgress != nil && group.exerciseID != nil
   }
 
   /// "Body" for a bodyweight set with no added load, "Body + 10 kg" when there was some, and the
