@@ -249,6 +249,8 @@ number does not reflow.
 | `title` | `.title3` | semibold | 0 | section headers |
 | `label` | `.subheadline` | regular | 0 | field labels, buttons |
 | `caption` | `.caption` | regular | 0 | units, footnotes, "Last time" |
+| `glyph` | `.title2` | — | — | symbol-only controls: the log circle, pause, skip |
+| `mono` | `.caption` monospaced | regular | 0 | technical detail meant to be pasted into a bug report |
 
 **Every style is a semantic `Font.TextStyle`, never a raw point size** — a hardcoded size breaks
 Dynamic Type, and this app is read at arm's length in bad light. Tracking is applied through
@@ -282,7 +284,10 @@ Existing scale is sound. Two additions for the sleeker rhythm — sleekness is m
 
 ### 4.2 Shape
 
-`Radius.control = 10`, `Radius.card = 16` — keep. All corners continuous, never circular.
+`Radius.control = 10`, `Radius.card = 16`, `Radius.bar = 4` — keep. All corners continuous,
+never circular. `bar` is smaller than `control` because a data bar is 10 pt tall: at radius 10
+it becomes a lozenge and stops reading as a length. It was a literal `4` at four call sites
+across two charts before it was named, which is how a fourth radius arrives without a decision.
 
 **Nested corners must be concentric,** not equal. An inset child inside a 16 pt card needs
 `16 − inset`, not 16. Prefer `ConcentricRectangle`, which derives this from the container rather

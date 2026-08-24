@@ -39,7 +39,7 @@ public struct CertaintyBadge: View {
     .popover(isPresented: $isShowingDetail) {
       VStack(alignment: .leading, spacing: Tokens.Spacing.regular) {
         Text("How this is calculated")
-          .font(.headline)
+          .font(Tokens.Text.title)
         Text(methodology)
           .font(Tokens.Text.label)
         if let citation {

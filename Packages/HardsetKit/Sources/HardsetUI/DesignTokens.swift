@@ -228,6 +228,12 @@ public enum Tokens {
   public enum Radius {
     public static let control: CGFloat = 10
     public static let card: CGFloat = 16
+    /// A data bar's corner. Smaller than `control` because these are 10 pt tall: at radius 10 a bar
+    /// that short becomes a lozenge and stops reading as a length.
+    ///
+    /// Named because it was a literal `4` at four call sites across two charts, which is exactly how
+    /// a fourth radius arrives without anyone deciding on one.
+    public static let bar: CGFloat = 4
   }
 
   public enum Text {
@@ -244,7 +250,18 @@ public enum Tokens {
     public static let setEntry = Font.system(.title3, design: .default, weight: .medium)
       .monospacedDigit()
     public static let title = Font.system(.title3, design: .default, weight: .semibold)
+    /// A symbol-only control: the log circle, pause, skip. Sized as text so it scales with Dynamic
+    /// Type like everything else, rather than being pinned in points.
+    ///
+    /// Its own role because the six text roles describe *text*, and forcing a glyph into `readout`
+    /// or `label` would make those roles mean two things. Four raw `.title2`/`.body` literals lived
+    /// at these call sites before it existed.
+    public static let glyph = Font.title2
     public static let label = Font.subheadline
+    /// Technical detail meant to be read character by character and pasted elsewhere -- an error a
+    /// bug report needs. Monospaced because alignment and character identity carry meaning here in a
+    /// way they do not in prose.
+    public static let mono = Font.system(.caption, design: .monospaced)
     public static let caption = Font.caption
   }
 

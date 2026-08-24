@@ -264,7 +264,7 @@ public struct RestBarView: View {
   private var pauseResumeButton: some View {
     Button(action: onPauseResume) {
       Image(systemName: state.isRunning ? "pause.circle" : "play.circle")
-        .font(.title2)
+        .font(Tokens.Text.glyph)
         .frame(width: Tokens.loggerTapTarget, height: Tokens.loggerTapTarget)
         .contentShape(Rectangle())
     }
@@ -276,7 +276,7 @@ public struct RestBarView: View {
   private var skipButton: some View {
     Button(action: onSkip) {
       Image(systemName: "forward.end")
-        .font(.body)
+        .font(Tokens.Text.glyph)
         .frame(width: Tokens.loggerTapTarget, height: Tokens.loggerTapTarget)
         .contentShape(Rectangle())
     }

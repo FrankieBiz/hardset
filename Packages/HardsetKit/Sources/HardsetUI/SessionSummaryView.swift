@@ -344,9 +344,9 @@ public struct SessionSummaryView: View {
       }
       GeometryReader { proxy in
         ZStack(alignment: .leading) {
-          RoundedRectangle(cornerRadius: 4)
+          RoundedRectangle(cornerRadius: Tokens.Radius.bar)
             .fill(Tokens.Color.surface)
-          RoundedRectangle(cornerRadius: 4)
+          RoundedRectangle(cornerRadius: Tokens.Radius.bar)
             .fill(Tokens.Color.textPrimary)
             .frame(width: barWidth(in: proxy.size.width, sets: share.sets))
         }

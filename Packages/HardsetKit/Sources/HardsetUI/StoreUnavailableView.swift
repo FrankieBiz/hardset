@@ -74,7 +74,7 @@ public struct StoreUnavailableView: View {
             .foregroundStyle(Tokens.Color.textPrimary)
           // Selectable, because the only use for this text is pasting it into a bug report.
           Text(detail)
-            .font(.system(.caption, design: .monospaced))
+            .font(Tokens.Text.mono)
             .foregroundStyle(Tokens.Color.textSecondary)
             .textSelection(.enabled)
             .fixedSize(horizontal: false, vertical: true)

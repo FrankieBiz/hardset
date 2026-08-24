@@ -182,9 +182,9 @@ public struct VolumeReportView: View {
       }
       GeometryReader { proxy in
         ZStack(alignment: .leading) {
-          RoundedRectangle(cornerRadius: 4)
+          RoundedRectangle(cornerRadius: Tokens.Radius.bar)
             .fill(Tokens.Color.surface)
-          RoundedRectangle(cornerRadius: 4)
+          RoundedRectangle(cornerRadius: Tokens.Radius.bar)
             .fill(Tokens.Color.accent)
             // The value animates, not a scaleEffect: a scaled bar carries a distorted corner
             // radius and would drag its label with it.

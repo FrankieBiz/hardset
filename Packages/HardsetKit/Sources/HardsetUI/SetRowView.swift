@@ -367,7 +367,7 @@ public struct SetRowView: View {
   private var logButton: some View {
     Button(action: onLog) {
       Image(systemName: isLogged ? "checkmark.circle.fill" : "circle")
-        .font(.title2)
+        .font(Tokens.Text.glyph)
         // The check replaces the circle rather than cross-fading into it. `.offUp` reads as the
         // set being put away, which is what just happened. Under Reduce Motion the glyph simply
         // changes -- `.identity`, not a shorter travel, because the travel is the thing being asked
