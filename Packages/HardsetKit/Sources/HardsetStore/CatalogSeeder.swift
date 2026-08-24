@@ -110,16 +110,37 @@ public nonisolated struct CatalogSeeder {
     }
   }
 
-  /// Case- and diacritic-insensitive prefix/substring match on the name.
+  /// Case- and diacritic-insensitive substring match across name, muscle and equipment.
   ///
   /// An empty query returns everything rather than nothing, so clearing the search box restores
   /// the list instead of emptying it.
+  ///
+  /// Name alone was not enough. The list is *grouped* by muscle and labelled with equipment, so
+  /// those are the words a lifter can see and would reasonably type -- and "quads", "cable" and
+  /// "bodyweight" all returned nothing, on a catalogue where the whole reason to search is that
+  /// eighty-one entries do not fit on a screen. Squats are found by typing "quads" now.
+  ///
+  /// Muscles include the credited secondaries, so "triceps" finds the presses that train them
+  /// indirectly. That matches what the row already prints underneath the name.
   public func search(_ query: String) throws -> [CatalogEntry] {
     let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
     let all = try selectableExercises()
     guard !trimmed.isEmpty else { return all }
-    return all.filter {
-      $0.name.range(of: trimmed, options: [.caseInsensitive, .diacriticInsensitive]) != nil
+    return all.filter { Self.matches($0, query: trimmed) }
+  }
+
+  /// Whether one entry answers a query. Static and internal so the rule is testable directly.
+  static func matches(_ entry: CatalogEntry, query: String) -> Bool {
+    func contains(_ haystack: String) -> Bool {
+      haystack.range(of: query, options: [.caseInsensitive, .diacriticInsensitive]) != nil
+    }
+
+    if contains(entry.name) { return true }
+    if let modality = entry.modality, contains(modality.label) { return true }
+    // The muscle vocabulary as the picker prints it -- "Front delts", not "frontDelts".
+    if contains(MuscleVocabulary.displayName(entry.primaryMuscle)) { return true }
+    return entry.creditedMuscles.contains {
+      contains(MuscleVocabulary.displayName($0.key))
     }
   }
 

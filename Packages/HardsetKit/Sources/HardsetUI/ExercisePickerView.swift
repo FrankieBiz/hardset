@@ -246,20 +246,8 @@ public struct ExercisePickerView: View {
   /// place that turns a key into words, so localisation is a change here and nowhere else. It
   /// deliberately does not title-case an unknown raw value.
   static func displayName(_ key: MuscleKey) -> String {
-    if let muscle = key.muscle { return Self.copy[muscle] ?? muscle.rawValue }
-    return key.isReservedSentinel ? "Not attributed" : "Not recognised"
+    MuscleVocabulary.displayName(key)
   }
-
-  private static let copy: [Muscle: String] = [
-    .chest: "Chest", .frontDelts: "Front delts", .sideDelts: "Side delts",
-    .rearDelts: "Rear delts", .rotatorCuff: "Rotator cuff", .lats: "Lats",
-    .upperBack: "Upper back", .traps: "Traps", .lowerBack: "Lower back",
-    .biceps: "Biceps", .triceps: "Triceps", .forearms: "Forearms",
-    .abs: "Abs", .obliques: "Obliques", .neck: "Neck",
-    .quadriceps: "Quads", .hamstrings: "Hamstrings", .glutes: "Glutes",
-    .adductors: "Adductors", .hipAbductors: "Hip abductors",
-    .gastrocnemius: "Gastrocnemius", .soleus: "Soleus",
-  ]
 
   static func spokenLabel(for entry: CatalogEntry) -> String {
     var parts = [entry.name, displayName(entry.primaryMuscle)]

@@ -188,6 +188,20 @@ public struct SessionSummaryView: View {
           Text(recordDetail(record))
             .font(Tokens.Text.caption)
             .foregroundStyle(Tokens.Color.textSecondary)
+
+          // An estimated one-rep max is a derived health figure, and App Review guideline 1.4.1
+          // asks an app to disclose the methodology behind one. `StrengthMath.epleySource` has
+          // carried the method, the citation and the validated range since it was written -- it was
+          // simply never reachable from the screen that states the number. Only on this record
+          // kind: the other two are lifts that happened, and there is nothing to disclose about a
+          // load someone actually moved.
+          if record.kind == .estimatedOneRepMax {
+            CertaintyBadge(
+              level: .moderate,
+              methodology: StrengthMath.epleySource.methodology,
+              citation: StrengthMath.epleySource.citation
+            )
+          }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(Tokens.Spacing.regular)
