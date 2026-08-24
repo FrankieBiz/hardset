@@ -159,7 +159,14 @@ Still out of scope, and genuinely:
 
 - **Motion.** The planner uses the existing token vocabulary and adds no new animation. The four
   hero moments in §5 of the guidelines stay where they are, behind the device gate.
-- **Converting a split day into a live session.** A real feature and a small one, but it touches
-  `SessionCoordinator`, the most load-bearing type in the app. It deserves its own pass rather than
-  riding along with a schema change.
+- ~~**Converting a split day into a live session.**~~ **Shipped.** It was deferred as touching
+  `SessionCoordinator`, but it turned out to need no change there at all: `SessionCoordinator.start`
+  already takes `[PlannedExercise]`, and `PlannedExercise.plannedSets` is already `Int?`. So
+  `SplitStore.plannedExercises(for:)` hands it a day with every `plannedSets` nil and the coordinator
+  is untouched.
+
+  Worth recording *why* it does not go through `RepeatableExercise`, the "do it again" currency: that
+  type's `workingSets` is non-optional, because a past workout genuinely has a set count. A split day
+  does not, so routing through it would have forced a number to be invented at precisely the boundary
+  this feature exists to keep clean.
 - **Per-movement set targets of the lifter's own.** Additive later if asked for; see §3.

@@ -214,6 +214,11 @@ The live sequence:
    machine in a plan writes `machineExercises`**, which is what lets the picker know a gym has
    equipment for a movement before anything is logged there.
 
+   A day starts as today's workout (`SplitStore.plannedExercises(for:)` -> the existing
+   `SessionCoordinator.start`), which is what keeps the planner from being a document. Every
+   `plannedSets` is nil; the rows the logger opens with come from the lifter's own history, not from
+   the plan.
+
    Five defects were found by running the screen and none by the suite: an empty plan whose own copy
    promised to deal your logged movements while the button read from the empty plan and did nothing;
    "1 days"; day subtitles ranked by group touches so a chest day read "Arms · Legs · Shoulders";
