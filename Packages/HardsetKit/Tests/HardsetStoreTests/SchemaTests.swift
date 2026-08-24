@@ -274,7 +274,7 @@ struct SchemaTests {
         "weightKg", "reps", "rpe", "isWarmup", "completedAt",
       ],
       "machineExercises": ["id", "machineID", "exerciseID", "createdAt"],
-      "machines": ["id", "gymID", "name", "brand", "stackIncrementKg", "isArchived", "createdAt"],
+      "machines": ["id", "gymID", "name", "stackIncrementKg", "isArchived", "createdAt"],
       "sessionExercises": ["id", "sessionID", "exerciseID", "machineID", "position", "plannedSets"],
       "sessions": ["id", "gymID", "title", "notes", "startedAt", "finishedAt"],
     ]

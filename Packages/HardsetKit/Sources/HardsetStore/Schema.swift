@@ -43,7 +43,6 @@ nonisolated struct Machine: Hashable, Identifiable, Sendable {
   let id: UUID
   var gymID: UUID
   var name = ""
-  var brand = ""
   /// Smallest load step this machine allows, when known. Drives honest progression
   /// suggestions: proposing +2.5 kg on a stack that moves in 5 kg jumps is a lie.
   ///

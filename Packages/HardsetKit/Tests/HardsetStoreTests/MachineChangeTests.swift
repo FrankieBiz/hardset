@@ -31,8 +31,8 @@ struct MachineChangeTests {
       try Exercise.insert { Exercise.Draft(id: exercise.rawValue, name: "Leg Press") }.execute(db)
     }
     let gym = try gyms.createGym(name: "Gym", now: now)
-    let hammer = try gyms.createMachine(at: gym, name: "Leg Press", brand: "Hammer Strength", now: now)
-    let cybex = try gyms.createMachine(at: gym, name: "Leg Press", brand: "Cybex", now: now)
+    let hammer = try gyms.createMachine(at: gym, name: "Hammer Strength Leg Press", now: now)
+    let cybex = try gyms.createMachine(at: gym, name: "Cybex Leg Press", now: now)
     return (database, logger, gyms, exercise, hammer, cybex)
   }
 
@@ -142,7 +142,7 @@ struct MachineChangeTests {
     let (_, logger, gyms, exercise, hammer, _) = try fixture()
     try seedHistory(logger, exercise, hammer, weight: 120, daysAgo: 7)
     let brandNew = try gyms.createMachine(
-      at: try gyms.gyms()[0].id, name: "Leg Press", brand: "Panatta", now: now
+      at: try gyms.gyms()[0].id, name: "Panatta Leg Press", now: now
     )
 
     let live = try SessionCoordinator.start(

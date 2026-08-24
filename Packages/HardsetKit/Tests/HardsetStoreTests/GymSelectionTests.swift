@@ -88,7 +88,7 @@ struct GymSelectionTests {
     let (logger, gyms, exercise) = try fixture()
     let gym = try gyms.createGym(name: "Club", now: now)
     let machine = try gyms.createMachine(
-      at: gym, name: "Leg Press", brand: "Hammer Strength", stackIncrementKg: 10, now: now
+      at: gym, name: "Hammer Strength Leg Press", stackIncrementKg: 10, now: now
     )
     let live = try SessionCoordinator.start(
       store: logger, gymID: gym,

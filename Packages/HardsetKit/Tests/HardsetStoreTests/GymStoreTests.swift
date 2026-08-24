@@ -31,18 +31,21 @@ struct GymStoreTests {
   func createAndRead() throws {
     let (_, gyms, _, _) = try fixture()
     let gym = try gyms.createGym(name: "PureGym Holloway", now: now)
-    try gyms.createMachine(at: gym, name: "Leg Press", brand: "Hammer Strength", now: now)
-    try gyms.createMachine(at: gym, name: "Leg Press", brand: "Cybex", now: now)
+    // The brand is part of the name. A separate `brand` column existed and nothing ever wrote it,
+    // because the sheet asks for "Name or brand" in one field -- which is the right call when a
+    // lifter is standing at a machine mid-workout.
+    try gyms.createMachine(at: gym, name: "Hammer Strength Leg Press", now: now)
+    try gyms.createMachine(at: gym, name: "Cybex Leg Press", now: now)
 
     #expect(try gyms.gyms().map(\.name) == ["PureGym Holloway"])
     let machines = try gyms.machines(at: gym)
     #expect(machines.count == 2)
-    // The brand leads, because distinguishing brands is the entire point of tracking machines.
+    // Two leg presses at one gym stay two machines, which is the entire point of tracking them.
     #expect(Set(machines.map(\.displayName)) == ["Hammer Strength Leg Press", "Cybex Leg Press"])
   }
 
-  @Test("A machine with no brand shows just its name")
-  func unbrandedMachine() throws {
+  @Test("A machine shows the name it was given")
+  func machineShowsItsName() throws {
     let (_, gyms, _, _) = try fixture()
     let gym = try gyms.createGym(name: "Home", now: now)
     try gyms.createMachine(at: gym, name: "Squat rack", now: now)
@@ -101,8 +104,8 @@ struct GymStoreTests {
   func recencyOrder() throws {
     let (_, gyms, logger, exercise) = try fixture()
     let gym = try gyms.createGym(name: "Gym", now: now)
-    let hammer = try gyms.createMachine(at: gym, name: "Leg Press", brand: "Hammer Strength", now: now)
-    let cybex = try gyms.createMachine(at: gym, name: "Leg Press", brand: "Cybex", now: now)
+    let hammer = try gyms.createMachine(at: gym, name: "Hammer Strength Leg Press", now: now)
+    let cybex = try gyms.createMachine(at: gym, name: "Cybex Leg Press", now: now)
 
     // Hammer three weeks ago, Cybex last week.
     for (machine, daysAgo) in [(hammer, 21), (cybex, 7)] {

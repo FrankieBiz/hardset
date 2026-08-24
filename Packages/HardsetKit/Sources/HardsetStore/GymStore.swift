@@ -18,7 +18,6 @@ public nonisolated struct MachineRecord: Hashable, Sendable, Identifiable {
   public let id: MachineID
   public let gymID: GymID
   public let name: String
-  public let brand: String
   /// The smallest step this stack actually moves in, when known. Drives honest progression: a
   /// suggestion of +2.5 kg on a stack that moves in 5 kg jumps is a lie about the equipment.
   public let stackIncrementKg: Double?
@@ -27,15 +26,17 @@ public nonisolated struct MachineRecord: Hashable, Sendable, Identifiable {
     self.id = MachineID(rawValue: row.id)
     self.gymID = GymID(rawValue: row.gymID)
     self.name = row.name
-    self.brand = row.brand
     self.stackIncrementKg = row.stackIncrementKg
   }
 
-  /// "Hammer Strength Leg Press", or just the name when the brand is unknown. The brand is the
-  /// whole point of tracking machines separately, so it leads when it exists.
-  public var displayName: String {
-    brand.isEmpty ? name : "\(brand) \(name)"
-  }
+  /// What the lifter called it.
+  ///
+  /// There was a separate `brand` column, and this composed "Hammer Strength" with "Leg Press" when
+  /// it was set. Nothing ever set it: `createMachine`'s `brand:` parameter defaulted to empty and its
+  /// one caller never passed it, because the sheet asks for "Name or brand" in a single field -- one
+  /// field being the right call when a lifter is standing at a machine mid-workout. So the whole
+  /// label already lives in `name`, and the column was dropped before the schema froze.
+  public var displayName: String { name }
 }
 
 /// Gyms and their machines.
@@ -198,7 +199,6 @@ public nonisolated struct GymStore {
   public func createMachine(
     at gymID: GymID,
     name: String,
-    brand: String = "",
     stackIncrementKg: Double? = nil,
     forExercise exerciseID: ExerciseID? = nil,
     now: Date = Date()
@@ -207,7 +207,7 @@ public nonisolated struct GymStore {
     try database.write { db in
       try Machine.insert {
         Machine.Draft(
-          id: id.rawValue, gymID: gymID.rawValue, name: name, brand: brand,
+          id: id.rawValue, gymID: gymID.rawValue, name: name,
           stackIncrementKg: stackIncrementKg,
           isArchived: false, createdAt: now
         )
