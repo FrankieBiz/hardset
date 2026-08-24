@@ -277,7 +277,14 @@ public struct ExerciseLogState: Hashable, Sendable, Identifiable {
   /// last week: after logging 100 × 8, the next row opens at 100 × 8. Only when nothing has
   /// been logged yet does this fall back to history.
   public mutating func appendSlot(isWarmup: Bool = false) {
-    let index = slots.count
+    // The *working-set* index, not the raw row count.
+    //
+    // History is indexed by working set -- last week's set 1, set 2, set 3 -- so counting warm-up
+    // rows into the index shifted every later prefill by one per warm-up. Add a warm-up, then add a
+    // working row, and the row that is working set 1 was prefilled from last week's set 2. The
+    // badge already numbers rows this way (`ordinal(of:)` in the section view); this makes the
+    // suggestion agree with the number printed next to it.
+    let index = slots.count { !$0.isWarmup }
     let suggestion: PriorSetRecord? =
       lastLoggedRecord() ?? prior?.suggestion(forSetIndex: index)
     slots.append(SetSlot(draft: SetEntryDraft(suggestion: suggestion), isWarmup: isWarmup))

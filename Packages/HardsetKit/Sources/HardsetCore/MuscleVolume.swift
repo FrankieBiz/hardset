@@ -85,6 +85,12 @@ public struct MuscleVolumeReport: Hashable, Sendable {
   ///
   /// Excludes the tokens with no direct movement in the catalogue yet — reporting "you have no
   /// neck work" when the app ships no neck exercise is blaming the user for a content gap.
+  ///
+  /// **"Credited nothing" is not the same claim as "not trained."** When `isLowerBound` is true some
+  /// sets could not be attributed, so a muscle in this list may well have been trained by one of
+  /// them. Any caller presenting this as a gap must say so — and in the degenerate case where
+  /// nothing at all was attributed, this returns every muscle, which read as "you trained nothing"
+  /// when the truth was "the app could not tell what you trained".
   public func untrainedMuscles(excluding excluded: Set<Muscle>) -> [Muscle] {
     Muscle.allCases.filter { !excluded.contains($0) && sets(for: $0) == 0 }
   }

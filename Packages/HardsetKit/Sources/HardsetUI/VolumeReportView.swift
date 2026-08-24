@@ -209,8 +209,25 @@ public struct VolumeReportView: View {
 
   private var gapsSection: some View {
     let gaps = report.untrainedMuscles(excluding: excludedFromGaps)
+    // Nothing at all could be attributed, so "credited nothing" is true of every muscle and means
+    // nothing. Listing all twenty-two as gaps read as "you trained nothing this week" when the
+    // truth was "the app could not tell what you trained" -- a confident negative claim built out
+    // of missing data, which is the one thing this report exists not to do.
+    let nothingAttributed = report.hardSets > 0 && report.coverage == 0
     return Group {
-      if !gaps.isEmpty {
+      if nothingAttributed {
+        VStack(alignment: .leading, spacing: Tokens.Spacing.snug) {
+          Text("Where the work went is unknown")
+            .font(Tokens.Text.label.weight(.semibold))
+          Text(
+            "^[\(report.hardSets) set](inflect: true) logged this week, and none of them could be "
+              + "matched to a muscle. That is a gap in the app's movement data, not in your training."
+          )
+          .font(Tokens.Text.caption)
+          .foregroundStyle(Tokens.Color.certainty(.low))
+          .fixedSize(horizontal: false, vertical: true)
+        }
+      } else if !gaps.isEmpty {
         VStack(alignment: .leading, spacing: Tokens.Spacing.snug) {
           Text("Nothing logged for")
             .font(Tokens.Text.label.weight(.semibold))
@@ -218,6 +235,17 @@ public struct VolumeReportView: View {
           Text("These had no sets this week. Whether that matters depends on your plan.")
             .font(Tokens.Text.caption)
             .foregroundStyle(Tokens.Color.textSecondary)
+          if report.isLowerBound {
+            // "Credited nothing" is not "not trained". Some sets could not be attributed, so a
+            // muscle below may have been trained by one of them, and the list is a maximum.
+            Text(
+              "^[\(report.unattributedHardSets) set](inflect: true) this week could not be matched "
+                + "to a muscle, so some of these may have been trained after all."
+            )
+            .font(Tokens.Text.caption)
+            .foregroundStyle(Tokens.Color.certainty(.low))
+            .fixedSize(horizontal: false, vertical: true)
+          }
 
           FlowLayout(spacing: Tokens.Spacing.snug) {
             ForEach(gaps, id: \.self) { muscle in

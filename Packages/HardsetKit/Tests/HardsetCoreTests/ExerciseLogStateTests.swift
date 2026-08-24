@@ -186,4 +186,54 @@ struct ExerciseLogStateTests {
     #expect(a == a)
     #expect(a.progressionKey == ProgressionKey(exerciseID: exercise, machineID: nil))
   }
+
+  /// A warm-up row must not shift the working-set prefills behind it.
+  ///
+  /// History is indexed by working set -- last week's set 1, set 2, set 3 -- and `appendSlot` looked
+  /// the suggestion up by the raw row count. So a warm-up sitting above a working row pushed that
+  /// row's prefill one set further down last week's list than the badge beside it claimed.
+  @Test("A warm-up row does not shift the next working row's prefill")
+  func warmupDoesNotShiftPrefills() {
+    let key = ProgressionKey(exerciseID: exercise, machineID: machine)
+    var state = ExerciseLogState.build(
+      exerciseID: exercise,
+      machineID: machine,
+      exerciseName: "Leg Press",
+      snapshot: snapshot(key: key, sets: [(100, 10), (105, 8), (110, 6)]),
+      plannedSets: 1
+    )
+    #expect(state.slots.count == 1)
+
+    state.appendSlot(isWarmup: true)
+    state.appendSlot()
+
+    let working = state.slots.filter { !$0.isWarmup }
+    #expect(working.count == 2)
+    // The second working row takes last week's second set. Counting the warm-up into the index
+    // gave it the third: 110 x 6 instead of 105 x 8.
+    #expect(working.map { $0.draft.weightKg } == [100, 105])
+    #expect(working.map { $0.draft.reps } == [10, 8])
+  }
+
+  /// Two warm-ups, to show the old shift compounded rather than being a single off-by-one.
+  @Test("Two warm-ups do not compound the shift")
+  func twoWarmupsDoNotCompoundTheShift() {
+    let key = ProgressionKey(exerciseID: exercise, machineID: machine)
+    var state = ExerciseLogState.build(
+      exerciseID: exercise,
+      machineID: machine,
+      exerciseName: "Leg Press",
+      snapshot: snapshot(key: key, sets: [(100, 10), (105, 8), (110, 6)]),
+      plannedSets: 1
+    )
+
+    state.appendSlot(isWarmup: true)
+    state.appendSlot(isWarmup: true)
+    state.appendSlot()
+
+    let working = state.slots.filter { !$0.isWarmup }
+    #expect(working.count == 2)
+    #expect(working.last?.draft.weightKg == 105)
+    #expect(working.last?.draft.reps == 8)
+  }
 }

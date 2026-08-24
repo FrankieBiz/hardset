@@ -285,4 +285,59 @@ struct CatalogVolumeTests {
       #expect(credited <= Double(report.hardSets), "\(key.storedValue) credited \(credited)")
     }
   }
+
+  /// "Credited nothing" is not the same claim as "not trained".
+  ///
+  /// When nothing could be attributed, every muscle has zero credited sets -- so the gap list
+  /// returned all of them, and the report read as "you trained nothing this week" when the truth was
+  /// "the app could not tell what you trained". The engine still answers the question it was asked;
+  /// what it must also expose is that the answer is unsafe to present as a gap.
+  @Test("A week of unattributed work is a coverage failure, not an empty week")
+  func unattributedWeekIsNotAnEmptyWeek() {
+    let report = MuscleVolumeReport(
+      fractionalSets: [:],
+      hardSets: 12,
+      unattributedHardSets: 12,
+      setsTouchingGroup: [:]
+    )
+
+    // The gap list is technically correct and completely misleading on its own.
+    #expect(report.untrainedMuscles(excluding: []).count == Muscle.allCases.count)
+    // These are what a caller has to check before presenting it as a gap.
+    #expect(report.coverage == 0)
+    #expect(report.isLowerBound)
+    #expect(report.unattributedHardSets == 12)
+  }
+
+  /// Partial attribution: the gaps are real but overstated, and the caller has to say so.
+  @Test("Partly unattributed work makes the gap list a maximum")
+  func partialAttributionMakesGapsAMaximum() {
+    let report = MuscleVolumeReport(
+      fractionalSets: [MuscleKey(.chest): 6],
+      hardSets: 10,
+      unattributedHardSets: 4,
+      setsTouchingGroup: [:]
+    )
+
+    #expect(report.isLowerBound)
+    #expect(abs(report.coverage - 0.6) < 1e-9)
+    let gaps = report.untrainedMuscles(excluding: [])
+    #expect(!gaps.contains(.chest))
+    // Every other muscle is listed, though four sets of unknown work might have hit some of them.
+    #expect(gaps.contains(.hamstrings))
+  }
+
+  /// The safe case, where a gap really is a gap.
+  @Test("A fully attributed week states its gaps without qualification")
+  func fullyAttributedWeekIsCertain() {
+    let report = MuscleVolumeReport(
+      fractionalSets: [MuscleKey(.chest): 6],
+      hardSets: 6,
+      unattributedHardSets: 0,
+      setsTouchingGroup: [:]
+    )
+    #expect(!report.isLowerBound)
+    #expect(report.coverage == 1)
+    #expect(report.untrainedMuscles(excluding: []).contains(.hamstrings))
+  }
 }
