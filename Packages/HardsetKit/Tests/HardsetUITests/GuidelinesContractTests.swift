@@ -143,6 +143,103 @@ struct GuidelinesContractTests {
       }
   }
 
+  // MARK: - The token vocabulary is closed
+
+  /// Every Swift file in the two view modules, so a sweep cannot miss a newly added one.
+  private func viewSources() throws -> [(name: String, text: String)] {
+    var found: [(String, String)] = []
+    for module in ["HardsetUI", "HardsetFeature"] {
+      let directory = Self.repositoryRoot.appending(path: "Packages/HardsetKit/Sources/\(module)")
+      let names = try FileManager.default.contentsOfDirectory(atPath: directory.path)
+      for name in names where name.hasSuffix(".swift") && name != "DesignTokens.swift" {
+        found.append((name, try String(contentsOf: directory.appending(path: name), encoding: .utf8)))
+      }
+    }
+    return found
+  }
+
+  /// Lines outside comments that match a pattern, so a rule quoted in prose does not trip it.
+  private func offendingLines(_ text: String, pattern: String) throws -> [String] {
+    let regex = try NSRegularExpression(pattern: pattern)
+    return text.split(separator: "\n", omittingEmptySubsequences: false).compactMap { line in
+      let trimmed = line.trimmingCharacters(in: .whitespaces)
+      guard !trimmed.hasPrefix("//"), !trimmed.hasPrefix("///"), !trimmed.hasPrefix("*") else {
+        return nil
+      }
+      // Materialise the String FIRST and take indices from it. Building the range from `line`'s
+      // own indices and matching against a freshly-constructed String is a different string with
+      // different indices, and NSRange conversion traps on it rather than failing to match.
+      let candidate = String(line)
+      let range = NSRange(candidate.startIndex..., in: candidate)
+      guard regex.firstMatch(in: candidate, range: range) != nil else { return nil }
+      return trimmed
+    }
+  }
+
+  /// The vocabulary claim, actually enforced.
+  ///
+  /// A commit closed the font and radius vocabulary and recorded that "grep for a raw font or a
+  /// radius literal in `HardsetUI` and `HardsetFeature` now returns nothing" -- and then nothing kept
+  /// it true. That is the same failure this suite exists to fix: the document said its colours were
+  /// "verified against this document by script" when no script existed. A swept-clean codebase with
+  /// no test is one screen away from being dirty again, and this repo adds screens.
+  @Test("No view uses a raw text style instead of a Tokens.Text role")
+  func noRawFonts() throws {
+    // `.font(.caption)` and friends, plus any direct `Font.system`/`Font.custom` construction.
+    let pattern =
+      #"\.font\(\s*\.(largeTitle|title|title2|title3|headline|subheadline|body|callout|footnote|caption|caption2)\b"#
+      + #"|Font\.(system|custom)\("#
+    for source in try viewSources() {
+      let offenders = try offendingLines(source.text, pattern: pattern)
+      #expect(
+        offenders.isEmpty,
+        "\(source.name) uses a raw text style: \(offenders.joined(separator: " | "))"
+      )
+    }
+  }
+
+  /// Four `cornerRadius: 4` literals were what made a fourth radius arrive without anyone deciding
+  /// on one. `Tokens.Radius` has four named roles; a number here means a fifth is being invented.
+  @Test("No view hardcodes a corner radius")
+  func noRadiusLiterals() throws {
+    let pattern = #"cornerRadius:\s*[0-9]|cornerRadius\(\s*[0-9]"#
+    for source in try viewSources() {
+      let offenders = try offendingLines(source.text, pattern: pattern)
+      #expect(
+        offenders.isEmpty,
+        "\(source.name) hardcodes a radius: \(offenders.joined(separator: " | "))"
+      )
+    }
+  }
+
+  /// The strongest invariant in the whole design: chrome is achromatic, and hue appears only where it
+  /// carries information. A stock `.red` or `.blue` anywhere in a view is that rule breaking, and it
+  /// is invisible in review because it looks like ordinary SwiftUI.
+  @Test("No view reaches for a stock SwiftUI hue")
+  func noRawColours() throws {
+    let pattern =
+      #"(Color|foregroundStyle|foregroundColor|tint|fill|background|stroke)\(\s*\."#
+      + #"(red|blue|green|orange|yellow|purple|pink|gray|grey|indigo|teal|cyan|mint|brown)\b"#
+    for source in try viewSources() {
+      let offenders = try offendingLines(source.text, pattern: pattern)
+      #expect(
+        offenders.isEmpty,
+        "\(source.name) uses a stock hue instead of a token: \(offenders.joined(separator: " | "))"
+      )
+    }
+  }
+
+  /// Guards the sweep itself: if the file walk finds nothing, the three tests above pass vacuously.
+  @Test("The vocabulary sweep actually reads the view modules")
+  func sweepIsNotVacuous() throws {
+    let sources = try viewSources()
+    #expect(sources.count > 20, "only \(sources.count) view files found -- the sweep is not running")
+    let names = Set(sources.map(\.name))
+    #expect(names.contains("SplitPlannerView.swift"))
+    #expect(names.contains("SessionView.swift"))
+    #expect(!names.contains("DesignTokens.swift"), "the token file must be exempt, not swept")
+  }
+
   /// The accent is the app's identity and the document is emphatic that it is white, the same value
   /// as `textPrimary`. A hue creeping in here is the single most visible way to break the design.
   @Test("The accent is still the ink colour, not a hue")
