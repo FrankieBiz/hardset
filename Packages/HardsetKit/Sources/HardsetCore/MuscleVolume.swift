@@ -7,11 +7,17 @@ import Foundation
 /// accidentally use them.
 public struct CountableSet: Hashable, Sendable {
   public let exerciseID: ExerciseID
-  public let isWarmup: Bool
+  public let kind: SetKind
+
+  public var isWarmup: Bool { kind == .warmup }
+
+  public init(exerciseID: ExerciseID, kind: SetKind) {
+    self.exerciseID = exerciseID
+    self.kind = kind
+  }
 
   public init(exerciseID: ExerciseID, isWarmup: Bool) {
-    self.exerciseID = exerciseID
-    self.isWarmup = isWarmup
+    self.init(exerciseID: exerciseID, kind: isWarmup ? .warmup : .working)
   }
 }
 
@@ -126,7 +132,11 @@ public enum VolumeAnalyzer {
 
     for (index, set) in sets.enumerated() {
       // Warm-ups are real work and are not the prescription. They count nowhere here.
-      guard !set.isWarmup else { continue }
+      //
+      // Nor do drops, and for a different reason: a drop is counted as part of the set it
+      // continues rather than as another set. See `SetCounting.dropSetConvention` — it is an
+      // adopted convention, not a finding, and the app says so where App Review reads it.
+      guard set.kind.countsAsWorkingSet else { continue }
       hardSets += 1
 
       guard let contributions = attribution.contributions(for: set.exerciseID) else {
@@ -210,7 +220,10 @@ extension VolumeAnalyzer {
     let beyond = fractionalSets > studiedRangeCeiling
     return Claim(
       DoseResponsePosition(fractionalSets: fractionalSets, isBeyondStudiedRange: beyond),
-      certainty: beyond ? .low : .moderate,
+      // `SetCounting.certaintyCeiling` states this rule, and stating it twice is how the two
+      // copies drift. Identical by construction for a modelled muscle, which is the only kind
+      // that reaches this line -- the guard above returned for the rest.
+      certainty: SetCounting.certaintyCeiling(for: muscle, fractionalSets: fractionalSets),
       source: doseResponseSource
     )
   }

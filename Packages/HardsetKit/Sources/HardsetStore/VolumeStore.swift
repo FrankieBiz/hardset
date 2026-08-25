@@ -25,7 +25,12 @@ public nonisolated struct VolumeStore {
         .where { $0.completedAt < to }
         .order { $0.completedAt }
         .fetchAll(db)
-        .map { CountableSet(exerciseID: ExerciseID(rawValue: $0.exerciseID), isWarmup: $0.isWarmup) }
+        .map {
+          CountableSet(
+            exerciseID: ExerciseID(rawValue: $0.exerciseID),
+            kind: SetKind(isWarmup: $0.isWarmup, isDropSet: $0.isDropSet)
+          )
+        }
     }
   }
 
@@ -57,7 +62,12 @@ public nonisolated struct VolumeStore {
         .where { $0.sessionID.eq(sessionID.rawValue) }
         .order { $0.completedAt }
         .fetchAll(db)
-        .map { CountableSet(exerciseID: ExerciseID(rawValue: $0.exerciseID), isWarmup: $0.isWarmup) }
+        .map {
+          CountableSet(
+            exerciseID: ExerciseID(rawValue: $0.exerciseID),
+            kind: SetKind(isWarmup: $0.isWarmup, isDropSet: $0.isDropSet)
+          )
+        }
     }
   }
 
@@ -99,17 +109,29 @@ public nonisolated struct ProgressionStore {
   /// Completed working sets for one exercise, across every machine, oldest first.
   ///
   /// Warm-ups are excluded in SQL. A warm-up reaching the analyser would be a bug, so it is not
-  /// filtered defensively there — that would hide it.
+  /// filtered defensively there — that would hide it. Drops are excluded on the same line: the
+  /// chart plots a session's best work, and a set continued at a reduced load is neither a
+  /// heaviest load nor an estimable one-rep max.
   public func samples(for exerciseID: ExerciseID, limit: Int = 2_000) throws
     -> [ProgressionSample]
   {
     try database.read { db in
       try LoggedSet
         .where { $0.exerciseID.eq(exerciseID.rawValue) }
-        .where { !$0.isWarmup }
-        .order { $0.completedAt }
+        .where { !$0.isWarmup && !$0.isDropSet }
+        // Newest first, then reversed below. `.order { $0.completedAt }` is ASC, so pairing it
+        // with `.limit` kept the OLDEST rows and silently dropped the newest -- a lifter past the
+        // cap had a chart that stopped years ago and a "last trained" date to match. Truncating a
+        // history has to drop the far end, not the near one.
+        //
+        // Reversed rather than handed back descending, because `ProgressionAnalyzer.machineChanges`
+        // breaks timestamp ties on the input's own index to keep the result deterministic. Handing
+        // it a reversed array would flip which machine reads as "from" and which as "to" for two
+        // blocks sharing an instant.
+        .order { $0.completedAt.desc() }
         .limit(limit)
         .fetchAll(db)
+        .reversed()
         .map {
           ProgressionSample(
             sessionID: SessionID(rawValue: $0.sessionID),
@@ -263,8 +285,12 @@ public nonisolated struct LoggedSetDetail: Hashable, Sendable, Identifiable {
   public let reps: Int
   /// Effort as recorded, or `nil` if none was.
   public let rpe: Double?
-  public let isWarmup: Bool
+  /// Working, warm-up or drop. History has to be able to show a drop as one, or a chain reads as
+  /// three unexplained sets at falling loads.
+  public let kind: SetKind
   public let completedAt: Date
+
+  public var isWarmup: Bool { kind == .warmup }
 
   public init(
     id: SetID,
@@ -276,7 +302,7 @@ public nonisolated struct LoggedSetDetail: Hashable, Sendable, Identifiable {
     weightKg: Double,
     reps: Int,
     rpe: Double? = nil,
-    isWarmup: Bool,
+    kind: SetKind,
     completedAt: Date
   ) {
     self.id = id
@@ -288,9 +314,12 @@ public nonisolated struct LoggedSetDetail: Hashable, Sendable, Identifiable {
     self.weightKg = weightKg
     self.reps = reps
     self.rpe = rpe
-    self.isWarmup = isWarmup
+    self.kind = kind
     self.completedAt = completedAt
   }
+
+  // No `isWarmup:` convenience, for the same reason `LoggedSetRow` has none: this is built by
+  // mapping stored rows, and a Bool would silently promote a drop to a working set.
 }
 
 public nonisolated struct SessionSummary: Hashable, Sendable, Identifiable {
@@ -341,7 +370,9 @@ public nonisolated struct HistoryStore {
     var order: [String] = []
     var byKey: [String: RepeatableExercise] = [:]
 
-    for set in logged where !set.isWarmup {
+    // Drops are skipped as well as warm-ups. Repeating a workout opens rows to log into, and a
+    // drop is not a row you plan -- it is one you add when you get there.
+    for set in logged where set.kind.countsAsWorkingSet {
       // Keyed on movement *and* machine, so two blocks on different equipment come back as two
       // entries rather than merging -- the same rule the chart follows.
       let key = "\(set.exerciseID.rawValue)|\(set.machineID?.rawValue.uuidString ?? "-")"
@@ -435,7 +466,7 @@ public nonisolated struct HistoryStore {
           weightKg: row.weightKg,
           reps: row.reps,
           rpe: row.rpe,
-          isWarmup: row.isWarmup,
+          kind: SetKind(isWarmup: row.isWarmup, isDropSet: row.isDropSet),
           completedAt: row.completedAt
         )
       }
@@ -497,19 +528,28 @@ public nonisolated struct HistoryStore {
   private static func volume(of sets: [LoggedSet]) -> SessionVolume {
     var workingSets = 0
     var warmupSets = 0
+    var dropSets = 0
     var volumeKg = 0.0
     var reps = 0
     for set in sets {
-      if set.isWarmup {
+      switch SetKind(isWarmup: set.isWarmup, isDropSet: set.isDropSet) {
+      case .warmup:
         warmupSets += 1
-      } else {
+      case .working:
         workingSets += 1
+        volumeKg += set.weightKg * Double(set.reps)
+        reps += set.reps
+      case .drop:
+        // Tonnage and reps in full, no set added -- the same split `SessionVolume` makes, so the
+        // history screen and the live screen cannot disagree about what a workout contained.
+        dropSets += 1
         volumeKg += set.weightKg * Double(set.reps)
         reps += set.reps
       }
     }
     return SessionVolume(
-      workingSets: workingSets, warmupSets: warmupSets, volumeKg: volumeKg, reps: reps
+      workingSets: workingSets, warmupSets: warmupSets, volumeKg: volumeKg, reps: reps,
+      dropSets: dropSets
     )
   }
 }

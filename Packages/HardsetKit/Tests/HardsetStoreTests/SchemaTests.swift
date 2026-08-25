@@ -299,11 +299,13 @@ struct SchemaTests {
       "gyms": ["id", "name", "isArchived", "createdAt"],
       "loggedSets": [
         "id", "sessionID", "exerciseID", "machineID", "sessionExerciseID", "setOrdinal",
-        "weightKg", "reps", "rpe", "isWarmup", "completedAt",
+        "weightKg", "reps", "rpe", "isWarmup", "isDropSet", "completedAt",
       ],
       "machineExercises": ["id", "machineID", "exerciseID", "createdAt"],
       "machines": ["id", "gymID", "name", "stackIncrementKg", "isArchived", "createdAt"],
-      "sessionExercises": ["id", "sessionID", "exerciseID", "machineID", "position", "plannedSets"],
+      "sessionExercises": [
+        "id", "sessionID", "exerciseID", "machineID", "position", "plannedSets", "supersetGroup",
+      ],
       "sessions": ["id", "gymID", "title", "notes", "startedAt", "finishedAt"],
       // No set-count column on splitEntries, deliberately. See the migration's note.
       "splitDays": ["id", "splitID", "name", "position", "createdAt"],

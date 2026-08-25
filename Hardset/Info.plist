@@ -24,8 +24,30 @@
 	<string>1.0</string>
 	<key>CFBundleVersion</key>
 	<string>1</string>
+	<!-- Dark, and dark before SwiftUI exists.
+	     `HardsetRootView` sets `.preferredColorScheme(.dark)`, but that only governs the SwiftUI
+	     tree. The launch screen is drawn by the system before any of it runs, so an empty
+	     UILaunchScreen dict painted the system background -- white on a device in light mode --
+	     and every cold launch of a dark-only app began with a white flash. UIUserInterfaceStyle
+	     covers the rest: system-drawn chrome (sheets, alerts, the keyboard, scroll indicators)
+	     follows the device, not the SwiftUI modifier.
+
+	     Both come out again together if light mode is ever built; DECISIONS #22 keeps it open. -->
 	<key>UILaunchScreen</key>
-	<dict/>
+	<dict>
+		<key>UIColorName</key>
+		<string>LaunchBackground</string>
+	</dict>
+	<key>UIUserInterfaceStyle</key>
+	<string>Dark</string>
+
+	<!-- Declared so App Store Connect stops asking on every single upload. Hardset ships no
+	     encryption of its own; HTTPS and the platform's own CloudKit transport are exempt under
+	     the standard exemption, so this is `false` rather than a filed year-long exemption.
+	     Revisit only if the app ever bundles its own crypto (SQLCipher would be the one to
+	     watch, and it would also change the PrivacyInfo note below). -->
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
 
 	<!-- Required for AlarmKit. Without this key AlarmManager cannot schedule at all: the
 	     framework fails at runtime with "Client has not provided an NSAlarmKitUsageDescription

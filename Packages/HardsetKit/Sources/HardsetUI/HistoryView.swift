@@ -44,17 +44,23 @@ public struct HistoryView: View {
   private let onSelect: ((HistoryRow) -> Void)?
   /// Deletes a workout. `nil` hides the affordance.
   private let onDelete: ((HistoryRow) -> Void)?
+  /// Loads the next page. `nil` when everything written is already on screen, which is what makes
+  /// the absence of the footer meaningful: no button means no more workouts, not more workouts
+  /// you cannot reach.
+  private let onLoadMore: (() -> Void)?
 
   public init(
     rows: [HistoryRow],
     unit: WeightUnit,
     onSelect: ((HistoryRow) -> Void)? = nil,
-    onDelete: ((HistoryRow) -> Void)? = nil
+    onDelete: ((HistoryRow) -> Void)? = nil,
+    onLoadMore: (() -> Void)? = nil
   ) {
     self.rows = rows
     self.unit = unit
     self.onSelect = onSelect
     self.onDelete = onDelete
+    self.onLoadMore = onLoadMore
   }
 
   public var body: some View {
@@ -90,6 +96,20 @@ public struct HistoryView: View {
               }
             }
           }
+        }
+
+        // Explicit, not infinite scroll. A workout that exists and cannot be reached is the same
+        // class of defect as one the app forgot: the list used to stop at fifty with no footer,
+        // no count and no way further back, so a lifter four months in silently lost the start of
+        // their training to a query limit.
+        if let onLoadMore {
+          Button(action: onLoadMore) {
+            Label("Show older workouts", systemImage: "clock.arrow.circlepath")
+              .frame(maxWidth: .infinity, minHeight: Tokens.minimumTapTarget)
+              .contentShape(Rectangle())
+          }
+          .buttonStyle(.plain)
+          .foregroundStyle(Tokens.Color.accent)
         }
       }
     }

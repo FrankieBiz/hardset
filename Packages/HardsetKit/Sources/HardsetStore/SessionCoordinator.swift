@@ -271,10 +271,10 @@ public final class SessionCoordinator {
             setID: $0.id, weightKg: $0.weightKg, reps: $0.reps,
             // Restored, like the modality and the notes above it. The row otherwise came back
             // claiming no effort was recorded for a set the lifter had rated.
-            rpe: $0.rpe, isWarmup: $0.isWarmup
+            rpe: $0.rpe, kind: $0.kind
           )
         }
-      let state = ExerciseLogState.resume(
+      var state = ExerciseLogState.resume(
         exerciseID: entry.exerciseID,
         machineID: entry.machineID,
         exerciseName: entry.exerciseName,
@@ -291,6 +291,9 @@ public final class SessionCoordinator {
         notes: resumedNotes[entry.exerciseID] ?? ""
       )
       rowIDs[state.id] = entry.id
+      // Restored with everything else. Without it a force-quit dissolves the superset silently
+      // and the rest timer goes back to arming after every set, mid-workout, unexplained.
+      state.supersetGroup = entry.supersetGroup
       return state
     }
 
@@ -422,7 +425,7 @@ public final class SessionCoordinator {
         // Derived by the store from what is already written, NOT from the slot index. Recovered
         // slots are renumbered, so a slot-index ordinal reissues one that is already taken.
         setOrdinal: nil,
-        isWarmup: slot.isWarmup,
+        kind: slot.kind,
         // Recorded when the lifter supplied one. The column has existed unused since the first
         // migration.
         rpe: slot.draft.validatedRPE,
@@ -446,8 +449,18 @@ public final class SessionCoordinator {
         lastRecords = []
       }
 
-      // Warm-ups do not start a rest timer: the user is still warming up.
-      if let restAfterSet, !slot.isWarmup {
+      // Whether this set ends a piece of work, or is followed immediately by more of it.
+      //
+      // Warm-ups never armed rest. A set with a drop queued behind it does not either, because
+      // the point of a drop is that no rest is taken; nor does a set inside a superset until the
+      // rest of the round is done. All three live in one pure, tested rule rather than as
+      // conditions accumulating here.
+      let armsRest = SupersetRest.shouldArmRest(
+        afterLogging: slotID,
+        in: exercises[exerciseIndex],
+        session: exercises
+      )
+      if let restAfterSet, armsRest {
         let metadata = RestMetadata(
           exerciseName: exercise.exerciseName,
           setOrdinal: exercises[exerciseIndex].workingOrdinal(ofSlotID: slotID) ?? 1,
@@ -474,6 +487,93 @@ public final class SessionCoordinator {
     // Nothing is persisted per slot until it is logged, so an unlogged row exists only in memory
     // and removing it touches no storage.
     return exercises[index].removeSlot(slotID: slotID)
+  }
+
+  /// Adds a drop continuing the last row of a movement.
+  ///
+  /// Touches no storage, like every other row that has not been logged yet. Returns the new row's
+  /// id, or `nil` when there is nothing to continue — an empty movement, or one whose last row is
+  /// a warm-up.
+  @discardableResult
+  public func addDropSet(inExercise exerciseStateID: UUID) -> UUID? {
+    guard let index = exercises.firstIndex(where: { $0.id == exerciseStateID }) else {
+      lastError = SessionCoordinatorError.unknownSlot
+      return nil
+    }
+    return exercises[index].appendDropSet()
+  }
+
+  /// Pairs a movement with the one after it, so rest waits for the round rather than the set.
+  ///
+  /// Joining with the *next* movement rather than an arbitrary one is what keeps a group
+  /// contiguous by construction. A superset whose members are scattered down the screen is a
+  /// scrolling problem during the one part of a workout where scrolling is hardest, and nothing
+  /// about the rule needs them adjacent — so the constraint costs nothing and buys the ordering.
+  ///
+  /// Extends an existing group rather than starting a new one when either side already has one,
+  /// which is how a third movement joins a pair.
+  @discardableResult
+  public func joinSupersetWithNext(exerciseStateID: UUID) -> Bool {
+    guard
+      let index = exercises.firstIndex(where: { $0.id == exerciseStateID }),
+      exercises.indices.contains(index + 1)
+    else {
+      lastError = SessionCoordinatorError.unknownSlot
+      return false
+    }
+
+    let group =
+      exercises[index].supersetGroup
+      ?? exercises[index + 1].supersetGroup
+      ?? SupersetGrouping.nextGroup(in: exercises)
+
+    for offset in [index, index + 1] where exercises[offset].supersetGroup != group {
+      exercises[offset].supersetGroup = group
+      persistSupersetGroup(at: offset)
+    }
+    return true
+  }
+
+  /// Takes a movement back out of its superset.
+  ///
+  /// If that leaves exactly one movement behind, it is ungrouped too. A group of one is not a
+  /// superset, and leaving the number on the row would keep it lettered "A" with no partner while
+  /// the rest rule waited for a round that can never complete.
+  @discardableResult
+  public func leaveSuperset(exerciseStateID: UUID) -> Bool {
+    guard
+      let index = exercises.firstIndex(where: { $0.id == exerciseStateID }),
+      let group = exercises[index].supersetGroup
+    else {
+      lastError = SessionCoordinatorError.unknownSlot
+      return false
+    }
+
+    exercises[index].supersetGroup = nil
+    persistSupersetGroup(at: index)
+
+    let remaining = exercises.indices.filter { exercises[$0].supersetGroup == group }
+    if remaining.count == 1 {
+      exercises[remaining[0]].supersetGroup = nil
+      persistSupersetGroup(at: remaining[0])
+    }
+    return true
+  }
+
+  /// Writes one movement's group to its plan row.
+  ///
+  /// A failure is recorded rather than thrown: the grouping is already reflected on screen, and a
+  /// workout must not be interrupted because a rest-timing preference could not be saved. What is
+  /// lost if it fails is the grouping surviving a force-quit, not any part of the record.
+  private func persistSupersetGroup(at index: Int) {
+    guard let rowID = planRowIDs[exercises[index].id] else { return }
+    do {
+      try store.setSessionExerciseSupersetGroup(
+        rowID: rowID, group: exercises[index].supersetGroup
+      )
+    } catch {
+      lastError = error
+    }
   }
 
   /// Removes a movement from the workout, along with anything logged against it.
@@ -672,8 +772,13 @@ public final class SessionCoordinator {
     isFinished = true
   }
 
+  /// Sets performed so far, as the workout bar reports them.
+  ///
+  /// Counted in working sets rather than written rows. Summing `loggedCount` counted each drop as
+  /// another set, so a lifter who dropped twice saw the bar jump from three to five -- the app
+  /// contradicting its own counting convention on the most visible number in a live workout.
   public var loggedSetCount: Int {
-    exercises.reduce(0) { $0 + $1.loggedCount }
+    exercises.reduce(0) { $0 + $1.loggedWorkingSetCount }
   }
 }
 

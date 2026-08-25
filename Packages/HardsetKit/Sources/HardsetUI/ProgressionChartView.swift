@@ -229,7 +229,7 @@ public struct ProgressionChartView: View {
     VStack(alignment: .leading, spacing: Tokens.Spacing.snug) {
       ForEach(machineChanges) { change in
         Label {
-          Text(change.explanation)
+          Text(change.explanation(in: unit))
         } icon: {
           Image(systemName: "arrow.triangle.branch")
         }

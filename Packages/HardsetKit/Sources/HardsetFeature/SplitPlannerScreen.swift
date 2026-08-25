@@ -14,6 +14,12 @@ public struct SplitPlannerScreen: View {
   private let catalog: CatalogSeeder
   private let gyms: GymStore
   private let volume: VolumeStore
+  /// Defines the lifter's own movements. Optional for the same reason the logger's is: the create
+  /// affordance is hidden rather than shown-and-broken when there is no store to write to.
+  private let exercises: ExerciseStore?
+  /// What machine stack steps are shown in. The planner's machine sheet printed them in kilograms
+  /// regardless of the lifter's setting.
+  private let unit: WeightUnit
 
   @State private var plans: [SplitRecord] = []
   @State private var selected: SplitID?
@@ -31,11 +37,29 @@ public struct SplitPlannerScreen: View {
   /// the logger, and no more acceptable here.
   @State private var machineCache: [MachineRecord] = []
 
+  /// Plans put away, so archiving is a round trip. Held in state rather than read in `body`.
+  @State private var archived: [SplitRecord] = []
+
   @State private var isNamingPlan = false
+  @State private var isRenamingPlan = false
+  @State private var isConfirmingArchive = false
   @State private var renamingDay: PlannedDay?
   @State private var addingToDay: DayTarget?
   @State private var choosingMachineFor: PlannedMovementRow?
   @State private var pickerQuery = ""
+  /// The picker's contents, read once per query rather than once per render. Both source reads
+  /// used to sit in the sheet's ViewBuilder, so every keystroke in the search field was two table
+  /// scans.
+  @State private var pickerEntries: [CatalogEntry] = []
+  @State private var pickerRecent: [ExerciseID] = []
+  /// Movements this gym is known to have equipment for, and its name for the heading. The logger
+  /// showed this section and the planner did not, though planning is the one moment the lifter is
+  /// choosing without standing at the rack.
+  @State private var availableHere: Set<ExerciseID> = []
+  @State private var gymName: String?
+  @State private var isCreatingExercise = false
+  /// Movements offerable as a template for one the lifter defines. Curated only.
+  @State private var templates: [CatalogEntry] = []
   /// Why the last write failed, in the lifter's words. A `try?` here would leave a button that
   /// appears to do nothing, which is the failure mode this codebase has already shipped once.
   @State private var failure: String?
@@ -49,12 +73,16 @@ public struct SplitPlannerScreen: View {
     catalog: CatalogSeeder,
     gyms: GymStore,
     volume: VolumeStore,
+    exercises: ExerciseStore? = nil,
+    unit: WeightUnit = .kilograms,
     onStartDay: (([PlannedExercise]) -> Void)? = nil
   ) {
     self.splits = splits
     self.catalog = catalog
     self.gyms = gyms
     self.volume = volume
+    self.exercises = exercises
+    self.unit = unit
     self.onStartDay = onStartDay
   }
 
@@ -62,6 +90,7 @@ public struct SplitPlannerScreen: View {
     content
       .task { reload() }
       .sheet(isPresented: $isNamingPlan) { namePlanSheet }
+      .sheet(isPresented: $isRenamingPlan) { renamePlanSheet }
       .sheet(item: $renamingDay) { day in renameDaySheet(day) }
       .sheet(item: $addingToDay) { target in movementPicker(for: target.id) }
       .sheet(item: $choosingMachineFor) { movement in machinePicker(for: movement) }
@@ -120,10 +149,47 @@ public struct SplitPlannerScreen: View {
           } label: {
             Label("Add day", systemImage: "calendar.badge.plus")
           }
+          // Renaming and putting a plan away were both unreachable: a plan created by mistake, or
+          // named in a hurry, was permanent. The store could do both all along.
+          Button {
+            isRenamingPlan = true
+          } label: {
+            Label("Rename plan", systemImage: "pencil")
+          }
+          if !archived.isEmpty {
+            Menu {
+              ForEach(archived) { plan in
+                Button {
+                  restore(plan)
+                } label: {
+                  Label(plan.name, systemImage: "arrow.uturn.backward")
+                }
+              }
+            } label: {
+              Label("Archived plans", systemImage: "archivebox")
+            }
+          }
+          Button(role: .destructive) {
+            isConfirmingArchive = true
+          } label: {
+            Label("Put this plan away", systemImage: "archivebox")
+          }
         } label: {
           Label("Plans", systemImage: "ellipsis.circle")
         }
       }
+    }
+    .confirmationDialog(
+      "Put this plan away?",
+      isPresented: $isConfirmingArchive,
+      titleVisibility: .visible
+    ) {
+      Button("Put away") { archiveCurrent() }
+      Button("Cancel", role: .cancel) {}
+    } message: {
+      // Says what actually happens, which is not deletion. The restore path is in the same menu.
+      Text("It moves to Archived plans and can be brought back. Your logged workouts are not "
+        + "affected.")
     }
     .onChange(of: selected) { _, _ in reloadPlan() }
   }
@@ -141,6 +207,24 @@ public struct SplitPlannerScreen: View {
         write { selected = try splits.createSplit(name: name) }
       },
       onCancel: { isNamingPlan = false }
+    )
+  }
+
+  @ViewBuilder private var renamePlanSheet: some View {
+    // Prefilled. "Rename workout" once opened blank and made the lifter retype a name the app
+    // already had, which is what `split(_:)` is read for here.
+    let current = selected.flatMap { try? splits.split($0) }
+    NameEntrySheet(
+      title: "Rename plan",
+      prompt: "Plan name",
+      confirmLabel: "Save",
+      initialValue: current?.name ?? "",
+      onConfirm: { name in
+        isRenamingPlan = false
+        guard let selected else { return }
+        write { try splits.renameSplit(selected, to: name) }
+      },
+      onCancel: { isRenamingPlan = false }
     )
   }
 
@@ -162,19 +246,39 @@ public struct SplitPlannerScreen: View {
     // The lifter's own movements first is handled inside the picker by `recent`. The full catalogue
     // stays reachable, because planning is exactly when someone adds a movement they have not done
     // yet -- and choosing it themselves is not the app recommending it.
-    let entries = (try? catalog.selectableExercises()) ?? []
-    let recent = (try? splits.loggedMovements(limit: 8)) ?? []
     NavigationStack {
       ExercisePickerView(
         query: $pickerQuery,
-        entries: filtered(entries),
-        recent: recent,
+        entries: pickerEntries,
+        recent: pickerRecent,
+        availableHere: availableHere,
+        gymName: gymName,
         onSelect: { entry in
           addingToDay = nil
           pickerQuery = ""
           write { try splits.addEntry(to: dayID, exercise: entry.id) }
-        }
+        },
+        // The dead end this screen shipped with. Both create affordances live inside the picker
+        // and both are gated on `onCreate`; the logger passed it and this call site passed
+        // nothing, so searching the planner for a movement the catalogue lacks ended at
+        // "Nothing matches" with no way forward. Reproduced on device before it was fixed.
+        onCreate: exercises == nil ? nil : { isCreatingExercise = true }
       )
+      // Attached to the picker, not beside the enclosing sheet: two `.sheet` modifiers on one
+      // anchor silently drop the second, which has already cost this codebase a screen that never
+      // presented.
+      .sheet(isPresented: $isCreatingExercise) {
+        NewExerciseSheet(
+          // Prefilled from the search that found nothing, so the name is not typed twice.
+          initialName: pickerQuery,
+          templates: templates,
+          onCreate: { draft in
+            isCreatingExercise = false
+            createExercise(draft, addingTo: dayID)
+          },
+          onCancel: { isCreatingExercise = false }
+        )
+      }
       .navigationTitle("Add movement")
       // Inline, not large: a large title truncates rather than wraps, and at accessibility text
       // sizes this sheet was headed "Add movem...".
@@ -182,6 +286,12 @@ public struct SplitPlannerScreen: View {
         .navigationBarTitleDisplayMode(.inline)
       #endif
     }
+    // Searching hits the database, so it happens here rather than inside the picker, which stays
+    // free of storage. Re-run on change rather than filtered in memory, so a movement created
+    // from the empty state appears without reopening the sheet.
+    .task(id: pickerQuery) { refreshPickerEntries() }
+    // Once per presentation. Relevance does not change while the sheet is open.
+    .task { refreshPickerRelevance() }
   }
 
   @ViewBuilder private func machinePicker(for movement: PlannedMovementRow) -> some View {
@@ -196,6 +306,7 @@ public struct SplitPlannerScreen: View {
         // The machine already named must show as chosen, or reopening the sheet looks like nothing
         // was ever set.
         selected: movement.machineID,
+        unit: unit,
         onSelect: { machineID in
           choosingMachineFor = nil
           write {
@@ -242,13 +353,55 @@ public struct SplitPlannerScreen: View {
     return (try? gyms.machines(at: gym)) ?? []
   }
 
-  private func filtered(_ entries: [CatalogEntry]) -> [CatalogEntry] {
+  private func refreshPickerEntries() {
     let query = pickerQuery.trimmingCharacters(in: .whitespacesAndNewlines)
-    guard !query.isEmpty else { return entries }
-    return (try? catalog.search(query)) ?? entries
+    do {
+      pickerEntries =
+        query.isEmpty ? try catalog.selectableExercises() : try catalog.search(query)
+    } catch {
+      // An unreadable catalogue must not block planning: the picker says it has nothing and the
+      // create affordance is still there, which is the one path that does not need the catalogue.
+      pickerEntries = []
+    }
+  }
+
+  /// What to surface above the alphabet. Both inputs are facts -- the lifter's own history and the
+  /// building's inventory -- so neither turns the picker into a recommendation.
+  private func refreshPickerRelevance() {
+    pickerRecent = (try? splits.loggedMovements(limit: 8)) ?? []
+    // Curated only, for the reason the logger's copy states: inheriting from another hand-typed
+    // row copies one person's guess twice while looking like corroboration.
+    templates = ((try? catalog.selectableExercises()) ?? []).filter(\.isCurated)
+    if let gym = try? gyms.lastUsedGym() {
+      availableHere = (try? gyms.exercisesWithEquipment(at: gym)) ?? []
+      gymName = (try? gyms.gyms())?.first { $0.id == gym }?.name
+    } else {
+      availableHere = []
+      gymName = nil
+    }
   }
 
   // MARK: - Writes
+
+  /// Records a movement the lifter defined, then puts it straight on the day they were filling.
+  ///
+  /// Added rather than handed back to the list, for the reason the logger does the same: they
+  /// described it in order to plan it, and making them find it again afterwards is a second
+  /// decision for no reason.
+  private func createExercise(_ draft: NewExerciseDraft, addingTo dayID: SplitDayID) {
+    guard let exercises else { return }
+    addingToDay = nil
+    pickerQuery = ""
+    write {
+      let id = try exercises.createExercise(
+        name: draft.name,
+        modality: draft.modality,
+        primaryMuscle: draft.primaryMuscle,
+        inheriting: draft.inheriting
+      )
+      try splits.addEntry(to: dayID, exercise: id)
+    }
+  }
 
   /// Runs a write and surfaces its failure instead of swallowing it.
   private func write(_ work: () throws -> Void) {
@@ -257,6 +410,23 @@ public struct SplitPlannerScreen: View {
       reload()
     } catch {
       failure = error.localizedDescription
+    }
+  }
+
+  private func archiveCurrent() {
+    guard let selected else { return }
+    write {
+      try splits.archiveSplit(selected)
+      // Drop the selection so `reload` picks whatever is left rather than showing a plan the
+      // lifter just put away.
+      self.selected = nil
+    }
+  }
+
+  private func restore(_ plan: SplitRecord) {
+    write {
+      try splits.unarchiveSplit(plan.id)
+      selected = plan.id
     }
   }
 
@@ -334,6 +504,7 @@ public struct SplitPlannerScreen: View {
 
   private func reload() {
     plans = (try? splits.splits()) ?? []
+    archived = (try? splits.archivedSplits()) ?? []
     if selected == nil || !plans.contains(where: { $0.id == selected }) {
       selected = plans.first?.id
     }

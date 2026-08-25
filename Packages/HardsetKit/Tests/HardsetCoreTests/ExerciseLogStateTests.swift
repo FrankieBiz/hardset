@@ -168,7 +168,7 @@ struct ExerciseLogStateTests {
       exerciseID: exercise, machineID: machine, exerciseName: "Leg Press",
       snapshot: snapshot(key: key, sets: [(100, 10)])
     )
-    state.slots[0].isWarmup = true
+    state.slots[0].kind = .warmup
     state.slots[0].draft.weightKg = 40
     state.slots[0].draft.reps = 15
     state.markLogged(slotID: state.slots[0].id, setID: SetID())

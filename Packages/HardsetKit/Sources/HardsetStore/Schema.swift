@@ -101,6 +101,12 @@ nonisolated struct SessionExercise: Hashable, Identifiable, Sendable {
   var machineID: UUID?
   var position = 0
   var plannedSets: Int?
+  /// Which superset this movement is part of within this session, or nil when it stands alone.
+  ///
+  /// Session-scoped and meaningless outside it, which is why it is a plain number rather than a
+  /// reference to a `supersets` table -- there is nothing else that would ever point at one. It
+  /// changes only when the rest timer is armed, never what is recorded.
+  var supersetGroup: Int?
 }
 
 @Table("loggedSets")
@@ -120,6 +126,12 @@ nonisolated struct LoggedSet: Hashable, Identifiable, Sendable {
   var reps = 0
   var rpe: Double?
   var isWarmup = false
+  /// A set continuing the one above it at a reduced load, taken with no rest between.
+  ///
+  /// Two flags rather than one `kind` column because `isWarmup` predates this and is filtered on
+  /// in SQL in half a dozen places; `SetKind` is the write-side type that keeps the fourth
+  /// combination from being written, since `STRICT` tables cannot carry a `CHECK`.
+  var isDropSet = false
   var completedAt = Date(timeIntervalSince1970: 0)
 }
 

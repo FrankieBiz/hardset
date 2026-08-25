@@ -64,7 +64,46 @@ struct SplitStoreTests {
     #expect(try f.splits.splits().map(\.name) == ["Full body"])
   }
 
-  @Test("An empty rename is refused rather than blanking the name")
+/// A soft delete with no way back is worse than a hard one: the rows keep syncing to iCloud while
+  /// the lifter has been told the plan is gone. So archiving has to be a round trip, and the list of
+  /// archived plans is what makes the restore path reachable at all.
+  @Test("An archived plan is listed as archived and can be brought back")
+  func archivingIsARoundTrip() throws {
+    let f = try fixture()
+    let keep = try f.splits.createSplit(name: "Upper / Lower", now: now)
+    let away = try f.splits.createSplit(name: "Old PPL", now: now)
+
+    try f.splits.archiveSplit(away)
+
+    #expect(try f.splits.splits().map(\.name) == ["Upper / Lower"])
+    #expect(try f.splits.archivedSplits().map(\.name) == ["Old PPL"])
+    // The archived plan is still readable by id -- it was put away, not deleted.
+    #expect(try f.splits.split(away)?.name == "Old PPL")
+
+    try f.splits.unarchiveSplit(away)
+    #expect(try f.splits.archivedSplits().isEmpty)
+    #expect(Set(try f.splits.splits().map(\.name)) == ["Upper / Lower", "Old PPL"])
+    _ = keep
+  }
+
+  /// Putting a plan away must not take its days and movements with it, or "bring it back" returns an
+  /// empty shell and the round trip is a lie.
+  @Test("Archiving keeps the plan's days and movements intact")
+  func archivingPreservesContents() throws {
+    let f = try fixture()
+    let split = try f.splits.createSplit(name: "Week", now: now)
+    let day = try f.splits.addDay(to: split, name: "Push", now: now)
+    try f.splits.addEntry(to: day, exercise: f.bench, now: now)
+
+    try f.splits.archiveSplit(split)
+    try f.splits.unarchiveSplit(split)
+
+    let restored = try f.splits.plan(for: split)
+    #expect(restored.dayCount == 1)
+    #expect(restored.allMovements == [f.bench])
+  }
+
+    @Test("An empty rename is refused rather than blanking the name")
   func emptyRenameRefused() throws {
     let f = try fixture()
     let id = try f.splits.createSplit(name: "PPL", now: now)

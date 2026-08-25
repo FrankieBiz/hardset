@@ -21,6 +21,15 @@ public struct ExerciseSectionView: View {
   private let onSelectMachine: (() -> Void)?
   private let onShowHistory: (() -> Void)?
   private let onEditNote: (() -> Void)?
+  /// The letter this movement carries inside its superset, or `nil` when it stands alone.
+  /// Derived by the caller through `SupersetGrouping`, which is the layer that can see the whole
+  /// session — this view only ever holds one movement.
+  private let supersetLetter: String?
+  /// Pairs this movement with the one after it. `nil` hides the item, which is correct for the
+  /// last movement in the session: there is nothing to pair with.
+  private let onJoinSuperset: (() -> Void)?
+  /// Takes it back out. `nil` hides the item.
+  private let onLeaveSuperset: (() -> Void)?
 
   /// - Parameter onSelectMachine: Opens the machine picker. Passing `nil` hides the chip, which is
   ///   correct when no gym is known — an affordance that opens an empty list is worse than none.
@@ -36,7 +45,10 @@ public struct ExerciseSectionView: View {
     onRemoveExercise: (() -> Void)? = nil,
     onSelectMachine: (() -> Void)? = nil,
     onShowHistory: (() -> Void)? = nil,
-    onEditNote: (() -> Void)? = nil
+    onEditNote: (() -> Void)? = nil,
+    supersetLetter: String? = nil,
+    onJoinSuperset: (() -> Void)? = nil,
+    onLeaveSuperset: (() -> Void)? = nil
   ) {
     self._state = state
     self.unit = unit
@@ -48,6 +60,9 @@ public struct ExerciseSectionView: View {
     self.onSelectMachine = onSelectMachine
     self.onShowHistory = onShowHistory
     self.onEditNote = onEditNote
+    self.supersetLetter = supersetLetter
+    self.onJoinSuperset = onJoinSuperset
+    self.onLeaveSuperset = onLeaveSuperset
   }
 
   public var body: some View {
@@ -59,7 +74,7 @@ public struct ExerciseSectionView: View {
           SetRowView(
             draft: $slot.draft,
             ordinal: ordinal(of: slot),
-            isWarmup: slot.isWarmup,
+            kind: slot.kind,
             isLogged: slot.isLogged,
             unit: unit,
             previous: state.suggestion(forSetIndex: ordinal(of: slot)),
@@ -90,6 +105,9 @@ public struct ExerciseSectionView: View {
               : nil
           )
           .clipShape(RoundedRectangle(cornerRadius: Tokens.Radius.control))
+          // A drop is inset so a chain reads as one block rather than as separate sets. The
+          // badge already says so; this makes it legible without reading anything.
+          .padding(.leading, slot.isDropSet ? Tokens.Spacing.regular : 0)
         }
       }
 
@@ -103,6 +121,19 @@ public struct ExerciseSectionView: View {
       // On the movement's own header rather than a set row, because this discards every set in it.
       // Long press, with the count stated, so it cannot be confused with removing one row.
       .contextMenu {
+        if let onJoinSuperset {
+          Button(action: onJoinSuperset) {
+            Label(
+              supersetLetter == nil ? "Superset with next movement" : "Add next movement to this superset",
+              systemImage: "arrow.triangle.2.circlepath"
+            )
+          }
+        }
+        if let onLeaveSuperset, supersetLetter != nil {
+          Button(action: onLeaveSuperset) {
+            Label("Take out of superset", systemImage: "arrow.uturn.backward")
+          }
+        }
         if let onEditNote {
           Button(action: onEditNote) {
             Label(
@@ -116,7 +147,10 @@ public struct ExerciseSectionView: View {
             Label(
               state.loggedCount == 0
                 ? "Remove this movement"
-                : "Remove this movement and its ^[\(state.loggedCount) set](inflect: true)",
+                // Rows, not sets, deliberately: this warns about what is destroyed, and a drop
+                // that is about to be deleted is a record the lifter loses whether or not the
+                // week counts it as a set.
+                : "Remove this movement and its ^[\(state.loggedCount) logged row](inflect: true)",
               systemImage: "trash"
             )
           }
@@ -126,6 +160,17 @@ public struct ExerciseSectionView: View {
 
   @ViewBuilder private var headerContent: some View {
     VStack(alignment: .leading, spacing: Tokens.Spacing.tight) {
+      if let supersetLetter {
+        // Stated on the movement rather than drawn as a container around the pair. A card that
+        // wraps two movements is a layout the logger does not otherwise have, and the thing the
+        // lifter needs to know here is small: this is part of a superset, and it is the Nth part.
+        // Where the rest goes is the behaviour, and the behaviour is in `SupersetRest`.
+        Label("Superset \(supersetLetter)", systemImage: "arrow.triangle.2.circlepath")
+          .font(Tokens.Text.caption.weight(.semibold))
+          .foregroundStyle(Tokens.Color.accent)
+          .accessibilityLabel("Superset, movement \(supersetLetter)")
+          .accessibilityHint("Rest starts when the round is finished, not after this set.")
+      }
       HStack(alignment: .firstTextBaseline) {
         // The name is the way into this movement's load history. Placed here because "how have I
         // been doing on this" is a question asked while standing at the machine, and a chart
@@ -211,8 +256,9 @@ public struct ExerciseSectionView: View {
         Image(systemName: state.machineID == nil ? "dumbbell" : "dumbbell.fill")
         Text(state.machineName ?? "Choose machine")
         if let increment = state.machineIncrementKg {
-          // Shown because it is the constraint on what a suggestion may propose.
-          Text("· \(Self.format(increment)) kg steps")
+          // Shown because it is the constraint on what a suggestion may propose. Converted, not
+          // labelled: printing "kg" beside a pounds figure is the defect `SetRowView` documents.
+          Text("· \(Self.format(unit.displayValue(fromKilograms: increment))) \(unit.abbreviation) steps")
         }
       }
       .font(Tokens.Text.caption)
@@ -259,20 +305,45 @@ public struct ExerciseSectionView: View {
       }
       .buttonStyle(.plain)
       .foregroundStyle(Tokens.Color.textSecondary)
+
+      // Offered only when there is a row to continue. A drop under nothing, or under a warm-up,
+      // would be a row that continues something that is not a set.
+      if state.canAppendDropSet {
+        Button {
+          state.appendDropSet()
+        } label: {
+          Label("Drop", systemImage: "arrow.down.circle")
+            .font(Tokens.Text.label)
+            .frame(minHeight: Tokens.minimumTapTarget)
+        }
+        .buttonStyle(.plain)
+        .foregroundStyle(Tokens.Color.textSecondary)
+        .accessibilityLabel("Add a drop set")
+        .accessibilityHint("Continues the last set at a lower load, with no rest.")
+      }
     }
     .padding(.horizontal, Tokens.Spacing.regular)
   }
 
   /// Warm-ups do not consume a working-set number, so the badge on row three still reads "3"
-  /// when a warm-up sits above it.
+  /// when a warm-up sits above it. Neither do drops — a drop shows an arrow rather than a number,
+  /// and the value passed here is what its parent set is called.
   private func ordinal(of slot: SetSlot) -> Int {
     guard let index = state.slots.firstIndex(of: slot) else { return 0 }
-    return state.slots[..<index].count { !$0.isWarmup }
+    let preceding = state.slots[..<index].count { $0.countsAsWorkingSet }
+    // A drop borrows the number of the set above it, which is already counted in `preceding`.
+    return slot.countsAsWorkingSet ? preceding : max(preceding - 1, 0)
   }
 
+  /// "2 of 4 logged", counting sets rather than rows.
+  ///
+  /// Both halves have to agree about what a set is. Counting logged *rows* against working *sets*
+  /// made a movement with one drop report "4 of 3 logged" — a progress line that overshoots its
+  /// own total the moment anyone uses the feature.
   private var progressDescription: String {
-    let working = state.slots.count { !$0.isWarmup }
-    return "\(state.loggedCount) of \(working) logged"
+    let working = state.workingSetCount
+    let logged = state.slots.count { $0.isLogged && $0.countsAsWorkingSet }
+    return "\(logged) of \(working) logged"
   }
 }
 

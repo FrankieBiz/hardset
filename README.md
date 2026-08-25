@@ -10,7 +10,10 @@ Sessions, sets, prefill from history, the rest bar, recovery of an interrupted w
 records, an 81-movement seed catalogue and a picker; the permanent muscle vocabulary, fractional
 sets-per-muscle-per-week with coverage, per-machine load history, a session history screen and a
 post-workout summary; and plans — arrangements of movements you already train, dealt across the days
-you choose. 571 tests across 80 suites run on the host in about 1.4 seconds.
+you choose; and your own equipment — movements you define (optionally based on a curated one,
+which carries its muscles across but never its citations), a machine library for reviewing what you
+have named, machine-name suggestions that never merge two machines, and a per-machine readout of
+what you press on each. 687 tests across 100 suites run on the host in under two seconds.
 
 **Not yet true: nothing has run on a physical device.** No AlarmKit alarm has ever fired and no
 CloudKit sync has ever happened, so the rest timer and the whole sync story are unverified. The app
@@ -42,7 +45,9 @@ Packages/HardsetKit/
 ./test.sh
 ```
 
-571 tests, ~1.4 s. The script runs the engine-dependent tests in separate processes: SQLiteData's
+687 tests, ~1.7 s — 682 in the main run, four re-run one process each, and one deliberately
+disabled canary that cannot run on the host. The script separates the engine-dependent tests because
+SQLiteData's
 non-live `SyncEngine` attaches an in-memory metadatabase at a fixed shared-cache path, and the task
 local that resets it between constructions is `package`-scoped, so two engines in one process
 contend for the same SQLite file.

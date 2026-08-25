@@ -25,6 +25,25 @@ BUNDLE_ID = "com.hardset.app"
 IOS_MIN = "26.1"
 SWIFT_VERSION = "6.0"
 
+# --- Signing, for putting a build on a real phone -------------------------------------------
+#
+# Both of these are read from the environment rather than committed, because a team identifier is
+# account-specific and a checked-in one is wrong for everybody except its owner.
+#
+#   HARDSET_TEAM_ID   Your 10-character Apple Developer Team ID. Without it Xcode cannot sign for
+#                     a device at all; the simulator does not care.
+#   HARDSET_LOCAL     Set to 1 (or pass --local) to build WITHOUT the CloudKit and push
+#                     entitlements.
+#
+# Why --local exists. iCloud/CloudKit and push notifications require a **paid** Apple Developer
+# Program membership. A free Apple ID gets a "personal team" that can sign an app onto your own
+# phone for 7 days, but cannot grant those capabilities -- so with the normal entitlements file the
+# install fails outright. `--local` drops the entitlements, which costs exactly one thing: sync.
+# The app already runs local-only when the sync engine cannot start (see `HardsetApp.swift`), so
+# everything a gym session touches -- logging, the rest timer, history, plans -- is unaffected.
+TEAM_ID = os.environ.get("HARDSET_TEAM_ID", "").strip()
+LOCAL_ONLY = "--local" in sys.argv or os.environ.get("HARDSET_LOCAL") == "1"
+
 APP, WIDGET, TESTS = "Hardset", "HardsetWidget", "HardsetTests"
 
 # (file name, group dir, target)
@@ -57,12 +76,16 @@ def build_settings(target):
         "CURRENT_PROJECT_VERSION": "1",
         "MARKETING_VERSION": "1.0",
     }
+    if TEAM_ID:
+        s["DEVELOPMENT_TEAM"] = TEAM_ID
     if target == APP:
         s.update({
             "PRODUCT_BUNDLE_IDENTIFIER": BUNDLE_ID,
             "PRODUCT_NAME": "Hardset",
             "INFOPLIST_FILE": "Hardset/Info.plist",
-            "CODE_SIGN_ENTITLEMENTS": "Hardset/Hardset.entitlements",
+            # Omitted entirely under --local: an entitlements file requesting capabilities the
+            # signing account does not have fails the install rather than degrading.
+            **({} if LOCAL_ONLY else {"CODE_SIGN_ENTITLEMENTS": "Hardset/Hardset.entitlements"}),
             "ASSETCATALOG_COMPILER_APPICON_NAME": "AppIcon",
             "ENABLE_PREVIEWS": "YES",
             "LD_RUNPATH_SEARCH_PATHS": '"$(inherited) @executable_path/Frameworks"',

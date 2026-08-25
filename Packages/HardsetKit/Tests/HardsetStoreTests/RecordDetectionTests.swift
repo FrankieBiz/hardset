@@ -61,7 +61,7 @@ struct RecordDetectionTests {
     _ coordinator: SessionCoordinator, slot index: Int, _ weight: Double, _ reps: Int,
     isWarmup: Bool = false
   ) -> Bool {
-    coordinator.exercises[0].slots[index].isWarmup = isWarmup
+    coordinator.exercises[0].slots[index].kind = isWarmup ? .warmup : .working
     coordinator.exercises[0].slots[index].draft = SetEntryDraft(weightKg: weight, reps: reps)
     return coordinator.logSet(
       slotID: coordinator.exercises[0].slots[index].id, inExercise: coordinator.exercises[0].id

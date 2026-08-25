@@ -32,6 +32,10 @@ public struct SessionView: View {
   private let onSelectMachine: ((UUID) -> Void)?
   private let onShowHistory: ((UUID) -> Void)?
   private let onEditNote: ((UUID) -> Void)?
+  /// Pairs a movement with the one after it so rest waits for the round. `nil` hides the action
+  /// everywhere, which is what a caller with no coordinator (a preview) wants.
+  private let onJoinSuperset: ((UUID) -> Void)?
+  private let onLeaveSuperset: ((UUID) -> Void)?
   private let onFinish: () -> Void
 
   public init(
@@ -54,6 +58,8 @@ public struct SessionView: View {
     onSelectMachine: ((UUID) -> Void)? = nil,
     onShowHistory: ((UUID) -> Void)? = nil,
     onEditNote: ((UUID) -> Void)? = nil,
+    onJoinSuperset: ((UUID) -> Void)? = nil,
+    onLeaveSuperset: ((UUID) -> Void)? = nil,
     onFinish: @escaping () -> Void = {}
   ) {
     self._exercises = exercises
@@ -75,7 +81,15 @@ public struct SessionView: View {
     self.onSelectMachine = onSelectMachine
     self.onShowHistory = onShowHistory
     self.onEditNote = onEditNote
+    self.onJoinSuperset = onJoinSuperset
+    self.onLeaveSuperset = onLeaveSuperset
     self.onFinish = onFinish
+  }
+
+  /// Whether a movement has one after it to be paired with.
+  private func hasNext(_ exercise: ExerciseLogState) -> Bool {
+    guard let index = exercises.firstIndex(where: { $0.id == exercise.id }) else { return false }
+    return exercises.indices.contains(index + 1)
   }
 
   public var body: some View {
@@ -141,7 +155,16 @@ public struct SessionView: View {
             },
             onEditNote: onEditNote.map { edit in
               { edit(exercise.id) }
-            }
+            },
+            // Derived here rather than stored, because this is the only layer that can see the
+            // whole session. A section holds one movement and cannot know it has a partner.
+            supersetLetter: SupersetGrouping.letter(for: exercise, in: exercises),
+            // Hidden on the last movement: there is nothing after it to pair with, and an action
+            // that silently does nothing is the dead-button pattern this app keeps finding.
+            onJoinSuperset: hasNext(exercise)
+              ? onJoinSuperset.map { join in { join(exercise.id) } }
+              : nil,
+            onLeaveSuperset: onLeaveSuperset.map { leave in { leave(exercise.id) } }
           )
           .background(Tokens.Color.surface.opacity(0.4), in: RoundedRectangle(cornerRadius: Tokens.Radius.card))
           .padding(.horizontal, Tokens.Spacing.snug)

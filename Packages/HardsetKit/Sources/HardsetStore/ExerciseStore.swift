@@ -29,11 +29,23 @@ public nonisolated struct ExerciseStore {
   /// One is asked for rather than several because the lifter is standing in a gym, and the app has no
   /// basis for guessing the rest.
   ///
-  /// The contribution is written as `direct` with `low` certainty, which is the honest reading: the
+  /// The chosen muscle is written as `direct` with `low` certainty, which is the honest reading: the
   /// role is what the lifter says the movement trains, and the confidence is that of a single
   /// person's judgement rather than of the literature the curated rows cite. Certainty does not
   /// change what a set counts -- `setWeight` reads the role alone -- so this labels the claim without
   /// quietly discounting the lifter's own work.
+  ///
+  /// # Inheriting from a movement it resembles
+  ///
+  /// `inheriting` carries the contributions of a curated movement the lifter picked as a template,
+  /// and is the fix for a movement that credits one muscle when it plainly trains four. The
+  /// rewrite that makes it honest -- user source, no citation, certainty capped -- happens **here**
+  /// rather than in the sheet that collects it, so no future caller can write an inherited
+  /// attribution that still claims the trial's provenance. `InheritedAttribution` is a pure
+  /// function in Core precisely so this boundary has one rule to apply and a test can pin it.
+  ///
+  /// Pass the contributions the lifter left in place, not the template's whole list: the sheet
+  /// shows them as removable rows, and a muscle they removed must not arrive here.
   ///
   /// - Returns: the new movement's id, or throws if the name is blank.
   @discardableResult
@@ -41,18 +53,15 @@ public nonisolated struct ExerciseStore {
     name: String,
     modality: ExerciseModality?,
     primaryMuscle: Muscle,
+    inheriting: [MuscleContribution] = [],
     now: Date = Date()
   ) throws -> ExerciseID {
     let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !trimmed.isEmpty else { throw ExerciseStoreError.blankName }
 
     let id = ExerciseID()
-    let contribution = MuscleContribution(
-      key: MuscleKey(primaryMuscle),
-      role: .direct,
-      certainty: .low,
-      sourceID: Self.userSourceID,
-      citation: nil
+    let contributions = InheritedAttribution.inherited(
+      from: inheriting, primary: primaryMuscle
     )
 
     try database.write { db in
@@ -67,7 +76,7 @@ public nonisolated struct ExerciseStore {
           isCurated: false,
           modality: modality?.rawValue ?? "unknown",
           primaryMuscle: MuscleKey(primaryMuscle).storedValue,
-          secondaryMusclesJSON: MuscleColumn.encode([contribution]),
+          secondaryMusclesJSON: MuscleColumn.encode(contributions),
           notes: "",
           isArchived: false,
           createdAt: now
@@ -129,7 +138,10 @@ public nonisolated struct ExerciseStore {
   }
 
   /// Marks the lifter's own attribution, so a test can tell it from a cited one.
-  static let userSourceID = "user-declared"
+  ///
+  /// Defined in Core now that two paths write it -- a movement typed from scratch and one
+  /// inherited from a template. Kept here as the name the existing tests already use.
+  static let userSourceID = MuscleContribution.userSourceID
 }
 
 public enum ExerciseStoreError: Error, Equatable, Sendable {

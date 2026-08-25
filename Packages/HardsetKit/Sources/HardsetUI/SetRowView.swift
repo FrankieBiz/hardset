@@ -52,7 +52,9 @@ public struct SetRowView: View {
   @ScaledMetric(relativeTo: .subheadline) private var ordinalWidth: CGFloat = 28
 
   private let ordinal: Int
-  private let isWarmup: Bool
+  /// Working, warm-up, or a drop continuing the row above. Drives the badge, the ink and the
+  /// spoken label; the row is otherwise identical, because logging a drop is logging a set.
+  private let kind: SetKind
   private let isLogged: Bool
   private let unit: WeightUnit
   private let previous: PriorSetRecord?
@@ -81,7 +83,7 @@ public struct SetRowView: View {
   public init(
     draft: Binding<SetEntryDraft>,
     ordinal: Int,
-    isWarmup: Bool = false,
+    kind: SetKind = .working,
     isLogged: Bool = false,
     unit: WeightUnit,
     previous: PriorSetRecord? = nil,
@@ -96,7 +98,7 @@ public struct SetRowView: View {
   ) {
     self._draft = draft
     self.ordinal = ordinal
-    self.isWarmup = isWarmup
+    self.kind = kind
     self.isLogged = isLogged
     self.unit = unit
     self.previous = previous
@@ -280,12 +282,25 @@ public struct SetRowView: View {
   // MARK: - Pieces
 
   private var ordinalBadge: some View {
-    Text(isWarmup ? "W" : String(ordinal + 1))
+    Text(badgeText)
       .font(Tokens.Text.label.weight(.semibold))
       .monospacedDigit()
       .foregroundStyle(ordinalInk)
       .frame(minWidth: ordinalWidth, alignment: .leading)
   }
+
+  /// A drop shows an arrow rather than a number, because it does not have one — it belongs to the
+  /// set above it. Numbering it would make a set dropped twice read as sets 3, 4 and 5, which is
+  /// the same inflation the counting convention exists to avoid, printed on the row.
+  private var badgeText: String {
+    switch kind {
+    case .warmup: "W"
+    case .working: String(ordinal + 1)
+    case .drop: "↓"
+    }
+  }
+
+  private var isWarmup: Bool { kind == .warmup }
 
   /// A logged row recedes, and the next row is left as the brightest thing on screen.
   ///
@@ -293,7 +308,9 @@ public struct SetRowView: View {
   /// that gets louder as the session fills. Attention belongs on the set being worked on.
   private var ordinalInk: SwiftUI.Color {
     if isLogged { return Tokens.Color.textSecondary }
-    return isWarmup ? Tokens.Color.textSecondary : Tokens.Color.textPrimary
+    // A drop is dimmed like a warm-up rather than lit like a working set: both are rows the
+    // set count does not include, and the badge is the one place that can say so at a glance.
+    return kind.countsAsWorkingSet ? Tokens.Color.textPrimary : Tokens.Color.textSecondary
   }
 
   private func valueInk(isEmpty: Bool) -> SwiftUI.Color {
@@ -462,8 +479,21 @@ public struct SetRowView: View {
     return "\(Self.format(weight)) \(unit.abbreviation) × \(previous.reps)"
   }
 
+  /// How the row opens when read aloud.
+  ///
+  /// A drop names what it continues. Without that a chain reads as three sets at falling loads
+  /// with no explanation, which is exactly the reading the badge exists to prevent for sighted
+  /// users.
+  private var spokenKind: String {
+    switch kind {
+    case .warmup: "Warm-up set"
+    case .working: "Set \(ordinal + 1)"
+    case .drop: "Drop set, continuing set \(ordinal + 1)"
+    }
+  }
+
   private var spokenLabel: String {
-    var parts: [String] = [isWarmup ? "Warm-up set" : "Set \(ordinal + 1)"]
+    var parts: [String] = [spokenKind]
     if let weight = weightBuffer.value, let reps = repsBuffer.value {
       parts.append("\(Self.format(weight)) \(unit.abbreviation), \(Int(reps)) reps")
     } else {

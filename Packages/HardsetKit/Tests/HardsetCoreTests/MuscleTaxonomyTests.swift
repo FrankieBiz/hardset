@@ -202,6 +202,24 @@ struct SetCountingTests {
     #expect(SetCounting.source.citation?.contains("10.1007/s40279-025-02344-w") == true)
   }
 
+  /// The drop convention is held to exactly the standard the 0.5 weight is: it is a counting
+  /// choice with no finding behind it, the text has to say so, and it has to reach the disclosure
+  /// App Review reads rather than living only in a doc comment.
+  @Test("The disclosure states that counting a drop chain once is a convention, not a finding")
+  func dropConventionIsDisclosed() {
+    let convention = SetCounting.dropSetConvention
+    #expect(convention.contains("No convention for"))
+    #expect(convention.contains("is established"))
+    // It must not claim the technique is worth less -- only that the app will not report it as
+    // a set. Those are different statements and only one of them is supportable.
+    #expect(convention.contains("not a judgement"))
+    // Tonnage is arithmetic, not convention, and the text has to keep saying so.
+    #expect(convention.contains("count in full"))
+
+    // And it is actually part of the generated 1.4.1 text, not merely defined nearby.
+    #expect(SetCounting.source.methodology.contains(convention))
+  }
+
   /// The eight measured sites bound where the scheme was tested. Applying it elsewhere is an
   /// extrapolation and the validRange has to say so.
   @Test("The valid range names the extrapolation and the ~25-set boundary")

@@ -46,7 +46,10 @@ public nonisolated struct MachineRecord: Hashable, Sendable, Identifiable {
 /// with no way to create one logs every set with `machineID == nil` and the whole differentiator
 /// is dead code.
 public nonisolated struct GymStore {
-  private let database: any DatabaseWriter
+  /// Module-internal rather than `private` so `MachineLibrary.swift` can extend this store in its
+  /// own file. `private` is file-scoped in Swift, so the alternative was appending the whole
+  /// library read to this file.
+  let database: any DatabaseWriter
 
   public init(database: any DatabaseWriter) {
     self.database = database
@@ -305,7 +308,13 @@ public nonisolated struct GymStore {
   }
 }
 
-extension GymStore {
+/// `nonisolated`, like the struct itself.
+///
+/// This module is built with `.defaultIsolation(MainActor.self)`, so an unmarked extension of a
+/// `nonisolated` store quietly splits that store's API across two isolation domains -- most of it
+/// callable from anywhere, this part main-actor-only. It compiles silently and fails at run time.
+/// `IsolationContractTests` now enforces this.
+nonisolated extension GymStore {
   /// The gym of the most recent session that recorded one.
   ///
   /// Used to preselect where the next workout is, because a lifter trains at the same place most

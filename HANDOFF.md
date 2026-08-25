@@ -43,8 +43,11 @@ below.
 cd Packages/HardsetKit && swift test --disable-sandbox
 ```
 
-Or `./test.sh` from the repo root, which also runs three tests that need isolated processes.
-**Current state: 571 tests, 80 suites, all passing, ~1.4s on the host.**
+Or `./test.sh` from the repo root, which also runs four tests that need isolated processes.
+**Current state: 687 tests, 100 suites, all passing, ~1.7s on the host.** `./test.sh` reports 682 in
+its main run plus those four; the remaining one is a deliberately `.disabled` canary that cannot run
+off-device. Prefer `./test.sh` — a bare `swift test` occasionally fails the `SyncEngine` suites on
+metadatabase contention, which is the whole reason the script exists.
 
 Everything with behaviour lives in `Packages/HardsetKit` and builds on macOS. That is deliberate —
 see §7.
@@ -85,6 +88,10 @@ Packages/HardsetKit/
   HardsetUI       Design tokens + every view. Depends on Core ONLY, never on Store.
   HardsetFeature  Composition root. Depends on Core + Store + UI + SQLiteData.
 docs/SPLITS-spec.md          plans: what they are, and the four quality axes that do not exist
+docs/SUPERSETS-spec.md       supersets and drop sets: one rest rule, and why a drop adds no set
+Tools/generate_icon.py       the app icon, derived from the locked palette rather than drawn
+docs/GYM-TEST.md             how to sign, install and what to actually test on a real phone
+docs/MACHINES-spec.md        your own machines and movements: what already works, and the 5 gaps
 docs/MuscleTaxonomy-spec.md  the taxonomy specification, implemented
 docs/research/               the full research corpus (~1.2MB) — grep it, do not read it whole
 DECISIONS.md                 21 numbered decisions of record. READ THIS.
@@ -122,6 +129,14 @@ Break any of these and you reintroduce a defect that reached real users.
    group triple-counts a bench press.
 10. **Machine series are never merged.** One line through two different leg presses draws progress
     the lifter did not make.
+11. **A drop set adds no set, and every count agrees about that.** A drop is counted as part of the
+    set it continues; its load and reps still count in full toward tonnage. The trap is that a
+    *row* count and a *set* count are no longer the same number, and three surfaces got it wrong
+    before anyone noticed — see §8d. `SetKind.countsAsWorkingSet` is the one predicate; use
+    `loggedWorkingSetCount`, never `loggedCount`, wherever the word "set" reaches the screen.
+12. **Drops never reach history, records or the chart.** A drop is the lightest load of the session
+    by construction, so a drop in `priorPerformanceSnapshot` makes next week's opening row lighter
+    every time the lifter trains hard. Excluded in SQL in all three queries.
 
 ---
 
@@ -136,7 +151,14 @@ Do not "fix" these. Each is the app declining to assert something unsupported, a
   exceeds the smallest detectable effect size — a detectability artefact, not a biological floor.
   The function exists so future warning code can only iterate *evaluated* targets, which makes
   "warn with no target" unrepresentable.
-- **No default rest duration.** `restAfterSet` is nil unless a caller supplies one.
+- **No default rest duration**, and it cannot be learned either. `restAfterSet` is nil unless a
+  caller supplies one. A 2026 teardown proposed learning one from the lifter's own median rest,
+  which would have been sound -- except the app does not record rest. `loggedSets` carries only
+  `completedAt`, so the one derivable interval is finish-to-finish, which is `rest + work(N+1)`;
+  the set itself is 25-40 s against a 60-180 s rest, so that median overstates rest by a fifth to a
+  third and a timer set to it fires after the lifter would have finished the next set. DECISIONS
+  #27 has the arithmetic. The underlying defect is still real and still open: `restSeconds`
+  defaults to `0` and lives only in Settings, so the flagship feature does not start itself.
 - **No default program.** "Start workout" starts empty. There is no generator, and inventing a
   plan would assert a prescription the app does not have.
 
@@ -201,7 +223,20 @@ The live sequence:
    every row was a disabled button and the app could tell you a session happened but not what was
    in it. The row's hit area was also only its glyphs, with no `contentShape`.
 
-4. **DONE — plans.** A split in this app is a *partition of movements the lifter already trains*
+4. **DONE — supersets and drop sets.** The logger's two missing shapes, and the largest
+   functional gap against Strong and Hevy. `docs/SUPERSETS-spec.md` is the spec; DECISIONS #25 and
+   #26 record why they are permissible in an app that refuses to prescribe (they change *when rest
+   is armed*, nothing else) and why a drop adds no set. Two additive columns in the v1 migration,
+   `SetKind` and `SupersetRest` in Core, and one letter chip plus one button in the UI.
+
+   Three things worth carrying forward. **The research corpus said defer drop sets and its reason
+   does not apply here** — it cites the Alpha Progression complaint that auto-advance blocks them,
+   and this app has no auto-advance. **The corpus also proposed pre-modelling `amrap`/`backoff`;
+   that was refused** as speculative, because #4 lets a column be added at any time and never
+   removed, so an unbuilt case defers for free. And **three surfaces reported drops as sets** — see
+   §8d, which is the pattern, not a one-off.
+
+5. **DONE — plans.** A split in this app is a *partition of movements the lifter already trains*
    across days they chose, not a program. `docs/SPLITS-spec.md` is the spec; read its §1 before
    entertaining any request for a "balanced split" or a plan rating, because the four candidate
    quality axes are each closed off by a number in `SplitCalibrationProbe`. Three tables (added to
@@ -225,7 +260,36 @@ The live sequence:
    an unscoped "Fewest movements" label; and a machine sheet filing the whole gym under "You've used
    these". This is the pattern, not a one-off.
 
-5. **Motion**, in the order the hero moments' hosts become stable: set-log recede, then the rest
+6. **DONE — the submittable pass.** An audit against the submission gates and against what an app
+   of this kind is expected to have. Read `DEVICE-CHECKLIST.md` §E before doing any of it again:
+   it is now split into what is blocked on the account holder (most of it), what is done, and what
+   is still to build.
+
+   Fixed here, and each was a real gap: **no app icon at all** (a hard upload blocker — now
+   generated by `Tools/generate_icon.py`, DECISIONS #28); **the launch screen and system chrome
+   were not dark**, so a dark-only app flashed white on any device in light mode (#29); **no data
+   export** (#30); **no single place disclosing every derived number** (#31); and `AccentColor` was
+   still Xcode's default blue, contradicting #22 outright.
+
+   Two traps worth carrying. `PrivacyInfo.xcprivacy` is now **verified present at the built
+   bundle's root**, not just in the source tree — checklist §D asked for that and nobody had
+   looked. And nothing invents a legal URL: `LegalLinks.live` holds `nil`, rows render only when
+   set, because App Review taps every link and a 404 is slower to recover from than a missing
+   feature (#32).
+
+7. **NEXT — the device gate, and it is now runnable.** `docs/GYM-TEST.md` is the procedure:
+   `HARDSET_TEAM_ID=... python3 Tools/generate_project.py` (add `--local` on a free Apple ID, which
+   cannot sign CloudKit or push), build **Release** to the phone, and work §5 of that doc.
+
+   What is being proven is §B of `DEVICE-CHECKLIST.md` and nothing in this repo can substitute for
+   it: **no AlarmKit alarm has ever fired on hardware**. The four that matter are fires-at-all,
+   fires-backgrounded-and-locked, fires-through-silent-and-Focus, and survives-force-quit.
+
+   The first-run rest prompt (#33) exists so this is testable at all — before it, a fresh install
+   never asked for AlarmKit permission, so the timer could not have alerted even if everything
+   else was right.
+
+8. **Motion**, in the order the hero moments' hosts become stable: set-log recede, then the rest
    timer, then the summary choreography, then chart draw-on. `docs/UI-GUIDELINES.md` §5 specifies
    all four; `Tokens.Motion` already holds the vocabulary.
 
@@ -311,18 +375,82 @@ Swept every column against its readers and writers. Two are genuinely dead and s
 used or removed before the schema is frozen at ship -- remember DECISIONS #4: SQLiteData forbids
 removing or renaming a column forever once a build reaches a second device.
 
-- **`exercises.notes`** -- never written, never read. Either per-exercise notes become a feature or
-  the column goes.
-- **`machines.loadType`** -- written as the literal `"unknown"` by `createMachine` and never read.
-  Vestigial.
+**This list was stale in the repo's favour and has been corrected against the source.**
+`machines.loadType` is **gone from the schema entirely** -- only a comment at `Schema.swift:49`
+records that it existed. `exercises.notes` **is wired**, through `setExerciseNotes` and the
+movement-note editor. `bodyweightEntries` **has a store and a screen** (`BodyweightStore`,
+`BodyweightScreen`). `machines.stackIncrementKg` has a real input path at `GymStore.swift:101`.
+What remains genuinely dead:
 - **`machines.brand`** -- written as `""` and read once. In practice lifters type the brand into the
   name ("Hammer Strength"), which is why the field never earned its keep.
-- **`bodyweightEntries`** and **`deviceHealthSamples`** -- no code at all beyond the schema. The
-  second is intentional (HealthKit is out of v1); the first is a real gap, and recording bodyweight
-  is the prerequisite if tonnage is ever to include bodyweight movements.
+- **`deviceHealthSamples`** -- no code beyond the schema, and intentionally so. HealthKit is out
+  of v1, and it must **stay** out of any synchronized table: App Review 5.1.3 forbids storing
+  personal health information in iCloud, and CloudKit is the only sync transport here.
 
 Fixed in this pass: **`sessions.title`** was read in 23 places and written in none, so every workout
 was nameless and history could only show a date.
+
+## 8d. A row count is not a set count, and three surfaces got it wrong
+
+Found by seeding a database and driving the screen, not by the suite -- which stayed green through
+all of it, because before drop sets existed the two numbers were always equal.
+
+- **The live workout bar** summed `loggedCount` across movements, so a lifter who dropped twice
+  watched "3 sets logged" become "5". The most visible number in a live workout, contradicting the
+  app's own counting convention.
+- **A past workout's headline** counted every non-warm-up row, so a drop chain read as three
+  working sets on the history screen while the volume report for the same week said one.
+- **A movement's progress line** counted logged *rows* against working *sets*, so one drop produced
+  "4 of 3 logged" -- a progress figure overshooting its own total.
+
+The rule that prevents the next one: `loggedCount` is a count of **records** and belongs only where
+the question is how much data an action destroys. Anywhere the word "set" reaches a user, count with
+`countsAsWorkingSet`.
+
+**A fourth, older bug fell out of the same audit.** `ExerciseLogState.resume` compared written *rows*
+against expected working *sets* (`max(state.slots.count, slots.count)` against `workingLogged`) --
+two different units. Every warm-up already logged therefore added one phantom open row to a
+recovered movement: log a warm-up and three working sets, force-quit, and the workout came back
+asking for a fourth. That predates supersets and drops entirely and had been shipping since recovery
+was written. `ResumeRowCountTests` pins both halves.
+
+## 8e. The long-term audit: what a lifter sees after five months
+
+Seeded 60 finished sessions across 20 weeks (3/week, an Upper/Lower split, real progressive
+overload, machines at one gym) and drove every progress surface. The technique matters more than
+the result: **none of these are visible with a week of data**, which is all anyone had ever put in
+front of this app.
+
+**What holds up.** The progression chart is the strongest thing in the app — twenty weeks of Leg
+Press rendered as a clean stepped line with a month axis, a Heaviest-load / Est-1RM toggle, and
+per-machine series. It reads `samples(for:limit: 2000)`, so it is **not** subject to the history
+cap below. Session detail is exactly what "what did I do that session" needs: per movement, the
+machine's name, and every set as load x reps x RPE. The split loop compounds properly — a day's
+row count and prefills come from *history*, not the plan, so the same split gets more useful the
+longer it is used.
+
+**Fixed here: history truncated silently at fifty workouts.** `recentSessions()` defaulted to
+`limit: 50` and `HistoryScreen` passed nothing. With 60 sessions written, **10 sessions and 75
+logged sets were in the database and unreachable** — no footer, no count, no way back. At three
+sessions a week that is the fourth month, and it looks exactly like data loss. Now paged:
+`HistoryScreen.pageSize` = 50, a "Show older workouts" footer, and the footer is `nil` when a read
+comes back short of a page, so its absence means "nothing older exists" rather than "we stopped".
+
+**Still open, in the order they hurt.**
+
+1. **Weekly volume has no history.** `VolumeAnalyzer` is only ever called as
+   `rollingWeek(endingAt: now())`, and there is no week picker. A lifter with twenty weeks logged
+   who took ten days off sees "Nothing logged this week" and cannot look at any earlier week. For
+   an app whose second tab is volume, the volume surface cannot answer "how has my volume changed".
+   The store already computes `report(from:to:)` for any window, so this is a screen, not an engine.
+2. **The progression chart has no browse entry point.** Exactly two callers:
+   `LiveSessionScreen` and `SessionDetailScreen`. To see how your chest press is going you must
+   either be mid-workout or first find a past session that contained it. The single best screen in
+   the app is reachable only sideways.
+3. **A split has no rotation.** `SplitDayRecord` carries `id`, `splitID`, `name`, `position` and
+   nothing about when the day was last trained. On a 3- or 4-day split the lifter has to remember
+   where they are. "Last trained 6 days ago" per day is derivable from `sessions` today — it needs
+   no schema change.
 
 ## 9. Traps that cost me build cycles — do not rediscover these
 

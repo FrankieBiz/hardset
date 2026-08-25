@@ -17,7 +17,7 @@ struct SessionDetailGroupingTests {
   ) -> LoggedSetRow {
     LoggedSetRow(
       id: UUID(), exerciseName: name, machineName: machine,
-      weightKg: kg, reps: reps, isWarmup: warmup
+      weightKg: kg, reps: reps, kind: warmup ? .warmup : .working
     )
   }
 
@@ -81,5 +81,33 @@ struct SessionDetailGroupingTests {
     let withMore = SessionDetailView.groups(from: [first, set("Row", 60, 10)])
 
     #expect(onlyFirst[0].id == withMore[0].id)
+  }
+}
+
+/// A past workout's headline must agree with the week that contains it. Counting every
+/// non-warm-up row reported a drop chain as three sets where the volume report said one.
+@Suite("A past workout's set count follows the same convention as the week")
+struct SessionDetailDropCountTests {
+  @Test("A drop chain reads as one working set, not three")
+  func dropsAreNotCountedAsWorkingSets() {
+    let rows = [
+      LoggedSetRow(
+        id: UUID(), exerciseName: "Leg Press", machineName: nil,
+        weightKg: 200, reps: 10, kind: .working
+      ),
+      LoggedSetRow(
+        id: UUID(), exerciseName: "Leg Press", machineName: nil,
+        weightKg: 160, reps: 8, kind: .drop
+      ),
+      LoggedSetRow(
+        id: UUID(), exerciseName: "Leg Press", machineName: nil,
+        weightKg: 120, reps: 6, kind: .drop
+      ),
+    ]
+    let working = rows.count { $0.kind.countsAsWorkingSet }
+    #expect(working == 1)
+    // Each drop still knows what it is, so history can label it rather than hiding it.
+    #expect(rows.count { $0.kind == .drop } == 2)
+    #expect(rows.allSatisfy { !$0.isWarmup })
   }
 }

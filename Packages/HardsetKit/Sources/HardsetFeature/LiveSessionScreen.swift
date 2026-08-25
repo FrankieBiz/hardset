@@ -79,6 +79,11 @@ public struct LiveSessionScreen: View {
   @State private var recentExercises: [ExerciseID] = []
   @State private var availableHere: Set<ExerciseID> = []
   @State private var gymName: String?
+  /// Movements offerable as a template for one the lifter defines. Curated only, and read once per
+  /// presentation rather than per render.
+  @State private var templates: [CatalogEntry] = []
+  /// Machine names already used, for the add-machine sheet.
+  @State private var machineNameSuggestions: [MachineNameSheet.MachineNameSuggestionRow] = []
   @State private var isPickerPresented = false
   /// Whether the define-your-own-movement sheet is up.
   @State private var isCreatingExercise = false
@@ -169,6 +174,8 @@ public struct LiveSessionScreen: View {
       onSelectMachine: canPickMachines ? { machineTarget = MachineTarget(id: $0) } : nil,
       onShowHistory: progression == nil ? nil : { historyTarget = MachineTarget(id: $0) },
       onEditNote: { noteTarget = MachineTarget(id: $0) },
+      onJoinSuperset: { coordinator.joinSupersetWithNext(exerciseStateID: $0) },
+      onLeaveSuperset: { coordinator.leaveSuperset(exerciseStateID: $0) },
       onFinish: finish
     )
     .toolbar {
@@ -282,9 +289,10 @@ public struct LiveSessionScreen: View {
           NewExerciseSheet(
             // Prefilled from the search that found nothing, so the name is not typed twice.
             initialName: pickerQuery,
-            onCreate: { name, modality, muscle in
+            templates: templates,
+            onCreate: { draft in
               isCreatingExercise = false
-              createExercise(name: name, modality: modality, muscle: muscle)
+              createExercise(draft)
             },
             onCancel: { isCreatingExercise = false }
           )
@@ -311,6 +319,7 @@ public struct LiveSessionScreen: View {
           recent: machineOptions.recent,
           others: machineOptions.others,
           selected: coordinator.exercises.first { $0.id == target }?.machineID,
+          unit: unit,
           onSelect: { machineID in
             selectMachine(machineID, forExercise: target)
             machineTarget = nil
@@ -368,11 +377,10 @@ public struct LiveSessionScreen: View {
           )
         }
         .sheet(isPresented: $isAddingMachine) {
-          NameEntrySheet(
-            title: "Add a machine",
-            prompt: "Name or brand",
-            footnote:
-              "Whatever you'd recognise it by — \"Hammer Strength\" or \"the one by the window\".",
+          MachineNameSheet(
+            // Offers names already used, so the same machine at a second gym is not retyped and
+            // mistyped into a third empty history.
+            suggestions: machineNameSuggestions,
             onConfirm: { name in
               isAddingMachine = false
               addMachine(named: name, forExercise: target)
@@ -420,10 +428,18 @@ public struct LiveSessionScreen: View {
       let recentIDs = Set(recent.map(\.id))
       let others = try gyms.machines(at: gymID).filter { !recentIDs.contains($0.id) }
       machineOptions = (recent.map(Self.option(for:)), others.map(Self.option(for:)))
+      // Loaded here rather than with the exercise picker's relevance, because this is the flow
+      // that reaches "Add a machine".
+      machineNameSuggestions = try gyms.machineNameSuggestions(at: gymID).map {
+        MachineNameSheet.MachineNameSuggestionRow(
+          name: $0.name, isAlreadyHere: $0.existingHere != nil, otherGymNames: $0.otherGymNames
+        )
+      }
     } catch {
       // An unreadable gym must not block logging. The picker shows only "Not recorded", which is
       // a true statement about what can be offered rather than a fabricated list.
       machineOptions = ([], [])
+      machineNameSuggestions = []
     }
   }
 
@@ -511,13 +527,18 @@ public struct LiveSessionScreen: View {
   ///
   /// Added immediately rather than returned to the list: they described it in order to log it, and
   /// making them find it again afterwards is a second decision for no reason.
-  private func createExercise(name: String, modality: ExerciseModality?, muscle: Muscle) {
+  private func createExercise(_ draft: NewExerciseDraft) {
     guard let exercises else { return }
     do {
       let id = try exercises.createExercise(
-        name: name, modality: modality, primaryMuscle: muscle
+        name: draft.name,
+        modality: draft.modality,
+        primaryMuscle: draft.primaryMuscle,
+        inheriting: draft.inheriting
       )
-      coordinator.addExercise(exerciseID: id, exerciseName: name, modality: modality)
+      coordinator.addExercise(
+        exerciseID: id, exerciseName: draft.name, modality: draft.modality
+      )
       isPickerPresented = false
       pickerQuery = ""
       equipmentError = nil
@@ -533,9 +554,14 @@ public struct LiveSessionScreen: View {
       // Recorded here because this is the only moment the association is known for free: a machine
       // is named from inside an exercise's picker, and nothing later can recover what it was for
       // without guessing.
-      let machineID = try gyms.createMachine(
-        at: gymID, name: name, forExercise: exerciseID
-      )
+      //
+      // `resolveMachine`, not `createMachine`: the sheet now offers names back, so a name that is
+      // already at THIS gym is a likely input rather than a rare one, and inserting unconditionally
+      // would answer "that one" with a second machine holding no history. Never matches across
+      // gyms -- that would be the merge invariant #10 forbids.
+      let machineID = try gyms.resolveMachine(
+        at: gymID, named: name, forExercise: exerciseID
+      ).id
       // Selected immediately: adding one and then having to find it in a list is a second decision
       // for no reason. The stack step is left unknown rather than guessed — an invented increment
       // would licence progression suggestions the equipment cannot honour.
@@ -553,6 +579,14 @@ public struct LiveSessionScreen: View {
   /// What to surface above the alphabet. Both inputs are facts -- history and inventory -- so
   /// neither turns the picker into a recommendation.
   private func refreshRelevance() {
+    // Curated only: a template exists to carry a researched attribution across, and inheriting
+    // from another hand-typed row would copy one person's guess twice while looking like
+    // corroboration.
+    if let catalog {
+      templates = ((try? catalog.selectableExercises()) ?? []).filter(\.isCurated)
+    } else {
+      templates = []
+    }
     guard let gyms else { return }
     recentExercises = (try? gyms.recentlyLoggedExercises()) ?? []
     if let gymID = coordinator.gymID {

@@ -104,7 +104,7 @@ public struct SessionDetailScreen: View {
           weightKg: $0.weightKg,
           reps: $0.reps,
           rpe: $0.rpe,
-          isWarmup: $0.isWarmup
+          kind: $0.kind
         )
       }
       notes = try store.notes(for: row.id)

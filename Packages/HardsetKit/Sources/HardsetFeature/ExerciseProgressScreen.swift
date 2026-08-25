@@ -41,12 +41,16 @@ public struct ExerciseProgressScreen: View {
           Text("Your logged sets are safe. Pull down to try again.")
         }
       } else {
-        ProgressionChartView(
-          series: seriesInputs,
-          machineChanges: history?.machineChanges ?? [],
-          unit: unit,
-          onExplain: { isShowingMethodology = true }
-        )
+        VStack(alignment: .leading, spacing: 0) {
+          ProgressionChartView(
+            series: seriesInputs,
+            machineChanges: history?.machineChanges ?? [],
+            unit: unit,
+            onExplain: { isShowingMethodology = true }
+          )
+          // The comparison the chart draws but never states. Same data, no second read.
+          MachineComparisonView(rows: comparisonRows, unit: unit)
+        }
         .padding(.horizontal, Tokens.Spacing.regular)
       }
     }
@@ -87,6 +91,27 @@ public struct ExerciseProgressScreen: View {
         points: series.points,
         gymIndex: gymIndex,
         machineIndexInGym: withinGym
+      )
+    }
+  }
+
+  /// Per-machine bests, labelled here for the same reason the chart's series are: the label needs
+  /// the store's machine names, and the view stays free of storage.
+  private var comparisonRows: [MachineComparisonView.Row] {
+    guard let history else { return [] }
+    let computed = MachineComparison.rows(from: history.series)
+    guard let reference = computed.first else { return [] }
+    let referenceLabel = history.label(for: reference.key)
+    return computed.map { row in
+      MachineComparisonView.Row(
+        key: row.key,
+        label: history.label(for: row.key),
+        heaviestLoadKg: row.heaviestLoadKg,
+        bestEstimatedOneRepMaxKg: row.bestEstimatedOneRepMaxKg,
+        lastTrained: row.lastTrained,
+        sessionCount: row.sessionCount,
+        heaviestLoadDeltaKg: row.heaviestLoadDeltaKg,
+        referenceLabel: row.isReference ? nil : referenceLabel
       )
     }
   }

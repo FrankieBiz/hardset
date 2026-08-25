@@ -31,7 +31,11 @@ public struct LoggedSetRow: Identifiable, Hashable, Sendable {
   public let reps: Int
   /// Effort as recorded, or `nil`. Shown only when it exists -- an absent RPE is not a zero.
   public let rpe: Double?
-  public let isWarmup: Bool
+  /// Working, warm-up or drop. History has to distinguish them or a chain reads back as three
+  /// unexplained sets at falling loads, which looks like a bad session rather than a hard one.
+  public let kind: SetKind
+
+  public var isWarmup: Bool { kind == .warmup }
 
   public init(
     id: UUID,
@@ -42,7 +46,7 @@ public struct LoggedSetRow: Identifiable, Hashable, Sendable {
     weightKg: Double,
     reps: Int,
     rpe: Double? = nil,
-    isWarmup: Bool
+    kind: SetKind
   ) {
     self.id = id
     self.exerciseID = exerciseID
@@ -52,8 +56,12 @@ public struct LoggedSetRow: Identifiable, Hashable, Sendable {
     self.weightKg = weightKg
     self.reps = reps
     self.rpe = rpe
-    self.isWarmup = isWarmup
+    self.kind = kind
   }
+
+  // Deliberately no `isWarmup:` convenience. This type is built by mapping stored rows, and a
+  // Bool cannot carry a drop -- an `isWarmup: false` shortcut would quietly render every drop in
+  // history as a working set, which is the one thing the counting convention promises it is not.
 }
 
 public struct SessionDetailView: View {
@@ -169,7 +177,9 @@ public struct SessionDetailView: View {
     return duration.clockString
   }
 
-  private var workingSetCount: Int { sets.count { !$0.isWarmup } }
+  /// Working sets, so a past workout's headline agrees with the week that contains it. Counting
+  /// every non-warm-up row reported a drop chain as three sets where the volume report said one.
+  private var workingSetCount: Int { sets.count { $0.kind.countsAsWorkingSet } }
 
   @ViewBuilder private func groupView(_ group: Group_) -> some View {
     VStack(alignment: .leading, spacing: Tokens.Spacing.snug) {
@@ -247,7 +257,7 @@ public struct SessionDetailView: View {
           .foregroundStyle(Tokens.Color.textSecondary)
       }
       Spacer(minLength: 0)
-      if set.isWarmup { warmupTag }
+      if let tag = kindTag(set) { tag }
     }
   }
 
@@ -261,7 +271,7 @@ public struct SessionDetailView: View {
     VStack(alignment: .leading, spacing: Tokens.Spacing.hairline) {
       HStack(spacing: Tokens.Spacing.snug) {
         ordinal(set, in: group, index: index)
-        if set.isWarmup { warmupTag }
+        if let tag = kindTag(set) { tag }
       }
       Text("\(loadText(set)) \u{00D7} \(set.reps)")
         .font(Tokens.Text.setEntry)
@@ -279,17 +289,36 @@ public struct SessionDetailView: View {
   @ViewBuilder private func ordinal(
     _ set: LoggedSetRow, in group: Group_, index: Int
   ) -> some View {
-    Text(set.isWarmup ? "W" : "\(workingOrdinal(of: set, in: group) ?? index + 1)")
+    Text(badge(for: set, in: group, index: index))
       .font(Tokens.Text.label)
       .monospacedDigit()
       .foregroundStyle(Tokens.Color.textSecondary)
   }
 
-  private var warmupTag: some View {
-    // Marked, and excluded from the count above, because a warm-up is not training volume.
-    Text("warm-up")
+  /// The word beside a row that is not a plain working set, or nothing.
+  ///
+  /// Both kinds are marked and both are excluded from the count above, for the same reason: one
+  /// is not training volume and the other is already counted inside the set it continues.
+  private func kindTag(_ set: LoggedSetRow) -> Text? {
+    let word: String
+    switch set.kind {
+    case .working: return nil
+    case .warmup: word = "warm-up"
+    case .drop: word = "drop"
+    }
+    return Text(word)
       .font(Tokens.Text.caption)
       .foregroundStyle(Tokens.Color.textSecondary)
+  }
+
+  /// A drop carries an arrow instead of a number, matching the live logger, because it does not
+  /// have a number of its own.
+  private func badge(for set: LoggedSetRow, in group: Group_, index: Int) -> String {
+    switch set.kind {
+    case .warmup: "W"
+    case .drop: "\u{2193}"
+    case .working: "\(workingOrdinal(of: set, in: group) ?? index + 1)"
+    }
   }
 
   /// "Body" for a bodyweight set with no added load, "Body + 10 kg" when there was some, and the
@@ -302,8 +331,8 @@ public struct SessionDetailView: View {
   }
 
   private func workingOrdinal(of set: LoggedSetRow, in group: Group_) -> Int? {
-    guard !set.isWarmup else { return nil }
-    let working = group.sets.filter { !$0.isWarmup }
+    guard set.kind.countsAsWorkingSet else { return nil }
+    let working = group.sets.filter { $0.kind.countsAsWorkingSet }
     guard let index = working.firstIndex(where: { $0.id == set.id }) else { return nil }
     return index + 1
   }
@@ -311,9 +340,12 @@ public struct SessionDetailView: View {
   private func spokenLabel(
     for set: LoggedSetRow, in group: Group_, fallbackIndex: Int
   ) -> String {
-    let which = set.isWarmup
-      ? "Warm-up set"
-      : "Set \(workingOrdinal(of: set, in: group) ?? fallbackIndex + 1)"
+    let which =
+      switch set.kind {
+      case .warmup: "Warm-up set"
+      case .drop: "Drop set"
+      case .working: "Set \(workingOrdinal(of: set, in: group) ?? fallbackIndex + 1)"
+      }
     let effort = set.rpe.map { ", RPE \(Self.format($0))" } ?? ""
     return "\(which), \(loadText(set)), \(set.reps) reps\(effort)"
   }

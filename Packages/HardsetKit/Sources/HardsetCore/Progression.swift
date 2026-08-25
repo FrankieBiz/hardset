@@ -108,13 +108,20 @@ public struct MachineChange: Hashable, Sendable, Identifiable {
 
   /// The sentence the chart must show. Deliberately refuses to characterise the change as progress
   /// or regression, because across a machine switch it is neither.
-  public var explanation: String {
+  ///
+  /// Takes the unit rather than hardcoding kilograms. It used to print "kg" unconditionally, so a
+  /// lifter reading in pounds saw "the load is 11.5 kg lower" directly above a chart axis labelled
+  /// `lb` — and, once "Your best on each" shipped underneath, directly above the same difference
+  /// correctly stated as 25.3 lb. `SetRowView` carries a comment about this exact defect being
+  /// fixed there ("the suffix switched to kg while the number stayed in pounds"); it survived here,
+  /// in `MachinePickerView` and in `ExerciseSectionView`.
+  public func explanation(in unit: WeightUnit) -> String {
     let direction = heaviestLoadDeltaKg >= 0 ? "higher" : "lower"
-    let magnitude = abs(heaviestLoadDeltaKg)
+    let magnitude = abs(unit.displayValue(fromKilograms: heaviestLoadDeltaKg))
     guard magnitude > 0 else {
       return "You changed machines here. The load happened to match, which is a coincidence, not a comparison."
     }
-    return "You changed machines here. The load is \(Self.format(magnitude)) kg \(direction), which is a difference between the machines rather than a change in strength."
+    return "You changed machines here. The load is \(Self.format(magnitude)) \(unit.abbreviation) \(direction), which is a difference between the machines rather than a change in strength."
   }
 
   static func format(_ value: Double) -> String {

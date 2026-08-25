@@ -18,6 +18,14 @@ public struct SettingsSheet: View {
   /// affordance that opens a screen with no store behind it is worse than no affordance.
   private let bodyweight: BodyweightStore?
   private let unit: WeightUnit
+  /// Produces the CSV a lifter takes their history away in. `nil` hides the row, the same rule
+  /// the bodyweight row follows.
+  private let export: ExportStore?
+  /// Gyms and their machines, for the equipment library. `nil` hides the row, same rule again.
+  private let gyms: GymStore?
+  /// Where the privacy policy, terms and support pages live. Rows render only for links that are
+  /// actually set — see `LegalLinks`, which explains why nothing here invents one.
+  private let links: LegalLinks
   /// Whether AlarmKit has refused permission to alert.
   ///
   /// Shown here because this is where the promise is made: the footer below says the timer keeps
@@ -36,6 +44,9 @@ public struct SettingsSheet: View {
     restSeconds: Binding<Int>,
     tracksRPE: Binding<Bool>,
     bodyweight: BodyweightStore? = nil,
+    export: ExportStore? = nil,
+    gyms: GymStore? = nil,
+    links: LegalLinks = .live,
     unit: WeightUnit = .kilograms,
     restAlertsDenied: Bool = false,
     onDone: @escaping () -> Void
@@ -44,9 +55,157 @@ public struct SettingsSheet: View {
     self._restSeconds = restSeconds
     self._tracksRPE = tracksRPE
     self.bodyweight = bodyweight
+    self.export = export
+    self.gyms = gyms
+    self.links = links
     self.unit = unit
     self.restAlertsDenied = restAlertsDenied
     self.onDone = onDone
+  }
+
+  /// `URL` is not `Identifiable`, and `sheet(item:)` needs it to be. Wrapped rather than made so
+  /// by an extension on `URL`: conforming a Foundation type app-wide to satisfy one sheet is how
+  /// two modules end up disagreeing about what a URL's identity is.
+  private struct ExportedFile: Identifiable {
+    let url: URL
+    var id: String { url.path }
+  }
+
+  /// The CSV, written when the sheet opens so the row can be a real `ShareLink`.
+  ///
+  /// A file rather than a string, because sharing a string offers "Copy" and "Message" but not
+  /// "Save to Files" — and saving it is the entire point.
+  ///
+  /// Prepared up front rather than on tap, because `ShareLink` needs its item at init. The
+  /// alternative — a button that writes the file and then presents a sheet — was tried and is
+  /// worse twice over: nested inside the Section the sheet dismissed Settings instead of
+  /// presenting, and once hoisted it presented a sheet containing a single "Share…" link rather
+  /// than the system share sheet. A `ShareLink` in the row is one tap and the real thing.
+  @State private var exportedFile: ExportedFile?
+  @State private var exportFailed = false
+  /// How many sets an export would contain, read **once** when the sheet appears.
+  ///
+  /// Hoisted out of `body` deliberately. It was `try? export.loggedSetCount()` inline in the
+  /// section, which is a `COUNT(*)` over `loggedSets` on every body evaluation -- so flipping the
+  /// RPE toggle re-queried the whole table. Settings is not the logger, but it is the same mistake
+  /// invariant #3 exists to forbid, and the fix is the same one: read it once into a value.
+  ///
+  /// `nil` means not yet read, which renders as absence rather than as zero.
+  @State private var exportableSetCount: Int?
+
+  @ViewBuilder private var exportSection: some View {
+    if export != nil, (exportableSetCount ?? 0) > 0 || exportFailed {
+      Section {
+        if let file = exportedFile, let count = exportableSetCount {
+          // Pluralised by hand rather than with `^[...](inflect:)`. The markup is only interpreted
+          // when it reaches a `LocalizedStringKey`, and this app has shipped it verbatim on screen
+          // twice already by routing one through a `String` first. Not worth the risk on a label
+          // nobody can see until they open this sheet.
+          ShareLink(item: file.url) {
+            Label(
+              "Export \(count) set\(count == 1 ? "" : "s") as CSV",
+              systemImage: "square.and.arrow.up"
+            )
+          }
+        } else if !exportFailed {
+          // The file is still being written. Stated rather than shown as a live control that does
+          // nothing yet.
+          Label("Preparing export…", systemImage: "square.and.arrow.up")
+            .foregroundStyle(Tokens.Color.textSecondary)
+        }
+        if exportFailed {
+          // Stated, not swallowed. An export that silently does nothing reads as data loss to the
+          // one person most worried about it -- and a row that simply vanishes on a failed read is
+          // the same lie told more quietly.
+          Text("Your history could not be prepared for export. Close Settings and try again.")
+            .font(Tokens.Text.caption)
+            .foregroundStyle(Tokens.Color.certainty(.low))
+        }
+      } header: {
+        Text("Your data")
+      } footer: {
+        Text(
+          "One row per logged set, in kilograms — the unit everything is stored in, so the file "
+            + "does not carry a conversion. Nothing is derived: no estimated maxes, no weekly "
+            + "totals. Those are worked out from these rows, and the rows are what you actually did."
+        )
+      }
+    }
+  }
+
+  /// Reads the whole log and writes it out, once, when the sheet appears.
+  ///
+  /// Synchronous and on the main actor, matching every other store read in this app -- the
+  /// invariant that matters here is "no database work *per render*", not "no database work". This
+  /// runs once per opening of Settings. A detached task was tried and rejected by strict
+  /// concurrency: `ExportStore` reaches this method already main-actor-isolated, so handing it to
+  /// `Task.detached` is a `sending`-closure error rather than a free win.
+  ///
+  /// Scale check: 450 logged sets produced a 70 KB file, so the read is milliseconds. If a log ever
+  /// gets large enough to be felt on opening Settings, the fix is to make `ExportStore` `Sendable`
+  /// and move this off the actor -- not to write it lazily, which is what `ShareLink` cannot do.
+  private func prepareExport(_ export: ExportStore) {
+    do {
+      let csv = try export.workoutCSV()
+      let url = FileManager.default.temporaryDirectory
+        .appendingPathComponent(ExportStore.filename(on: Date()))
+      try csv.write(to: url, atomically: true, encoding: .utf8)
+      exportedFile = ExportedFile(url: url)
+      exportFailed = false
+    } catch {
+      exportFailed = true
+    }
+  }
+
+  /// The machine library.
+  ///
+  /// Deliberately phrased as review rather than setup. Equipment is learned by naming it at the
+  /// rack, because the ancestor app's setup screen went uncompleted and every set after it was
+  /// logged against nothing -- so this row must not read as a step anyone has to take.
+  @ViewBuilder private var equipmentSection: some View {
+    if let gyms {
+      Section {
+        NavigationLink {
+          MachineLibraryScreen(gyms: gyms, unit: unit)
+            .navigationTitle("Machines")
+        } label: {
+          Label("Machines", systemImage: "dumbbell")
+        }
+      } header: {
+        Text("Equipment")
+      } footer: {
+        Text(
+          "What you have named while logging. Fix a name, set a stack step, or put one away "
+            + "\u{2014} nothing here needs filling in first."
+        )
+      }
+    }
+  }
+
+  @ViewBuilder private var aboutSection: some View {
+    Section {
+      NavigationLink {
+        MethodologyIndexScreen()
+      } label: {
+        Label("How the numbers work", systemImage: "function")
+      }
+      // Each renders only if it has somewhere real to go. See `LegalLinks`.
+      if let url = links.privacyPolicy {
+        Link(destination: url) { Label("Privacy policy", systemImage: "hand.raised") }
+      }
+      if let url = links.termsOfUse {
+        Link(destination: url) { Label("Terms of use", systemImage: "doc.text") }
+      }
+      if let url = links.support {
+        Link(destination: url) { Label("Support", systemImage: "questionmark.circle") }
+      }
+      if let version = AppVersion.current() {
+        LabeledContent("Version", value: version.displayString)
+          .foregroundStyle(Tokens.Color.textSecondary)
+      }
+    } header: {
+      Text("About")
+    }
   }
 
   static func restLabel(_ seconds: Int) -> String {
@@ -143,6 +302,26 @@ public struct SettingsSheet: View {
                 + "mostly food and water."
             )
           }
+        }
+
+        equipmentSection
+        exportSection
+        aboutSection
+      }
+      .task {
+        // One read, on appear. An export offered with no sets behind it would hand over a file
+        // containing only a header.
+        //
+        // Not `try?`. A swallowed failure here removes the export row entirely, which tells the
+        // one person most worried about their data that the feature does not exist -- see the
+        // standing rule against `try?` inside a view.
+        guard let export else { return }
+        do {
+          let count = try export.loggedSetCount()
+          exportableSetCount = count
+          if count > 0 { prepareExport(export) }
+        } catch {
+          exportFailed = true
         }
       }
       .navigationTitle("Settings")

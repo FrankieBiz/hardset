@@ -199,7 +199,16 @@ public nonisolated enum HardsetMigrations {
           "exerciseID" TEXT NOT NULL REFERENCES "exercises"("id") ON DELETE CASCADE,
           "machineID" TEXT REFERENCES "machines"("id") ON DELETE SET NULL,
           "position" INTEGER NOT NULL ON CONFLICT REPLACE DEFAULT 0,
-          "plannedSets" INTEGER
+          "plannedSets" INTEGER,
+          -- Which superset this movement belongs to within this session. Nullable, and
+          -- deliberately not a foreign key: a superset has no existence outside the workout it is
+          -- performed in, so there is no row for it to reference.
+          --
+          -- Note what this does NOT do. It changes when the rest timer is armed -- once per round
+          -- rather than once per set -- and nothing else. It is not a prescription: the lifter
+          -- pairs their own movements, and the set counts are still theirs. See
+          -- `docs/SUPERSETS-spec.md`.
+          "supersetGroup" INTEGER
         ) STRICT
         """
       )
@@ -229,6 +238,18 @@ public nonisolated enum HardsetMigrations {
           "reps" INTEGER NOT NULL ON CONFLICT REPLACE DEFAULT 0,
           "rpe" REAL,
           "isWarmup" INTEGER NOT NULL ON CONFLICT REPLACE DEFAULT 0,
+          -- A set continuing the one above it at a reduced load, with no rest between.
+          --
+          -- A second flag beside `isWarmup` rather than one `kind` column, because `isWarmup` has
+          -- existed since this table was written and is filtered on in SQL in half a dozen
+          -- places. `SetKind` in HardsetCore is the write-side type, and it is what keeps
+          -- "a warm-up that is also a drop" from ever being written -- STRICT tables forbid
+          -- CHECK, so that constraint cannot live here.
+          --
+          -- A drop does not add to any set count: it is counted as part of the set it continues.
+          -- That is an adopted convention rather than a finding, and `SetCounting.dropSetConvention`
+          -- is the text that says so where App Review reads it.
+          "isDropSet" INTEGER NOT NULL ON CONFLICT REPLACE DEFAULT 0,
           "completedAt" TEXT NOT NULL ON CONFLICT REPLACE DEFAULT (datetime('now', 'subsec'))
         ) STRICT
         """

@@ -13,10 +13,10 @@
 		65342E8704866A7FA63B7D7F /* PrivacyInfo.xcprivacy in Hardset */ = {isa = PBXBuildFile; fileRef = 9DA6D3A9523128D8236A0547 /* PrivacyInfo.xcprivacy */; };
 		EB0E7800B3B9CBC55200705F /* Assets.xcassets in Hardset */ = {isa = PBXBuildFile; fileRef = 2872DB59AAC00898EC5AC167 /* Assets.xcassets */; };
 		27CF9CF3EE27D125AC53CB48 /* HardsetCore */ = {isa = PBXBuildFile; productRef = 299DED104025EEA646ADE2F4 /* HardsetCore */; };
-		A1F0C0DE0000000000000001 /* HardsetFeature */ = {isa = PBXBuildFile; productRef = A1F0C0DE0000000000000002 /* HardsetFeature */; };
 		5F3D50D2DE60064848672CE0 /* HardsetStore */ = {isa = PBXBuildFile; productRef = 4BD04F50D3691F17448149E4 /* HardsetStore */; };
 		54B81466C42A28C826A1B775 /* HardsetUI */ = {isa = PBXBuildFile; productRef = B8FEB24B1C5CAB855B8DA0C1 /* HardsetUI */; };
 		5F3D50D2DE6006470B5A43E0 /* HardsetAlarm */ = {isa = PBXBuildFile; productRef = 4BD04F50D3691F16077460E4 /* HardsetAlarm */; };
+		654F079CF304E734AD15EC31 /* HardsetFeature */ = {isa = PBXBuildFile; productRef = 2F14F12BF1D4F2765F98FD55 /* HardsetFeature */; };
 		E55D922B8225D435833BCE8C /* HardsetCore */ = {isa = PBXBuildFile; productRef = 9C6FD605DC391D164B870358 /* HardsetCore */; };
 		29707BD6CCDEC7E47EC31D99 /* HardsetUI */ = {isa = PBXBuildFile; productRef = 69B7000331548A82D7D4E305 /* HardsetUI */; };
 		5EE1CC43995B97620413EFAC /* HardsetAlarm */ = {isa = PBXBuildFile; productRef = 0D3A84FFB139E268828FF410 /* HardsetAlarm */; };
@@ -77,10 +77,6 @@
 /* End XCLocalSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
-		A1F0C0DE0000000000000002 /* HardsetFeature */ = {
-			isa = XCSwiftPackageProductDependency;
-			productName = HardsetFeature;
-		};
 		299DED104025EEA646ADE2F4 /* HardsetCore */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = HardsetCore;
@@ -96,6 +92,10 @@
 		4BD04F50D3691F16077460E4 /* HardsetAlarm */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = HardsetAlarm;
+		};
+		2F14F12BF1D4F2765F98FD55 /* HardsetFeature */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = HardsetFeature;
 		};
 		9C6FD605DC391D164B870358 /* HardsetCore */ = {
 			isa = XCSwiftPackageProductDependency;
@@ -124,7 +124,7 @@
 				5F3D50D2DE60064848672CE0 /* HardsetStore */,
 				54B81466C42A28C826A1B775 /* HardsetUI */,
 				5F3D50D2DE6006470B5A43E0 /* HardsetAlarm */,
-				A1F0C0DE0000000000000001 /* HardsetFeature */,
+				654F079CF304E734AD15EC31 /* HardsetFeature */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -221,7 +221,7 @@
 				4BD04F50D3691F17448149E4 /* HardsetStore */,
 				B8FEB24B1C5CAB855B8DA0C1 /* HardsetUI */,
 				4BD04F50D3691F16077460E4 /* HardsetAlarm */,
-				A1F0C0DE0000000000000002 /* HardsetFeature */,
+				2F14F12BF1D4F2765F98FD55 /* HardsetFeature */,
 			);
 			productName = Hardset;
 			productReference = C0DD8C9D659EAB28228ED87D /* Hardset.app */;
@@ -440,6 +440,7 @@
 				CODE_SIGN_ENTITLEMENTS = Hardset/Hardset.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 7R2SW36YX3;
 				ENABLE_PREVIEWS = YES;
 				ENABLE_USER_SCRIPT_SANDBOXING = YES;
 				GENERATE_INFOPLIST_FILE = NO;
@@ -468,6 +469,7 @@
 				CODE_SIGN_ENTITLEMENTS = Hardset/Hardset.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 7R2SW36YX3;
 				ENABLE_PREVIEWS = YES;
 				ENABLE_USER_SCRIPT_SANDBOXING = YES;
 				GENERATE_INFOPLIST_FILE = NO;
@@ -494,6 +496,7 @@
 				CLANG_ENABLE_MODULES = YES;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 7R2SW36YX3;
 				ENABLE_USER_SCRIPT_SANDBOXING = YES;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = HardsetWidget/Info.plist;
@@ -520,6 +523,7 @@
 				CLANG_ENABLE_MODULES = YES;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 7R2SW36YX3;
 				ENABLE_USER_SCRIPT_SANDBOXING = YES;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = HardsetWidget/Info.plist;
@@ -547,6 +551,7 @@
 				CLANG_ENABLE_MODULES = YES;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 7R2SW36YX3;
 				ENABLE_USER_SCRIPT_SANDBOXING = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 26.1;
@@ -572,6 +577,7 @@
 				CLANG_ENABLE_MODULES = YES;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 7R2SW36YX3;
 				ENABLE_USER_SCRIPT_SANDBOXING = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 26.1;

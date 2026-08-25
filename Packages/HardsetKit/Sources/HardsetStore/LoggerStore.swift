@@ -71,7 +71,8 @@ public nonisolated struct LoggerStore {
     exerciseID: ExerciseID,
     machineID: MachineID? = nil,
     position: Int,
-    plannedSets: Int? = nil
+    plannedSets: Int? = nil,
+    supersetGroup: Int? = nil
   ) throws -> UUID {
     let rowID = UUID()
     try database.write { db in
@@ -82,7 +83,8 @@ public nonisolated struct LoggerStore {
           exerciseID: exerciseID.rawValue,
           machineID: machineID?.rawValue,
           position: position,
-          plannedSets: plannedSets
+          plannedSets: plannedSets,
+          supersetGroup: supersetGroup
         )
       }
       .execute(db)
@@ -99,6 +101,20 @@ public nonisolated struct LoggerStore {
       try SessionExercise
         .where { $0.id.eq(rowID) }
         .update { $0.machineID = #bind(machineID?.rawValue) }
+        .execute(db)
+    }
+  }
+
+  /// Records that a movement joined or left a superset.
+  ///
+  /// Persisted for the same reason the machine change is: recovery rebuilds the session from the
+  /// plan rows, so a grouping that lived only in memory would be gone after a force-quit and the
+  /// rest timer would start behaving differently mid-workout with no explanation.
+  public func setSessionExerciseSupersetGroup(rowID: UUID, group: Int?) throws {
+    try database.write { db in
+      try SessionExercise
+        .where { $0.id.eq(rowID) }
+        .update { $0.supersetGroup = #bind(group) }
         .execute(db)
     }
   }
@@ -122,7 +138,7 @@ public nonisolated struct LoggerStore {
     sessionExerciseID: UUID? = nil,
     draft: SetEntryDraft,
     setOrdinal: Int? = nil,
-    isWarmup: Bool = false,
+    kind: SetKind = .working,
     rpe: Double? = nil,
     at completedAt: Date
   ) throws -> SetID {
@@ -155,13 +171,43 @@ public nonisolated struct LoggerStore {
           weightKg: resolved.weightKg,
           reps: resolved.reps,
           rpe: rpe,
-          isWarmup: isWarmup,
+          isWarmup: kind.storage.isWarmup,
+          isDropSet: kind.storage.isDropSet,
           completedAt: completedAt
         )
       }
       .execute(db)
     }
     return id
+  }
+
+  /// Warm-up-or-working convenience for the many callers that never write a drop.
+  ///
+  /// `isWarmup` deliberately has no default. Giving it one would make a call that supplies
+  /// neither label ambiguous against the `kind:` overload, and the compiler would be right.
+  @discardableResult
+  public func logSet(
+    sessionID: SessionID,
+    exerciseID: ExerciseID,
+    machineID: MachineID? = nil,
+    sessionExerciseID: UUID? = nil,
+    draft: SetEntryDraft,
+    setOrdinal: Int? = nil,
+    isWarmup: Bool,
+    rpe: Double? = nil,
+    at completedAt: Date
+  ) throws -> SetID {
+    try logSet(
+      sessionID: sessionID,
+      exerciseID: exerciseID,
+      machineID: machineID,
+      sessionExerciseID: sessionExerciseID,
+      draft: draft,
+      setOrdinal: setOrdinal,
+      kind: isWarmup ? .warmup : .working,
+      rpe: rpe,
+      at: completedAt
+    )
   }
 
   /// Stack increments for the given machines, keyed by id.
@@ -399,6 +445,7 @@ public nonisolated struct LoggerStore {
           machineName: row.machineID.flatMap { machines[$0]?.name },
           position: row.position,
           plannedSets: row.plannedSets,
+          supersetGroup: row.supersetGroup,
           machineIncrementKg: row.machineID.flatMap { machines[$0]?.stackIncrementKg }
         )
       }
@@ -409,6 +456,9 @@ public nonisolated struct LoggerStore {
   ///
   /// Used for record detection, which needs the all-time best rather than the most recent
   /// session. Warm-ups are excluded in SQL: a heavy warm-up is not a record and not a benchmark.
+  /// Drops are excluded for the mirror-image reason -- a set continued at a deliberately reduced
+  /// load is not a benchmark either, and letting one set the bar for "heaviest" would make the
+  /// margin rule fire against a number the lifter never treated as a working set.
   /// Bounded, so a lifter with years of history does not pay for it on the tap path.
   public func completedSets(
     for key: ProgressionKey,
@@ -420,7 +470,7 @@ public nonisolated struct LoggerStore {
         rows = try LoggedSet
           .where { $0.exerciseID.eq(key.exerciseID.rawValue) }
           .where { $0.machineID.eq(machineID) }
-          .where { !$0.isWarmup }
+          .where { !$0.isWarmup && !$0.isDropSet }
           .order { $0.completedAt.desc() }
           .limit(limit)
           .fetchAll(db)
@@ -428,7 +478,7 @@ public nonisolated struct LoggerStore {
         rows = try LoggedSet
           .where { $0.exerciseID.eq(key.exerciseID.rawValue) }
           .where { $0.machineID.is(nil) }
-          .where { !$0.isWarmup }
+          .where { !$0.isWarmup && !$0.isDropSet }
           .order { $0.completedAt.desc() }
           .limit(limit)
           .fetchAll(db)
@@ -465,10 +515,15 @@ public nonisolated struct LoggerStore {
 
     // One query. Warm-ups are excluded here rather than filtered later: a warm-up load must
     // never pre-fill a working set, and doing it in SQL keeps the row budget honest.
+    //
+    // Drops are excluded on the same principle and it matters more, not less. A drop is the
+    // lightest load of the session by construction, so leaving them in would hand next week's
+    // opening row the bottom of last week's chain -- a suggestion that gets steadily lighter
+    // every time the lifter trains hard.
     let rows: [LoggedSet] = try database.read { db in
       try LoggedSet
         .where { $0.exerciseID.in(exerciseIDs) }
-        .where { !$0.isWarmup }
+        .where { !$0.isWarmup && !$0.isDropSet }
         .order { $0.completedAt.desc() }
         .limit(rowLimit)
         .fetchAll(db)
@@ -547,6 +602,8 @@ public nonisolated struct LoggedSetRecord: Hashable, Sendable {
   public let reps: Int
   public let rpe: Double?
   public let isWarmup: Bool
+  /// Working, warm-up or drop, resolved from the two stored flags.
+  public let kind: SetKind
   public let completedAt: Date
   /// The plan row this set was logged against, when known.
   public let sessionExerciseID: UUID?
@@ -561,6 +618,7 @@ public nonisolated struct LoggedSetRecord: Hashable, Sendable {
     self.reps = row.reps
     self.rpe = row.rpe
     self.isWarmup = row.isWarmup
+    self.kind = SetKind(isWarmup: row.isWarmup, isDropSet: row.isDropSet)
     self.completedAt = row.completedAt
     self.sessionExerciseID = row.sessionExerciseID
   }
@@ -581,6 +639,9 @@ public nonisolated struct PlannedExerciseRecord: Hashable, Sendable, Identifiabl
   public let machineName: String?
   public let position: Int
   public let plannedSets: Int?
+  /// Which superset this movement was part of, so recovery puts the grouping back. Without it a
+  /// force-quit silently dissolves the superset and the rest timer starts arming after every set.
+  public let supersetGroup: Int?
   /// The machine's real load step, when known. Carried here so recovery restores it — without it,
   /// a recovered session falls back to a default step the equipment may not be able to hit.
   public let machineIncrementKg: Double?

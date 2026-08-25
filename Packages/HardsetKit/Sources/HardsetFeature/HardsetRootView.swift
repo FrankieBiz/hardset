@@ -26,6 +26,8 @@ public struct HardsetEnvironment {
   public let gyms: GymStore
   /// Device-local, and never registered with the sync engine. See `BodyweightStore`.
   public let bodyweight: BodyweightStore
+  /// Produces the CSV a lifter takes their history away in.
+  public let export: ExportStore
 
   public init(database: any DatabaseWriter) {
     self.logger = LoggerStore(database: database)
@@ -37,6 +39,7 @@ public struct HardsetEnvironment {
     self.splits = SplitStore(database: database)
     self.gyms = GymStore(database: database)
     self.bodyweight = BodyweightStore(database: database)
+    self.export = ExportStore(database: database)
   }
 }
 
@@ -76,6 +79,19 @@ public struct HardsetRootView: View {
   /// no basis for prescribing a rest length, so it waits to be told one. Stored in seconds rather
   /// than as a `Duration` because `@AppStorage` cannot hold one.
   @AppStorage("hardset.restSeconds") private var restSeconds = 0
+  /// Whether the lifter has ever been asked about the rest timer.
+  ///
+  /// Distinct from `restSeconds == 0`, and that distinction is the whole point: zero means "no
+  /// timer", and until this flag is set it is impossible to tell that apart from "never asked".
+  /// Conflating them is why the flagship feature never started itself -- a lifter who never opened
+  /// Settings had the rest timer silently off forever, and nothing ever requested the AlarmKit
+  /// permission it needs either.
+  ///
+  /// Asking is not prescribing. DECISIONS #6 refuses a *literature* default rest length and #27
+  /// refuses a *learned* one; neither says the app may not put the question in front of the
+  /// person whose decision it is. Off is offered first and is a real answer.
+  @AppStorage("hardset.hasChosenRest") private var hasChosenRest = false
+  @State private var isChoosingRest = false
   /// Whether the set row offers an effort field. Off by default: an unused column in the logger is
   /// clutter in the one place the app cannot afford it.
   @AppStorage("hardset.tracksRPE") private var tracksRPE = false
@@ -191,12 +207,15 @@ public struct HardsetRootView: View {
             }
           }
         }
+        .sheet(isPresented: $isChoosingRest) { restChoiceSheet }
         .sheet(isPresented: $isShowingSettings) {
           SettingsSheet(
             useImperial: $useImperial,
             restSeconds: $restSeconds,
             tracksRPE: $tracksRPE,
             bodyweight: environment.bodyweight,
+            export: environment.export,
+            gyms: environment.gyms,
             unit: unit,
             restAlertsDenied: hooks.isDenied()
           ) { isShowingSettings = false }
@@ -218,6 +237,8 @@ public struct HardsetRootView: View {
         catalog: environment.catalog,
         gyms: environment.gyms,
         volume: environment.volume,
+        exercises: environment.exercises,
+        unit: unit,
         onStartDay: startDayHandler
       )
       .navigationTitle("Plan")
@@ -569,6 +590,7 @@ public struct HardsetRootView: View {
   /// Each movement comes back on the same machine with the same number of rows, so the loads
   /// prefill from that machine's history and the lifter starts one tap from their first set.
   private func repeatWorkout(_ plan: [RepeatableExercise]) {
+    promptForRestIfNeeded()
     guard coordinator == nil, !plan.isEmpty else { return }
     // `start` moves to the Train tab on success. Starting a workout the lifter cannot see would be
     // the same class of defect as a button that appears to do nothing.
@@ -600,6 +622,7 @@ public struct HardsetRootView: View {
   /// plan carries no set counts and inventing one here would put a prescription into the logger by
   /// the back door.
   private func startPlannedDay(_ plan: [PlannedExercise]) {
+    promptForRestIfNeeded()
     guard coordinator == nil, !plan.isEmpty else { return }
     // `start` moves to the Train tab on success -- starting a workout the lifter cannot see is the
     // same class of defect as a button that appears to do nothing.
@@ -661,7 +684,70 @@ public struct HardsetRootView: View {
     }
   }
 
+  /// The one-time rest question.
+  ///
+  /// Every option is the lifter's; the app supplies no recommendation and marks nothing as
+  /// suggested, because it has none — see DECISIONS #6 and #27. What it does supply is the
+  /// question, at the one moment it is about to matter.
+  @ViewBuilder private var restChoiceSheet: some View {
+    NavigationStack {
+      List {
+        Section {
+          ForEach(SettingsSheet.restOptions, id: \.self) { seconds in
+            Button {
+              restSeconds = seconds
+              hasChosenRest = true
+              isChoosingRest = false
+            } label: {
+              HStack {
+                Text(seconds == 0 ? "No timer" : SettingsSheet.restLabel(seconds))
+                  .foregroundStyle(Tokens.Color.textPrimary)
+                Spacer()
+                if restSeconds == seconds, hasChosenRest {
+                  Image(systemName: "checkmark").foregroundStyle(Tokens.Color.accent)
+                }
+              }
+              .frame(minHeight: Tokens.minimumTapTarget)
+              .contentShape(Rectangle())
+            }
+          }
+        } header: {
+          Text("Rest between working sets")
+        } footer: {
+          Text(
+            "Hardset has no recommended rest length — the literature does not establish one, so "
+              + "the app will not invent one. Pick what you already do. It never starts after a "
+              + "warm-up, and it keeps running if you leave the app or force-quit it. You can "
+              + "change this any time in Settings."
+          )
+        }
+      }
+      .navigationTitle("Rest timer")
+      .toolbar {
+        ToolbarItem(placement: .confirmationAction) {
+          // Dismissing without choosing still counts as answered. Asking again at the start of
+          // every workout would be nagging, and Settings is one tap away.
+          Button("Not now") {
+            hasChosenRest = true
+            isChoosingRest = false
+          }
+        }
+      }
+    }
+    .presentationDetents([.medium])
+  }
+
+  /// Puts the rest question in front of the lifter the first time they start a workout.
+  ///
+  /// At the start rather than after the first set: mid-set is the worst possible moment to read a
+  /// question, and the answer changes what happens the moment the first set is logged.
+  private func promptForRestIfNeeded() {
+    guard !hasChosenRest else { return }
+    isChoosingRest = true
+  }
+
   private func startEmptyWorkout() {
+    promptForRestIfNeeded()
     start {
       // An empty plan on purpose: the app does not invent a program, and there is no generator
       // yet. Movements are added from the picker as the lifter goes.

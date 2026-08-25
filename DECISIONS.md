@@ -385,3 +385,365 @@ deliberate additive change.
 The three tables went into the **v1 migration** rather than a v2, because nothing has shipped and no
 build has reached a device — v1 is still the single designed artefact it claims to be, and this was
 the last moment a column could be reconsidered for free.
+
+---
+
+## The logger's missing shapes
+
+### 25. Supersets and drop sets are timing, not prescription
+
+The two gaps a 2026 competitive teardown was right about, and the largest functional distance
+between this app and the loggers it has to match before anything else matters. `superset`,
+`dropSet` and `myo` had **zero occurrences** in `Packages/HardsetKit/Sources`.
+
+**Why they are permissible at all**, in an app that refuses to prescribe: neither asserts anything
+about training. A superset is the lifter pairing their own movements, and it changes *when the rest
+timer is armed* — once per round instead of once per set — and nothing else. A drop is the lifter
+continuing their own set at a lower load, and it changes when rest is armed too: not until the chain
+ends. Set counts stay the lifter's, loads stay the lifter's, and the app picks neither the pairing
+nor the drop percentage. This is the same arithmetic-over-authored-data ground that permits splits
+under #24, and `SupersetAndDropStoreTests` pins it: a superset records exactly what the same sets
+record apart.
+
+**One rule, not conditions scattered down the write path.** `SupersetRest.shouldArmRest` is pure and
+Foundation-only, and it is the whole behaviour: a warm-up arms nothing; a set with a drop queued
+behind it arms nothing; a set inside a superset arms nothing until every other member has caught up
+*or has finished*. That last clause is load-bearing — without it a partner with fewer sets blocks
+rest forever once it is done, and the lifter's last sets of the longer movement never start a timer.
+
+**The research corpus said defer drop sets, and that reasoning does not apply here.**
+`docs/research/r3-research.md:91` recommends shipping supersets in v1 and holding drop sets to 1.1
+because "auto-advance blocks adding drop sets" — the specific complaint logged against Alpha
+Progression. Hardset has no auto-advance: `grep -n "autoAdvance"` over the sources returns nothing,
+and the log control acts on `nextUnloggedSlotID` without ever moving focus. The objection was
+against a feature this app does not have, so it does not transfer.
+
+The same corpus proposed modelling `SetKind {working, warmup, amrap, drop, backoff}` up front so a
+later release would be "a UI change rather than a migration." **Refused as speculative.** #4 runs
+one way: a column may be added at any time and never removed or renamed. So an unbuilt case costs
+nothing to defer and a guessed one commits the schema to a vocabulary no screen has been designed
+against. Three cases ship. Myo-reps and cluster sets are refused outright — they need genuine
+sub-set structure with intra-set rests, which means a second concurrent alarm and a nested model.
+
+**Storage is two flags, and the type is what makes the fourth state unwritable.** `isWarmup`
+predates this and is filtered on in SQL in half a dozen places, so it stays; `isDropSet` sits beside
+it. `STRICT` tables forbid `CHECK`, so "a warm-up that is also a drop" cannot be excluded in SQL —
+`SetKind.storage` is the only thing that produces the pair, which is what excludes it. The decode
+resolves the impossible combination rather than throwing, unlike `RestTimerState`, because it sits
+on the crash-recovery path where throwing would take a whole workout's written sets down with one
+bad row.
+
+### 26. A drop set adds no set, and that is a convention with nothing behind it
+
+Held to exactly the standard #17 holds the 0.5 indirect credit to. There is **no established
+convention** for mapping a drop onto a set count: the dose-response scheme the counting follows was
+fitted to studies of conventionally performed sets, and the drop-set literature describes the
+technique as one set carried past failure at reducing loads rather than as several sets.
+
+Hardset counts the chain **once**, as the set it continues. The only ground claimed for that is
+that it is the reading which cannot manufacture volume — counting each drop separately would report
+three sets dropped twice as nine, and every weekly figure in the app would inflate the moment
+anyone used the feature. `SetCounting.dropSetConvention` says so in the text App Review reads, it is
+interpolated into `SetCounting.source.methodology` so the disclosure cannot drift from the code, and
+`dropConventionIsDisclosed` asserts it keeps saying it — including that it is "not a judgement"
+about the technique, because "the app will not report this as a set" and "this is worth less than a
+set" are different statements and only one of them is supportable.
+
+**Tonnage is unaffected, because tonnage is arithmetic rather than convention.** Every drop's load
+and reps count in full. `SessionVolume` reports `dropSets` separately for the same reason it
+reports warm-ups separately: work that vanishes from a summary looks like a bug.
+
+**Three read paths had to learn this, and the dangerous one is the prefill.** A drop is the lightest
+load of the session by construction, so leaving drops in `priorPerformanceSnapshot` would hand next
+week's opening row the bottom of last week's chain — a suggestion that gets *lighter* every time the
+lifter trains hard. They are also excluded from `completedSets` (a deliberately reduced load is not
+a record benchmark) and from `ProgressionStore.samples` (the chart plots a session's best work).
+
+### 27. Rest cannot be learned from what this app stores, and the arithmetic says so
+
+The same teardown recommended fixing the missing rest default by learning it — "a default learned
+from the lifter's own median observed rest on that movement asserts nothing about physiology," which
+would have been the identical argument that permits splits and #25. **It does not survive contact
+with the schema, and the reason is worth recording so it is not re-proposed.**
+
+**The app does not observe rest.** `loggedSets` stores `completedAt` and nothing else temporal;
+across all thirteen tables the only other timestamps are `sessions.startedAt` and the rest timer's
+own device row. There is no set-*start* time anywhere. So the only interval derivable from a
+lifter's history is finish-to-finish:
+
+```
+gap(set N → set N+1) = rest + work(N+1)
+```
+
+`work(N+1)` is never recorded, and it is not negligible: a working set of 8–12 reps runs roughly
+25–40 s against a 60–180 s rest, so the finish-to-finish median **overestimates rest by roughly a
+fifth to a third**. A timer defaulted to it fires around when the lifter would historically have
+*finished* the next set, not started it.
+
+That makes it the exact shape this project's corpus catalogues at scale — a real measurement
+presented as a different quantity. The honest claim available is a bound (rest is never more than
+the gap), and a bound is not a default.
+
+**Not fixed by measuring rest from the timer, either — that is circular while the timer defaults to
+off.** The lifter has to turn it on before the app can observe anything to learn from. Breaking the
+circle properly means the timer being on by default, which is the question this was supposed to
+answer.
+
+So: no learned rest default. The underlying defect is real and stays open — `restSeconds` defaults
+to `0` and lives only in Settings, so the flagship feature does not start itself — but the fix is a
+choice the lifter makes at a moment that makes sense, not a number derived from data that cannot
+carry it. #6's refusal of a *literature* default stands unchanged and was never the thing in
+question.
+
+---
+
+## Getting submittable
+
+### 28. The icon is generated, for the same reason the project file is
+
+`Tools/generate_icon.py`, not a drawing. The two colours in it are `Tokens.Color.ground` and
+`Tokens.Color.accent`, so the icon cannot drift from the locked palette — if #22 ever moves, this is
+a one-line change rather than a trip through a design tool. It is geometry, not commissioned art,
+and it is deliberately in the locked palette so that replacing it later is a swap rather than a
+redesign.
+
+Two constraints that are not stylistic and are easy to get wrong once:
+
+- **Opaque RGB, never RGBA.** iOS rejects an app icon carrying an alpha channel at upload. The
+  script composites on the ground colour and saves RGB.
+- **Supersampled 4× then LANCZOS.** Drawing at 1024 directly leaves visible stair-stepping on the
+  shaft's rounded ends.
+
+Related: `AccentColor` was still Xcode's default blue (`#2E82F6`), which contradicted #22 outright.
+It is the achromatic accent now. That asset is not decoration — it tints system-drawn controls the
+design tokens never reach.
+
+### 29. Dark-only has to be declared to the system, not just to SwiftUI
+
+`HardsetRootView` sets `.preferredColorScheme(.dark)`, and that governs the SwiftUI tree only. Two
+things sit outside it, and both were wrong:
+
+- **The launch screen.** `UILaunchScreen` was an empty dict, so the system painted its default
+  background — white on any device in light mode. Every cold launch of a dark-only app began with a
+  white flash. Now `UIColorName` points at a `LaunchBackground` colorset holding the ground value.
+- **System-drawn chrome.** Sheets, alerts, the keyboard and scroll indicators follow the device's
+  interface style, not a SwiftUI modifier. `UIUserInterfaceStyle` is `Dark`.
+
+Verified rather than assumed: with the simulator in **light** appearance the app now renders
+`(8, 10, 14)` — exactly `#080A0E` — where it previously leaked white.
+
+Both keys come out together if light mode is ever built. #22 keeps that open, which is why the
+token names still carry no "dark".
+
+### 30. The training log is exportable, and exports nothing derived
+
+A training log the owner cannot get out of the app is a hostage, and "data loss / no export" is one
+of the loudest complaints in this category's reviews (`prior-research.md:576`). It is also the
+honest consequence of the app's own claim: if these numbers are worth trusting, they are worth
+owning.
+
+**One row per logged set, and nothing computed.** No fractional credit, no estimated one-rep max, no
+weekly totals. Every one of those is derived by code whose conventions are stated and revisable —
+#17's 0.5 credit, #26's drop counting — and writing them into a file freezes a convention into an
+artefact that outlives it. What is exported is what the lifter did, which cannot go stale.
+
+**Kilograms, always**, matching storage, with `weight_kg` in the column name so nobody has to guess.
+The display unit is a preference; converting on the way out would put the lifter's rounding into
+their own archive.
+
+**Escaping is its own tested type**, because a file that opens cleanly with one column shifted is
+worse than one that fails to write — nobody finds out for months. One real bug fell straight out of
+that test: in Swift `"\r\n"` is a **single grapheme cluster**, so `field.contains("\n")` is `false`
+for a field containing a CRLF. A pasted note would have gone out unquoted, ending its row early and
+shifting every column after it. `CSV.escape` matches on unicode scalars.
+
+### 31. Every derived number is disclosed in one place, as well as in situ
+
+`MethodologyIndexScreen`. The app already answered Guideline 1.4.1 where each number appears, each
+sheet generated from the same `EvidenceSource` the code computes with. The gap was that a reviewer —
+or a lifter deciding whether to trust any of it — had no way to see the whole set without finding
+every screen that hides one. The sources are already public values, so listing them costs nothing
+and gives App Review a single place to be pointed at.
+
+### 32. Nothing invents a legal URL
+
+The privacy policy and Terms of Use pages do not exist yet, so `LegalLinks.live` holds `nil` and
+each Settings row renders only when its link is set. A link to a page that does not exist is worse
+than no link: App Review taps every one, and a 404 is a rejection with a slower turnaround than a
+missing feature. `submissionBlockers` names what is still owed in the same words
+`DEVICE-CHECKLIST.md` §E uses, so "are we ready" has one answer rather than a memory of one.
+
+---
+
+## Getting it onto a phone
+
+### 33. The app asks about rest once; it still does not prescribe one
+
+`restSeconds` defaulted to `0`, and `0` meant both "no timer" and "never asked". Conflating those is
+why the flagship feature never started itself: a lifter who never opened Settings had the rest timer
+silently off forever — **and nothing ever requested the AlarmKit permission**, because the request
+is triggered by choosing a duration. A fresh install could not have alerted even if it had tried.
+
+`hasChosenRest` separates the two, and the first time a workout starts the app puts the question up:
+the same options Settings offers, "No timer" first, and "Not now" as a real answer that is not asked
+again.
+
+**Asking is not prescribing**, and the distinction is the whole justification. #6 refuses a
+*literature* rest default and #27 refuses a *learned* one — both are the app asserting a number.
+Neither says the app may not put the question in front of the person whose decision it is. Nothing
+is preselected, nothing is marked recommended, and the sheet says in as many words that Hardset has
+no recommended rest length and will not invent one.
+
+Verified on device rather than reasoned about: fresh install → start workout → the sheet appears →
+choosing 1:30 fires the AlarmKit permission prompt → the first logged set arms a 1:30 timer labelled
+with the movement. None of that chain had ever run before.
+
+### 34. Signing goes through the generator, not the Xcode UI
+
+`Tools/generate_project.py` reads `HARDSET_TEAM_ID` from the environment and writes
+`DEVELOPMENT_TEAM` into every target. It is not committed, because a team identifier is
+account-specific and a checked-in one is wrong for everybody but its owner. Setting it in Xcode's
+Signing & Capabilities tab instead would work exactly until the next regeneration silently dropped
+it — the same class of trap as hand-editing the project file.
+
+`--local` (or `HARDSET_LOCAL=1`) omits `CODE_SIGN_ENTITLEMENTS` entirely. **iCloud/CloudKit and push
+are paid-membership capabilities**, so an entitlements file requesting them fails the install
+outright on a free Apple ID rather than degrading. Dropping them costs sync and nothing else: the
+app already runs local-only when the sync engine cannot start, and every part of a workout is local.
+
+That path is what made #35 necessary.
+
+### 35. A sync engine that cannot start is not an assertion failure
+
+`HardsetApp` caught a failed `SyncEngine` construction and called `assertionFailure`, on the
+reasoning that the only possible cause is a schema mistake caught by `SchemaTests`. That reasoning
+was incomplete: a build signed with a free personal team has no CloudKit entitlement, so it reaches
+that line on **every** launch. An assertion is a no-op in Release and a trap in Debug — which means
+the default build configuration would have crashed on launch, on the day the app was first taken to
+a gym. It logs and runs local-only now. A real schema mistake still fails loudly in `SchemaTests`,
+on the host, before anything is installed.
+
+### 36. History is paged, because a workout you cannot reach is one the app forgot
+
+`recentSessions()` defaulted to `limit: 50` and `HistoryScreen` passed no argument, so the list
+stopped at fifty workouts with no footer, no count and no way further back. Verified against a
+seeded 60-session history: **10 sessions and 75 logged sets sat in the database, unreachable.** At
+three sessions a week that is month four, and to the lifter it is indistinguishable from data loss
+in an app whose entire claim is that its numbers can be trusted.
+
+Paged rather than uncapped: someone with years of training should not render all of it to check
+last Tuesday. The footer is `nil` when a read returns fewer rows than the page size, which is what
+makes its absence informative — no button means nothing older exists, rather than the list having
+quietly stopped.
+
+Worth recording how it was found. It is invisible with a week of data, which is all anyone had ever
+put in front of this app; it took seeding twenty weeks of realistic training to see it at all. The
+same pass found three more surfaces that only fail at length — see `HANDOFF.md` §8e.
+
+### 37. `ShareLink` is the control, not sheet content
+
+The export shipped broken twice in one sitting, and both failures were presentation shape rather
+than logic — the CSV was written correctly every time.
+
+**First**, the `.sheet` was attached to the `Section` that owned the button. This whole view is
+already inside a presented sheet, and a second `.sheet` nested that deep **dismissed Settings**
+instead of presenting over it. Tapping Export closed the screen and appeared to do nothing.
+
+**Second**, once hoisted onto the `NavigationStack`, it presented a near-empty sheet containing a
+single "Share…" link. `.sheet { ShareLink(…) }` renders the link as *content*; it does not become
+the system share sheet.
+
+So the row **is** a `ShareLink`. That has a real consequence worth stating, because it is what
+drives the rest of the shape: `ShareLink` needs its item at init, so it cannot write the file
+lazily on tap. The CSV is therefore written once in `.task` when the sheet appears, and the row
+renders "Preparing export…" until it exists.
+
+Two smaller things fell out of the same pass. The set count was `try? export.loggedSetCount()`
+inline in `body` — a `COUNT(*)` over `loggedSets` on **every body evaluation**, so flipping the RPE
+toggle re-queried the table. Hoisted into `@State`, read once. And the write is synchronous on the
+main actor: `Task.detached` is a `sending`-closure error here because `ExportStore` arrives already
+main-actor-isolated, and the invariant that actually matters is "no database work *per render*",
+not "no database work". 450 sets produced a 72 KB file, so the read is milliseconds; if a log ever
+grows enough to be felt, make `ExportStore` `Sendable` and move it off the actor.
+
+Verified on device end to end: one tap, the system share sheet, "Save to Files", 72 KB, Settings
+still behind it.
+
+### 38. A user movement may inherit muscles from a curated one, but never its evidence
+
+A movement typed at the rack credited exactly one muscle, `direct`, `low` certainty. So
+`Nautilus High Lever Row` credited lats and nothing else, while the curated `Chest Supported Row` it
+is plainly a variant of credits rear delts, upper back and biceps too. Every weekly figure that
+movement touched was quietly short — and for a lifter whose gym is mostly brand-specific machines,
+that is most of their training.
+
+`NewExerciseSheet` now offers a "Based on" template. The muscles and their roles carry over. The
+**provenance does not**: `InheritedAttribution.inherited(from:primary:)` rewrites every contribution
+to the user source with no citation, and caps certainty at `.low` by `min` — so a contribution that
+was already `.unevaluated` stays `.unevaluated` rather than being promoted on its way through. The
+literature cited for a chest-supported row is evidence about *that* movement; a lifter asserting
+their lever row is like it is one person's judgement about one machine.
+
+Two things make this honest rather than merely convenient, and both came out of an audit that
+refuted the spec's original reasoning. The spec said "Phase 2 lives or dies on the
+source-and-citation swap." **That was backwards.** Nothing outside the JSON encoder reads
+`.certainty`, `.sourceID` or `.citation`, so the swap alone changes nothing anyone sees, while a
+silent copy would mint up to eight per-muscle arithmetic facts the lifter never saw. That is
+strictly worse than the single guess it replaced, because the single guess *under*-claims.
+
+So: the inherited muscles are shown as rows that can be switched off, and only what is left on is
+written — the endorsement is real, not implied. And the rewrite happens at the **store** boundary,
+not in the sheet, so no future caller can write an inherited attribution that still carries the
+trial's provenance. Stabilisers are dropped: they credit nothing, and the sheet lists credited
+muscles only, so inheriting one would be a claim that never appeared on screen to be refused.
+
+The same audit found `SetCounting.certaintyCeiling` had been dead its whole life — `public`, called
+only by its own tests — while `VolumeAnalyzer.doseResponse` computed the identical rule inline.
+`doseResponse` now calls it, and the ~25-set cut point is read from `studiedRangeCeiling` instead of
+being retyped as a literal.
+
+### 39. A suggested machine name may resolve to a machine here, never merge one from elsewhere
+
+Machine names are now offered back when adding one, because the same machine at a second gym was
+retyped from scratch and "Hammer Strength Iso-Lateral Row" is not a name anyone retypes identically.
+A near miss did not fail loudly — it silently created a third machine with a third empty history,
+and invariant #10 forbids merging two machines, so there was no way back.
+
+The rule is a **partition**, and it is the whole design:
+
+- A name already at **this** gym resolves to that machine. Autocomplete makes re-picking one likely
+  rather than rare, and an unconditional insert would answer "that one" with a brand-new machine
+  holding no history. Matching normalises case and spacing, because a lifter at a rack does not
+  reproduce either.
+- A name from **another** gym creates a new machine, and the sheet says so in as many words: its
+  loads start empty and are not shared with the one at the other gym. Anything vaguer and the
+  feature reads as "merge my machines", which is the one thing #10 forbids.
+
+`GymStore.resolveMachine(at:named:)` is the only sanctioned path from a name field to a machine;
+calling `createMachine` straight from user input is now the bug. `setMachineArchived` also gained the
+unarchive direction it never had — archiving from the new library screen would otherwise be a
+one-way door, which is exactly how a mistyped duplicate becomes permanent.
+
+### 40. Every declaration in `HardsetStore` must say `nonisolated`, and a test now enforces it
+
+This module is built with `.defaultIsolation(MainActor.self)`, which is why every store type in it
+spells out `public nonisolated struct`. An **extension** that omits the same word is silently
+`@MainActor`, and the compiler says nothing — the type's API is then split across two isolation
+domains, most of it callable from anywhere and part of it main-actor-only.
+
+It does not fail at build time. It fails as **SIGTRAP with no message**, apparently *on entry* to
+the function, so nothing logged inside it ever prints and the crash reads as though the call site
+were at fault. The triggers are closures handed to the standard library — `filter`, `sorted`;
+`map(\.someKeyPath)` and plain `for` loops do not trip it, because a key path carries no isolation
+and a loop body is not a closure.
+
+That combination is genuinely misleading: it looks exactly like a codegen bug, and it survives
+`swift package clean`. Writing `MachineLibrary.swift` cost hours to it, and every intermediate
+"fix" — loops instead of `filter`, two sort passes instead of one comparator, a struct instead of a
+tuple — only moved the symptom while leaving a store that claims to be callable from any context and
+is not. The diagnosis only became visible when marking the extension `nonisolated` finally made the
+compiler name a main-actor-isolated call.
+
+`IsolationContractTests` sweeps `Sources/HardsetStore` and fails when an extension of a nonisolated
+store type declares members that are neither. `extension GymStore` in `GymStore.swift` was already
+carrying the same latent defect and is now fixed.

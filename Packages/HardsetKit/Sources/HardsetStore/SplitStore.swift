@@ -81,6 +81,21 @@ public nonisolated struct SplitStore {
     }
   }
 
+  /// Plans that have been put away, newest first.
+  ///
+  /// This exists so `isArchived` is a round trip rather than a one-way door. A soft delete with no
+  /// restore path is worse than a hard one: the rows keep syncing to iCloud while the lifter has
+  /// been told the plan is gone, and "archived" becomes a word for "invisible forever".
+  public func archivedSplits() throws -> [SplitRecord] {
+    try database.read { db in
+      try Split
+        .where { $0.isArchived }
+        .order { $0.createdAt.desc() }
+        .fetchAll(db)
+        .map(SplitRecord.init(row:))
+    }
+  }
+
   public func split(_ id: SplitID) throws -> SplitRecord? {
     try database.read { db in
       try Split.where { $0.id.eq(id.rawValue) }.fetchOne(db).map(SplitRecord.init(row:))

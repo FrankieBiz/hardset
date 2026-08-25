@@ -88,7 +88,7 @@ struct ProgressionStoreTests {
     let history = try progression.history(for: exercise)
     #expect(history.machineChanges.count == 1)
     #expect(history.machineChanges[0].heaviestLoadDeltaKg == -25)
-    #expect(history.machineChanges[0].explanation.contains("difference between the machines"))
+    #expect(history.machineChanges[0].explanation(in: .kilograms).contains("difference between the machines"))
   }
 
   @Test("Warm-ups never reach the history")

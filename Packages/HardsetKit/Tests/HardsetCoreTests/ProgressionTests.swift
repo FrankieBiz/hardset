@@ -128,8 +128,8 @@ struct ProgressionTests {
     #expect(change.toMachineID == cybex)
     #expect(change.heaviestLoadDeltaKg == -20)
     // And it refuses to call the drop a regression.
-    #expect(change.explanation.contains("difference between the machines"))
-    #expect(!change.explanation.lowercased().contains("weaker"))
+    #expect(change.explanation(in: .kilograms).contains("difference between the machines"))
+    #expect(!change.explanation(in: .kilograms).lowercased().contains("weaker"))
   }
 
   @Test("Staying on one machine produces no changes")
@@ -160,7 +160,25 @@ struct ProgressionTests {
     let all = samples([(1, hammer, 100, 8, 0), (2, cybex, 100, 8, 7)])
     let change = try #require(ProgressionAnalyzer.machineChanges(from: all).first)
     #expect(change.heaviestLoadDeltaKg == 0)
-    #expect(change.explanation.contains("coincidence, not a comparison"))
+    #expect(change.explanation(in: .kilograms).contains("coincidence, not a comparison"))
+  }
+
+  /// It printed "kg" unconditionally, so a lifter reading in pounds saw "the load is 11.5 kg lower"
+  /// above a chart axis labelled `lb` -- and, once "Your best on each" shipped underneath, directly
+  /// above the same difference correctly stated as 25.3 lb. Found by running the app in pounds,
+  /// not by reading the code.
+  @Test("The machine-change sentence is written in the lifter's unit, not always kilograms")
+  func explanationConvertsToTheDisplayUnit() {
+    let change = MachineChange(
+      date: Date(timeIntervalSince1970: 0),
+      fromMachineID: MachineID(),
+      toMachineID: MachineID(),
+      heaviestLoadDeltaKg: -11.5
+    )
+    let pounds = change.explanation(in: .pounds)
+    #expect(pounds.contains("25.4 lb lower") || pounds.contains("25.3 lb lower"), "\(pounds)")
+    #expect(!pounds.contains("kg"))
+    #expect(change.explanation(in: .kilograms).contains("11.5 kg lower"))
   }
 
   @Test("A move to or from free weights is a machine change too")

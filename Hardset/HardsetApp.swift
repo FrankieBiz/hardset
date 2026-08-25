@@ -127,9 +127,19 @@ private struct RootView: View {
       do {
         syncEngine = try HardsetDatabase.makeSyncEngine(for: database, delegate: syncDelegate)
       } catch {
-        // A schema the SyncEngine rejects is a programmer error caught by `SchemaTests`, not
-        // something a user can act on — so run local-only rather than crash.
-        assertionFailure("SyncEngine rejected the schema: \(String(describing: error))")
+        // Run local-only rather than crash. Everything a workout touches — logging, the rest
+        // timer, history, plans — is local, so a sync engine that cannot start costs sync and
+        // nothing else.
+        //
+        // Deliberately NOT `assertionFailure`. That reads as "this can only be a schema bug caught
+        // by `SchemaTests`", and it is not: iCloud and push are **paid**-membership capabilities,
+        // so a build signed with a free personal team reaches here every single launch. An
+        // assertion would turn the one build configuration a developer runs by default into a
+        // crash on launch, on the day they were trying to test the app in a gym.
+        //
+        // A schema mistake still fails loudly where it should — in `SchemaTests`, on the host,
+        // before anything is installed.
+        print("Hardset: running local-only, sync unavailable — \(String(describing: error))")
       }
     }
   }

@@ -45,11 +45,16 @@ public struct MachinePickerView: View {
   /// there was no second chance to supply it. So the increment was always nil, the label never
   /// appeared, and the ± control on the keypad could never use the equipment's real step.
   private let onSetIncrement: ((MachineID) -> Void)?
+  /// What the stack step is shown in. Defaulted so existing call sites keep compiling, but every
+  /// real one passes the lifter's unit -- this row printed "moves in 2.5 kg steps" to someone
+  /// reading in pounds everywhere else in the app.
+  private let unit: WeightUnit
 
   public init(
     recent: [MachineOption],
     others: [MachineOption] = [],
     selected: MachineID?,
+    unit: WeightUnit = .kilograms,
     onSelect: @escaping (MachineID?) -> Void,
     onAddMachine: (() -> Void)? = nil,
     onRename: ((MachineID) -> Void)? = nil,
@@ -59,6 +64,7 @@ public struct MachinePickerView: View {
     self.recent = recent
     self.others = others
     self.selected = selected
+    self.unit = unit
     self.onSelect = onSelect
     self.onAddMachine = onAddMachine
     self.onRename = onRename
@@ -126,7 +132,7 @@ public struct MachinePickerView: View {
             .foregroundStyle(Tokens.Color.textPrimary)
           if let increment = option.stackIncrementKg {
             // Stated because it constrains what a progression suggestion may propose.
-            Text("moves in \(Self.format(increment)) kg steps")
+            Text("moves in \(Self.format(unit.displayValue(fromKilograms: increment))) \(unit.abbreviation) steps")
               .font(Tokens.Text.caption)
               .foregroundStyle(Tokens.Color.textSecondary)
           }
