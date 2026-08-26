@@ -21,7 +21,16 @@ def oid(name):
     _used[name] = v
     return v
 
-BUNDLE_ID = "com.hardset.app"
+# The shipping identity. Overridable, because a free personal team registers the App ID on the fly
+# and Apple refuses one another account already owns -- "cannot be registered to your development
+# team because it is not available". That is a signing accident, not a decision about what this app
+# is called, so it does not belong in a commit.
+#
+#   HARDSET_BUNDLE_ID   Reverse-DNS identifier for a local build, e.g. com.yourname.hardset.
+#
+# The widget and test bundles derive from it, so overriding this moves all three together. Note the
+# free-account limit of 10 App IDs per 7 days: pick one and keep it rather than trying several.
+BUNDLE_ID = os.environ.get("HARDSET_BUNDLE_ID", "").strip() or "com.hardset.app"
 IOS_MIN = "26.1"
 SWIFT_VERSION = "6.0"
 
@@ -34,6 +43,8 @@ SWIFT_VERSION = "6.0"
 #                     a device at all; the simulator does not care.
 #   HARDSET_LOCAL     Set to 1 (or pass --local) to build WITHOUT the CloudKit and push
 #                     entitlements.
+#   HARDSET_BUNDLE_ID Reverse-DNS bundle identifier, when the default is already registered to
+#                     somebody else's team. See the constant below.
 #
 # Why --local exists. iCloud/CloudKit and push notifications require a **paid** Apple Developer
 # Program membership. A free Apple ID gets a "personal team" that can sign an app onto your own
