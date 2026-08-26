@@ -23,9 +23,23 @@ four independent reasons; see the `fix(app)` commit. Two are worth remembering:
 
 - [x] Builds for the simulator via headless `xcodebuild` (the Simulator MCP `build` tool passes
       `-skipMacroValidation`, which also bypasses the macro trust prompt).
-- [ ] Open `Hardset.xcodeproj` in Xcode once and click **Trust & Enable** for the macros from
-      `swift-syntax`, `swift-structured-queries` and `swift-perception`. Only needed for building
-      inside Xcode; the headless path does not prompt.
+- [ ] Open `Hardset.xcodeproj` in Xcode once and click **Trust & Enable** for each macro. Only
+      needed for building inside Xcode; the headless path passes `-skipMacroValidation` and never
+      prompts, which is why this box can sit unchecked while the app builds and ships fine.
+
+      Four packages, confirmed from the actual Xcode issue list (an earlier version of this line
+      named `swift-syntax`, which does not appear — it is a transitive dependency, not a macro
+      target the project uses directly):
+
+      * `DependenciesMacrosPlugin` — swift-dependencies
+      * `PerceptionMacros` — swift-perception
+      * `StructuredQueriesMacros` — swift-structured-queries
+      * `StructuredQueriesSQLiteMacros` — swift-structured-queries
+
+      Xcode reports them as four warnings *and* three errors, which is one issue reported twice at
+      different severities, not seven problems. Trust persists in
+      `~/Library/org.swift.swiftpm/security/macros.json`, keyed by fingerprint — so it is a
+      once-per-machine step that a package version bump will ask about again.
 - [ ] Build and run on a **physical device** — still never done. Signing needs a team identifier
       the sandbox cannot supply.
 
