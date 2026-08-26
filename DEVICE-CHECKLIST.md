@@ -43,6 +43,30 @@ four independent reasons; see the `fix(app)` commit. Two are worth remembering:
 - [ ] Build and run on a **physical device** — still never done. Signing needs a team identifier
       the sandbox cannot supply.
 
+      **Regenerate before opening Xcode, and never commit the result:**
+
+      ```
+      HARDSET_TEAM_ID=<your 10-char team> python3 Tools/generate_project.py --local
+      ```
+
+      Two failures happen without it, and they look like one:
+
+      * `DEVELOPMENT_TEAM = 7R2SW36YX3` was **committed** to the project on 2026-08-24, against this
+        script's own rule that a team identifier is account-specific and a checked-in one is wrong
+        for everybody except its owner. On any other machine Xcode reports *"No Account for Team
+        7R2SW36YX3"* on all six build configurations. Fixed: the committed project now carries no
+        team at all, and supplying one is a local step.
+      * Selecting a team in Xcode's UI writes it into the two **app-target** configurations only —
+        the ones that also carry `CODE_SIGN_ENTITLEMENTS`. The widget, tests and project-level
+        configurations keep whatever was there, so the project ends up with two different team IDs
+        and half the errors appear to be fixed. Regenerating is what makes all six agree.
+
+      `--local` is not optional on a free account: the entitlements request CloudKit and
+      `aps-environment`, and a personal team cannot grant either, so Xcode refuses to create a
+      profile at all rather than degrading. Dropping them costs sync and nothing a gym session
+      touches. `UIBackgroundModes: remote-notification` stays in `Info.plist` and is inert without
+      the entitlement — harmless, and not worth a second Info.plist to strip.
+
 ## A2. Verified in the simulator (not a substitute for the device gate)
 
 Walked end to end on iPhone 17 / iOS 26.4, with the database checked directly after each step:
