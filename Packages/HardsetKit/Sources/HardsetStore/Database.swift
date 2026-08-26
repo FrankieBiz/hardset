@@ -10,13 +10,51 @@ public nonisolated enum HardsetDatabase {
   /// Opens the on-disk database and runs migrations.
   ///
   /// Must be called exactly once per process, from `App.init()`.
-  public static func open(containerIdentifier: String? = nil) throws -> any DatabaseWriter {
+  ///
+  /// ## Attaching the sync metadatabase is optional, and that is the whole point
+  ///
+  /// `attachMetadatabase` resolves its container from the **iCloud entitlement** and throws
+  /// `SchemaError.noCloudKitContainer` when there is none. That call used to be unconditional, so
+  /// a build signed without the entitlement could not open its database *at all* -- `open()` threw,
+  /// `HardsetApp` recorded a store failure, and the app launched straight into
+  /// `StoreUnavailableView` telling the lifter their training history could not be read.
+  ///
+  /// Which is exactly the build `Tools/generate_project.py --local` produces, and the one anybody
+  /// with a free personal team must use: iCloud and push are paid-membership capabilities, so the
+  /// entitlements are dropped. That script's own comment promised `--local` "costs exactly one
+  /// thing: sync". **It cost the entire app**, and nothing caught it: the host suite runs in a
+  /// non-`.live` dependency context, where SQLiteData falls back to a synthetic `"container"` and
+  /// the attach always succeeds. Only a real signed build on real hardware reaches the throw.
+  ///
+  /// So a failure here is tolerated and the app runs local-only. Nothing outside `SyncEngine`
+  /// reads the `sqlitedata_icloud` schema, so an unattached metadatabase costs sync and nothing
+  /// else -- which is what the promise should have said. `makeSyncEngine` then fails for the same
+  /// reason and `HardsetApp` already reports *that* one, so the condition stays visible without
+  /// this layer printing per connection.
+  ///
+  /// The error is caught rather than matched because `SyncEngine.SchemaError` is `package`-scoped
+  /// and unreachable from here.
+  ///
+  /// - Parameter attachMetadatabase: Injectable purely so the failure above can be tested. There is
+  ///   no other way to reach it: the real call cannot be made to fail from a test process.
+  public static func open(
+    containerIdentifier: String? = nil,
+    attachMetadatabase: @escaping @Sendable (Database, String?) throws -> Void = {
+      try $0.attachMetadatabase(containerIdentifier: $1)
+    }
+  ) throws -> any DatabaseWriter {
     var configuration = Configuration()
     // Required for ON DELETE CASCADE / SET NULL to actually fire.
     configuration.foreignKeysEnabled = true
     configuration.prepareDatabase { db in
-      // Attaches SQLiteData's sync metadatabase under the `sqlitedata_icloud` schema.
-      try db.attachMetadatabase(containerIdentifier: containerIdentifier)
+      // Attaches SQLiteData's sync metadatabase under the `sqlitedata_icloud` schema, when this
+      // build is entitled to one. See the note above: this must not be fatal.
+      do {
+        try attachMetadatabase(db, containerIdentifier)
+      } catch {
+        // Local-only. Deliberately silent here; `HardsetApp` reports the same condition once when
+        // `makeSyncEngine` fails, and this closure runs per connection.
+      }
     }
 
     // Spelled with the module prefix on purpose: inside a `DependencyValues` extension the

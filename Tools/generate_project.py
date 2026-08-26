@@ -49,9 +49,15 @@ SWIFT_VERSION = "6.0"
 # Why --local exists. iCloud/CloudKit and push notifications require a **paid** Apple Developer
 # Program membership. A free Apple ID gets a "personal team" that can sign an app onto your own
 # phone for 7 days, but cannot grant those capabilities -- so with the normal entitlements file the
-# install fails outright. `--local` drops the entitlements, which costs exactly one thing: sync.
-# The app already runs local-only when the sync engine cannot start (see `HardsetApp.swift`), so
-# everything a gym session touches -- logging, the rest timer, history, plans -- is unaffected.
+# install fails outright. `--local` drops the entitlements, which costs one thing: sync.
+#
+# That sentence used to say "exactly one thing" and was **false until 2026-08-25**. Dropping the
+# entitlement also removes the CloudKit container that `HardsetDatabase.open` attached its sync
+# metadatabase to, and that attach was unconditional -- so the database could not be opened at all,
+# and the first device build this app ever had launched straight into "Can't open your training
+# history". `open()` tolerates it now and `LocalOnlyLaunchTests` pins the behaviour; only then did
+# the sentence become true. Everything a gym session touches -- logging, the rest timer, history,
+# plans -- is local, and unaffected.
 TEAM_ID = os.environ.get("HARDSET_TEAM_ID", "").strip()
 LOCAL_ONLY = "--local" in sys.argv or os.environ.get("HARDSET_LOCAL") == "1"
 
