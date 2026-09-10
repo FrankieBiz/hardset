@@ -31,15 +31,26 @@ public struct MethodologyIndexScreen: View {
             Button {
               showing = source
             } label: {
-              VStack(alignment: .leading, spacing: Tokens.Spacing.hairline) {
-                Text(source.title)
-                  .font(Tokens.Text.label)
-                  .foregroundStyle(Tokens.Color.textPrimary)
-                if source.citation != nil {
-                  Text("Cited")
-                    .font(Tokens.Text.caption)
-                    .foregroundStyle(Tokens.Color.textSecondary)
+              HStack(spacing: Tokens.Spacing.snug) {
+                VStack(alignment: .leading, spacing: Tokens.Spacing.hairline) {
+                  Text(source.title)
+                    .font(Tokens.Text.label)
+                    .foregroundStyle(Tokens.Color.textPrimary)
+                  if source.citation != nil {
+                    Text("Cited")
+                      .font(Tokens.Text.caption)
+                      .foregroundStyle(Tokens.Color.textSecondary)
+                  }
                 }
+                Spacer(minLength: 0)
+                // `.plain` strips the tint and a Button gets no system disclosure, so the whole
+                // row was tappable with nothing saying so -- on the screen whose entire purpose is
+                // that these get opened. `info.circle` rather than a chevron because the
+                // destination is a sheet, not a push, and it is the same glyph this content
+                // already carries beside a number in situ.
+                Image(systemName: "info.circle")
+                  .font(Tokens.Text.caption)
+                  .foregroundStyle(Tokens.Color.textSecondary)
               }
               .frame(maxWidth: .infinity, alignment: .leading)
               .contentShape(Rectangle())

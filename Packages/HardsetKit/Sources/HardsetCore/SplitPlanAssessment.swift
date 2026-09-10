@@ -95,6 +95,24 @@ public struct SplitPlanAssessment: Hashable, Sendable {
   ///
   /// Modelled muscles credited by nothing are excluded: they belong in `uncreditedMuscles`, and
   /// reporting them twice would double-count one gap as two findings.
+  /// Days crediting each modelled muscle, in the taxonomy's own order.
+  ///
+  /// A **readout, never a ranking.** `creditingDays` carries the reason in its own note: the app has
+  /// no registered finding about training frequency, so a UI may show these counts and may not sort
+  /// by them, call one "fewest", or attach any verdict. Ordered by `Muscle.allCases` for that exact
+  /// reason -- ordering by count would be the ranking the note forbids.
+  ///
+  /// Restricted to `.modelled`, because the spec permits no claim about the other muscles beyond
+  /// zero-versus-nonzero, and a per-day count is a claim beyond it.
+  ///
+  /// Muscles nothing credits are omitted: their absence is already stated by
+  /// `uncreditedMuscles(excluding:)`, and a row of zero would say it twice.
+  public var modelledDayCredits: [(muscle: Muscle, days: Int)] {
+    Muscle.allCases
+      .filter { $0.tier == .modelled && days(crediting: $0) > 0 }
+      .map { (muscle: $0, days: days(crediting: $0)) }
+  }
+
   public var leastCreditedModelledMuscles: [Muscle] {
     let credited = Muscle.allCases.filter { $0.tier == .modelled && movements(crediting: $0) > 0 }
     guard let fewest = credited.map({ movements(crediting: $0) }).min() else { return [] }

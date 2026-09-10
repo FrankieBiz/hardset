@@ -45,6 +45,50 @@ struct VolumeStoreTests {
     }
   }
 
+  /// The floor the volume tab stops browsing at. Without it, paging back runs into empty windows
+  /// forever and "Nothing logged" stops distinguishing a rest week from a week before you started.
+  @Test("The oldest countable set is where the record begins")
+  func earliestCountableSetBoundsTheRecord() throws {
+    let (database, logger, volume) = try seeded()
+    #expect(try volume.earliestCountableSet() == nil)
+
+    let bench = try exerciseID(database, slug: "barbell-bench-press")
+    let oldest = now.addingTimeInterval(-90 * 86_400)
+    let session = try logger.startSession(at: oldest)
+    try log(logger, session, bench, sets: 2, at: oldest)
+    try logger.finishSession(session, at: oldest.addingTimeInterval(3_600))
+
+    let later = try logger.startSession(at: now.addingTimeInterval(-3_600))
+    try log(logger, later, bench, sets: 2, at: now.addingTimeInterval(-3_600))
+    try logger.finishSession(later, at: now)
+
+    // The first set of the oldest session, not the oldest session's start and not the newest set.
+    #expect(try volume.earliestCountableSet() == oldest)
+  }
+
+  /// The floor has to agree with what the report counts, or the volume tab offers an earlier window
+  /// whose only content is a warm-up and then says nothing was logged in it.
+  @Test("A warm-up does not move where countable training begins")
+  func earliestIgnoresWarmups() throws {
+    let (database, logger, volume) = try seeded()
+    let bench = try exerciseID(database, slug: "barbell-bench-press")
+
+    let warmupAt = now.addingTimeInterval(-30 * 86_400)
+    let old = try logger.startSession(at: warmupAt)
+    try log(logger, old, bench, sets: 1, at: warmupAt, isWarmup: true)
+    try logger.finishSession(old, at: warmupAt.addingTimeInterval(600))
+    #expect(try volume.earliestCountableSet() == nil)
+
+    let workingAt = now.addingTimeInterval(-10 * 86_400)
+    let later = try logger.startSession(at: workingAt)
+    try log(logger, later, bench, sets: 1, at: workingAt, isWarmup: true)
+    try log(logger, later, bench, sets: 2, at: workingAt.addingTimeInterval(300))
+    try logger.finishSession(later, at: workingAt.addingTimeInterval(3_600))
+
+    // The working set five minutes in, not the warm-up that opened the session.
+    #expect(try volume.earliestCountableSet() == workingAt.addingTimeInterval(300))
+  }
+
   @Test("Fractional credit reaches the report through the database")
   func fractionalCreditEndToEnd() throws {
     let (database, logger, volume) = try seeded()

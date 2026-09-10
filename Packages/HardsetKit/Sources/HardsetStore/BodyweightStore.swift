@@ -31,7 +31,7 @@ public nonisolated struct BodyweightRecord: Hashable, Sendable, Identifiable {
 /// `nonisolated`, like every other store here: these run on GRDB's database queues, and isolating
 /// them to the main actor would force the whole app -- and the test suite -- to hop actors to read a
 /// row.
-public nonisolated struct BodyweightStore {
+public nonisolated struct BodyweightStore: Sendable {
   private let database: any DatabaseWriter
 
   public init(database: any DatabaseWriter) {

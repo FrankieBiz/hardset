@@ -24,7 +24,7 @@ public nonisolated struct PersistedRestTimer: Hashable, Sendable {
 ///
 /// Device-local by design. It is not in `syncedTableNames`, and it must not be: two phones do not
 /// share one rest period, and a deadline pushed from another device would be actively wrong.
-public nonisolated struct RestTimerStore {
+public nonisolated struct RestTimerStore: Sendable {
   private let database: any DatabaseWriter
 
   /// The one row. A fixed id rather than "the newest row", so a failed write cannot leave two

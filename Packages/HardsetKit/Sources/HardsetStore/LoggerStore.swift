@@ -18,7 +18,7 @@ import SQLiteData
 // `nonisolated` is deliberate, matching the rest of this module: the work happens on GRDB's
 // database queues, and isolating it to the main actor would force every caller to hop for
 // no reason.
-public nonisolated struct LoggerStore {
+public nonisolated struct LoggerStore: Sendable {
   private let database: any DatabaseWriter
 
   public init(database: any DatabaseWriter) {
@@ -31,6 +31,7 @@ public nonisolated struct LoggerStore {
   public func startSession(
     gymID: GymID? = nil,
     title: String = "",
+    splitDayID: SplitDayID? = nil,
     at startedAt: Date
   ) throws -> SessionID {
     let id = SessionID()
@@ -56,7 +57,8 @@ public nonisolated struct LoggerStore {
           title: title,
           notes: "",
           startedAt: startedAt,
-          finishedAt: nil
+          finishedAt: nil,
+          splitDayID: splitDayID?.rawValue
         )
       }
       .execute(db)

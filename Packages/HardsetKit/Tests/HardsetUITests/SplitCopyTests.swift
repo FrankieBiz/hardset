@@ -1,4 +1,5 @@
 import Foundation
+import HardsetCore
 import Testing
 
 @testable import HardsetUI
@@ -102,15 +103,53 @@ struct SplitCopyTests {
     #expect(!text.contains("Spreads the"))
   }
 
-  @Test("Confirmation says which movements are about to be arranged")
+  /// The lifter's own intended set count, and the silence that is the default.
+  ///
+  /// nil must render as nothing at all. A row that showed "0 sets planned" or a suggested figure
+  /// would be the app having a view on volume, which is the one thing the column may not become.
+  @Test("An intended set count reads as the lifter's own, and says nothing when unset")
+  func targetSetsCopy() {
+    func row(_ sets: Int?) -> PlannedMovementRow {
+      PlannedMovementRow(
+        id: SplitEntryID(rawValue: UUID()),
+        exerciseID: ExerciseID(rawValue: UUID()),
+        name: "Bench Press",
+        creditedMuscleNames: ["Chest"],
+        machineID: nil,
+        machineName: nil,
+        isUnattributed: false,
+        targetSets: sets
+      )
+    }
+
+    #expect(row(nil).targetSetsText == nil)
+    #expect(row(0).targetSetsText == nil)
+    #expect(row(1).targetSetsText == "1 set planned")
+    #expect(row(4).targetSetsText == "4 sets planned")
+
+    // The markup form is only honoured for a LocalizedStringKey; it shipped verbatim once.
+    let interpolated = row(3).targetSetsText ?? ""
+    #expect(!interpolated.contains("inflect"))
+  }
+
+  /// A confirmation has to describe what the button really does.
+  ///
+  /// This used to pin "replaces the current arrangement" and nothing more, which was true and
+  /// materially incomplete: dealing also discarded every machine the lifter had named and reset
+  /// their day names to "Day 1". Both are carried across now, so the copy names them — and these
+  /// expectations exist so a future change cannot quietly drop either the behaviour or the promise.
+  @Test("Confirmation says what dealing moves and what it keeps")
   func confirmationMatchesTheSource() {
     let rearrange = SplitPlannerView.dealConfirmation(.planContents(count: 5))
-    #expect(rearrange.contains("replaces the current arrangement"))
-    // Reassures about the thing a lifter would actually fear losing.
+    #expect(rearrange.contains("onto different days"))
+    // Reassures about the things a lifter would actually fear losing.
     #expect(rearrange.contains("logged workouts are not affected"))
+    #expect(rearrange.contains("Machines you have named"))
+    #expect(rearrange.contains("day names are kept"))
 
     let seed = SplitPlannerView.dealConfirmation(.loggedHistory(count: 5))
     #expect(seed.contains("have not trained"))
+    #expect(seed.contains("day names are kept"))
   }
 
   // MARK: - The refusals, in the words the lifter reads
@@ -150,5 +189,48 @@ struct SplitCopyTests {
       )
     )
     #expect(text == "12 movements across 3 days.")
+  }
+
+  @Test("Plan building and redistribution are two explicit jobs")
+  func planBuilderExplainsItsTwoJobs() {
+    #expect(SplitPlannerView.planPurposeText.contains("reusable"))
+    #expect(SplitPlannerView.manualBuildButtonText == "Build it myself")
+    #expect(SplitPlannerView.historyStartButtonText == "Start from training history")
+    #expect(SplitPlannerView.redistributionSectionTitle == "Redistribute exercises")
+    #expect(SplitPlannerView.redistributionButtonText(3) == "Redistribute across 3 days")
+
+    let redistribution = SplitPlannerView.redistributionExplanation(movementCount: 8)
+    #expect(redistribution.contains("8 movements already in this plan"))
+    #expect(redistribution.contains("similar-muscle"))
+    #expect(redistribution.contains("does not add or remove"))
+    #expect(redistribution.contains("does not decide your sets"))
+
+    let history = SplitPlannerView.historyStartExplanation(movementCount: 8)
+    #expect(history.contains("8 movements from completed workouts"))
+    #expect(history.contains("does not change completed workouts"))
+  }
+
+  @Test("Reducing plan days discloses the history link that is removed")
+  func fewerDaysWarnsAboutRemovedDayHistory() {
+    let text = SplitPlannerView.redistributionExplanation(
+      movementCount: 8, currentDayCount: 4, targetDayCount: 3)
+    #expect(text.contains("weights and reps stay"))
+    #expect(text.contains("removed day"))
+    #expect(text.contains("rotation history"))
+  }
+
+  @Test("The builder state never makes history start look like redistribution")
+  func planBuilderModeSeparatesTheTwoFlows() {
+    #expect(PlanBuilderMode(planMovementCount: 0, historyMovementCount: 8) == .empty(historyCount: 8))
+    #expect(PlanBuilderMode(planMovementCount: 0, historyMovementCount: 0) == .empty(historyCount: 0))
+    #expect(PlanBuilderMode(planMovementCount: 4, historyMovementCount: 8) == .populated)
+  }
+
+  @Test("Adding an empty day keeps the history-based setup flow visible")
+  func emptyDayStillUsesEmptyBuilderMode() {
+    let emptyDay = PlannedDay(
+      id: SplitDayID(), name: "Day 1", subtitle: "Nothing planned", movements: [])
+
+    #expect(SplitPlannerView.builderMode(for: [emptyDay], historyMovementCount: 8) == .empty(historyCount: 8))
   }
 }

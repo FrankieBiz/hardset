@@ -28,6 +28,9 @@ public struct ExercisePickerView: View {
 
   @Binding private var query: String
   private let entries: [CatalogEntry]
+  /// True while the caller is reading the catalogue. Prevents an empty result from briefly being
+  /// presented as a real "not found" answer while a search is still in flight.
+  private let isLoading: Bool
   private let onSelect: (CatalogEntry) -> Void
   /// Defines a movement the catalogue does not have. `nil` hides the affordance.
   ///
@@ -38,6 +41,7 @@ public struct ExercisePickerView: View {
   public init(
     query: Binding<String>,
     entries: [CatalogEntry],
+    isLoading: Bool = false,
     recent: [ExerciseID] = [],
     availableHere: Set<ExerciseID> = [],
     gymName: String? = nil,
@@ -46,6 +50,7 @@ public struct ExercisePickerView: View {
   ) {
     self._query = query
     self.entries = entries
+    self.isLoading = isLoading
     self.recent = recent
     self.availableHere = availableHere
     self.gymName = gymName
@@ -55,7 +60,10 @@ public struct ExercisePickerView: View {
 
   public var body: some View {
     List {
-      if entries.isEmpty {
+      if entries.isEmpty, isLoading {
+        ProgressView("Searching movements…")
+          .frame(maxWidth: .infinity, minHeight: 180)
+      } else if entries.isEmpty {
         // Names the query rather than showing a bare "No results", and offers the action that
         // actually resolves it.
         ContentUnavailableView {
@@ -67,10 +75,11 @@ public struct ExercisePickerView: View {
               : "Nothing in the catalogue matches “\(query)”."
           )
         } actions: {
-          // The action that actually resolves it. The empty state named the problem and offered
-          // nothing, on a catalogue that is knowingly a third of its intended size.
+          // The action that actually resolves it. It can save the typed name as both a movement and
+          // a machine when the caller has a current gym, so equipment-led names are not a second
+          // setup flow.
           if let onCreate {
-            Button("Add it yourself", action: onCreate)
+            Button("Add movement or machine", action: onCreate)
           }
         }
       } else {
@@ -97,11 +106,21 @@ public struct ExercisePickerView: View {
       }
     }
     .searchable(text: $query, prompt: "Search movements")
+    // A movement search is matched case- and diacritic-insensitively, so the shift key does nothing
+    // but put a capital in the field and in the "nothing matches ..." sentence that quotes it back.
+    // Autocorrect is worse: gym vocabulary is not in the dictionary, and "pec" was being offered
+    // corrections over a list that already had Pec Deck in it.
+    //
+    // Capitalisation is iOS-only, the same reason `NameEntrySheet` guards `keyboardType`.
+    #if os(iOS)
+      .textInputAutocapitalization(.never)
+    #endif
+    .autocorrectionDisabled()
     .toolbar {
       if let onCreate {
         ToolbarItem(placement: .primaryAction) {
           Button(action: onCreate) {
-            Label("Your own movement", systemImage: "plus")
+            Label("New movement or machine", systemImage: "plus")
           }
         }
       }

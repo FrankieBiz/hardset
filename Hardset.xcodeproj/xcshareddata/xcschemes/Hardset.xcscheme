@@ -15,6 +15,10 @@
             <BuildableReference BuildableIdentifier="primary" BlueprintIdentifier="47006484C7F8FCC897FFA8E2"
                BuildableName="HardsetTests.xctest" BlueprintName="HardsetTests" ReferencedContainer="container:Hardset.xcodeproj"/>
          </TestableReference>
+         <TestableReference skipped="NO">
+            <BuildableReference BuildableIdentifier="primary" BlueprintIdentifier="46F030AFE4BFE0ED784B6067"
+               BuildableName="HardsetAppUITests.xctest" BlueprintName="HardsetAppUITests" ReferencedContainer="container:Hardset.xcodeproj"/>
+         </TestableReference>
       </Testables>
    </TestAction>
    <LaunchAction buildConfiguration="Debug" selectedDebuggerIdentifier="Xcode.DebuggerFoundation.Debugger.LLDB"

@@ -44,6 +44,60 @@ struct SplitPlanAssessmentTests {
     return Fixture(press: press, squat: squat, curl: curl, attribution: attribution)
   }
 
+  // MARK: - Days credited: a readout, never a ranking
+
+  /// `creditingDays` carries its own instruction: a UI "may show this and may not rank it", because
+  /// the app has no registered finding about training frequency. `modelledDayCredits` is the shape
+  /// that can be shown, so these tests pin the three things that keep it honest.
+  @Test("Days credited are reported in the taxonomy's order, not sorted by count")
+  func dayCreditsAreNotRanked() {
+    let f = makeFixture()
+    // Chest lands on one day, quads on two, so a ranked list would put quads first.
+    let plan = SplitPlan(days: [
+      SplitPlanDay(position: 0, name: "Day 1", movements: [f.press, f.squat]),
+      SplitPlanDay(position: 1, name: "Day 2", movements: [f.squat]),
+    ])
+    let credits = plan.assessed(with: f.attribution).modelledDayCredits
+
+    let taxonomyOrder = Muscle.allCases.filter { muscle in credits.contains { $0.muscle == muscle } }
+    #expect(credits.map(\.muscle) == taxonomyOrder)
+
+    // Sorting by count descending would be a ranking, so it must NOT match unless the taxonomy
+    // happens to agree — assert on the counts instead, which is the fact being reported.
+    let quadriceps = credits.first { $0.muscle == .quadriceps }
+    #expect(quadriceps?.days == 2)
+    #expect(credits.first { $0.muscle == .chest }?.days == 1)
+  }
+
+  /// Only the six the dose-response model covers. A per-day count for the other muscles would be a
+  /// claim beyond zero-versus-nonzero, which the spec's section 2 forbids outright.
+  @Test("Days credited covers only the muscles the evidence covers")
+  func dayCreditsAreModelledOnly() {
+    let f = makeFixture()
+    let plan = SplitPlan(days: [
+      SplitPlanDay(position: 0, name: "Day 1", movements: [f.press, f.squat, f.curl])
+    ])
+    let credits = plan.assessed(with: f.attribution).modelledDayCredits
+
+    let allModelled = credits.allSatisfy { $0.muscle.tier == .modelled }
+    #expect(allModelled)
+  }
+
+  /// A muscle nothing credits is already named by `uncreditedMuscles(excluding:)`. A row of zero
+  /// here would say the same thing twice, and invite reading the list as a scoreboard.
+  @Test("A muscle nothing credits is omitted rather than shown as zero")
+  func dayCreditsOmitZero() {
+    let f = makeFixture()
+    let plan = SplitPlan(days: [
+      SplitPlanDay(position: 0, name: "Day 1", movements: [f.curl])
+    ])
+    let credits = plan.assessed(with: f.attribution).modelledDayCredits
+
+    let noZeroes = credits.allSatisfy { $0.days > 0 }
+    #expect(noZeroes)
+    #expect(!credits.contains { $0.muscle == .chest })
+  }
+
   // MARK: - Movements, never sets
 
   /// The load-bearing distinction. A plan records no set counts, so every figure it reports is a

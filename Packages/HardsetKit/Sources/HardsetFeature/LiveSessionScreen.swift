@@ -8,6 +8,21 @@ private struct MachineTarget: Identifiable, Hashable {
   let id: UUID
 }
 
+/// What the lifter last asked the coordinator to do.
+///
+/// The coordinator funnels every failure into one `lastError`, so without this the screen had a
+/// single fallback sentence — "It has not been logged" — and said it after a failed *un*-log, when
+/// the row is still logged. That is the app stating the opposite of what the database holds.
+private enum LiveAction {
+  case log
+  case unlog
+  case removeSlot
+  case removeExercise
+  case note
+  case rename
+  case superset
+}
+
 /// Hooks the app supplies for the rest timer.
 ///
 /// This exists so the composition root can live in a package target that builds on the host.
@@ -90,14 +105,21 @@ public struct LiveSessionScreen: View {
   /// Set when finishing failed and the session is still open, so the user is told rather than
   /// silently returned to a start screen while their workout is stranded.
   @State private var finishFailed = false
+  /// Which coordinator call is being reported on, so the fallback sentence names the right thing.
+  @State private var lastAction: LiveAction?
+  /// Set when the machine list could not be read, so an unreadable gym is not drawn as an empty
+  /// one. Logging stays possible either way.
+  @State private var machineLoadFailed = false
   @State private var pickerQuery = ""
   @State private var pickerEntries: [CatalogEntry] = []
+  @State private var isPickerLoading = false
   /// The exercise whose machine is being chosen. Non-nil presents the picker.
   ///
   /// Wrapped rather than a bare `UUID` because `sheet(item:)` needs `Identifiable`, and retroactively
   /// conforming a Foundation type to get it would leak that conformance to every importer.
   @State private var machineTarget: MachineTarget?
   @State private var machineOptions: (recent: [MachineOption], others: [MachineOption]) = ([], [])
+  @State private var isMachinePickerLoading = false
   @State private var isAddingMachine = false
   private let unit: WeightUnit
   private let tracksRPE: Bool
@@ -151,15 +173,19 @@ public struct LiveSessionScreen: View {
       errorMessage: errorMessage,
       records: coordinator.lastRecords,
       onLogSet: { exerciseStateID, slot in
+        lastAction = .log
         coordinator.logSet(slotID: slot.id, inExercise: exerciseStateID)
       },
       onUnlogSet: { exerciseStateID, slot in
+        lastAction = .unlog
         coordinator.unlogSet(slotID: slot.id, inExercise: exerciseStateID)
       },
       onRemoveSlot: { exerciseStateID, slot in
+        lastAction = .removeSlot
         coordinator.removeSlot(slotID: slot.id, inExercise: exerciseStateID)
       },
       onRemoveExercise: { exerciseStateID in
+        lastAction = .removeExercise
         coordinator.removeExercise(exerciseStateID)
       },
       onAdjustRest: hooks.adjust,
@@ -174,8 +200,14 @@ public struct LiveSessionScreen: View {
       onSelectMachine: canPickMachines ? { machineTarget = MachineTarget(id: $0) } : nil,
       onShowHistory: progression == nil ? nil : { historyTarget = MachineTarget(id: $0) },
       onEditNote: { noteTarget = MachineTarget(id: $0) },
-      onJoinSuperset: { coordinator.joinSupersetWithNext(exerciseStateID: $0) },
-      onLeaveSuperset: { coordinator.leaveSuperset(exerciseStateID: $0) },
+      onJoinSuperset: {
+        lastAction = .superset
+        coordinator.joinSupersetWithNext(exerciseStateID: $0)
+      },
+      onLeaveSuperset: {
+        lastAction = .superset
+        coordinator.leaveSuperset(exerciseStateID: $0)
+      },
       onFinish: finish
     )
     .toolbar {
@@ -222,6 +254,7 @@ public struct LiveSessionScreen: View {
         isMultiline: true,
         onConfirm: { text in
           isNotingSession = false
+          lastAction = .note
           _ = coordinator.setSessionNotes(text)
         },
         onCancel: { isNotingSession = false }
@@ -238,6 +271,7 @@ public struct LiveSessionScreen: View {
         allowsEmpty: true,
         onConfirm: { name in
           isNaming = false
+          lastAction = .rename
           _ = coordinator.rename(to: name)
         },
         onCancel: { isNaming = false }
@@ -258,6 +292,7 @@ public struct LiveSessionScreen: View {
         isMultiline: true,
         onConfirm: { text in
           noteTarget = nil
+          lastAction = .note
           if let exerciseID = exercise?.exerciseID {
             _ = coordinator.setNotes(text, for: exerciseID)
           }
@@ -268,18 +303,38 @@ public struct LiveSessionScreen: View {
     // Changing equipment mid-exercise re-prefills every unlogged row from the new machine's
     // history, which is a big enough change to confirm by feel.
     .sensoryFeedback(.selection, trigger: machineChangeCount)
+    // Each sheet owns its own error and its own search. Neither was cleared on an interactive
+    // dismissal, so the picker reopened pre-filtered -- hiding Recent and "At your gym", which are
+    // both gated on an empty query -- and a stale equipment message outranked every later error
+    // for the rest of the session, then fired as an alert about a failure from an hour ago.
+    .onChange(of: isPickerPresented) { _, shown in
+      if !shown {
+        pickerQuery = ""
+        equipmentError = nil
+      }
+    }
+    .onChange(of: machineTarget) { _, target in
+      if target == nil { equipmentError = nil }
+    }
     .sheet(isPresented: $isPickerPresented) {
       NavigationStack {
         ExercisePickerView(
           query: $pickerQuery,
           entries: pickerEntries,
+          isLoading: isPickerLoading,
           recent: recentExercises,
           availableHere: availableHere,
           gymName: gymName,
           onSelect: { entry in
-            coordinator.addExercise(entry)
+            guard coordinator.addExercise(entry) else {
+              // Keep the picker open. Dismissing it made a failed add look successful until the
+              // lifter returned to the workout and discovered that no row had appeared.
+              equipmentError = "That movement could not be added. Nothing was changed."
+              return
+            }
             isPickerPresented = false
             pickerQuery = ""
+            equipmentError = nil
           },
           // The catalogue is knowingly a third of its intended size, so "nothing matches" is a
           // routine outcome. It used to be a dead end.
@@ -290,6 +345,7 @@ public struct LiveSessionScreen: View {
             // Prefilled from the search that found nothing, so the name is not typed twice.
             initialName: pickerQuery,
             templates: templates,
+            gymName: gymName,
             onCreate: { draft in
               isCreatingExercise = false
               createExercise(draft)
@@ -297,7 +353,26 @@ public struct LiveSessionScreen: View {
             onCancel: { isCreatingExercise = false }
           )
         }
+        // The picker stays up on a failed add, so it has to own the message too. Without this the
+        // only renderers were the logger's own banner -- underneath this sheet -- and the machine
+        // picker's alert, which is a different, unpresented sheet. A failed add was a silent tap.
+        .alert(
+          "Could not add that movement",
+          isPresented: Binding(
+            get: { equipmentError != nil },
+            set: { if !$0 { equipmentError = nil } }
+          )
+        ) {
+          Button("OK") { equipmentError = nil }
+        } message: {
+          Text(equipmentError ?? "Nothing was changed.")
+        }
         .navigationTitle("Add movement")
+        .toolbar {
+          ToolbarItem(placement: .cancellationAction) {
+            Button("Cancel") { isPickerPresented = false }
+          }
+        }
         // Inline rather than large. A large title truncates instead of wrapping, so at
         // accessibility text sizes this sheet was headed "Add movem...". Inline also stops a
         // modal picker from spending a third of its height on its own name.
@@ -308,27 +383,52 @@ public struct LiveSessionScreen: View {
       // Searching hits the database, so it happens here rather than inside the picker, which
       // stays free of storage. The query is re-run on change instead of filtering in memory so a
       // user-created movement shows up without reopening the sheet.
-      .task(id: pickerQuery) { refreshPicker() }
+      .task(id: pickerQuery) { await refreshPicker() }
       // Once per presentation. Relevance does not change while the sheet is open.
-      .task { refreshRelevance() }
+      .task { await refreshRelevance() }
     }
     .sheet(item: $machineTarget) { wrapped in
       let target = wrapped.id
       NavigationStack {
-        MachinePickerView(
-          recent: machineOptions.recent,
-          others: machineOptions.others,
-          selected: coordinator.exercises.first { $0.id == target }?.machineID,
-          unit: unit,
-          onSelect: { machineID in
-            selectMachine(machineID, forExercise: target)
-            machineTarget = nil
-          },
-          onAddMachine: { isAddingMachine = true },
-          onRename: { renamingMachine = MachineTarget(id: $0.rawValue) },
-          onArchive: { archive($0, forExercise: target) },
-          onSetIncrement: { incrementMachine = MachineTarget(id: $0.rawValue) }
-        )
+        VStack(spacing: 0) {
+          // A read that failed and a gym with no equipment produced exactly the same screen: two
+          // empty sections and "Not recorded". DECISIONS #53 is explicit that a failed read says so
+          // rather than presenting a convincing empty list. The picker below stays usable, because
+          // an unreadable gym must never block logging.
+          if machineLoadFailed {
+            VStack(alignment: .leading, spacing: Tokens.Spacing.tight) {
+              Text("Your machines could not be read")
+                .font(Tokens.Text.label.weight(.semibold))
+                .foregroundStyle(Tokens.Color.textPrimary)
+              Text("Your equipment and workout history are safe.")
+                .font(Tokens.Text.caption)
+                .foregroundStyle(Tokens.Color.textSecondary)
+              Button("Try again") { refreshMachines(forExercise: target) }
+                .font(Tokens.Text.label)
+                .foregroundStyle(Tokens.Color.accent)
+                .frame(minHeight: Tokens.minimumTapTarget, alignment: .leading)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(Tokens.Spacing.regular)
+            .background(Tokens.Color.surface)
+            .accessibilityElement(children: .combine)
+          }
+
+          MachinePickerView(
+            recent: machineOptions.recent,
+            others: machineOptions.others,
+            selected: coordinator.exercises.first { $0.id == target }?.machineID,
+            unit: unit,
+            onSelect: { machineID in
+              selectMachine(machineID, forExercise: target)
+              machineTarget = nil
+            },
+            onAddMachine: { isAddingMachine = true },
+            onRename: { renamingMachine = MachineTarget(id: $0.rawValue) },
+            onArchive: { archive($0, forExercise: target) },
+            onSetIncrement: { incrementMachine = MachineTarget(id: $0.rawValue) }
+          )
+        }
         .navigationTitle("Machine")
         .toolbar {
           ToolbarItem(placement: .cancellationAction) {
@@ -338,13 +438,20 @@ public struct LiveSessionScreen: View {
         // Named on the spot rather than in a setup flow, because the lifter is standing at the
         // machine right now and will not be later.
         .sheet(item: $renamingMachine) { wrapped in
+          let id = MachineID(rawValue: wrapped.id)
+          // Opened with the name the app already knows, like the stack-step sheet below and the
+          // sibling call site in the machine library. Blank, it made the lifter retype a name
+          // mid-workout to correct one character of it.
+          let current = (machineOptions.recent + machineOptions.others)
+            .first { $0.id == id }?.displayName ?? ""
           NameEntrySheet(
             title: "Rename machine",
             prompt: "Name or brand",
             footnote:
               "Only the label changes. Everything logged on this machine keeps its history.",
+            confirmLabel: "Save",
+            initialValue: current,
             onConfirm: { newName in
-              let id = MachineID(rawValue: wrapped.id)
               renamingMachine = nil
               rename(id, to: newName, forExercise: target)
             },
@@ -388,9 +495,27 @@ public struct LiveSessionScreen: View {
             onCancel: { isAddingMachine = false }
           )
         }
+        .alert(
+          "Could not update that machine",
+          isPresented: Binding(
+            get: { equipmentError != nil },
+            set: { if !$0 { equipmentError = nil } }
+          )
+        ) {
+          Button("OK") { equipmentError = nil }
+        } message: {
+          Text(equipmentError ?? "Nothing was changed.")
+        }
+        .overlay {
+          if isMachinePickerLoading {
+            ProgressView("Loading machines…")
+              .frame(maxWidth: .infinity, maxHeight: .infinity)
+              .background(Tokens.Color.ground.opacity(0.92))
+          }
+        }
       }
       // Reloaded per presentation: what the lifter used most recently changes as they log.
-      .task(id: wrapped) { refreshMachines(forExercise: target) }
+      .task(id: wrapped) { await loadMachines(forExercise: target) }
     }
     .sheet(item: $historyTarget) { wrapped in
       if let progression, let exercise = coordinator.exercises.first(where: { $0.id == wrapped.id })
@@ -420,27 +545,43 @@ public struct LiveSessionScreen: View {
   /// the ordering rule — the machine you last used this movement on is the one you are standing at
   /// — lives in one place.
   private func refreshMachines(forExercise target: UUID) {
+    Task { await loadMachines(forExercise: target) }
+  }
+
+  private func loadMachines(forExercise target: UUID) async {
     guard let gyms, let gymID = coordinator.gymID,
       let exercise = coordinator.exercises.first(where: { $0.id == target })
-    else { return }
-    do {
-      let recent = try gyms.recentMachines(for: exercise.exerciseID, at: gymID)
+    else {
+      isMachinePickerLoading = false
+      return
+    }
+    isMachinePickerLoading = true
+    let exerciseID = exercise.exerciseID
+    let result = await readOffMain {
+      let recent = try gyms.recentMachines(for: exerciseID, at: gymID)
       let recentIDs = Set(recent.map(\.id))
       let others = try gyms.machines(at: gymID).filter { !recentIDs.contains($0.id) }
-      machineOptions = (recent.map(Self.option(for:)), others.map(Self.option(for:)))
+      let suggestions = try gyms.machineNameSuggestions(at: gymID)
+      return (recent, others, suggestions)
+    }
+    guard !Task.isCancelled else { return }
+    switch result {
+    case .success(let loaded):
+      machineOptions = (loaded.0.map(Self.option(for:)), loaded.1.map(Self.option(for:)))
       // Loaded here rather than with the exercise picker's relevance, because this is the flow
       // that reaches "Add a machine".
-      machineNameSuggestions = try gyms.machineNameSuggestions(at: gymID).map {
+      machineNameSuggestions = loaded.2.map {
         MachineNameSheet.MachineNameSuggestionRow(
           name: $0.name, isAlreadyHere: $0.existingHere != nil, otherGymNames: $0.otherGymNames
         )
       }
-    } catch {
+    case .failure:
       // An unreadable gym must not block logging. The picker shows only "Not recorded", which is
       // a true statement about what can be offered rather than a fabricated list.
       machineOptions = ([], [])
       machineNameSuggestions = []
     }
+    isMachinePickerLoading = false
   }
 
   private static func option(for record: MachineRecord) -> MachineOption {
@@ -536,9 +677,24 @@ public struct LiveSessionScreen: View {
         primaryMuscle: draft.primaryMuscle,
         inheriting: draft.inheriting
       )
-      coordinator.addExercise(
-        exerciseID: id, exerciseName: draft.name, modality: draft.modality
-      )
+      let machineID: MachineID?
+      if let machineName = draft.machineName, let gyms, let gymID = coordinator.gymID {
+        machineID = try gyms.resolveMachine(
+          at: gymID, named: machineName, forExercise: id
+        ).id
+      } else {
+        machineID = nil
+      }
+      guard coordinator.addExercise(
+        exerciseID: id,
+        exerciseName: draft.name,
+        modality: draft.modality,
+        machineID: machineID,
+        machineName: machineID == nil ? nil : draft.machineName
+      ) else {
+        equipmentError = "That movement was saved, but it could not be added to this workout."
+        return
+      }
       isPickerPresented = false
       pickerQuery = ""
       equipmentError = nil
@@ -571,42 +727,71 @@ public struct LiveSessionScreen: View {
       // decision has been made asks the lifter to confirm something twice.
       machineTarget = nil
     } catch {
-      // Nothing was created, so nothing is selected and the list is unchanged. Silent because the
-      // user's next tap is the retry, and a modal error over a modal picker is worse than none.
+      // The picker remains open and owns the alert, so the failure is visible without throwing the
+      // lifter out of the equipment flow.
+      equipmentError = "That machine could not be saved. Nothing was changed."
     }
   }
 
   /// What to surface above the alphabet. Both inputs are facts -- history and inventory -- so
   /// neither turns the picker into a recommendation.
-  private func refreshRelevance() {
-    // Curated only: a template exists to carry a researched attribution across, and inheriting
-    // from another hand-typed row would copy one person's guess twice while looking like
-    // corroboration.
-    if let catalog {
-      templates = ((try? catalog.selectableExercises()) ?? []).filter(\.isCurated)
-    } else {
-      templates = []
+  private func refreshRelevance() async {
+    let catalog = catalog
+    let gyms = gyms
+    let gymID = coordinator.gymID
+    let result = await readOffMain {
+      let templates = try catalog?.selectableExercises().filter(\.isCurated) ?? []
+      guard let gyms else {
+        return (templates, [ExerciseID](), Set<ExerciseID>(), String?.none)
+      }
+      let recent = try gyms.recentlyLoggedExercises()
+      guard let gymID else { return (templates, recent, Set<ExerciseID>(), String?.none) }
+      let available = try gyms.exercisesWithEquipment(at: gymID)
+      let name = try gyms.gyms().first { $0.id == gymID }?.name
+      return (templates, recent, available, name)
     }
-    guard let gyms else { return }
-    recentExercises = (try? gyms.recentlyLoggedExercises()) ?? []
-    if let gymID = coordinator.gymID {
-      availableHere = (try? gyms.exercisesWithEquipment(at: gymID)) ?? []
-      gymName = (try? gyms.gyms())?.first { $0.id == gymID }?.name
-    } else {
+    guard !Task.isCancelled else { return }
+    switch result {
+    case .success(let loaded):
+      templates = loaded.0
+      recentExercises = loaded.1
+      availableHere = loaded.2
+      gymName = loaded.3
+    case .failure:
+      // Creation remains available even if relevance could not be assembled.
+      templates = []
+      recentExercises = []
       availableHere = []
       gymName = nil
     }
   }
 
-  private func refreshPicker() {
-    guard let catalog else { return }
-    do {
-      pickerEntries = try catalog.search(pickerQuery)
-    } catch {
+  private func refreshPicker() async {
+    guard let catalog else {
+      pickerEntries = []
+      isPickerLoading = false
+      return
+    }
+    let query = pickerQuery.trimmingCharacters(in: .whitespacesAndNewlines)
+    isPickerLoading = true
+    // A short debounce avoids a table scan for every intermediate character without making the
+    // keyboard feel detached from the results. Empty-query presentation still loads immediately.
+    if !query.isEmpty {
+      try? await Task.sleep(for: .milliseconds(120))
+    }
+    guard !Task.isCancelled else { return }
+    let result = await readOffMain { try catalog.search(query) }
+    guard !Task.isCancelled, query == pickerQuery.trimmingCharacters(in: .whitespacesAndNewlines)
+    else { return }
+    switch result {
+    case .success(let entries):
+      pickerEntries = entries
+    case .failure:
       // An unreadable catalogue is not worth blocking a workout over: the list is empty and the
       // picker says so, and the user can still log what is already on the plan.
       pickerEntries = []
     }
+    isPickerLoading = false
   }
 
   /// A failed write is stated in the user's words, not as an error dump. The row stays
@@ -670,6 +855,7 @@ extension SessionCoordinator {
     store: LoggerStore,
     gymID: GymID? = nil,
     title: String = "",
+    splitDayID: SplitDayID? = nil,
     plan: [PlannedExercise],
     restAfterSet: Duration?,
     hooks: RestTimerHooks,
@@ -679,6 +865,31 @@ extension SessionCoordinator {
       store: store,
       gymID: gymID,
       title: title,
+      splitDayID: splitDayID,
+      plan: plan,
+      now: now,
+      restAfterSet: restAfterSet,
+      onStartRest: { duration, metadata in hooks.start(duration, metadata) }
+    )
+  }
+
+  /// Keeps the database work for a new workout off the UI actor while preserving the same rest
+  /// routing as the synchronous convenience above.
+  public static func startAsync(
+    store: LoggerStore,
+    gymID: GymID? = nil,
+    title: String = "",
+    splitDayID: SplitDayID? = nil,
+    plan: [PlannedExercise],
+    restAfterSet: Duration?,
+    hooks: RestTimerHooks,
+    now: @escaping () -> Date = { Date() }
+  ) async throws -> SessionCoordinator {
+    try await SessionCoordinator.startAsync(
+      store: store,
+      gymID: gymID,
+      title: title,
+      splitDayID: splitDayID,
       plan: plan,
       now: now,
       restAfterSet: restAfterSet,

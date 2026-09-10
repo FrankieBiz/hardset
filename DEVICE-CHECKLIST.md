@@ -4,13 +4,13 @@ Everything here is device-only. None of it can be checked in the simulator or by
 and Phase 0 stays **open** until every box passes. Record failures inline rather than re-running
 until green.
 
-Prerequisites: an iPhone on iOS 26.1 or later, signed into iCloud, and a free Apple Developer
-account for signing. Set `PRODUCT_BUNDLE_IDENTIFIER` and the iCloud container to values your team
-can sign before starting.
+Prerequisites: an iPhone on iOS 26.1 or later and an Apple Developer account for signing. A local-only
+build works with a free account; CloudKit verification also requires a paid team and iCloud sign-in.
+Set a bundle identifier your team can sign before starting.
 
 ---
 
-## A. Building the app — DONE, and what it cost
+## A. Building and launching the app — DONE, and what it cost
 
 The app target now builds and runs on the iOS 26.4 simulator. It had never compiled before, for
 four independent reasons; see the `fix(app)` commit. Two are worth remembering:
@@ -40,13 +40,20 @@ four independent reasons; see the `fix(app)` commit. Two are worth remembering:
       different severities, not seven problems. Trust persists in
       `~/Library/org.swift.swiftpm/security/macros.json`, keyed by fingerprint — so it is a
       once-per-machine step that a package version bump will ask about again.
-- [ ] Build and run on a **physical device** — still never done. Signing needs a team identifier
-      the sandbox cannot supply.
+- [x] Build and launch on a **physical device**. Verified 2026-08-25 with a signed local-only
+      Release build on `iFone` (iPhone 18,3, iOS 26.6): the app and widget embedded successfully,
+      installation succeeded, and `devicectl` launched `com.francisbisignano.hardset`. This proves
+      the build/install boundary only; it does not close any AlarmKit checks in §B.
 
-      **Regenerate before opening Xcode, and never commit the result:**
+      **Regenerate before opening Xcode, and never commit the result.** The Team ID is the
+      certificate subject's `OU`, not the parenthesized suffix printed by `find-identity`:
 
       ```
-      HARDSET_TEAM_ID=<your 10-char team> python3 Tools/generate_project.py --local
+      security find-certificate -c "Apple Development" -p \
+        | openssl x509 -noout -subject -nameopt multiline \
+        | sed -n 's/^[[:space:]]*organizationalUnitName[[:space:]]*=[[:space:]]*//p'
+
+      HARDSET_TEAM_ID=<the OU above> python3 Tools/generate_project.py --local
       ```
 
       Two failures happen without it, and they look like one:
@@ -66,6 +73,10 @@ four independent reasons; see the `fix(app)` commit. Two are worth remembering:
       profile at all rather than degrading. Dropping them costs sync and nothing a gym session
       touches. `UIBackgroundModes: remote-notification` stays in `Info.plist` and is inert without
       the entitlement — harmless, and not worth a second Info.plist to strip.
+
+      Leave at least 4 GB free before a clean Release build. Hardset's DerivedData reached 2.8 GB;
+      at 103 MB free, SwiftPM emitted `databaseFull` and code signing failed with an opaque internal
+      error. Both were storage failures, not source or provisioning failures.
 
 ## A2. Verified in the simulator (not a substitute for the device gate)
 
@@ -199,7 +210,8 @@ merge semantics. Use the iPhone plus a simulator signed into the same iCloud acc
       must happen before the first external build.
 - [ ] Confirm `PrivacyInfo.xcprivacy` is present in the built app bundle **root**, not just in the
       source tree. A manifest that is not copied is functionally missing.
-- [ ] Privacy policy URL live and reachable both in App Store Connect and from inside the app.
+- [ ] Privacy policy URL live and reachable in App Store Connect and from the bundled in-app
+      policy. The policy itself is already always readable offline from Settings.
 - [ ] Paid Applications Agreement signed; Small Business Program enrolment done; EU DSA trader
       details submitted and verified.
 
@@ -212,14 +224,15 @@ what is left is not engineering.
 
 ### E1. Blocked on the account holder — nothing in the repo can advance these
 
-- [ ] **Apple Developer Program membership**, and a signing identity. Gates the device gate, gates
-      TestFlight, gates everything below.
+- [ ] **Paid Apple Developer Program membership.** Local device signing is verified; paid
+      membership still gates CloudKit/push provisioning, TestFlight, and the remaining submission
+      work below.
 - [ ] **Paid Applications Agreement** signed, banking and tax filled in. Required even for a free
       app if it ever sells anything.
 - [ ] **EU DSA trader status** submitted and verified. This has a real queue and blocks EU
       availability; start it early rather than at submission.
 - [ ] **Privacy policy page live** at a stable URL. Required by App Store Connect for every app.
-      Then set `LegalLinks.live.privacyPolicy` — the Settings row appears on its own.
+      Then set `LegalLinks.live.privacyPolicy` — the always-present Settings policy links to it.
 - [ ] **Terms of Use (EULA) page live**, and `LegalLinks.live.termsOfUse` set. Required *inside the
       binary* the moment an auto-renewable subscription ships (Guideline 3.1.2); Apple's standard
       EULA is acceptable if you do not want to write one.
@@ -245,21 +258,28 @@ what is left is not engineering.
 - [x] **`AccentColor`** is the locked achromatic accent rather than Xcode's default blue.
 - [x] **`PrivacyInfo.xcprivacy`** written and reasoned, including what is deliberately *not*
       declared and the `nm -u` check that would flip it.
+- [x] **Privacy policy is always readable inside the app**, even before a network request can
+      succeed. The public App Store URL remains an account-holder gate above.
+- [x] **Live Activities are declared** with `NSSupportsLiveActivities`, matching the ActivityKit
+      widget and AlarmKit countdown that already ship in the binary.
+- [x] **The retained-v1 upgrade path is migrated and tested.** `v2-session-split-day` adds the plan
+      link without rewriting v1 or losing an existing workout; it was also installed over the
+      retained simulator database that originally exposed the missing-column failure.
 - [x] **Data export.** CSV of every logged set, from Settings. "Data loss / no export" is one of
       this category's loudest review complaints.
 - [x] **Methodology index.** One screen listing every derived number and its source, which is what
       to point Guideline 1.4.1 at.
 - [x] **Version and build shown in Settings**, read from the bundle rather than duplicated.
 
-### E3. Still to build, and each is a decision before it is work
+### E3. Product decisions and physical-account verification still open
 
-- [ ] **`eraseDatabaseOnSchemaChange` must be gone before the first build anyone else installs.**
-      It is `#if DEBUG` today, which is correct for now and *not* sufficient forever: a TestFlight
-      build is Release, but a schema change after that silently destroys history. See
-      `Migrations.swift:82`.
-- [ ] **Delete-all-my-data.** Not built. Expected by reviewers and by GDPR, and it is not trivial
-      here: deleting locally must propagate as CloudKit tombstones rather than resurrecting on the
-      next sync.
+- [x] **Destructive migration fallback removed.** No build configuration enables
+      `eraseDatabaseOnSchemaChange`; a migration failure now reaches the explicit unavailable-store
+      UI instead of silently destroying history.
+- [x] **Delete-all-my-data is built and transactionally tested.** It deletes local-only records,
+      preserves the fixed curated exercise catalog, and produces CloudKit deletion tombstones for
+      synchronized rows. The two-device production-CloudKit check remains required in §C because
+      a package test cannot prove Apple's production container behavior.
 - [ ] **Subscriptions**, if v1 is paid: StoreKit 2 + RevenueCat, a paywall, and **Restore
       Purchases**, which Guideline 3.1.1 requires and which is the single commonest IAP rejection.
       Nothing is built; `grep StoreKit` returns nothing.

@@ -14,7 +14,7 @@ import Testing
 // `.serialized`: each test attaches a metadatabase, and Swift Testing runs tests in
 // parallel by default. Even with per-test container identifiers, serialising keeps SQLite
 // lock contention out of the results.
-@Suite("The v1 schema is CloudKit-safe", .serialized)
+@Suite("The migrated schema is CloudKit-safe", .serialized)
 struct SchemaTests {
   /// Builds a migrated in-memory database.
   ///
@@ -89,6 +89,109 @@ struct SchemaTests {
         #expect(exists == true, "missing table: \(table)")
       }
     }
+  }
+
+  @Test("An installed v1 database gains split rotation without losing its sessions")
+  func v1UpgradeAddsSplitDayLink() throws {
+    var configuration = Configuration()
+    configuration.foreignKeysEnabled = true
+    let database = try DatabaseQueue(configuration: configuration)
+    let migrator = HardsetMigrations.migrator()
+    try migrator.migrate(database, upTo: "v1")
+
+    let sessionID = UUID().uuidString.lowercased()
+    try database.write { db in
+      let beforeColumns = try db.columns(in: "sessions").map(\.name)
+      #expect(!beforeColumns.contains("splitDayID"))
+      try db.execute(
+        sql: """
+          INSERT INTO sessions (id, title, notes, startedAt)
+          VALUES (?, 'Existing workout', 'keep me', '2026-08-25T12:00:00Z')
+          """,
+        arguments: [sessionID]
+      )
+    }
+
+    try migrator.migrate(database)
+
+    try database.read { db in
+      let afterColumns = try db.columns(in: "sessions").map(\.name)
+      #expect(afterColumns.contains("splitDayID"))
+      let fetched = try Row.fetchOne(
+        db, sql: "SELECT * FROM sessions WHERE id = ?", arguments: [sessionID]
+      )
+      let row = try #require(fetched)
+      #expect(row["title"] as String == "Existing workout")
+      #expect(row["notes"] as String == "keep me")
+      #expect(row["splitDayID"] as String? == nil)
+
+      let foreignKeys = try Row.fetchAll(db, sql: "SELECT * FROM pragma_foreign_key_list('sessions')")
+      #expect(foreignKeys.contains { ($0["from"] as String?) == "splitDayID" })
+    }
+  }
+
+  @Test("A historical v1 that already has splitDayID still completes later migrations")
+  func historicalV1WithSplitDayLinkStillUpgrades() throws {
+    var configuration = Configuration()
+    configuration.foreignKeysEnabled = true
+    let database = try DatabaseQueue(configuration: configuration)
+    let migrator = HardsetMigrations.migrator()
+    try migrator.migrate(database, upTo: "v1")
+
+    let sessionID = UUID().uuidString.lowercased()
+    try database.write { db in
+      // Reproduce the schema installed on physical devices by the build that briefly shipped
+      // `splitDayID` inside v1 before v2 was registered. Its migration ledger says v1 even though
+      // the column is already present.
+      try db.execute(
+        sql: """
+          ALTER TABLE sessions
+            ADD COLUMN splitDayID TEXT REFERENCES splitDays(id) ON DELETE SET NULL
+          """
+      )
+      try db.execute(
+        sql: """
+          INSERT INTO sessions (id, title, notes, startedAt)
+          VALUES (?, 'Existing workout', 'keep me', '2026-08-25T12:00:00Z')
+          """,
+        arguments: [sessionID]
+      )
+    }
+
+    try migrator.migrate(database)
+
+    try database.read { db in
+      let sessionColumns = try db.columns(in: "sessions").map(\.name)
+      let splitEntryColumns = try db.columns(in: "splitEntries").map(\.name)
+      let notes = try String.fetchOne(
+        db, sql: "SELECT notes FROM sessions WHERE id = ?", arguments: [sessionID])
+      let applied = try String.fetchAll(
+        db, sql: "SELECT identifier FROM grdb_migrations ORDER BY rowid")
+
+      #expect(sessionColumns.contains("splitDayID"))
+      #expect(splitEntryColumns.contains("targetSets"))
+      #expect(notes == "keep me")
+      #expect(applied == ["v1", "v2-session-split-day", "v3-split-entry-target-sets"])
+    }
+  }
+
+  @Test("A historical v1 that already has both later columns records both migrations")
+  func historicalV1WithBothLaterColumnsStillUpgrades() throws {
+    let database = try DatabaseQueue()
+    let migrator = HardsetMigrations.migrator()
+    try migrator.migrate(database, upTo: "v1")
+
+    try database.write { db in
+      try db.execute(sql: "ALTER TABLE sessions ADD COLUMN splitDayID TEXT")
+      try db.execute(sql: "ALTER TABLE splitEntries ADD COLUMN targetSets INTEGER")
+    }
+
+    try migrator.migrate(database)
+
+    let applied = try database.read { db in
+      try String.fetchAll(db, sql: "SELECT identifier FROM grdb_migrations ORDER BY rowid")
+    }
+    #expect(applied == ["v1", "v2-session-split-day", "v3-split-entry-target-sets"])
   }
 
   /// App Review guideline 5.1.3(ii): personal health information may not be stored in iCloud.
@@ -256,11 +359,26 @@ struct SchemaTests {
   ///
   /// `sessionExercises.plannedSets` is deliberately exempt: that is the lifter typing what they
   /// intend to do today, not the app arranging their week.
-  @Test("No split table carries a set count")
+  ///
+  /// **`splitEntries.targetSets` is exempt on exactly that reasoning, and the argument is made here
+  /// rather than by editing the list.** This test's own note says a future session adding a set
+  /// count must argue with a named test; this is that argument.
+  ///
+  /// The refusal was never "no number may exist" — it is "the app may not author one". The spec's
+  /// section 3 objected to a column *the dealer could fill*: "a set-count column there is the hole a
+  /// prescription engine climbs through". Section 6 then named this exact extension — "per-movement
+  /// set targets of the lifter's own. Additive later if asked for" — and it was asked for. Nothing
+  /// derives it, no default supplies it, and `weeklyTarget` stays `.unevaluated`, so no screen
+  /// compares it to anything.
+  ///
+  /// So the ban stays on every name the app could plausibly deal out, and the exemption is guarded
+  /// harder than the ban was: `targetSetsIsNullableAndUndefaulted` proves the schema cannot author a
+  /// value, and `appNeverAuthorsATargetSetCount` proves no source file assigns a literal one.
+  @Test("No split table carries a set count the app could author")
   func splitsCarryNoPrescription() throws {
     let queue = try DatabaseQueue()
     try HardsetMigrations.migrator().migrate(queue)
-    let forbidden = ["plannedSets", "sets", "setCount", "targetSets", "reps", "weightKg"]
+    let forbidden = ["plannedSets", "sets", "setCount", "reps", "weightKg"]
     try queue.read { db in
       for table in ["splits", "splitDays", "splitEntries"] {
         let columns = try db.columns(in: table).map(\.name)
@@ -272,6 +390,67 @@ struct SchemaTests {
         }
       }
     }
+  }
+
+  /// The schema itself must not be able to supply a set count.
+  ///
+  /// Nullable with no default is what makes "the lifter has not said" representable, and it is the
+  /// difference between recording intent and having an opinion. A `NOT NULL DEFAULT 3` here would
+  /// prescribe three sets to every movement anyone ever planned, without a line of code.
+  @Test("An intended set count is nullable and has no default")
+  func targetSetsIsNullableAndUndefaulted() throws {
+    let queue = try DatabaseQueue()
+    try HardsetMigrations.migrator().migrate(queue)
+    try queue.read { db in
+      let column = try #require(
+        try db.columns(in: "splitEntries").first { $0.name == "targetSets" }
+      )
+      #expect(!column.isNotNull, "an intended set count must be able to be absent")
+      #expect(column.defaultValueSQL == nil, "a default here would prescribe volume")
+    }
+  }
+
+  /// No source file may assign a set count the lifter did not type.
+  ///
+  /// The column is permissible only because every value in it came from the lifter. A literal
+  /// anywhere in `Sources` would be the app authoring volume — the precise thing section 3 refused —
+  /// and it would not show up as a schema change, so the schema tests above could not catch it.
+  ///
+  /// Swept from source in the same spirit as `IsolationContractTests`: the invariant is about what
+  /// the code says, so the test reads the code.
+  @Test("The app never authors an intended set count")
+  func appNeverAuthorsATargetSetCount() throws {
+    let sources = URL(fileURLWithPath: #filePath)
+      .deletingLastPathComponent()  // HardsetStoreTests
+      .deletingLastPathComponent()  // Tests
+      .deletingLastPathComponent()  // HardsetKit
+      .appendingPathComponent("Sources")
+
+    let files = FileManager.default.enumerator(at: sources, includingPropertiesForKeys: nil)?
+      .compactMap { $0 as? URL }
+      .filter { $0.pathExtension == "swift" } ?? []
+    #expect(!files.isEmpty, "found no sources to sweep — the path above is wrong")
+
+    // `targetSets` followed by `=` or `:` and then a digit: an authored number. A variable, an
+    // optional or a `#bind` of either is fine, which is every legitimate write.
+    //
+    // Comments are stripped before matching. This file and the column's own documentation discuss
+    // "targetSets = 3" as the thing not to do, and a ban that trips on its own explanation is the
+    // trap HANDOFF section 9 records for the "score" substring test: strip the prose, scan the code.
+    let authored = try Regex(#"targetSets\s*[:=]\s*\d"#)
+    var offenders: [String] = []
+    for file in files {
+      let text = try String(contentsOf: file, encoding: .utf8)
+      let lines = text.split(separator: "\n", omittingEmptySubsequences: false)
+      for (index, line) in lines.enumerated() {
+        let code = line.range(of: "//").map { line[line.startIndex..<$0.lowerBound] } ?? line[...]
+        guard code.firstMatch(of: authored) != nil else { continue }
+        offenders.append(
+          "\(file.lastPathComponent):\(index + 1) \(code.trimmingCharacters(in: .whitespaces))"
+        )
+      }
+    }
+    #expect(offenders.isEmpty, "the app authored a set count: \(offenders.joined(separator: "; "))")
   }
 
   /// The exact column inventory, pinned.
@@ -306,11 +485,15 @@ struct SchemaTests {
       "sessionExercises": [
         "id", "sessionID", "exerciseID", "machineID", "position", "plannedSets", "supersetGroup",
       ],
-      "sessions": ["id", "gymID", "title", "notes", "startedAt", "finishedAt"],
-      // No set-count column on splitEntries, deliberately. See the migration's note.
+      "sessions": ["id", "gymID", "title", "notes", "startedAt", "finishedAt", "splitDayID"],
       "splitDays": ["id", "splitID", "name", "position", "createdAt"],
+      // `targetSets` is the lifter's own intended set count, nullable, and never written by the
+      // app. The migration's note records why that distinction is what makes the column permissible
+      // where an app-authored one would not be.
+      // `targetSets` sits last because it arrived by ALTER TABLE, which appends. Its position in
+      // this list is the migration's fingerprint, not a preference.
       "splitEntries": [
-        "id", "splitDayID", "exerciseID", "machineID", "position", "createdAt",
+        "id", "splitDayID", "exerciseID", "machineID", "position", "createdAt", "targetSets",
       ],
       "splits": ["id", "name", "isArchived", "createdAt"],
     ]

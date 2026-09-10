@@ -47,10 +47,13 @@ public struct SessionSummaryScreen: View {
         // at the top, so a set logged in the same instant the workout was finished fell outside its
         // own summary -- and the window could not tell whose sets it was counting either.
         //
-        // `try?` is acceptable here and nowhere near a write: the breakdown is additive, the view
-        // renders its absence honestly, and there is nothing the user could do about a read
-        // failure on a screen they are about to dismiss.
-        muscles = try? store.report(for: sessionID)
+        let store = store
+        let sessionID = sessionID
+        let result = await readOffMain { try store.report(for: sessionID) }
+        guard !Task.isCancelled else { return }
+        // The breakdown is additive and the view renders its absence honestly. Finishing the
+        // workout has already succeeded, so a report read can never hold that transition hostage.
+        if case .success(let report) = result { muscles = report }
       }
   }
 }

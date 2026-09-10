@@ -2,6 +2,18 @@ import Foundation
 import HardsetCore
 import SQLiteData
 
+private nonisolated struct SessionStartPreparation: Sendable {
+  let sessionID: SessionID
+  let states: [ExerciseLogState]
+  let rowIDs: [UUID: UUID]
+}
+
+private nonisolated struct SessionResumePreparation: Sendable {
+  let session: SessionRecord
+  let states: [ExerciseLogState]
+  let rowIDs: [UUID: UUID]
+}
+
 /// Drives one live workout: holds the exercise states, persists sets, and asks for rest.
 ///
 /// The ordering here is the whole point, and it is the opposite of what is convenient:
@@ -138,13 +150,82 @@ public final class SessionCoordinator {
     store: LoggerStore,
     gymID: GymID? = nil,
     title: String = "",
+    /// The plan day this workout is being started from, when it is. Carried so the planner can say
+    /// when each day was last trained without inferring it from what the session contained.
+    splitDayID: SplitDayID? = nil,
     plan: [PlannedExercise],
     now: @escaping () -> Date = { Date() },
     restAfterSet: Duration? = nil,
     onStartRest: @escaping (Duration, RestMetadata) -> Void = { _, _ in }
   ) throws -> SessionCoordinator {
     let startedAt = now()
-    let sessionID = try store.startSession(gymID: gymID, title: title, at: startedAt)
+    let prepared = try prepareStart(
+      store: store,
+      gymID: gymID,
+      title: title,
+      splitDayID: splitDayID,
+      plan: plan,
+      startedAt: startedAt
+    )
+    return coordinator(
+      from: prepared,
+      store: store,
+      gymID: gymID,
+      title: title,
+      startedAt: startedAt,
+      now: now,
+      restAfterSet: restAfterSet,
+      onStartRest: onStartRest
+    )
+  }
+
+  /// The same start contract with database preparation moved off the UI actor. The synchronous
+  /// entry point remains for tests and non-UI callers; the app uses this one so a large prior-
+  /// performance snapshot cannot stall the Start button.
+  public static func startAsync(
+    store: LoggerStore,
+    gymID: GymID? = nil,
+    title: String = "",
+    splitDayID: SplitDayID? = nil,
+    plan: [PlannedExercise],
+    now: @escaping () -> Date = { Date() },
+    restAfterSet: Duration? = nil,
+    onStartRest: @escaping (Duration, RestMetadata) -> Void = { _, _ in }
+  ) async throws -> SessionCoordinator {
+    let startedAt = now()
+    let prepared = try await Task.detached(priority: .userInitiated) {
+      try prepareStart(
+        store: store,
+        gymID: gymID,
+        title: title,
+        splitDayID: splitDayID,
+        plan: plan,
+        startedAt: startedAt
+      )
+    }.value
+    return coordinator(
+      from: prepared,
+      store: store,
+      gymID: gymID,
+      title: title,
+      startedAt: startedAt,
+      now: now,
+      restAfterSet: restAfterSet,
+      onStartRest: onStartRest
+    )
+  }
+
+  private nonisolated static func prepareStart(
+    store: LoggerStore,
+    gymID: GymID?,
+    title: String,
+    splitDayID: SplitDayID?,
+    plan: [PlannedExercise],
+    startedAt: Date
+  ) throws -> SessionStartPreparation {
+    let sessionID = try store.startSession(
+      gymID: gymID, title: title, splitDayID: splitDayID, at: startedAt
+    )
 
     let snapshot = try store.priorPerformanceSnapshot(
       for: plan.map(\.progressionKey),
@@ -187,17 +268,35 @@ public final class SessionCoordinator {
       states[index].notes = notes[states[index].exerciseID] ?? ""
     }
 
+    return SessionStartPreparation(sessionID: sessionID, states: states, rowIDs: rowIDs)
+  }
+
+  private static func coordinator(
+    from prepared: SessionStartPreparation,
+    store: LoggerStore,
+    gymID: GymID?,
+    title: String,
+    startedAt: Date,
+    now: @escaping () -> Date,
+    restAfterSet: Duration?,
+    onStartRest: @escaping (Duration, RestMetadata) -> Void
+  ) -> SessionCoordinator {
     let coordinator = SessionCoordinator(
       store: store,
-      sessionID: sessionID,
-      exercises: states,
+      sessionID: prepared.sessionID,
+      exercises: prepared.states,
       gymID: gymID,
       startedAt: startedAt,
+      // Carried, not dropped. `startSession` wrote this to the row while the coordinator kept "",
+      // so a titled workout rendered as "Name this workout" until a force-quit sent it through
+      // `resume`, which does read it back -- and then the name appeared out of nowhere. Harmless
+      // while nothing passed a title; a visible disagreement the moment a plan day does.
+      title: title,
       now: now,
       restAfterSet: restAfterSet,
       onStartRest: onStartRest
     )
-    coordinator.planRowIDs = rowIDs
+    coordinator.planRowIDs = prepared.rowIDs
     return coordinator
   }
 
@@ -216,6 +315,42 @@ public final class SessionCoordinator {
     restAfterSet: Duration? = nil,
     onStartRest: @escaping (Duration, RestMetadata) -> Void = { _, _ in }
   ) throws -> SessionCoordinator? {
+    guard let prepared = try prepareResume(store: store, asOf: now()) else { return nil }
+    return resumedCoordinator(
+      from: prepared,
+      store: store,
+      now: now,
+      restAfterSet: restAfterSet,
+      onStartRest: onStartRest
+    )
+  }
+
+  /// Recovery can read years of prior performance. The app uses this entry point during launch
+  /// so reopening an interrupted workout never monopolises the first interactive frame.
+  public static func resumeAsync(
+    store: LoggerStore,
+    now: @escaping () -> Date = { Date() },
+    restAfterSet: Duration? = nil,
+    onStartRest: @escaping (Duration, RestMetadata) -> Void = { _, _ in }
+  ) async throws -> SessionCoordinator? {
+    let asOf = now()
+    let prepared = try await Task.detached(priority: .userInitiated) {
+      try prepareResume(store: store, asOf: asOf)
+    }.value
+    guard let prepared else { return nil }
+    return resumedCoordinator(
+      from: prepared,
+      store: store,
+      now: now,
+      restAfterSet: restAfterSet,
+      onStartRest: onStartRest
+    )
+  }
+
+  private nonisolated static func prepareResume(
+    store: LoggerStore,
+    asOf: Date
+  ) throws -> SessionResumePreparation? {
     guard let session = try store.openSession() else { return nil }
 
     let planned = try store.sessionExercises(in: session.id)
@@ -229,7 +364,7 @@ public final class SessionCoordinator {
     let snapshot = try store.priorPerformanceSnapshot(
       for: planned.map(\.progressionKey),
       excluding: session.id,
-      asOf: now()
+      asOf: asOf
     )
 
     // Grouped by EXERCISE, not by progression key. A lifter who moves machines mid-exercise
@@ -297,24 +432,34 @@ public final class SessionCoordinator {
       return state
     }
 
+    return SessionResumePreparation(session: session, states: states, rowIDs: rowIDs)
+  }
+
+  private static func resumedCoordinator(
+    from prepared: SessionResumePreparation,
+    store: LoggerStore,
+    now: @escaping () -> Date,
+    restAfterSet: Duration?,
+    onStartRest: @escaping (Duration, RestMetadata) -> Void
+  ) -> SessionCoordinator {
     let coordinator = SessionCoordinator(
       store: store,
-      sessionID: session.id,
-      exercises: states,
+      sessionID: prepared.session.id,
+      exercises: prepared.states,
       // Read back from the session row, so a recovered workout offers the same gym's equipment.
-      gymID: session.gymID,
+      gymID: prepared.session.gymID,
       // From storage, never from `now()`. A recovered session started when it started, and
       // re-stamping it here is exactly how a workout becomes nine thousand minutes long.
-      startedAt: session.timeline.startedAt,
-      title: session.title,
+      startedAt: prepared.session.timeline.startedAt,
+      title: prepared.session.title,
       // Restored with the rest of the session, or a recovered workout loses the note the lifter
       // wrote about it.
-      notes: session.notes,
+      notes: prepared.session.notes,
       now: now,
       restAfterSet: restAfterSet,
       onStartRest: onStartRest
     )
-    coordinator.planRowIDs = rowIDs
+    coordinator.planRowIDs = prepared.rowIDs
     return coordinator
   }
 
@@ -788,6 +933,24 @@ public final class SessionCoordinator {
 /// defaults to MainActor isolation, which silently made this initialiser MainActor-only and
 /// unreachable from `SplitStore` -- the same leak the table types carry an explicit `nonisolated`
 /// for. Relaxing it cannot break a MainActor caller.
+/// A plan day, handed to whoever owns the session, ready to become today's workout.
+///
+/// Exists so the day's identity and its name travel with its movements. Both used to be dropped at
+/// this hop: the session could not be attributed back to the day afterwards, and it opened nameless
+/// even though the lifter had already named that day when they built the plan.
+public nonisolated struct PlannedDayStart: Sendable {
+  public let dayID: SplitDayID
+  /// The lifter's own name for the day, used as the workout's title.
+  public let name: String
+  public let exercises: [PlannedExercise]
+
+  public init(dayID: SplitDayID, name: String, exercises: [PlannedExercise]) {
+    self.dayID = dayID
+    self.name = name
+    self.exercises = exercises
+  }
+}
+
 public nonisolated struct PlannedExercise: Hashable, Sendable {
   public let exerciseID: ExerciseID
   public let machineID: MachineID?

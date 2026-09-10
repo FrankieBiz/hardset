@@ -10,6 +10,11 @@ public struct NewExerciseDraft: Hashable, Sendable {
   public let name: String
   public let modality: ExerciseModality?
   public let primaryMuscle: Muscle
+  /// A same-named physical machine to create or reuse at the current gym.
+  ///
+  /// Kept in the one draft so "Panatta Chest Press" does not require creating a movement, finding
+  /// it again, opening a second picker, and typing the same proper noun twice.
+  public let machineName: String?
   /// The template's contributions the lifter left switched on. Empty when they described the
   /// movement from scratch. Still carries curated provenance at this point — the store rewrites it,
   /// deliberately, so no caller can skip that step.
@@ -19,12 +24,14 @@ public struct NewExerciseDraft: Hashable, Sendable {
     name: String,
     modality: ExerciseModality?,
     primaryMuscle: Muscle,
-    inheriting: [MuscleContribution] = []
+    inheriting: [MuscleContribution] = [],
+    machineName: String? = nil
   ) {
     self.name = name
     self.modality = modality
     self.primaryMuscle = primaryMuscle
     self.inheriting = inheriting
+    self.machineName = machineName
   }
 }
 
@@ -58,6 +65,9 @@ public struct NewExerciseSheet: View {
   /// carry a *researched* attribution across, and inheriting from another hand-typed row would
   /// copy one person's guess twice while looking like corroboration.
   private let templates: [CatalogEntry]
+  /// The gym a same-named machine can be saved into. Nil hides that choice rather than offering a
+  /// control that cannot finish.
+  private let gymName: String?
   private let onCreate: (NewExerciseDraft) -> Void
   private let onCancel: () -> Void
 
@@ -65,6 +75,9 @@ public struct NewExerciseSheet: View {
   @State private var muscle: Muscle = .chest
   @State private var modality: ExerciseModality?
   @State private var templateID: ExerciseID?
+  @State private var savesMachine = false
+  /// Once the lifter explicitly changes the toggle, changing modality must not overrule them.
+  @State private var machineSavingWasChosen = false
   /// Muscles the lifter switched off. Tracked as the exclusions rather than the inclusions so that
   /// changing template starts everything on again without a second bookkeeping step.
   @State private var excluded: Set<MuscleKey> = []
@@ -75,11 +88,13 @@ public struct NewExerciseSheet: View {
   public init(
     initialName: String = "",
     templates: [CatalogEntry] = [],
+    gymName: String? = nil,
     onCreate: @escaping (NewExerciseDraft) -> Void,
     onCancel: @escaping () -> Void
   ) {
     self.initialName = initialName
     self.templates = templates
+    self.gymName = gymName
     self.onCreate = onCreate
     self.onCancel = onCancel
     self._name = State(initialValue: initialName)
@@ -109,6 +124,7 @@ public struct NewExerciseSheet: View {
           TextField("Name", text: $name)
             .focused($isNameFocused)
             .submitLabel(.done)
+            .onSubmit { isNameFocused = false }
             // Autocorrect off, and this is not a preference. Almost everything typed here is a
             // proper noun -- Panatta, Hammer Strength, Cybex, Nautilus -- which is precisely what
             // autocorrect rewrites. Typing "Panatta chest press" produced "Panama chest press",
@@ -190,16 +206,42 @@ public struct NewExerciseSheet: View {
               Text(option.label).tag(ExerciseModality?.some(option))
             }
           }
+          if let gymName {
+            Toggle(
+              isOn: Binding(
+                get: { savesMachine },
+                set: {
+                  savesMachine = $0
+                  machineSavingWasChosen = true
+                }
+              )
+            ) {
+              VStack(alignment: .leading, spacing: Tokens.Spacing.hairline) {
+                Text("Save this as a machine too")
+                Text(gymName)
+                  .font(Tokens.Text.caption)
+                  .foregroundStyle(Tokens.Color.textSecondary)
+              }
+            }
+          }
         } header: {
           Text("Equipment")
         } footer: {
-          Text(
-            "Optional. It decides whether a set reads back as \u{201C}Body\u{201D} rather than zero, "
-              + "and the step the +/- buttons offer."
-          )
+          if gymName != nil {
+            Text(
+              "For a specific piece of equipment, such as Panatta Chest Press, Hardset can save "
+                + "this one name as both your movement and the machine at this gym. It is selected "
+                + "on the plan immediately."
+            )
+          } else {
+            Text(
+              "Choose a gym on Train before creating this if you also want Hardset to save a "
+                + "specific machine."
+            )
+          }
         }
       }
-      .navigationTitle("Your own movement")
+      .navigationTitle(gymName == nil ? "Your own movement" : "New movement or machine")
       .toolbar {
         ToolbarItem(placement: .cancellationAction) {
           Button("Cancel", action: onCancel)
@@ -208,7 +250,11 @@ public struct NewExerciseSheet: View {
           Button("Add") {
             onCreate(
               NewExerciseDraft(
-                name: trimmed, modality: modality, primaryMuscle: muscle, inheriting: kept
+                name: trimmed,
+                modality: modality,
+                primaryMuscle: muscle,
+                inheriting: kept,
+                machineName: savesMachine && gymName != nil ? trimmed : nil
               )
             )
           }
@@ -222,6 +268,14 @@ public struct NewExerciseSheet: View {
       .onChange(of: templateID) { _, _ in
         excluded = []
         if let adopted = template?.primaryMuscle.muscle { muscle = adopted }
+      }
+      // "Machine" is the strong signal that the typed proper noun names physical equipment too.
+      // Turn the combined save on for the common case, but only until the lifter makes an explicit
+      // choice of their own.
+      .onChange(of: modality) { _, newValue in
+        if newValue == .machine, gymName != nil, !machineSavingWasChosen {
+          savesMachine = true
+        }
       }
       // Focused only when there is nothing to start from. Arriving with a name already filled in and
       // the keyboard up hides the fields that are the actual reason for this screen.

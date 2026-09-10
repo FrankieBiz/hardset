@@ -21,16 +21,23 @@ public struct SettingsSheet: View {
   /// Produces the CSV a lifter takes their history away in. `nil` hides the row, the same rule
   /// the bodyweight row follows.
   private let export: ExportStore?
+  /// Deletes every user-created row locally and through CloudKit tombstones.
+  private let dataDeletion: DataDeletionStore?
   /// Gyms and their machines, for the equipment library. `nil` hides the row, same rule again.
   private let gyms: GymStore?
-  /// Where the privacy policy, terms and support pages live. Rows render only for links that are
-  /// actually set — see `LegalLinks`, which explains why nothing here invents one.
+  /// Where the public privacy policy, terms and support pages live. The bundled privacy policy is
+  /// always present; optional web/legal rows render only when their real URLs are configured.
   private let links: LegalLinks
   /// Whether AlarmKit has refused permission to alert.
   ///
   /// Shown here because this is where the promise is made: the footer below says the timer keeps
   /// running if you leave the app, and without permission it cannot alert at all.
   private let restAlertsDenied: Bool
+  /// False during a workout. Deleting rows under a live `SessionCoordinator` would leave it
+  /// holding references to a workout that no longer exists.
+  private let canDeleteData: Bool
+  /// Resets non-database state, including the active AlarmKit alarm and AppStorage preferences.
+  private let onDataDeleted: () -> Void
   private let onDone: () -> Void
 
   /// Rest options the user can pick from. **Off is first and is the default**, because the app has
@@ -45,10 +52,13 @@ public struct SettingsSheet: View {
     tracksRPE: Binding<Bool>,
     bodyweight: BodyweightStore? = nil,
     export: ExportStore? = nil,
+    dataDeletion: DataDeletionStore? = nil,
     gyms: GymStore? = nil,
     links: LegalLinks = .live,
     unit: WeightUnit = .kilograms,
     restAlertsDenied: Bool = false,
+    canDeleteData: Bool = true,
+    onDataDeleted: @escaping () -> Void = {},
     onDone: @escaping () -> Void
   ) {
     self._useImperial = useImperial
@@ -56,10 +66,13 @@ public struct SettingsSheet: View {
     self._tracksRPE = tracksRPE
     self.bodyweight = bodyweight
     self.export = export
+    self.dataDeletion = dataDeletion
     self.gyms = gyms
     self.links = links
     self.unit = unit
     self.restAlertsDenied = restAlertsDenied
+    self.canDeleteData = canDeleteData
+    self.onDataDeleted = onDataDeleted
     self.onDone = onDone
   }
 
@@ -92,6 +105,10 @@ public struct SettingsSheet: View {
   ///
   /// `nil` means not yet read, which renders as absence rather than as zero.
   @State private var exportableSetCount: Int?
+  @State private var confirmsDataDeletion = false
+  @State private var isDeletingData = false
+  @State private var dataDeletionFailed = false
+  @State private var didDeleteData = false
 
   @ViewBuilder private var exportSection: some View {
     if export != nil, (exportableSetCount ?? 0) > 0 || exportFailed {
@@ -133,28 +150,111 @@ public struct SettingsSheet: View {
     }
   }
 
-  /// Reads the whole log and writes it out, once, when the sheet appears.
-  ///
-  /// Synchronous and on the main actor, matching every other store read in this app -- the
-  /// invariant that matters here is "no database work *per render*", not "no database work". This
-  /// runs once per opening of Settings. A detached task was tried and rejected by strict
-  /// concurrency: `ExportStore` reaches this method already main-actor-isolated, so handing it to
-  /// `Task.detached` is a `sending`-closure error rather than a free win.
-  ///
-  /// Scale check: 450 logged sets produced a 70 KB file, so the read is milliseconds. If a log ever
-  /// gets large enough to be felt on opening Settings, the fix is to make `ExportStore` `Sendable`
-  /// and move this off the actor -- not to write it lazily, which is what `ShareLink` cannot do.
-  private func prepareExport(_ export: ExportStore) {
-    do {
+  /// Reads the whole log and writes it out once, away from the UI actor. A long training history
+  /// can be opened from Settings without making the unit or RPE controls hitch while the CSV is
+  /// assembled.
+  private func prepareExport(_ export: ExportStore) async {
+    let result = await readOffMain {
+      let count = try export.loggedSetCount()
+      guard count > 0 else { return (count, URL?.none) }
       let csv = try export.workoutCSV()
       let url = FileManager.default.temporaryDirectory
         .appendingPathComponent(ExportStore.filename(on: Date()))
       try csv.write(to: url, atomically: true, encoding: .utf8)
-      exportedFile = ExportedFile(url: url)
+      return (count, URL?.some(url))
+    }
+    if Task.isCancelled {
+      if case .success((_, let url)) = result, let url {
+        try? FileManager.default.removeItem(at: url)
+      }
+      return
+    }
+    switch result {
+    case .success(let prepared):
+      exportableSetCount = prepared.0
+      exportedFile = prepared.1.map(ExportedFile.init(url:))
       exportFailed = false
-    } catch {
+    case .failure:
       exportFailed = true
     }
+  }
+
+  @ViewBuilder private var dataDeletionSection: some View {
+    if let dataDeletion {
+      Section {
+        Button(role: .destructive) {
+          confirmsDataDeletion = true
+        } label: {
+          if isDeletingData {
+            Label("Deleting…", systemImage: "trash")
+          } else {
+            Label("Delete all Hardset data", systemImage: "trash")
+          }
+        }
+        .disabled(!canDeleteData || isDeletingData)
+
+        if didDeleteData {
+          Label("All Hardset data was deleted", systemImage: "checkmark.circle")
+            .foregroundStyle(Tokens.Color.textSecondary)
+        } else if dataDeletionFailed {
+          Text("Hardset could not delete your data. Nothing was partially reset; try again.")
+            .font(Tokens.Text.caption)
+            .foregroundStyle(Tokens.Color.certainty(.low))
+        }
+      } header: {
+        Text("Delete data")
+      } footer: {
+        Text(
+          canDeleteData
+            ? "Permanently removes workouts, plans, gyms, custom exercises, bodyweight, and "
+              + "preferences. Synchronized records are also deleted from your private iCloud "
+              + "database when sync is available. Export first if you want a copy."
+            : "Finish or delete the workout in progress before deleting all data."
+        )
+      }
+      .alert("Delete all Hardset data?", isPresented: $confirmsDataDeletion) {
+        Button("Cancel", role: .cancel) {}
+        Button("Delete Everything", role: .destructive) {
+          deleteAllData(using: dataDeletion)
+        }
+      } message: {
+        Text(
+          "This cannot be undone. It deletes every workout, plan, gym, custom exercise, "
+            + "bodyweight reading, and preference from this device and queues deletion from "
+            + "your private iCloud database."
+        )
+      }
+    }
+  }
+
+  private func deleteAllData(using store: DataDeletionStore) {
+    isDeletingData = true
+    dataDeletionFailed = false
+    didDeleteData = false
+    Task {
+      let result = await Task.detached(priority: .userInitiated) {
+        Result { try store.deleteAllUserData() }
+      }.value
+      isDeletingData = false
+      switch result {
+      case .success:
+        deletePreparedExport()
+        exportableSetCount = 0
+        exportFailed = false
+        didDeleteData = true
+        onDataDeleted()
+      case .failure:
+        dataDeletionFailed = true
+      }
+    }
+  }
+
+  /// Removes the private temporary copy created for `ShareLink`. A file the user already copied
+  /// to Files or another app belongs to that destination and is intentionally outside our reach.
+  private func deletePreparedExport() {
+    guard let url = exportedFile?.url else { return }
+    try? FileManager.default.removeItem(at: url)
+    exportedFile = nil
   }
 
   /// The machine library.
@@ -189,9 +289,11 @@ public struct SettingsSheet: View {
       } label: {
         Label("How the numbers work", systemImage: "function")
       }
-      // Each renders only if it has somewhere real to go. See `LegalLinks`.
-      if let url = links.privacyPolicy {
-        Link(destination: url) { Label("Privacy policy", systemImage: "hand.raised") }
+      // Always present and readable offline. The public URL, once configured, appears inside.
+      NavigationLink {
+        PrivacyPolicyScreen(onlineURL: links.privacyPolicy)
+      } label: {
+        Label("Privacy policy", systemImage: "hand.raised")
       }
       if let url = links.termsOfUse {
         Link(destination: url) { Label("Terms of use", systemImage: "doc.text") }
@@ -219,15 +321,44 @@ public struct SettingsSheet: View {
     }
   }
 
+  private var unitPicker: some View {
+    HStack(spacing: Tokens.Spacing.hairline) {
+      unitButton(label: WeightUnit.kilograms.abbreviation, selectsImperial: false)
+      unitButton(label: WeightUnit.pounds.abbreviation, selectsImperial: true)
+    }
+    .padding(Tokens.Spacing.hairline)
+    .background(
+      Tokens.Color.raised,
+      in: RoundedRectangle(cornerRadius: Tokens.Radius.control)
+    )
+    .accessibilityElement(children: .contain)
+  }
+
+  private func unitButton(label: String, selectsImperial: Bool) -> some View {
+    let selected = useImperial == selectsImperial
+    return Button {
+      useImperial = selectsImperial
+    } label: {
+      Text(label)
+        .font(Tokens.Text.label)
+        .foregroundStyle(selected ? Tokens.Color.ground : Tokens.Color.textPrimary)
+        .frame(maxWidth: .infinity, minHeight: Tokens.minimumTapTarget)
+        .background(
+          selected ? Tokens.Color.accent : Tokens.Color.raised,
+          in: RoundedRectangle(cornerRadius: Tokens.Radius.control)
+        )
+        .contentShape(Rectangle())
+    }
+    .buttonStyle(.plain)
+    .accessibilityLabel(selectsImperial ? "Pounds" : "Kilograms")
+    .accessibilityAddTraits(selected ? .isSelected : [])
+  }
+
   public var body: some View {
     NavigationStack {
       Form {
         Section {
-          Picker("Weight", selection: $useImperial) {
-            Text(WeightUnit.kilograms.abbreviation).tag(false)
-            Text(WeightUnit.pounds.abbreviation).tag(true)
-          }
-          .pickerStyle(.segmented)
+          unitPicker
         } header: {
           Text("Units")
         } footer: {
@@ -239,7 +370,6 @@ public struct SettingsSheet: View {
               + "see and changes nothing that was recorded."
           )
         }
-
 
         Section {
           Picker("After a working set", selection: $restSeconds) {
@@ -293,6 +423,8 @@ public struct SettingsSheet: View {
             }
           } header: {
             Text("You")
+              .font(Tokens.Text.caption)
+              .foregroundStyle(Tokens.Color.textSecondary)
           } footer: {
             // The two things a lifter needs before typing a weight in: what it is used for, and
             // where it goes.
@@ -306,25 +438,15 @@ public struct SettingsSheet: View {
 
         equipmentSection
         exportSection
+        dataDeletionSection
         aboutSection
       }
       .task {
-        // One read, on appear. An export offered with no sets behind it would hand over a file
-        // containing only a header.
-        //
-        // Not `try?`. A swallowed failure here removes the export row entirely, which tells the
-        // one person most worried about their data that the feature does not exist -- see the
-        // standing rule against `try?` inside a view.
         guard let export else { return }
-        do {
-          let count = try export.loggedSetCount()
-          exportableSetCount = count
-          if count > 0 { prepareExport(export) }
-        } catch {
-          exportFailed = true
-        }
+        await prepareExport(export)
       }
       .navigationTitle("Settings")
+      .onDisappear { deletePreparedExport() }
       .toolbar {
         ToolbarItem(placement: .confirmationAction) {
           Button("Done", action: onDone)

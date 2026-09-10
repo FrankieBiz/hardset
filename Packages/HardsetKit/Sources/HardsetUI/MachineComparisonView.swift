@@ -49,10 +49,14 @@ public struct MachineComparisonView: View {
 
   private let rows: [Row]
   private let unit: WeightUnit
+  /// Captured at construction rather than read while rendering, so recency is a value the view was
+  /// handed instead of a clock read that differs between two draws of the same row.
+  private let now: Date
 
-  public init(rows: [Row], unit: WeightUnit) {
+  public init(rows: [Row], unit: WeightUnit, now: Date = Date()) {
     self.rows = rows
     self.unit = unit
+    self.now = now
   }
 
   public var body: some View {
@@ -112,7 +116,10 @@ public struct MachineComparisonView: View {
         "Est. 1RM \(Self.number(unit.displayValue(fromKilograms: estimate))) \(unit.abbreviation)"
       )
     }
-    parts.append("Last trained \(row.lastTrained.formatted(.relative(presentation: .named)))")
+    // `TrainingRecency`, not the system relative format: DECISION #42 banned the latter because it
+    // collapses seven to thirteen days into "last week". The row that reaches this card already
+    // words it that way, and one fact must not be worded two ways across a tap.
+    parts.append("Last trained \(TrainingRecency.phrase(since: row.lastTrained, asOf: now))")
     if let delta = row.heaviestLoadDeltaKg, let reference = row.referenceLabel {
       // Converted before it is worded, so a lifter reading in pounds is not told "20 kg more".
       parts.append(
@@ -134,7 +141,10 @@ public struct MachineComparisonView: View {
 
   /// Trailing ".0" dropped so a whole number reads as one. Rounding already happened in
   /// `displayValue`, which is the single place conversion and precision live.
+  ///
+  /// Formatted through the locale rather than `String(format: "%.1f")`, which writes a POSIX point
+  /// whatever the reader's separator is — the same defect the input side already fixed.
   static func number(_ value: Double) -> String {
-    value == value.rounded() ? String(Int(value.rounded())) : String(format: "%.1f", value)
+    value.formatted(.number.precision(.fractionLength(0...1)))
   }
 }

@@ -91,6 +91,8 @@ nonisolated struct Session: Hashable, Identifiable, Sendable {
   var startedAt = Date(timeIntervalSince1970: 0)
   /// nil means the session is still open. Never backfilled from `Date()`.
   var finishedAt: Date?
+  /// The plan day this workout was started from, or nil when it was not started from a plan.
+  var splitDayID: UUID?
 }
 
 @Table("sessionExercises")
@@ -168,6 +170,8 @@ nonisolated struct SplitEntry: Hashable, Identifiable, Sendable {
   /// is what adds it to the gym's library — see `SplitStore.addEntry`.
   var machineID: UUID?
   var position = 0
+  /// Working sets the lifter intends here, or nil when they have not said. Never written by the app.
+  var targetSets: Int?
   var createdAt = Date(timeIntervalSince1970: 0)
 }
 

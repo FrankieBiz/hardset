@@ -12,6 +12,11 @@ import SwiftUI
 /// can never leave a row showing a check mark for a set that was not saved.
 public struct ExerciseSectionView: View {
   @Binding private var state: ExerciseLogState
+  @State private var confirmsRemoval = false
+  /// Bumped when a removal is confirmed, purely to drive the haptic. §5.8 reserves `.warning` for
+  /// "destructive confirmed" and recorded that nothing destructive existed yet; this dialog is the
+  /// host it was waiting for. Un-logging one row — strictly the smaller loss — already taps.
+  @State private var removalCount = 0
   private let unit: WeightUnit
   private let tracksRPE: Bool
   private let onLogSet: (SetSlot) -> Void
@@ -114,6 +119,7 @@ public struct ExerciseSectionView: View {
       addSetButton
     }
     .padding(.vertical, Tokens.Spacing.regular)
+    .sensoryFeedback(.warning, trigger: removalCount)
   }
 
   private var header: some View {
@@ -121,41 +127,69 @@ public struct ExerciseSectionView: View {
       // On the movement's own header rather than a set row, because this discards every set in it.
       // Long press, with the count stated, so it cannot be confused with removing one row.
       .contextMenu {
-        if let onJoinSuperset {
-          Button(action: onJoinSuperset) {
-            Label(
-              supersetLetter == nil ? "Superset with next movement" : "Add next movement to this superset",
-              systemImage: "arrow.triangle.2.circlepath"
-            )
-          }
-        }
-        if let onLeaveSuperset, supersetLetter != nil {
-          Button(action: onLeaveSuperset) {
-            Label("Take out of superset", systemImage: "arrow.uturn.backward")
-          }
-        }
-        if let onEditNote {
-          Button(action: onEditNote) {
-            Label(
-              state.notes.isEmpty ? "Add a note" : "Edit note",
-              systemImage: state.notes.isEmpty ? "square.and.pencil" : "pencil"
-            )
-          }
-        }
-        if let onRemoveExercise {
-          Button(role: .destructive, action: onRemoveExercise) {
-            Label(
-              state.loggedCount == 0
-                ? "Remove this movement"
-                // Rows, not sets, deliberately: this warns about what is destroyed, and a drop
-                // that is about to be deleted is a record the lifter loses whether or not the
-                // week counts it as a set.
-                : "Remove this movement and its ^[\(state.loggedCount) logged row](inflect: true)",
-              systemImage: "trash"
-            )
-          }
-        }
+        headerActionItems
       }
+      .confirmationDialog(
+        "Remove \(state.exerciseName)?",
+        isPresented: $confirmsRemoval,
+        titleVisibility: .visible
+      ) {
+        Button("Remove movement and logged rows", role: .destructive) {
+          removalCount += 1
+          onRemoveExercise?()
+        }
+        Button("Cancel", role: .cancel) {}
+      } message: {
+        Text(
+          "This removes \(state.loggedCount) logged row\(state.loggedCount == 1 ? "" : "s") from "
+            + "this workout. It does not remove earlier history."
+        )
+      }
+  }
+
+  /// Shared by the visible menu and the long-press shortcut. A movement used to have important
+  /// actions but no visible sign that any existed, so notes and supersets felt nonfunctional unless
+  /// somebody guessed the gesture.
+  @ViewBuilder private var headerActionItems: some View {
+    if let onJoinSuperset {
+      Button(action: onJoinSuperset) {
+        Label(
+          supersetLetter == nil ? "Superset with next movement" : "Add next movement to this superset",
+          systemImage: "arrow.triangle.2.circlepath"
+        )
+      }
+    }
+    if let onLeaveSuperset, supersetLetter != nil {
+      Button(action: onLeaveSuperset) {
+        Label("Take out of superset", systemImage: "arrow.uturn.backward")
+      }
+    }
+    if let onEditNote {
+      Button(action: onEditNote) {
+        Label(
+          state.notes.isEmpty ? "Add a note" : "Edit note",
+          systemImage: state.notes.isEmpty ? "square.and.pencil" : "pencil"
+        )
+      }
+    }
+    if let onRemoveExercise {
+      Button(role: .destructive) {
+        if state.loggedCount == 0 {
+          onRemoveExercise()
+        } else {
+          confirmsRemoval = true
+        }
+      } label: {
+        Label(
+          state.loggedCount == 0
+            ? "Remove this movement"
+            // Rows, not sets, deliberately: this warns about what is destroyed, and a drop that
+            // is about to be deleted is a record the lifter loses whether or not the week counts it.
+            : "Remove this movement and its ^[\(state.loggedCount) logged row](inflect: true)",
+          systemImage: "trash"
+        )
+      }
+    }
   }
 
   @ViewBuilder private var headerContent: some View {
@@ -201,6 +235,19 @@ public struct ExerciseSectionView: View {
           .font(Tokens.Text.caption)
           .foregroundStyle(Tokens.Color.textSecondary)
           .monospacedDigit()
+        if hasHeaderActions {
+          Menu {
+            headerActionItems
+          } label: {
+            Image(systemName: "ellipsis.circle")
+              .font(Tokens.Text.glyph)
+              .frame(minWidth: Tokens.minimumTapTarget, minHeight: Tokens.minimumTapTarget)
+              // Without a content shape only the drawn glyph hit-tests, so the declared 44 pt was
+              // not yet the tappable area.
+              .contentShape(Rectangle())
+          }
+          .accessibilityLabel("Options for \(state.exerciseName)")
+        }
       }
       if let onSelectMachine {
         machineChip(action: onSelectMachine)
@@ -233,6 +280,11 @@ public struct ExerciseSectionView: View {
       }
     }
     .padding(.horizontal, Tokens.Spacing.regular)
+  }
+
+  private var hasHeaderActions: Bool {
+    onJoinSuperset != nil || (onLeaveSuperset != nil && supersetLetter != nil)
+      || onEditNote != nil || onRemoveExercise != nil
   }
 
   /// Where per-machine tracking is actually reached.

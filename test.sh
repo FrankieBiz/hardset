@@ -11,10 +11,11 @@ cd "$(dirname "$0")/Packages/HardsetKit" || exit 1
 FAIL=0
 echo "=== engine-independent suites ==="
 swift test --disable-sandbox --skip "SyncDelegateTests" \
-  --skip "SyncEngineRetentionTests" || FAIL=1
+  --skip "SyncEngineRetentionTests" \
+  --skip "DataDeletionCloudKitTests" || FAIL=1
 
 for t in signOutPreservesData switchAccountsPreservesData accountChangeIsReported \
-  retainedEngineAllowsWrites; do
+  retainedEngineAllowsWrites deletionCreatesCloudKitTombstones; do
   echo "=== $t (isolated process) ==="
   swift test --disable-sandbox --filter "$t" || FAIL=1
 done

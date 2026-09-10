@@ -55,12 +55,24 @@ public enum RestAlarmService {
   public nonisolated static func schedule(_ request: Request) async throws -> Alarm {
     // The 26.1 initialiser. The `stopButton:` overload is deprecated as of 26.1, which is
     // why the deployment target is 26.1 rather than 26.0.
+    //
+    // No secondary button, deliberately.
+    //
+    // This carried one reading "Skip" with `secondaryButtonBehavior: .custom`. `.custom` is the
+    // case that dispatches to the configuration's `secondaryIntent`, and the SDK's
+    // `timer(duration:attributes:stopIntent:secondaryIntent:sound:)` defaults that to nil -- which
+    // is what it was, because this app declares no AppIntents type at all: `LiveActivityIntent`
+    // appears nowhere in the repository. So the only interactive control on the app's flagship
+    // alert had nothing behind it, and this codebase already states the rule for that -- "an inert
+    // control is worse than none" (NumericPad.swift:169).
+    //
+    // `.countdown` is the only other case and it restarts the countdown, which is not what a button
+    // labelled Skip means on an alert that fires *because* rest is already over. Restoring a real
+    // secondary action means declaring a `LiveActivityIntent` in the app target and passing it as
+    // `secondaryIntent:` here; until that exists the honest alert is its title plus the system's own
+    // stop affordance. Nothing here is provable off-device -- see DEVICE-CHECKLIST.md section B.
     let alert = AlarmPresentation.Alert(
-      title: LocalizedStringResource(stringLiteral: request.alertTitle),
-      secondaryButton: AlarmButton(
-        text: "Skip", textColor: .white, systemImageName: "forward.end.fill"
-      ),
-      secondaryButtonBehavior: .custom
+      title: LocalizedStringResource(stringLiteral: request.alertTitle)
     )
 
     let countdown = AlarmPresentation.Countdown(

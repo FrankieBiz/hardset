@@ -32,14 +32,33 @@ struct HardsetApp: App {
   /// two years of history would see a fresh install, train into a store discarded on quit, and be
   /// told nothing. Recording the failure is what makes it possible to say so instead.
   private let storeFailure: String?
+  /// UI tests get a fresh migrated store on every launch. Release builds can never enable this.
+  private let runsUITests: Bool
 
   init() {
+    #if DEBUG
+      let runsUITests = ProcessInfo.processInfo.arguments.contains("--hardset-ui-testing")
+    #else
+      let runsUITests = false
+    #endif
+
+    #if DEBUG
+      if runsUITests, let bundleID = Bundle.main.bundleIdentifier {
+        // `@AppStorage` is process-global. Reset only Hardset's own test container so a previous UI
+        // run cannot skip the first-use rest choice or change the unit under a later assertion.
+        UserDefaults.standard.removePersistentDomain(forName: bundleID)
+      }
+    #endif
+
     var failure: String?
     // Exactly once per process. `prepareDependencies` is the supported place to install the
     // default database, and calling it more than once is a programmer error.
     prepareDependencies { dependencies in
       do {
-        dependencies.defaultDatabase = try HardsetDatabase.open()
+        dependencies.defaultDatabase =
+          try runsUITests
+          ? HardsetDatabase.ephemeral()
+          : HardsetDatabase.open()
       } catch {
         // Not a `fatalError`: a crash tells the user less than the screen does, and it removes
         // their chance to read the reason. Not swallowed either -- see `storeFailure`.
@@ -47,17 +66,32 @@ struct HardsetApp: App {
       }
     }
     self.storeFailure = failure
+    self.runsUITests = runsUITests
   }
 
   var body: some Scene {
     WindowGroup {
-      if let storeFailure {
-        // Deliberately terminal. There is no "start fresh" affordance, because a store that failed
-        // to open once may well open on the next launch, and erasing it is not reversible.
-        StoreUnavailableView(detail: storeFailure)
-      } else {
-        RootView(syncDelegate: syncDelegate, restTimer: restTimer)
+      Group {
+        if let storeFailure {
+          // Deliberately terminal. There is no "start fresh" affordance, because a store that failed
+          // to open once may well open on the next launch, and erasing it is not reversible.
+          StoreUnavailableView(detail: storeFailure)
+        } else {
+          RootView(
+            syncDelegate: syncDelegate,
+            restTimer: restTimer,
+            startsSyncEngine: !runsUITests
+          )
+        }
       }
+      // Applied here so both branches inherit them. `HardsetRootView` sets the same two inside its
+      // own body — and keeps them, since the package previews and the host suite render that view
+      // without this target — so only the store-failure screen was missing them: on a device in Light
+      // Mode the status bar, scroll indicators and the selection handles on the one text that screen
+      // exists to have copied were all drawn light, in stock blue. DECISIONS #22 makes dark-only the
+      // rule for the whole app, not for one view.
+      .preferredColorScheme(.dark)
+      .tint(Tokens.Color.accent)
     }
   }
 }
@@ -65,6 +99,7 @@ struct HardsetApp: App {
 private struct RootView: View {
   let syncDelegate: HardsetSyncDelegate
   let restTimer: RestTimerController
+  let startsSyncEngine: Bool
 
   /// Retained for the process lifetime, and that is load-bearing rather than tidy.
   ///
@@ -123,7 +158,9 @@ private struct RootView: View {
         restTimer.restore(state: stored.state, alarmID: stored.alarmID)
       }
 
-      // Sync starts after the UI exists, so a CloudKit hiccup cannot block launch.
+      // Sync starts after the UI exists, so a CloudKit hiccup cannot block launch. A UI-test store
+      // is intentionally process-local and has nothing to synchronize.
+      guard startsSyncEngine else { return }
       do {
         syncEngine = try HardsetDatabase.makeSyncEngine(for: database, delegate: syncDelegate)
       } catch {

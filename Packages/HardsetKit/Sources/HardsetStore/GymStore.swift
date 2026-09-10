@@ -45,7 +45,7 @@ public nonisolated struct MachineRecord: Hashable, Sendable, Identifiable {
 /// unreachable: the schema, the progression engine and the chart all key on a machine, but a user
 /// with no way to create one logs every set with `machineID == nil` and the whole differentiator
 /// is dead code.
-public nonisolated struct GymStore {
+public nonisolated struct GymStore: Sendable {
   /// Module-internal rather than `private` so `MachineLibrary.swift` can extend this store in its
   /// own file. `private` is file-scoped in Swift, so the alternative was appending the whole
   /// library read to this file.
@@ -127,6 +127,22 @@ public nonisolated struct GymStore {
   }
 
   // MARK: - Machines
+
+  /// Every machine at every gym, for resolving a name the caller already holds an id for.
+  ///
+  /// Deliberately **not** for offering a choice: a machine belongs to one gym, so anything the
+  /// lifter may pick from must come from `machines(at:)`. This exists because a plan can name a
+  /// machine at a gym the lifter is not currently at, and a row that dropped the name would be less
+  /// honest than one that shows it and says where it is.
+  public func machinesEverywhere() throws -> [MachineRecord] {
+    try database.read { db in
+      try Machine
+        .where { !$0.isArchived }
+        .order { $0.name }
+        .fetchAll(db)
+        .map(MachineRecord.init(row:))
+    }
+  }
 
   public func machines(at gymID: GymID) throws -> [MachineRecord] {
     try database.read { db in

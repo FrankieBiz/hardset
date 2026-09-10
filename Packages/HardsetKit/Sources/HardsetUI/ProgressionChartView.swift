@@ -43,7 +43,7 @@ public struct ProgressionChartView: View {
     // highest-contrast option on this ground. This is the common case, and it used to fall through
     // to `overflow`: a free-weight lift has no gym index, so the single most frequent chart in the
     // app drew its only line in the neutral grey reserved for "we ran out of hues".
-    guard series.count > 1 else { return Tokens.Color.accent }
+    guard plottedSeries.count > 1 else { return Tokens.Color.accent }
     guard let index = input.gymIndex else { return Tokens.Color.Series.overflow }
     return Tokens.Color.Series.hue(forGymIndex: index)
   }
@@ -63,6 +63,9 @@ public struct ProgressionChartView: View {
 
   /// A series plus the label the store resolved for it, so this view does no lookups.
   public struct SeriesInput: Identifiable, Hashable, Sendable {
+    /// What this series *is*, independent of what it is called. Identity used to be the label, so
+    /// two machines sharing a name also shared a `ForEach` id.
+    public let key: ProgressionKey
     public let label: String
     public let points: [ProgressionPoint]
     /// Which gym this series is at, as an index into the validated hue order. `nil` for free
@@ -72,14 +75,16 @@ public struct ProgressionChartView: View {
     /// by stroke, because they are the same place and different equipment.
     public let machineIndexInGym: Int
 
-    public var id: String { label }
+    public var id: ProgressionKey { key }
 
     public init(
+      key: ProgressionKey,
       label: String,
       points: [ProgressionPoint],
       gymIndex: Int? = nil,
       machineIndexInGym: Int = 0
     ) {
+      self.key = key
       self.label = label
       self.points = points
       self.gymIndex = gymIndex
@@ -109,8 +114,17 @@ public struct ProgressionChartView: View {
         }
       } else {
         picker
-        chart
-        if hasNoEstimates && metric == .estimatedOneRepMax {
+        // One point is not a chart. Swift Charts given a single value resolves an automatic domain
+        // it cannot label, so the screen drew a bare white dot floating in 220 pt of black with no
+        // axis, no date and no number -- the reader could not even tell what they had lifted. The
+        // measurement is stated in words instead, and the chart returns the moment there is a
+        // second session to draw a line between.
+        if let only = lonePoint {
+          singleSampleNote(only)
+        } else {
+          chart
+        }
+        if plottedSeries.isEmpty && metric == .estimatedOneRepMax {
           // Says why the chart is empty instead of drawing nothing and letting the user guess.
           Text(
             "No estimate is available. A one-rep max is only estimated from sets of twelve reps "
@@ -118,6 +132,17 @@ public struct ProgressionChartView: View {
           )
           .font(Tokens.Text.caption)
           .foregroundStyle(Tokens.Color.certainty(.low))
+        } else if !omittedSeries.isEmpty {
+          // A machine that this metric cannot plot used to keep its legend entry and its colour
+          // while drawing nothing, so it read as a line the chart had lost rather than one it
+          // never had. It is now out of the legend, and named here instead of silently gone.
+          Text(
+            "Not shown on this metric: "
+              + omittedSeries.map(\.label).formatted(.list(type: .and))
+          )
+          .font(Tokens.Text.caption)
+          .foregroundStyle(Tokens.Color.certainty(.low))
+          .fixedSize(horizontal: false, vertical: true)
         }
         machineChangeNotes
         if let onExplain {
@@ -128,9 +153,12 @@ public struct ProgressionChartView: View {
             }
             .font(Tokens.Text.caption)
             .foregroundStyle(Tokens.Color.accent)
+            // Inside the label, not on the Button: outside it pads the button rather than
+            // enlarging it, leaving the hit region the caption's own text height.
+            .frame(minHeight: Tokens.minimumTapTarget)
+            .contentShape(Rectangle())
           }
           .buttonStyle(.plain)
-          .frame(minHeight: Tokens.minimumTapTarget)
         }
       }
     }
@@ -147,7 +175,10 @@ public struct ProgressionChartView: View {
 
   private var chart: some View {
     Chart {
-      ForEach(series) { input in
+      // `plottedSeries`, not `series`: a machine this metric cannot plot must not reach the
+      // foreground-style domain, because the legend is built from that domain and would list a
+      // coloured machine with no marks on the plot.
+      ForEach(plottedSeries) { input in
         ForEach(plottable(input.points), id: \.sessionID) { point in
           LineMark(
             x: .value("Date", point.date),
@@ -187,11 +218,11 @@ public struct ProgressionChartView: View {
     // chart has carried one since it was written; this one, the older of the two, never did.
     .accessibilityLabel(
       "\(metric.label) over time, in \(unit.abbreviation)"
-        + (series.count > 1 ? ", one line per machine" : "")
+        + (plottedSeries.count > 1 ? ", one line per machine" : "")
     )
     // No legend for a single series: the screen's own title names it, and a one-row legend reading
     // "Free weight" tells the reader nothing they did not already know.
-    .chartLegend(series.count > 1 ? .visible : .hidden)
+    .chartLegend(plottedSeries.count > 1 ? .visible : .hidden)
     // The validated series palette rather than Swift Charts' defaults, which are not contrast
     // checked against this ground. Three hues, assigned in fixed order and never cycled; a
     // fourth *gym* folds to the neutral rather than inventing a hue that fails colour-blind
@@ -200,8 +231,8 @@ public struct ProgressionChartView: View {
     // gym and `ExerciseProgressScreen` fills it from `ProgressionHistory.gymOrder`. (A NOTE here
     // claimed that plumbing did not exist, sitting directly above the line that reads it.)
     .chartForegroundStyleScale(
-      domain: series.map(\.label),
-      range: series.map { colour(for: $0) }
+      domain: plottedSeries.map(\.label),
+      range: plottedSeries.map { colour(for: $0) }
     )
     // Masking the plot area rather than the whole chart, so the axes and legend stay put while
     // the lines draw in. One animated value, and it cannot stair-step the way a point-prefix does.
@@ -215,6 +246,10 @@ public struct ProgressionChartView: View {
       }
     }
     .frame(height: 220)
+    // The y-axis rescales between load and estimate rather than snapping to the new domain, which
+    // is what §5.6 asks for. Nothing collapses toward zero on the switch: `plottable` removes an
+    // unestimable point instead of mapping it to 0, so what animates is its removal.
+    .animation(reduceMotion ? nil : Tokens.Motion.surface, value: metric)
     .task {
       guard drawProgress == 0 else { return }
       if reduceMotion {
@@ -225,16 +260,29 @@ public struct ProgressionChartView: View {
     }
   }
 
+  /// The most recent switch, spelled out, and a count of the rest.
+  ///
+  /// This was one sentence per switch with no cap, so a two-gym lifter -- the app's own motivating
+  /// case -- read twenty identical copies of "You changed machines here." under a 220 pt plot. The
+  /// same collapse the counted-marker caveat already uses: state it once, then say how much else
+  /// there is. The rules on the plot still mark every switch individually.
   private var machineChangeNotes: some View {
     VStack(alignment: .leading, spacing: Tokens.Spacing.snug) {
-      ForEach(machineChanges) { change in
+      if let latest = machineChanges.max(by: { $0.date < $1.date }) {
         Label {
-          Text(change.explanation(in: unit))
+          Text(latest.explanation(in: unit))
         } icon: {
           Image(systemName: "arrow.triangle.branch")
         }
         .font(Tokens.Text.caption)
         .foregroundStyle(Tokens.Color.textSecondary)
+
+        if machineChanges.count > 1 {
+          let earlier = machineChanges.count - 1
+          Text("and \(earlier) earlier machine switch\(earlier == 1 ? "" : "es")")
+            .font(Tokens.Text.caption)
+            .foregroundStyle(Tokens.Color.textSecondary)
+        }
       }
     }
   }
@@ -250,6 +298,22 @@ public struct ProgressionChartView: View {
     }
   }
 
+  /// Series with at least one point for the selected metric. Colour exists to distinguish lines
+  /// that are actually present, not an unestimable machine that this metric correctly omits.
+  private var plottedSeries: [SeriesInput] {
+    series.filter { !plottable($0.points).isEmpty }
+  }
+
+  /// Series this metric drops, for naming them under the chart.
+  ///
+  /// Empty when nothing plots at all: that case already has its own sentence, and listing every
+  /// machine as "not shown" under it would say the same thing twice.
+  private var omittedSeries: [SeriesInput] {
+    guard !plottedSeries.isEmpty else { return [] }
+    let plotted = Set(plottedSeries.map(\.key))
+    return series.filter { !plotted.contains($0.key) }
+  }
+
   private func value(_ point: ProgressionPoint) -> Double {
     switch metric {
     case .heaviestLoad: unit.fromKilograms(point.heaviestLoadKg)
@@ -257,9 +321,39 @@ public struct ProgressionChartView: View {
     }
   }
 
-  private var hasNoEstimates: Bool {
-    series.allSatisfy { input in
-      input.points.allSatisfy { $0.bestEstimatedOneRepMaxKg == nil }
+  /// The only plotted point, when there is exactly one across every series.
+  ///
+  /// Counted after `plottable`, so switching to Est. 1RM on a history whose sole estimable session
+  /// is one of several correctly falls back to the note rather than plotting a lone dot.
+  private var lonePoint: ProgressionPoint? {
+    let points = series.flatMap { plottable($0.points) }
+    return points.count == 1 ? points[0] : nil
+  }
+
+  /// What a single session says, in the words a chart would have been trying to draw.
+  private func singleSampleNote(_ point: ProgressionPoint) -> some View {
+    VStack(alignment: .leading, spacing: Tokens.Spacing.tight) {
+      Text(unit.tonnageText(fromKilograms: kilograms(point)))
+        .font(Tokens.Text.readout)
+        .foregroundStyle(Tokens.Color.textPrimary)
+      Text(
+        "\(metric.label), \(point.date.formatted(.dateTime.day().month(.abbreviated).year()))"
+      )
+      .font(Tokens.Text.caption)
+      .foregroundStyle(Tokens.Color.textSecondary)
+      Text("One session logged. A line needs a second.")
+        .font(Tokens.Text.caption)
+        .foregroundStyle(Tokens.Color.textSecondary)
+    }
+    .frame(maxWidth: .infinity, alignment: .leading)
+    .accessibilityElement(children: .combine)
+  }
+
+  /// The selected metric in canonical kilograms, so the one formatter converts exactly once.
+  private func kilograms(_ point: ProgressionPoint) -> Double {
+    switch metric {
+    case .heaviestLoad: point.heaviestLoadKg
+    case .estimatedOneRepMax: point.bestEstimatedOneRepMaxKg ?? point.heaviestLoadKg
     }
   }
 }
@@ -281,10 +375,15 @@ public struct ProgressionChartView: View {
         ProgressionChartView(
           series: [
             .init(
+              key: ProgressionKey(exerciseID: ExerciseID(), machineID: MachineID()),
               label: "Hammer Strength",
               points: [point(0, 100, 116), point(1, 105, 122), point(2, 110, 128)]
             ),
-            .init(label: "Cybex", points: [point(3, 85, 99), point(4, 90, 105)]),
+            .init(
+              key: ProgressionKey(exerciseID: ExerciseID(), machineID: MachineID()),
+              label: "Cybex",
+              points: [point(3, 85, 99), point(4, 90, 105)]
+            ),
           ],
           machineChanges: [
             MachineChange(

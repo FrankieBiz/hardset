@@ -1,4 +1,10 @@
 .DS_Store
+.env
+.env.*
+!.env.example
+.idea/
+.vscode/
+.uxaudit/
 build/
 DerivedData/
 *.xcuserstate
@@ -8,3 +14,6 @@ Packages/*/.build/
 *.hmap
 *.ipa
 *.dSYM.zip
+*.xcresult
+*.mobileprovision
+*.p12

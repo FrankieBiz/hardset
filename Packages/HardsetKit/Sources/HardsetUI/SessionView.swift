@@ -37,6 +37,8 @@ public struct SessionView: View {
   private let onJoinSuperset: ((UUID) -> Void)?
   private let onLeaveSuperset: ((UUID) -> Void)?
   private let onFinish: () -> Void
+  /// Whether the finish confirmation is up.
+  @State private var confirmsFinish = false
 
   public init(
     exercises: Binding<[ExerciseLogState]>,
@@ -95,18 +97,6 @@ public struct SessionView: View {
   public var body: some View {
     ScrollView {
       LazyVStack(spacing: Tokens.Spacing.regular) {
-        if let errorMessage {
-          // A failed write is stated, not swallowed. The row it belongs to is still unlogged,
-          // so the user can retry rather than discovering the gap days later.
-          Label(errorMessage, systemImage: "exclamationmark.triangle.fill")
-            .font(Tokens.Text.label)
-            .foregroundStyle(Tokens.Color.certainty(.low))
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(Tokens.Spacing.regular)
-            .background(Tokens.Color.surface, in: RoundedRectangle(cornerRadius: Tokens.Radius.card))
-            .padding(.horizontal, Tokens.Spacing.regular)
-        }
-
         if !records.isEmpty {
           // Each record names what it beat, so the claim is checkable rather than a bare "PR!".
           VStack(alignment: .leading, spacing: Tokens.Spacing.tight) {
@@ -115,7 +105,7 @@ public struct SessionView: View {
                 VStack(alignment: .leading, spacing: 0) {
                   Text(record.kind.label)
                     .font(Tokens.Text.label.weight(.semibold))
-                  Text(Self.describe(record))
+                  Text(Self.describe(record, in: unit))
                     .font(Tokens.Text.caption)
                     .foregroundStyle(Tokens.Color.textSecondary)
                 }
@@ -128,7 +118,6 @@ public struct SessionView: View {
           .frame(maxWidth: .infinity, alignment: .leading)
           .padding(Tokens.Spacing.regular)
           .background(Tokens.Color.surface, in: RoundedRectangle(cornerRadius: Tokens.Radius.card))
-          .padding(.horizontal, Tokens.Spacing.regular)
           .accessibilityElement(children: .combine)
         }
 
@@ -167,7 +156,23 @@ public struct SessionView: View {
             onLeaveSuperset: onLeaveSuperset.map { leave in { leave(exercise.id) } }
           )
           .background(Tokens.Color.surface.opacity(0.4), in: RoundedRectangle(cornerRadius: Tokens.Radius.card))
-          .padding(.horizontal, Tokens.Spacing.snug)
+          // `ground -> surface` is the subtlest step in the palette, so a card sitting straight on
+          // `ground` takes a hairline. Without it this card had no edge at all, and the set rows
+          // inside it -- solid `surface` -- read as lighter than the container holding them.
+          .overlay {
+            RoundedRectangle(cornerRadius: Tokens.Radius.card)
+              .strokeBorder(Tokens.Color.hairline, lineWidth: 1)
+          }
+        }
+
+        // Above the button it describes. Guidance that renders *below* its own control is read
+        // after the decision it was meant to inform.
+        if exercises.isEmpty {
+          ContentUnavailableView {
+            Label("Nothing added yet", systemImage: "dumbbell")
+          } description: {
+            Text("Add a movement to start logging sets.")
+          }
         }
 
         if let onAddExercise {
@@ -182,30 +187,37 @@ public struct SessionView: View {
             Tokens.Color.surface,
             in: RoundedRectangle(cornerRadius: Tokens.Radius.control)
           )
-          .padding(.horizontal, Tokens.Spacing.regular)
-        }
-
-        // An empty workout says so, and says what to do about it, rather than rendering a bare
-        // "Finish" button under nothing.
-        if exercises.isEmpty {
-          ContentUnavailableView {
-            Label("Nothing added yet", systemImage: "dumbbell")
-          } description: {
-            Text("Add a movement to start logging sets.")
-          }
         }
 
         summary
       }
-      .padding(.vertical, Tokens.Spacing.regular)
-      // Room for the rest bar so the last row is never trapped underneath it.
-      .safeAreaPadding(.bottom, restState == .idle ? 0 : 72)
+      // One gutter for the whole scroll. Cards were inset `snug` while every control beside them
+      // used `regular`, so every card edge sat 4 pt outside every button edge down the screen.
+      .padding(Tokens.Spacing.regular)
     }
     .background(Tokens.Color.ground)
+    // Pinned rather than scrolled: as the first child of the stack, a failed write on movement
+    // twelve reported itself thousands of points above the row that was tapped. Reserves nothing
+    // while there is no message, so it composes with the rest bar's inset below.
+    .safeAreaInset(edge: .top) {
+      if let errorMessage {
+        Label(errorMessage, systemImage: "exclamationmark.triangle.fill")
+          .font(Tokens.Text.label)
+          .foregroundStyle(Tokens.Color.certainty(.low))
+          .frame(maxWidth: .infinity, alignment: .leading)
+          .padding(Tokens.Spacing.regular)
+          .background(Tokens.Color.surface, in: RoundedRectangle(cornerRadius: Tokens.Radius.card))
+          .padding(.horizontal, Tokens.Spacing.regular)
+      }
+    }
     // A record is stated, not celebrated -- but it is worth feeling, because the lifter is looking
-    // at the bar and not at the screen. Keyed on the count so a second record in the same session
-    // fires again.
-    .sensoryFeedback(.impact(flexibility: .solid, intensity: 0.7), trigger: records.count)
+    // at the bar and not at the screen. Keyed on the records themselves, not their count: two
+    // heaviest-load records in a row leave the count at one, and the second announcement was
+    // silent. A record has to beat the last by a real margin, so consecutive values cannot be
+    // equal; the predicate suppresses only the transition back to nothing.
+    .sensoryFeedback(.impact(flexibility: .solid, intensity: 0.7), trigger: records) { _, new in
+      !new.isEmpty
+    }
     .safeAreaInset(edge: .bottom) {
       RestBarView(
         state: restState,
@@ -220,21 +232,30 @@ public struct SessionView: View {
 
   /// Spells out the comparison. An estimated-1RM record says it is an estimate, because
   /// guideline 1.4.1 is about not presenting an estimate as a measurement.
-  static func describe(_ record: PersonalRecord) -> String {
+  ///
+  /// Takes the unit rather than assuming one. Records are the only sentences on this screen the
+  /// lifter is meant to feel, and they were printed in kilograms unconditionally -- so a lifter
+  /// working in pounds, who had just pressed 135 lb, was congratulated on "61 kg, up from 59 kg".
+  /// Every load beside it on the same screen was already in pounds.
+  static func describe(_ record: PersonalRecord, in unit: WeightUnit) -> String {
+    let load = Self.trim(unit.displayValue(fromKilograms: record.weightKg))
+    let suffix = unit.abbreviation
     switch record.kind {
     case .heaviestLoad:
       if let previous = record.previousWeightKg {
-        return "\(Self.trim(record.weightKg)) kg, up from \(Self.trim(previous)) kg"
+        let before = Self.trim(unit.displayValue(fromKilograms: previous))
+        return "\(load) \(suffix), up from \(before) \(suffix)"
       }
-      return "\(Self.trim(record.weightKg)) kg"
+      return "\(load) \(suffix)"
     case .repsAtLoad:
       if let previousReps = record.previousReps {
-        return "\(record.reps) reps at \(Self.trim(record.weightKg)) kg, up from \(previousReps)"
+        return "\(record.reps) reps at \(load) \(suffix), up from \(previousReps)"
       }
-      return "\(record.reps) reps at \(Self.trim(record.weightKg)) kg"
+      return "\(record.reps) reps at \(load) \(suffix)"
     case .estimatedOneRepMax:
       if let previous = record.previousWeightKg {
-        return "estimated, up from about \(Self.trim(previous)) kg"
+        let before = Self.trim(unit.displayValue(fromKilograms: previous))
+        return "estimated, up from about \(before) \(suffix)"
       }
       return "estimated"
     }
@@ -250,7 +271,7 @@ public struct SessionView: View {
         .font(Tokens.Text.caption)
         .foregroundStyle(Tokens.Color.textSecondary)
         .monospacedDigit()
-      Button(action: onFinish) {
+      Button { confirmsFinish = true } label: {
         Text("Finish workout")
           .font(Tokens.Text.label.weight(.semibold))
           .frame(maxWidth: .infinity, minHeight: Tokens.loggerTapTarget)
@@ -261,9 +282,55 @@ public struct SessionView: View {
         Tokens.Color.surface,
         in: RoundedRectangle(cornerRadius: Tokens.Radius.control)
       )
+      // Asked, because finishing cannot be undone -- `SessionTimeline` refuses to re-open a closed
+      // session -- and this control is a same-size, same-colour, same-weight rectangle sitting one
+      // gap below "Add movement". Reaching for one and hitting the other ended the workout with no
+      // warning and no way back. The message states what is kept and what is dropped rather than
+      // asking the lifter to guess which.
+      .confirmationDialog(
+        finishPrompt,
+        isPresented: $confirmsFinish,
+        titleVisibility: .visible
+      ) {
+        Button("Finish workout") { onFinish() }
+        Button("Keep going", role: .cancel) {}
+      } message: {
+        Text(finishConsequence)
+      }
     }
-    .padding(.horizontal, Tokens.Spacing.regular)
     .padding(.top, Tokens.Spacing.snug)
+  }
+
+  /// Rows the lifter has opened but not logged. Counted, not implied: "some rows" is the kind of
+  /// vagueness that makes a confirmation worthless.
+  private var openRowCount: Int {
+    exercises.reduce(0) { $0 + $1.slots.count { slot in !slot.isLogged } }
+  }
+
+  private var finishPrompt: String {
+    SessionVolume(exercises: exercises).isEmpty ? "Finish with nothing logged?" : "Finish this workout?"
+  }
+
+  /// What ending the workout actually does, in both directions.
+  private var finishConsequence: String {
+    let volume = SessionVolume(exercises: exercises)
+    if volume.isEmpty {
+      return "This saves a workout with no sets in it. You can delete it from History."
+    }
+    // Pluralised by hand. `^[...](inflect:)` is only interpreted inside a `LocalizedStringKey` --
+    // an inline `Text("...")` literal -- and this is a `String` reaching `Text(String)`, which
+    // renders the markup verbatim. `HistoryView.volumeText` carries the same note for the same
+    // reason: it shipped on screen once as "^[1 set](inflect: true)".
+    let kept = volume.workingSets == 1
+      ? "1 set already saved."
+      : "\(volume.workingSets) sets already saved."
+    guard openRowCount > 0 else {
+      return "\(kept) A finished workout cannot be reopened."
+    }
+    let dropped = openRowCount == 1
+      ? "The one row you have not logged is discarded."
+      : "The \(openRowCount) rows you have not logged are discarded."
+    return "\(kept) \(dropped) A finished workout cannot be reopened."
   }
 
   /// Counted by `SessionVolume`, which is tested. The rules that matter — unlogged rows and
@@ -272,15 +339,16 @@ public struct SessionView: View {
   private var volumeDescription: String {
     let volume = SessionVolume(exercises: exercises)
     guard !volume.isEmpty else { return "No sets logged yet" }
-    let displayed = unit.fromKilograms(volume.volumeKg)
     var parts = [
       volume.workingSets == 1 ? "1 set" : "\(volume.workingSets) sets",
       volume.reps == 1 ? "1 rep" : "\(volume.reps) reps",
     ]
     if volume.volumeKg > 0 {
-      parts.append("\(Int(displayed.rounded())) \(unit.abbreviation) volume")
+      parts.append("\(unit.tonnageText(fromKilograms: volume.volumeKg)) volume")
     }
-    if volume.warmupSets > 0 { parts.append("\(volume.warmupSets) warm-up") }
+    if volume.warmupSets > 0 {
+      parts.append("\(volume.warmupSets) warm-up\(volume.warmupSets == 1 ? "" : "s")")
+    }
     return parts.joined(separator: " · ")
   }
 }

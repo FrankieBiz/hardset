@@ -15,6 +15,8 @@ public struct MethodologySheet: View {
   private let source: EvidenceSource
   private let certainty: Certainty?
 
+  @Environment(\.dismiss) private var dismiss
+
   public init(source: EvidenceSource, certainty: Certainty? = nil) {
     self.source = source
     self.certainty = certainty
@@ -50,6 +52,18 @@ public struct MethodologySheet: View {
       }
       .background(Tokens.Color.ground)
       .navigationTitle(source.title)
+      #if os(iOS)
+        // A source title is a sentence more often than a word, and this sheet is read one-handed.
+        .navigationBarTitleDisplayMode(.inline)
+      #endif
+      // Every other modal in the app carries an explicit way out; the 1.4.1 disclosure was the one
+      // that relied on the drag. `.confirmationAction` rather than `.topBarTrailing`, which does
+      // not exist on macOS and this target builds for the host so the suite can run there.
+      .toolbar {
+        ToolbarItem(placement: .confirmationAction) {
+          Button("Done") { dismiss() }
+        }
+      }
     }
   }
 

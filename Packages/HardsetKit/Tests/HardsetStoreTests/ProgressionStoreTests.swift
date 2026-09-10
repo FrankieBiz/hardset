@@ -44,14 +44,14 @@ struct ProgressionStoreTests {
 
   private func session(
     _ store: LoggerStore, _ exercise: ExerciseID, _ machine: MachineID?,
-    sets: [(Double, Int)], at date: Date, isWarmup: Bool = false
+    sets: [(Double, Int)], at date: Date, kind: SetKind = .working
   ) throws {
     let id = try store.startSession(at: date)
     for (index, set) in sets.enumerated() {
       _ = try store.logSet(
         sessionID: id, exerciseID: exercise, machineID: machine,
         draft: SetEntryDraft(weightKg: set.0, reps: set.1), setOrdinal: index,
-        isWarmup: isWarmup, at: date.addingTimeInterval(Double(index) * 60)
+        kind: kind, at: date.addingTimeInterval(Double(index) * 60)
       )
     }
     try store.finishSession(id, at: date.addingTimeInterval(3600))
@@ -96,7 +96,7 @@ struct ProgressionStoreTests {
     let (database, logger, progression, exercise, gym) = try fixture()
     let hammer = try machine(database, gym, "Hammer Strength")
 
-    try session(logger, exercise, hammer, sets: [(200, 1)], at: now.addingTimeInterval(-2 * 86_400), isWarmup: true)
+    try session(logger, exercise, hammer, sets: [(200, 1)], at: now.addingTimeInterval(-2 * 86_400), kind: .warmup)
     try session(logger, exercise, hammer, sets: [(100, 8)], at: now.addingTimeInterval(-86_400))
 
     let history = try progression.history(for: exercise)
@@ -135,6 +135,30 @@ struct ProgressionStoreTests {
     let history = try progression.history(for: exercise)
     #expect(history.isEmpty)
     #expect(history.machineChanges.isEmpty)
+  }
+
+  @Test("The progress browser lists every working movement by last trained date")
+  func exercisesWithHistory() throws {
+    let (database, logger, progression, legPress, _) = try fixture()
+    let bench = ExerciseID()
+    let warmupOnly = ExerciseID()
+    let dropOnly = ExerciseID()
+    try database.write { db in
+      try Exercise.insert { Exercise.Draft(id: bench.rawValue, name: "Bench Press") }.execute(db)
+      try Exercise.insert { Exercise.Draft(id: warmupOnly.rawValue, name: "Warm-up Only") }.execute(db)
+      try Exercise.insert { Exercise.Draft(id: dropOnly.rawValue, name: "Drop Only") }.execute(db)
+    }
+
+    try session(logger, legPress, nil, sets: [(100, 8)], at: now.addingTimeInterval(-3 * 86_400))
+    try session(logger, bench, nil, sets: [(80, 8)], at: now.addingTimeInterval(-86_400))
+    // Neither kind has a chartable progression history, so neither belongs in the browser.
+    try session(logger, warmupOnly, nil, sets: [(40, 12)], at: now, kind: .warmup)
+    try session(logger, dropOnly, nil, sets: [(20, 20)], at: now, kind: .drop)
+
+    let rows = try progression.exercisesWithHistory()
+    #expect(rows.map(\.id) == [bench, legPress])
+    #expect(rows.map(\.name) == ["Bench Press", "Leg Press"])
+    #expect(rows.first?.lastTrained == now.addingTimeInterval(-86_400))
   }
 
   /// A deleted machine still has logged sets, and they must not vanish from the chart.

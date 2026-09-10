@@ -180,8 +180,18 @@ public struct MachinePickerView: View {
         }
       }
     }
+    // The visible row is two lines -- the name, and when it is known the stack step -- and this
+    // label replaced both with the name alone, so the one fact the second line exists to add was
+    // said to sighted users only. Its own comment above calls it out as constraining what a
+    // progression may propose; that reason does not stop applying under VoiceOver.
     .accessibilityLabel(
-      selected == option.id ? "\(option.displayName), selected" : option.displayName
+      ([
+        option.displayName,
+        option.stackIncrementKg.map {
+          "moves in \(Self.format(unit.displayValue(fromKilograms: $0))) \(unit.abbreviation) steps"
+        },
+        selected == option.id ? "selected" : nil,
+      ] as [String?]).compactMap { $0 }.joined(separator: ", ")
     )
     .accessibilityActions {
       if let onRename { Button("Rename this machine") { onRename(option.id) } }

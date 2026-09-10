@@ -1,10 +1,12 @@
 import Foundation
+import HardsetCore
+import HardsetUI
 import Testing
 
 /// Every place the movement picker appears offers the same way out of an empty result.
 ///
 /// This exists because of the exact defect it now forbids. `ExercisePickerView` carries both create
-/// affordances — a `+` toolbar item and an "Add it yourself" button on the empty state — and **both
+/// affordances — a `+` toolbar item and an "Add movement or machine" button on the empty state — and **both
 /// are gated on `onCreate`**. The live session passed it. The planner passed nothing. So building a
 /// plan and searching for a movement the catalogue lacks ended at "Nothing in the catalogue matches"
 /// with no way forward, on a catalogue that is knowingly a third of its intended size.
@@ -66,7 +68,7 @@ struct AffordanceWiringTests {
     #expect(sites.count >= 2, "Expected the logger and the planner to both present the picker.")
   }
 
-  /// The dead end itself. Without `onCreate` there is no `+` and no "Add it yourself", and a lifter
+  /// The dead end itself. Without `onCreate` there is no `+` and no "Add movement or machine", and a lifter
   /// whose gym has a machine the catalogue never heard of simply cannot proceed.
   @Test("Every call site passes onCreate, so 'nothing matches' is never the end")
   func everyCallSiteOffersCreation() throws {
@@ -97,5 +99,31 @@ struct AffordanceWiringTests {
         )
       }
     }
+  }
+}
+
+@Suite("New movement and machine draft")
+struct NewExerciseDraftTests {
+  @Test("A specific machine name travels with the movement instead of requiring a second form")
+  func carriesMachineName() {
+    let draft = NewExerciseDraft(
+      name: "Panatta Chest Press",
+      modality: .machine,
+      primaryMuscle: .chest,
+      machineName: "Panatta Chest Press"
+    )
+
+    #expect(draft.machineName == draft.name)
+  }
+
+  @Test("Existing movement-only callers remain movement-only")
+  func machineRemainsOptional() {
+    let draft = NewExerciseDraft(
+      name: "Push-Up",
+      modality: .bodyweight,
+      primaryMuscle: .chest
+    )
+
+    #expect(draft.machineName == nil)
   }
 }

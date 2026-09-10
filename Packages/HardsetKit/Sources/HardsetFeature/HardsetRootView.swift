@@ -3,6 +3,7 @@ import HardsetStore
 import HardsetUI
 import SQLiteData
 import SwiftUI
+
 #if canImport(UIKit)
   import UIKit
 #endif
@@ -28,6 +29,8 @@ public struct HardsetEnvironment {
   public let bodyweight: BodyweightStore
   /// Produces the CSV a lifter takes their history away in.
   public let export: ExportStore
+  /// Permanently removes user-created rows while preserving the bundled exercise catalogue.
+  public let dataDeletion: DataDeletionStore
 
   public init(database: any DatabaseWriter) {
     self.logger = LoggerStore(database: database)
@@ -40,10 +43,11 @@ public struct HardsetEnvironment {
     self.gyms = GymStore(database: database)
     self.bodyweight = BodyweightStore(database: database)
     self.export = ExportStore(database: database)
+    self.dataDeletion = DataDeletionStore(database: database)
   }
 }
 
-/// The app's three tabs, plus the workout-in-progress bar.
+/// The app's tabs, plus the workout-in-progress bar.
 ///
 /// A live session is deliberately NOT a full-screen modal. It lives in the tab bar's bottom
 /// accessory, so a lifter mid-workout can still open their history or check the week's volume
@@ -60,9 +64,14 @@ public struct HardsetRootView: View {
   /// pill saying it is in progress.
   @State private var finished: FinishedSession?
   @State private var startFailed = false
+  /// Starting reads prior performance and creates the first rows. While that happens the button
+  /// remains visibly busy and cannot launch a duplicate session.
+  @State private var isStartingWorkout = false
   /// A workout is open in the database but could not be reopened. Stated, because the alternative is
   /// the lifter training a second time into a day whose sets they cannot see.
   @State private var recoveryFailed = false
+  @State private var isPreparing = true
+  @State private var startupError: String?
   /// Where the next workout will be. Preselected from the last one, changeable in one tap, and
   /// allowed to stay nil — training somewhere new must not require setup first.
   @State private var selectedGym: GymID?
@@ -92,6 +101,13 @@ public struct HardsetRootView: View {
   /// person whose decision it is. Off is offered first and is a real answer.
   @AppStorage("hardset.hasChosenRest") private var hasChosenRest = false
   @State private var isChoosingRest = false
+  /// The action the lifter asked for before the first-use rest question appeared.
+  ///
+  /// Starting immediately after setting `isChoosingRest` replaced the start screen in the same
+  /// update that was supposed to present its sheet. SwiftUI discarded the presentation and the
+  /// flagship choice never appeared. Holding a value here lets the sheet dismiss first, then
+  /// performs the exact start the lifter requested from Train, Plan, or History.
+  @State private var pendingStart: WorkoutStartRequest?
   /// Whether the set row offers an effort field. Off by default: an unused column in the logger is
   /// clutter in the one place the app cannot afford it.
   @AppStorage("hardset.tracksRPE") private var tracksRPE = false
@@ -103,6 +119,14 @@ public struct HardsetRootView: View {
   /// Which tab is showing. Bound so repeating a workout from History can move the lifter to the
   /// logger, which is where the workout it just started actually is.
   @State private var selectedTab: RootTab = .train
+  /// Whether there is a plan with something on it to point at.
+  ///
+  /// The start screen used to describe only the empty-workout path, so a lifter with a four-day
+  /// split landed on "add movements as you go" and nothing said their plan existed -- the one hop
+  /// the planner was built to provide was reachable only by knowing to look in another tab. A
+  /// boolean rather than the days themselves: which plan is selected belongs to the planner, and
+  /// answering that twice is how two screens come to disagree.
+  @State private var hasStartablePlan = false
   private let environment: HardsetEnvironment
   /// Overrides the stored preference. Exists for previews and tests; the app passes `nil` so the
   /// user's own choice wins.
@@ -136,6 +160,9 @@ public struct HardsetRootView: View {
 
   public var body: some View {
     tabs
+      .sheet(isPresented: $isChoosingRest, onDismiss: continuePendingStart) {
+        restChoiceSheet
+      }
       // Dark-only in v1, and forced rather than following the system. One palette tuned precisely
       // beats two tuned adequately, and this app is read at arm's length in a badly lit gym.
       //
@@ -145,12 +172,26 @@ public struct HardsetRootView: View {
       // is cheap because `Tokens.Color.dynamic` already has a slot waiting for it.
       // Keeps a live session in step with the setting. Without this, turning the rest timer on
       // mid-workout silently does nothing until the next session.
+      // A plan built in the Plan tab must be visible on the Train tab without relaunching.
+      .onChange(of: selectedTab) { _, tab in
+        if tab == .train { Task { await refreshPlanAvailability() } }
+      }
       .onChange(of: resolvedRest) { _, updated in
         coordinator?.restAfterSet = updated
         // Asked for the first time the lifter actually chooses a rest length. Nothing in the app
         // ever requested AlarmKit permission, so every schedule on a fresh install was refused and
         // the timer counted down in silence.
-        if updated != nil { Task { await hooks.requestAuthorization() } }
+        if updated != nil {
+          Task { await hooks.requestAuthorization() }
+          // Choosing a length in Settings *is* the answer to the first-use question. Only the rest
+          // sheet wrote `hasChosenRest`, so a lifter who set 90 s in Settings was asked again at
+          // their next workout and saw their own answer sitting unticked.
+          //
+          // Guarded on a non-nil duration rather than on any change, because deleting all data
+          // resets `restSeconds` to 0 and `hasChosenRest` to false in the same update — an
+          // unguarded write here would immediately mark the question answered again.
+          hasChosenRest = true
+        }
       }
       // The screen stays awake while a workout is open, and only while one is open.
       //
@@ -171,14 +212,17 @@ public struct HardsetRootView: View {
       // the environment, which was still the stock blue. Chrome is greyscale in this app, so the
       // one hue the design exists to remove was left sitting in the tab bar until this line.
       .tint(Tokens.Color.accent)
-      .task {
-        // Seeding is idempotent and non-destructive, so running it every launch is the intended
-        // usage rather than something to guard with a flag that can drift from reality.
-        _ = try? environment.catalog.seed()
-        // A workout left open is offered back before anything else. Nothing is closed on the
-        // app's initiative.
-        if coordinator == nil { adoptOpenSession() }
-        refreshGyms()
+      .task { await prepareForUse() }
+      // Titled with what happened, not with an instruction OK cannot carry out. "Hardset needs
+      // another try" promised a retry the alert's one button does not offer — and does not need
+      // to, since `catalog.seed()` runs again on every launch.
+      .alert(
+        "The movement list is incomplete",
+        isPresented: Binding(get: { startupError != nil }, set: { if !$0 { startupError = nil } })
+      ) {
+        Button("OK") { startupError = nil }
+      } message: {
+        Text(startupError ?? "Your existing data is safe.")
       }
   }
 
@@ -193,41 +237,52 @@ public struct HardsetRootView: View {
     return { plan in repeatWorkout(plan) }
   }
 
+  /// The gear, attached to every tab's stack rather than only to Train.
+  ///
+  /// Units, the rest length, RPE, export and delete are not Train-tab concerns: a lifter reading
+  /// the week's volume in pounds had to go back to Train to change the unit. The sheet itself is
+  /// hoisted onto the `TabView` (see `tabs`) rather than repeated here — all four stacks stay alive
+  /// inside the tab view, so four presentations bound to one boolean would fight over it.
+  @ToolbarContentBuilder private var settingsToolbar: some ToolbarContent {
+    // `.primaryAction` rather than `.topBarTrailing`: the latter does not exist on macOS, and this
+    // target builds for the host so the suite can run there.
+    ToolbarItem(placement: .primaryAction) {
+      Button {
+        isShowingSettings = true
+      } label: {
+        Label("Settings", systemImage: "gearshape")
+      }
+    }
+  }
+
+  private var settingsSheet: some View {
+    SettingsSheet(
+      useImperial: $useImperial,
+      restSeconds: $restSeconds,
+      tracksRPE: $tracksRPE,
+      bodyweight: environment.bodyweight,
+      export: environment.export,
+      dataDeletion: environment.dataDeletion,
+      gyms: environment.gyms,
+      unit: unit,
+      restAlertsDenied: hooks.isDenied(),
+      canDeleteData: coordinator == nil,
+      onDataDeleted: handleAllDataDeleted
+    ) { isShowingSettings = false }
+  }
+
   @ViewBuilder private var trainNavigation: some View {
     NavigationStack {
       trainTab
-        .toolbar {
-          // `.primaryAction` rather than `.topBarTrailing`: the latter does not exist on macOS,
-          // and this target builds for the host so the suite can run there.
-          ToolbarItem(placement: .primaryAction) {
-            Button {
-              isShowingSettings = true
-            } label: {
-              Label("Settings", systemImage: "gearshape")
-            }
-          }
-        }
-        .sheet(isPresented: $isChoosingRest) { restChoiceSheet }
-        .sheet(isPresented: $isShowingSettings) {
-          SettingsSheet(
-            useImperial: $useImperial,
-            restSeconds: $restSeconds,
-            tracksRPE: $tracksRPE,
-            bodyweight: environment.bodyweight,
-            export: environment.export,
-            gyms: environment.gyms,
-            unit: unit,
-            restAlertsDenied: hooks.isDenied()
-          ) { isShowingSettings = false }
-        }
+        .toolbar { settingsToolbar }
     }
   }
 
   /// `nil` while a workout is open, which hides "Start this day" rather than offering a button that
   /// would abandon the session in progress. Same shape and same reason as `repeatHandler`.
-  private var startDayHandler: (([PlannedExercise]) -> Void)? {
+  private var startDayHandler: ((PlannedDayStart) -> Void)? {
     guard coordinator == nil else { return nil }
-    return { plan in startPlannedDay(plan) }
+    return { day in startPlannedDay(day) }
   }
 
   @ViewBuilder private var planNavigation: some View {
@@ -239,16 +294,21 @@ public struct HardsetRootView: View {
         volume: environment.volume,
         exercises: environment.exercises,
         unit: unit,
+        // The gym the next workout will be at, so the planner's machine choices and its
+        // "available here" section agree with the session its own button starts.
+        gymID: selectedGym,
         onStartDay: startDayHandler
       )
       .navigationTitle("Plan")
+      .toolbar { settingsToolbar }
     }
   }
 
   @ViewBuilder private var volumeNavigation: some View {
     NavigationStack {
       WeeklyVolumeScreen(store: environment.volume)
-        .navigationTitle("This week")
+        .navigationTitle("Volume")
+        .toolbar { settingsToolbar }
     }
   }
 
@@ -262,7 +322,8 @@ public struct HardsetRootView: View {
         // your bench progression meant starting a session first.
         progression: environment.progression
       )
-        .navigationTitle("History")
+      .navigationTitle("History")
+      .toolbar { settingsToolbar }
     }
   }
 
@@ -283,11 +344,28 @@ public struct HardsetRootView: View {
         historyNavigation
       }
     }
+    // One presentation for four gears. Bound above the tab view rather than inside each stack,
+    // because all four stacks stay alive and four `.sheet`s on one boolean race to present.
+    //
+    // Refreshed on dismissal: Settings → Machines can create a gym, and `gymOptions` is only
+    // rebuilt by `refreshGyms()`. A gym added there was missing from the start screen's picker
+    // until the next launch, so the lifter added it a second time.
+    .sheet(isPresented: $isShowingSettings, onDismiss: { Task { await refreshGyms() } }) {
+      settingsSheet
+    }
 
     #if os(iOS)
       // The accessory is attached only while a session exists. Attaching it unconditionally and
       // returning an empty view inside drew an empty pill above the tab bar on the start screen —
       // the slot is reserved by the modifier, not by its content.
+      //
+      // Flipping this conditional is not free, and merging the branches is not the fix. The two
+      // arms are a `_ConditionalContent` with different static types, so the whole tab view is torn
+      // down and rebuilt on each flip: every tab's `NavigationStack` path and per-screen `@State`
+      // resets, `WeeklyVolumeScreen`'s `anchor`/`weekOffset` most visibly. It is paid at start and
+      // at finish, both of which move the lifter to Train anyway. The only correct fix is hoisting
+      // the browsing state that matters to the root — not attaching the accessory unconditionally,
+      // which brings the empty pill back.
       if coordinator != nil {
         content
           .tabViewBottomAccessory { liveSessionAccessory }
@@ -337,34 +415,86 @@ public struct HardsetRootView: View {
         }
       )
       .navigationTitle("Workout")
+    } else if isPreparing {
+      ProgressView("Preparing Hardset…")
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Tokens.Color.ground)
     } else {
       startView
     }
   }
 
+  /// Scrolls rather than clips.
+  ///
+  /// This was a fixed-height centred stack. At AX5 the empty state's two multi-line paragraphs, the
+  /// gym row, the plan link, a 56 pt primary button and up to three error paragraphs are taller
+  /// than the screen, and the bottom of it — including the button the screen exists for — was
+  /// simply cut off.
   private var startView: some View {
-    VStack(spacing: Tokens.Spacing.loose) {
-      ContentUnavailableView {
-        Label("No workout in progress", systemImage: "figure.strengthtraining.traditional")
-      } description: {
-        Text("Start an empty workout and add movements as you go.")
+    GeometryReader { proxy in
+      ScrollView {
+        startContent
+          // Preserves the vertical centring the old `maxHeight: .infinity` gave: `minHeight` on a
+          // frame centres its content, and only grows past the screen once the content does.
+          .frame(maxWidth: .infinity, minHeight: proxy.size.height)
       }
+      // No rubber-banding at default text sizes, where nothing overflows and a scroll view that
+      // bounces reads as a screen with something hidden below it.
+      .scrollBounceBehavior(.basedOnSize)
+    }
+    .background(Tokens.Color.ground)
+    .sheet(isPresented: $isChoosingGym) { gymSheet }
+  }
+
+  private var startContent: some View {
+    VStack(spacing: Tokens.Spacing.loose) {
+      workoutEmptyState
       gymRow
+
+      if hasStartablePlan {
+        // Navigation, not a recommendation. It names no day and orders nothing -- it says a plan
+        // exists and moves to it, which is the tab that owns choosing a day.
+        Button {
+          selectedTab = .plan
+        } label: {
+          HStack(spacing: Tokens.Spacing.snug) {
+            Image(systemName: "square.split.2x2")
+            Text("Start a day from your plan")
+            Spacer(minLength: 0)
+            Image(systemName: "chevron.right")
+              .font(Tokens.Text.caption)
+          }
+          .font(Tokens.Text.label)
+          .foregroundStyle(Tokens.Color.textPrimary)
+          .frame(minHeight: Tokens.minimumTapTarget)
+          .padding(.horizontal, Tokens.Spacing.regular)
+          .background(
+            Tokens.Color.surface, in: RoundedRectangle(cornerRadius: Tokens.Radius.control)
+          )
+          .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .padding(.horizontal, Tokens.Spacing.edge)
+      }
 
       // The primary action is a white fill with a `ground` label -- the brightest object on the
       // screen, and there is at most one. This was white-on-surface, which made it read as
       // secondary and disagreed with the same control on the summary screen.
       Button(action: startEmptyWorkout) {
-        Text("Start workout")
-          .font(Tokens.Text.label.weight(.semibold))
-          .frame(maxWidth: .infinity, minHeight: Tokens.loggerTapTarget)
-          .foregroundStyle(Tokens.Color.ground)
-          .background(
-            Tokens.Color.accent, in: RoundedRectangle(cornerRadius: Tokens.Radius.control)
-          )
+        HStack(spacing: Tokens.Spacing.snug) {
+          if isStartingWorkout { ProgressView().controlSize(.small) }
+          Text(isStartingWorkout ? "Starting…" : "Start workout")
+        }
+        .font(Tokens.Text.label.weight(.semibold))
+        .frame(maxWidth: .infinity, minHeight: Tokens.loggerTapTarget)
+        .foregroundStyle(Tokens.Color.ground)
+        .background(
+          Tokens.Color.accent, in: RoundedRectangle(cornerRadius: Tokens.Radius.control)
+        )
       }
       .buttonStyle(CommitButtonStyle())
-      .padding(.horizontal, Tokens.Spacing.section)
+      .disabled(isStartingWorkout)
+      .padding(.horizontal, Tokens.Spacing.edge)
 
       if startFailed {
         Text("Could not start a workout. Nothing has been lost — try again.")
@@ -383,10 +513,46 @@ public struct HardsetRootView: View {
         .multilineTextAlignment(.center)
         .fixedSize(horizontal: false, vertical: true)
       }
+      if let gymError {
+        // Said here as well as in the gym sheet. The sheet is the only place this was rendered, and
+        // it is not open at launch — so a failed read left the row reading "Add a gym to track
+        // machines", which is a fresh-install invitation printed over an unknown failure.
+        Text(gymError)
+          .font(Tokens.Text.caption)
+          .foregroundStyle(Tokens.Color.certainty(.low))
+          .multilineTextAlignment(.center)
+          .fixedSize(horizontal: false, vertical: true)
+      }
     }
-    .frame(maxWidth: .infinity, maxHeight: .infinity)
-    .background(Tokens.Color.ground)
-    .sheet(isPresented: $isChoosingGym) { gymSheet }
+  }
+
+  /// The system `ContentUnavailableView` rendered this description correctly, but exposed it to
+  /// the iOS 26 accessibility runtime as a fixed-size node. This state uses only semantic fonts,
+  /// so a lifter's Dynamic Type setting reaches the first instructions the app ever shows them.
+  private var workoutEmptyState: some View {
+    VStack(spacing: Tokens.Spacing.snug) {
+      Image(systemName: "figure.strengthtraining.traditional")
+        .font(Tokens.Text.hero)
+        .foregroundStyle(Tokens.Color.textSecondary)
+        .accessibilityHidden(true)
+      Text("No workout in progress")
+        .font(Tokens.Text.title)
+        .foregroundStyle(Tokens.Color.textPrimary)
+        .multilineTextAlignment(.center)
+        .fixedSize(horizontal: false, vertical: true)
+      // Names both paths when both exist. Describing only the empty one made the planner look
+      // like a document rather than a way into a workout.
+      Text(
+        hasStartablePlan
+          ? "Start a day from your plan, or an empty workout you add movements to as you go."
+          : "Start an empty workout and add movements as you go."
+      )
+      .font(Tokens.Text.label)
+      .foregroundStyle(Tokens.Color.textSecondary)
+      .multilineTextAlignment(.center)
+      .fixedSize(horizontal: false, vertical: true)
+    }
+    .padding(.horizontal, Tokens.Spacing.section)
   }
 
   /// Sets where this workout is, which is what makes per-machine tracking reachable at all: a
@@ -400,7 +566,13 @@ public struct HardsetRootView: View {
     } label: {
       HStack(spacing: Tokens.Spacing.snug) {
         Image(systemName: "mappin.and.ellipse")
-        Text(selectedGymName ?? "Add a gym to track machines")
+        // Two different nil cases, and only one of them is an invitation: "Not recorded" is a
+        // choice the sheet deliberately offers, and inviting someone to add a gym they already
+        // declined reads as the app having lost their answer. Same wording as the sheet's own row.
+        Text(
+          selectedGymName ?? (gymOptions.isEmpty ? "Add a gym to track machines" : "Not recorded")
+        )
+        .fixedSize(horizontal: false, vertical: true)
         Spacer(minLength: 0)
         Image(systemName: "chevron.right")
           .font(Tokens.Text.caption)
@@ -416,7 +588,7 @@ public struct HardsetRootView: View {
       .contentShape(Rectangle())
     }
     .buttonStyle(.plain)
-    .padding(.horizontal, Tokens.Spacing.section)
+    .padding(.horizontal, Tokens.Spacing.edge)
   }
 
   private var selectedGymName: String? {
@@ -446,11 +618,19 @@ public struct HardsetRootView: View {
             // Rename on the leading edge and non-destructive: repairing a typo is the common need
             // and must not sit next to the destructive action.
             .swipeActions(edge: .leading) {
-              Button { renamingGym = RenameTarget(id: gym.id.rawValue) } label: {
+              Button {
+                renamingGym = RenameTarget(id: gym.id.rawValue)
+              } label: {
                 Label("Rename", systemImage: "pencil")
               }
             }
-            .swipeActions(edge: .trailing) {
+            // `allowsFullSwipe: false`, matching `HistoryView`: the default fires the destructive
+            // action on one continuous swipe without ever drawing the button, and retiring is
+            // currently one-way — `GymStore` has no unarchive, so a gym retired by a gesture the
+            // lifter never saw takes its machines out of every picker for good. Revealing the
+            // button and having it tapped is this project's confirmation; a dialog here would
+            // disagree with the equally destructive workout delete.
+            .swipeActions(edge: .trailing, allowsFullSwipe: false) {
               Button(role: .destructive) {
                 retire(gym.id)
               } label: {
@@ -490,9 +670,17 @@ public struct HardsetRootView: View {
           }
           .buttonStyle(.plain)
 
-          Button { isAddingGym = true } label: {
-            Label("Add a gym", systemImage: "plus")
-              .frame(minHeight: Tokens.minimumTapTarget)
+          Button {
+            isAddingGym = true
+          } label: {
+            // Spacer and `contentShape` so the hit area is the row, not the glyph and its label —
+            // the same defect the history row had, and the sibling directly above already fixes.
+            HStack {
+              Label("Add a gym", systemImage: "plus")
+              Spacer(minLength: 0)
+            }
+            .frame(minHeight: Tokens.minimumTapTarget)
+            .contentShape(Rectangle())
           }
           .buttonStyle(.plain)
           .foregroundStyle(Tokens.Color.accent)
@@ -533,15 +721,40 @@ public struct HardsetRootView: View {
     }
   }
 
+  /// Performs launch reads without freezing the first interactive frame. The only main-actor step
+  /// is rebuilding an open coordinator, whose observable state belongs to the UI by design.
+  private func prepareForUse() async {
+    // Seeding is idempotent and non-destructive, so running it every launch is intended. It is also
+    // dozens of writes and used to run synchronously before the first screen could respond.
+    let catalog = environment.catalog
+    let seedResult = await readOffMain { try catalog.seed() }
+    guard !Task.isCancelled else { return }
+    if case .failure = seedResult {
+      startupError =
+        "The movement catalogue could not be prepared, so the movement picker may be short or "
+        + "empty. Nothing you have logged is affected. Reopening Hardset tries again."
+    }
+
+    // A workout left open is offered back before the start controls become available. Nothing is
+    // closed on the app's initiative.
+    if coordinator == nil { _ = await adoptOpenSession() }
+    await refreshGyms()
+    await refreshPlanAvailability()
+    isPreparing = false
+  }
+
   /// Retires a gym without touching what was logged there.
   private func retire(_ id: GymID) {
     do {
       try environment.gyms.archiveGym(id)
       if selectedGym == id { selectedGym = nil }
       gymError = nil
-      refreshGyms()
+      Task { await refreshGyms() }
     } catch {
-      gymError = "That gym could not be retired. \(error)"
+      // Said in the lifter's words rather than as a raw `\(error)` dump. "GymStoreError error 1"
+      // tells them nothing about the only thing they need to know, which is that the gym and every
+      // workout logged there are exactly as they were.
+      gymError = "That gym could not be retired. Nothing was changed."
     }
   }
 
@@ -549,21 +762,71 @@ public struct HardsetRootView: View {
     do {
       try environment.gyms.renameGym(id, to: name)
       gymError = nil
-      refreshGyms()
+      Task { await refreshGyms() }
     } catch {
       gymError = "That gym could not be renamed. \(error)"
     }
   }
 
-  private func refreshGyms() {
-    gymOptions = (try? environment.gyms.gyms()) ?? []
+  /// Re-reads whether a plan exists to point at.
+  ///
+  /// A failure leaves the affordance hidden rather than showing a button to somewhere that may not
+  /// be there: a control that navigates to an empty planner is worse than no control.
+  private func refreshPlanAvailability() async {
+    let splits = environment.splits
+    let result = await readOffMain { try splits.hasStartableDay() }
+    guard !Task.isCancelled else { return }
+    switch result {
+    case .success(let available): hasStartablePlan = available
+    case .failure: hasStartablePlan = false
+    }
+  }
+
+  private func refreshGyms() async {
+    let gyms = environment.gyms
+    let result = await readOffMain {
+      let records = try gyms.gyms()
+      return (records, try? gyms.lastUsedGym())
+    }
+    guard !Task.isCancelled else { return }
+    guard case .success(let loaded) = result else {
+      gymError = "Your gyms could not be read. Your workout history is safe; try again."
+      return
+    }
+    gymOptions = loaded.0
     // Preselected from behaviour, not from a stored setting that could disagree with reality.
     if selectedGym == nil {
-      selectedGym = try? environment.gyms.lastUsedGym()
+      selectedGym = loaded.1
     }
     // A gym that has since been archived must not stay selected invisibly.
     if let selectedGym, !gymOptions.contains(where: { $0.id == selectedGym }) {
       self.selectedGym = nil
+    }
+  }
+
+  /// Resets the process state that lives outside SQLite after the database transaction succeeds.
+  ///
+  /// Settings disables deletion during an open workout, so there is no coordinator holding rows
+  /// that just disappeared. The AlarmKit cancellation is still explicit: deleting the persisted
+  /// timer row without cancelling the system alarm would leave an alert the app can no longer own.
+  private func handleAllDataDeleted() {
+    hooks.cancel()
+    useImperial = Locale.current.measurementSystem == .us
+    restSeconds = 0
+    hasChosenRest = false
+    tracksRPE = false
+    selectedGym = nil
+    gymOptions = []
+    hasStartablePlan = false
+    finished = nil
+    // The warnings go too, or someone who has just erased everything is greeted by "A workout from
+    // earlier is still open" over an empty database.
+    recoveryFailed = false
+    startFailed = false
+    startupError = nil
+    Task {
+      await refreshGyms()
+      await refreshPlanAvailability()
     }
   }
 
@@ -574,10 +837,10 @@ public struct HardsetRootView: View {
     guard !name.isEmpty else { return }
     do {
       let id = try environment.gyms.createGym(name: name)
-      refreshGyms()
       selectedGym = id
       gymError = nil
       isChoosingGym = false
+      Task { await refreshGyms() }
     } catch {
       // Stated, not swallowed. The error text is included because there is nothing useful to say
       // about a storage failure without it.
@@ -590,12 +853,15 @@ public struct HardsetRootView: View {
   /// Each movement comes back on the same machine with the same number of rows, so the loads
   /// prefill from that machine's history and the lifter starts one tap from their first set.
   private func repeatWorkout(_ plan: [RepeatableExercise]) {
-    promptForRestIfNeeded()
     guard coordinator == nil, !plan.isEmpty else { return }
+    requestStart(.repeated(plan))
+  }
+
+  private func startRepeatedWorkout(_ plan: [RepeatableExercise]) {
     // `start` moves to the Train tab on success. Starting a workout the lifter cannot see would be
     // the same class of defect as a button that appears to do nothing.
     start {
-      try SessionCoordinator.start(
+      try await SessionCoordinator.startAsync(
         store: environment.logger,
         gymID: selectedGym,
         plan: plan.map {
@@ -621,16 +887,26 @@ public struct HardsetRootView: View {
   /// already shaped as `PlannedExercise` from `SplitStore`, each with `plannedSets` nil, because a
   /// plan carries no set counts and inventing one here would put a prescription into the logger by
   /// the back door.
-  private func startPlannedDay(_ plan: [PlannedExercise]) {
-    promptForRestIfNeeded()
-    guard coordinator == nil, !plan.isEmpty else { return }
+  private func startPlannedDay(_ day: PlannedDayStart) {
+    guard coordinator == nil, !day.exercises.isEmpty else { return }
+    requestStart(.planned(day))
+  }
+
+  private func startRequestedDay(_ day: PlannedDayStart) {
     // `start` moves to the Train tab on success -- starting a workout the lifter cannot see is the
     // same class of defect as a button that appears to do nothing.
     start {
-      try SessionCoordinator.start(
+      try await SessionCoordinator.startAsync(
         store: environment.logger,
         gymID: selectedGym,
-        plan: plan,
+        // The lifter's own name for the day. Every workout the app started used to be nameless, so
+        // starting "Push" produced a row that history could label only with its date -- discarding
+        // a name the app already had. Still renameable from the live session.
+        title: day.name,
+        // Recorded on the session, which is what lets the planner say when each day was last
+        // trained instead of asking the lifter to remember where they are in their own split.
+        splitDayID: day.dayID,
+        plan: day.exercises,
         restAfterSet: resolvedRest,
         hooks: hooks
       )
@@ -647,9 +923,13 @@ public struct HardsetRootView: View {
   /// Now the failure is stated. A lifter whose session cannot be reopened needs to know that,
   /// because the alternative is training a second time into a day whose sets they cannot see.
   @discardableResult
-  private func adoptOpenSession() -> Bool {
+  private func adoptOpenSession() async -> Bool {
+    // Cleared before the attempt, not only set after a failed one. Nothing ever set it back to
+    // false, so one failed resume left the warning on the start screen for the rest of the process
+    // — through a workout that started, finished and was summarised perfectly well.
+    recoveryFailed = false
     do {
-      coordinator = try SessionCoordinator.resume(
+      coordinator = try await SessionCoordinator.resumeAsync(
         store: environment.logger,
         restAfterSet: resolvedRest,
         onStartRest: { duration, metadata in hooks.start(duration, metadata) }
@@ -667,20 +947,43 @@ public struct HardsetRootView: View {
   /// `startSession` now refuses when a workout is already open, which is the invariant that stops
   /// data being orphaned. Refusing is only safe if the app then offers that workout back instead of
   /// showing an error next to a button that will never work.
-  private func start(_ makeCoordinator: () throws -> SessionCoordinator) {
-    do {
-      coordinator = try makeCoordinator()
-      startFailed = false
-      selectedTab = .train
-    } catch LoggerStoreError.sessionAlreadyOpen {
-      // Not an error the lifter caused or can act on. Their open workout is what they wanted.
-      if adoptOpenSession() {
+  private func start(
+    _ makeCoordinator: @escaping @MainActor () async throws -> SessionCoordinator
+  ) {
+    guard !isStartingWorkout, coordinator == nil else { return }
+    isStartingWorkout = true
+    startFailed = false
+    recoveryFailed = false
+    Task {
+      defer { isStartingWorkout = false }
+      do {
+        coordinator = try await makeCoordinator()
+        // The previous workout's summary is dismissed by the workout that replaces it. `trainTab`
+        // renders `finished` ahead of `coordinator`, so Repeat or Start-this-day from another tab
+        // used to switch to Train and show last session's summary over the live logger it had just
+        // created. Cleared here on success rather than before the await: a start that then fails
+        // would otherwise have thrown away a summary the lifter had not read.
+        finished = nil
         selectedTab = .train
-      } else {
-        startFailed = true
+      } catch LoggerStoreError.sessionAlreadyOpen {
+        // Not an error the lifter caused or can act on. Their open workout is what they wanted.
+        if await adoptOpenSession() {
+          finished = nil
+          selectedTab = .train
+        } else {
+          startFailed = true
+        }
+      } catch {
+        // Preparation begins by opening the session. If a later history read fails, recover that
+        // real session instead of leaving the user beside a generic error after Start appeared to
+        // do nothing.
+        if await adoptOpenSession() {
+          finished = nil
+          selectedTab = .train
+        } else {
+          startFailed = true
+        }
       }
-    } catch {
-      startFailed = true
     }
   }
 
@@ -737,21 +1040,47 @@ public struct HardsetRootView: View {
     .presentationDetents([.medium])
   }
 
-  /// Puts the rest question in front of the lifter the first time they start a workout.
-  ///
-  /// At the start rather than after the first set: mid-set is the worst possible moment to read a
-  /// question, and the answer changes what happens the moment the first set is logged.
-  private func promptForRestIfNeeded() {
-    guard !hasChosenRest else { return }
-    isChoosingRest = true
+  private func startEmptyWorkout() {
+    requestStart(.empty)
   }
 
-  private func startEmptyWorkout() {
-    promptForRestIfNeeded()
+  /// Presents the one-time question before changing the screen that owns the start control.
+  private func requestStart(_ request: WorkoutStartRequest) {
+    guard coordinator == nil, pendingStart == nil else { return }
+    guard hasChosenRest else {
+      pendingStart = request
+      isChoosingRest = true
+      return
+    }
+    performStart(request)
+  }
+
+  /// Continues after the sheet is fully gone, including a swipe-down dismissal.
+  private func continuePendingStart() {
+    guard let request = pendingStart else { return }
+    pendingStart = nil
+    // Dismissing is the same answer as “Not now”. Asking on every workout would turn an optional
+    // timer into a nag, and Settings remains one tap away.
+    if !hasChosenRest { hasChosenRest = true }
+    performStart(request)
+  }
+
+  private func performStart(_ request: WorkoutStartRequest) {
+    switch request {
+    case .empty:
+      startEmptyWorkoutNow()
+    case .repeated(let plan):
+      startRepeatedWorkout(plan)
+    case .planned(let day):
+      startRequestedDay(day)
+    }
+  }
+
+  private func startEmptyWorkoutNow() {
     start {
       // An empty plan on purpose: the app does not invent a program, and there is no generator
       // yet. Movements are added from the picker as the lifter goes.
-      try SessionCoordinator.start(
+      try await SessionCoordinator.startAsync(
         store: environment.logger,
         gymID: selectedGym,
         plan: [],
@@ -765,26 +1094,39 @@ public struct HardsetRootView: View {
 
   @ViewBuilder private var liveSessionAccessory: some View {
     if let coordinator {
-      HStack(spacing: Tokens.Spacing.snug) {
-        Image(systemName: "figure.strengthtraining.traditional")
-        // Inflected rather than concatenated, so one set does not read "1 sets".
-        Text("^[\(coordinator.loggedSetCount) set](inflect: true) logged")
-          .font(Tokens.Text.caption)
-          .monospacedDigit()
-        Spacer(minLength: 0)
-        if case .running(let endsAt) = hooks.state() {
-          // System-rendered from the deadline, so the accessory costs no updates.
-          Text(timerInterval: Date()...max(endsAt, Date()), countsDown: true)
+      // A button, not a readout. This is the same slot the system gives a mini player, and it looks
+      // exactly like one -- a capsule pinned above the tab bar naming what is playing -- so a lifter
+      // three tabs away taps it to get back to their workout. It did nothing, which is the worst
+      // shape a control can have: present, obvious, and inert.
+      Button {
+        selectedTab = .train
+      } label: {
+        HStack(spacing: Tokens.Spacing.snug) {
+          Image(systemName: "figure.strengthtraining.traditional")
+          // Inflected rather than concatenated, so one set does not read "1 sets".
+          Text("^[\(coordinator.loggedSetCount) set](inflect: true) logged")
             .font(Tokens.Text.caption)
             .monospacedDigit()
-            .foregroundStyle(Tokens.Color.accent)
+          Spacer(minLength: 0)
+          if case .running(let endsAt) = hooks.state() {
+            // System-rendered from the deadline, so the accessory costs no updates.
+            Text(timerInterval: Date()...max(endsAt, Date()), countsDown: true)
+              .font(Tokens.Text.caption)
+              .monospacedDigit()
+              .foregroundStyle(Tokens.Color.accent)
+          }
         }
+        .padding(.horizontal, Tokens.Spacing.regular)
+        .frame(maxWidth: .infinity, minHeight: Tokens.minimumTapTarget)
+        .contentShape(Rectangle())
       }
-      .padding(.horizontal, Tokens.Spacing.regular)
+      .buttonStyle(.plain)
+      .foregroundStyle(Tokens.Color.textPrimary)
       .accessibilityElement(children: .combine)
       .accessibilityLabel(
         Text("Workout in progress, ^[\(coordinator.loggedSetCount) set](inflect: true) logged")
       )
+      .accessibilityHint("Double tap to return to your workout.")
     }
   }
 }
@@ -808,7 +1150,14 @@ struct RenameTarget: Identifiable, Hashable {
   let id: UUID
 }
 
-/// The three tabs, as a value the root can set.
+/// The tabs, as a value the root can set.
 enum RootTab: Hashable {
   case train, plan, volume, history
+}
+
+/// A first-use rest choice must not erase which route requested the workout.
+private enum WorkoutStartRequest {
+  case empty
+  case repeated([RepeatableExercise])
+  case planned(PlannedDayStart)
 }

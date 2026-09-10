@@ -77,6 +77,7 @@ public struct MachineNameSheet: View {
           TextField("Name or brand", text: $name)
             .focused($isNameFocused)
             .submitLabel(.done)
+            .onSubmit { if !trimmed.isEmpty { onConfirm(trimmed) } }
             // Autocorrect off for the same reason the movement sheet turns it off: these are
             // proper nouns -- Panatta, Hammer Strength, Cybex, Nautilus -- and autocorrect
             // rewrote "Panatta chest press" to "Panama chest press".

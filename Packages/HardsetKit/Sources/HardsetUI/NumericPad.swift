@@ -40,6 +40,7 @@ public struct NumericPad: View {
 
   public var body: some View {
     VStack(spacing: Tokens.Spacing.snug) {
+      readout
       if let step { stepRow(step) }
       ForEach(Array(keys.enumerated()), id: \.offset) { _, row in
         HStack(spacing: Tokens.Spacing.snug) {
@@ -54,14 +55,34 @@ public struct NumericPad: View {
             .font(Tokens.Text.label.weight(.semibold))
             .frame(maxWidth: .infinity, minHeight: Tokens.loggerTapTarget)
         }
-        .buttonStyle(.plain)
-        .background(Tokens.Color.accent.opacity(0.15), in: RoundedRectangle(cornerRadius: Tokens.Radius.control))
+        .buttonStyle(KeyButtonStyle(fill: Tokens.Color.accent.opacity(0.15)))
       }
     }
     .padding(Tokens.Spacing.regular)
     // Opaque, not glass. Glass cannot sample glass, and a translucent keypad over a dense set
     // grid is unreadable in a bright gym besides.
     .background(Tokens.Color.surface)
+  }
+
+  /// What has been typed so far, on the pad itself.
+  ///
+  /// The pad is a sheet sized to its own content, and at accessibility text sizes that content is
+  /// taller than the screen -- the detent clamps, the sheet covers the row it is editing, and the
+  /// value being entered was then visible nowhere at all. Stating it here makes the pad
+  /// self-describing whether or not the row behind it survives.
+  ///
+  /// Locale separator, same as the key: the buffer stores a period the way the store keeps
+  /// kilograms, converted at the presentation edge.
+  private var readout: some View {
+    let typed = buffer.displayText.replacingOccurrences(of: ".", with: decimalSeparator)
+    return Text(buffer.isEmpty ? "\u{2014}" : typed)
+      .font(Tokens.Text.readout)
+      .monospacedDigit()
+      .lineLimit(1)
+      .minimumScaleFactor(0.6)
+      .frame(maxWidth: .infinity, minHeight: Tokens.loggerTapTarget, alignment: .trailing)
+      // An em dash on its own is announced as "dash", which is not what it means here.
+      .accessibilityLabel(buffer.isEmpty ? "Nothing entered" : typed)
   }
 
   /// Minus and plus, with the step stated between them.
@@ -99,10 +120,9 @@ public struct NumericPad: View {
         .frame(maxWidth: .infinity, minHeight: Tokens.loggerTapTarget)
         .contentShape(Rectangle())
     }
-    .buttonStyle(.plain)
+    .buttonStyle(KeyButtonStyle(fill: Tokens.Color.raised))
     .disabled(stepped == nil)
     .foregroundStyle(stepped == nil ? Tokens.Color.textTertiary : Tokens.Color.accent)
-    .background(Tokens.Color.raised, in: RoundedRectangle(cornerRadius: Tokens.Radius.control))
     .accessibilityLabel(
       presses < 0 ? "Down \(Self.format(step))" : "Up \(Self.format(step))"
     )
@@ -137,24 +157,28 @@ public struct NumericPad: View {
         }
       }
       .font(Tokens.Text.readout)
+      // The glyph is hidden, not the whole key: the fill now lives inside the button style, and
+      // hiding that too would leave a gap in the grid instead of the empty well the placeholder is.
+      .opacity(key == .disabledDecimal ? 0 : 1)
       .frame(maxWidth: .infinity, minHeight: Tokens.loggerTapTarget)
       .contentShape(Rectangle())
     }
-    .buttonStyle(.plain)
-    .disabled(key == .disabledDecimal)
+    .buttonStyle(KeyButtonStyle(fill: Tokens.Color.ground))
+    // Delete on an empty buffer routes to a `guard !text.isEmpty else { return }` -- lit, tappable
+    // and inert. Disabled and dimmed like the step keys beside it, for the same reason they are:
+    // an inert control is worse than none.
+    .disabled(key == .disabledDecimal || (key == .delete && buffer.isEmpty))
+    .foregroundStyle(
+      key == .delete && buffer.isEmpty ? Tokens.Color.textTertiary : Tokens.Color.textPrimary
+    )
     // The delete key is an icon with no text, so without this VoiceOver announces the SF Symbol
     // name or nothing at all -- on the keypad used to enter every weight and every rep in the app.
     .accessibilityLabel(Self.spokenLabel(for: key, decimalSeparator: decimalSeparator))
-    .opacity(key == .disabledDecimal ? 0 : 1)
     // Invisible *and* unreachable. The placeholder exists so the grid does not change shape between
     // an integer field and a decimal one -- which would move the other keys under the user's thumb
     // -- but at zero opacity it stayed focusable, so VoiceOver on a reps field announced a
     // "Decimal point" button that does nothing and cannot be seen.
     .accessibilityHidden(key == .disabledDecimal)
-    .background(
-      Tokens.Color.ground,
-      in: RoundedRectangle(cornerRadius: Tokens.Radius.control)
-    )
   }
 
   /// The user's locale decides how a decimal point looks, even though the stored buffer is
@@ -169,6 +193,28 @@ public struct NumericPad: View {
     case .decimal: buffer.appendDecimalSeparator()
     case .disabledDecimal: break
     case .delete: buffer.deleteBackward()
+    }
+  }
+
+  /// A pad key that answers the finger landing.
+  ///
+  /// `.plain` applies no pressed appearance on iOS, and the fill used to sit *outside*
+  /// `configuration.label`, so no style could have animated it either -- every weight and every rep
+  /// in the app was typed with nothing happening until release, against guideline M3. The fill is
+  /// drawn in here so the dim covers the key rather than only the digit on top of it.
+  ///
+  /// No haptic: §5.8 reserves those for a committed state change, and typing a digit commits
+  /// nothing.
+  private struct KeyButtonStyle: ButtonStyle {
+    let fill: SwiftUI.Color
+
+    func makeBody(configuration: Configuration) -> some View {
+      configuration.label
+        .background(fill, in: RoundedRectangle(cornerRadius: Tokens.Radius.control))
+        // The same press dim the log control uses. No scale: a 56 pt key shrinking under a thumb
+        // that covers it is movement nobody sees, and Reduce Motion then has nothing to strip.
+        .opacity(configuration.isPressed ? 0.82 : 1)
+        .animation(Tokens.Motion.tap, value: configuration.isPressed)
     }
   }
 

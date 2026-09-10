@@ -10,6 +10,7 @@
 		ECC880F3E50363C05E57399D /* HardsetApp.swift in Hardset */ = {isa = PBXBuildFile; fileRef = 5727577A4D3484085A8EB0B5 /* HardsetApp.swift */; };
 		0ED5E055D9820A02EEE15DB4 /* HardsetWidgetBundle.swift in HardsetWidget */ = {isa = PBXBuildFile; fileRef = 094065545B074BB3C94068BC /* HardsetWidgetBundle.swift */; };
 		D06790A6910CE14033A7CB69 /* AppSmokeTests.swift in HardsetTests */ = {isa = PBXBuildFile; fileRef = 680B2E753A6F5EA9063B2981 /* AppSmokeTests.swift */; };
+		B967D3B106B7BC3377827A7A /* HardsetAppUITests.swift in HardsetAppUITests */ = {isa = PBXBuildFile; fileRef = 67F51C897498549204BCF5C2 /* HardsetAppUITests.swift */; };
 		65342E8704866A7FA63B7D7F /* PrivacyInfo.xcprivacy in Hardset */ = {isa = PBXBuildFile; fileRef = 9DA6D3A9523128D8236A0547 /* PrivacyInfo.xcprivacy */; };
 		EB0E7800B3B9CBC55200705F /* Assets.xcassets in Hardset */ = {isa = PBXBuildFile; fileRef = 2872DB59AAC00898EC5AC167 /* Assets.xcassets */; };
 		27CF9CF3EE27D125AC53CB48 /* HardsetCore */ = {isa = PBXBuildFile; productRef = 299DED104025EEA646ADE2F4 /* HardsetCore */; };
@@ -39,6 +40,13 @@
 			remoteGlobalIDString = ED6F75960779759F5DF4FA3F;
 			remoteInfo = Hardset;
 		};
+		702CAD38B80B65DFD1D789FB /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 00000001DD783D3B7A4BD607 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = ED6F75960779759F5DF4FA3F;
+			remoteInfo = Hardset;
+		};
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXCopyFilesBuildPhase section */
@@ -59,6 +67,7 @@
 		5727577A4D3484085A8EB0B5 /* HardsetApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HardsetApp.swift; sourceTree = "<group>"; };
 		094065545B074BB3C94068BC /* HardsetWidgetBundle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HardsetWidgetBundle.swift; sourceTree = "<group>"; };
 		680B2E753A6F5EA9063B2981 /* AppSmokeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppSmokeTests.swift; sourceTree = "<group>"; };
+		67F51C897498549204BCF5C2 /* HardsetAppUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HardsetAppUITests.swift; sourceTree = "<group>"; };
 		9DA6D3A9523128D8236A0547 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		2872DB59AAC00898EC5AC167 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		05BDD562198C5966370152DC /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
@@ -67,6 +76,7 @@
 		C0DD8C9D659EAB28228ED87D /* Hardset.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Hardset.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		E1B5F6FC2F875AC8EDAA1991 /* HardsetWidget.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = HardsetWidget.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		8C78985BD17648FF5F32A8BC /* HardsetTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = HardsetTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		90389A1C1882DFDB8F912D55 /* HardsetAppUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = HardsetAppUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin XCLocalSwiftPackageReference section */
@@ -146,6 +156,13 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		F23A778A137A634FC31360BB /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
@@ -155,6 +172,7 @@
 				20BD487F122225EBCA606B0B /* Hardset */,
 				69503542DF122851D0C74DEF /* HardsetWidget */,
 				B2A2CF8D3677583EF37F1886 /* HardsetTests */,
+				1EE3765F9D07413244CF9313 /* HardsetAppUITests */,
 				C0DC190647D7CB6444D05500 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -188,12 +206,21 @@
 			path = HardsetTests;
 			sourceTree = "<group>";
 		};
+		1EE3765F9D07413244CF9313 /* HardsetAppUITests */ = {
+			isa = PBXGroup;
+			children = (
+				67F51C897498549204BCF5C2 /* HardsetAppUITests.swift */,
+			);
+			path = HardsetAppUITests;
+			sourceTree = "<group>";
+		};
 		C0DC190647D7CB6444D05500 /* Products */ = {
 			isa = PBXGroup;
 			children = (
 				C0DD8C9D659EAB28228ED87D /* Hardset.app */,
 				E1B5F6FC2F875AC8EDAA1991 /* HardsetWidget.appex */,
 				8C78985BD17648FF5F32A8BC /* HardsetTests.xctest */,
+				90389A1C1882DFDB8F912D55 /* HardsetAppUITests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -270,6 +297,26 @@
 			productReference = 8C78985BD17648FF5F32A8BC /* HardsetTests.xctest */;
 			productType = "com.apple.product-type.bundle.unit-test";
 		};
+		46F030AFE4BFE0ED784B6067 /* HardsetAppUITests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 05AF5FCA1FA6638B68D8ED4C;
+			buildPhases = (
+				8ECE190A0779E9669543C62A /* Sources */,
+				F23A778A137A634FC31360BB /* Frameworks */,
+				B060772D4F733F011217478A /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				40C79ABA08D670E63B427F12 /* PBXTargetDependency */,
+			);
+			name = HardsetAppUITests;
+			packageProductDependencies = (
+			);
+			productName = HardsetAppUITests;
+			productReference = 90389A1C1882DFDB8F912D55 /* HardsetAppUITests.xctest */;
+			productType = "com.apple.product-type.bundle.ui-testing";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -287,6 +334,9 @@
 						CreatedOnToolsVersion = 26.4;
 					};
 					47006484C7F8FCC897FFA8E2 = {
+						CreatedOnToolsVersion = 26.4;
+					};
+					46F030AFE4BFE0ED784B6067 = {
 						CreatedOnToolsVersion = 26.4;
 					};
 				};
@@ -310,6 +360,7 @@
 				ED6F75960779759F5DF4FA3F /* Hardset */,
 				55336FF254695AC0FE912D03 /* HardsetWidget */,
 				47006484C7F8FCC897FFA8E2 /* HardsetTests */,
+				46F030AFE4BFE0ED784B6067 /* HardsetAppUITests */,
 			);
 		};
 /* End PBXProject section */
@@ -332,6 +383,13 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 		2EADA3C406B78291BEA91273 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		B060772D4F733F011217478A /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -365,6 +423,14 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		8ECE190A0779E9669543C62A /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				B967D3B106B7BC3377827A7A /* HardsetAppUITests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
@@ -377,6 +443,11 @@
 			isa = PBXTargetDependency;
 			target = ED6F75960779759F5DF4FA3F /* Hardset */;
 			targetProxy = B15EF4977130CF181C498BD4 /* PBXContainerItemProxy */;
+		};
+		40C79ABA08D670E63B427F12 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = ED6F75960779759F5DF4FA3F /* Hardset */;
+			targetProxy = 702CAD38B80B65DFD1D789FB /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 
@@ -437,9 +508,9 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CLANG_ENABLE_MODULES = YES;
-				CODE_SIGN_ENTITLEMENTS = Hardset/Hardset.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = ZBP387D523;
 				ENABLE_PREVIEWS = YES;
 				ENABLE_USER_SCRIPT_SANDBOXING = YES;
 				GENERATE_INFOPLIST_FILE = NO;
@@ -447,7 +518,7 @@
 				IPHONEOS_DEPLOYMENT_TARGET = 26.1;
 				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks";
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.hardset.app;
+				PRODUCT_BUNDLE_IDENTIFIER = com.francisbisignano.hardset;
 				PRODUCT_NAME = Hardset;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
 				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
@@ -465,9 +536,9 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CLANG_ENABLE_MODULES = YES;
-				CODE_SIGN_ENTITLEMENTS = Hardset/Hardset.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = ZBP387D523;
 				ENABLE_PREVIEWS = YES;
 				ENABLE_USER_SCRIPT_SANDBOXING = YES;
 				GENERATE_INFOPLIST_FILE = NO;
@@ -475,7 +546,7 @@
 				IPHONEOS_DEPLOYMENT_TARGET = 26.1;
 				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks";
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.hardset.app;
+				PRODUCT_BUNDLE_IDENTIFIER = com.francisbisignano.hardset;
 				PRODUCT_NAME = Hardset;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
 				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
@@ -494,13 +565,14 @@
 				CLANG_ENABLE_MODULES = YES;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = ZBP387D523;
 				ENABLE_USER_SCRIPT_SANDBOXING = YES;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = HardsetWidget/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 26.1;
 				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks @executable_path/../../Frameworks";
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.hardset.app.widget;
+				PRODUCT_BUNDLE_IDENTIFIER = com.francisbisignano.hardset.widget;
 				PRODUCT_NAME = HardsetWidget;
 				SKIP_INSTALL = YES;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
@@ -520,13 +592,14 @@
 				CLANG_ENABLE_MODULES = YES;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = ZBP387D523;
 				ENABLE_USER_SCRIPT_SANDBOXING = YES;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = HardsetWidget/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 26.1;
 				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks @executable_path/../../Frameworks";
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.hardset.app.widget;
+				PRODUCT_BUNDLE_IDENTIFIER = com.francisbisignano.hardset.widget;
 				PRODUCT_NAME = HardsetWidget;
 				SKIP_INSTALL = YES;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
@@ -547,11 +620,12 @@
 				CLANG_ENABLE_MODULES = YES;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = ZBP387D523;
 				ENABLE_USER_SCRIPT_SANDBOXING = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 26.1;
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.hardset.app.tests;
+				PRODUCT_BUNDLE_IDENTIFIER = com.francisbisignano.hardset.tests;
 				PRODUCT_NAME = HardsetTests;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
 				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
@@ -572,11 +646,12 @@
 				CLANG_ENABLE_MODULES = YES;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = ZBP387D523;
 				ENABLE_USER_SCRIPT_SANDBOXING = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 26.1;
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.hardset.app.tests;
+				PRODUCT_BUNDLE_IDENTIFIER = com.francisbisignano.hardset.tests;
 				PRODUCT_NAME = HardsetTests;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
 				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
@@ -586,6 +661,56 @@
 				SWIFT_VERSION = 6.0;
 				TARGETED_DEVICE_FAMILY = 1;
 				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Hardset.app/$(BUNDLED_BINARY_NAME_PREFIX)Hardset";
+
+			};
+			name = Release;
+		};
+		6BD02F4F8162BD3187A516B1 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CLANG_ENABLE_MODULES = YES;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = ZBP387D523;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.1;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.francisbisignano.hardset.uitests;
+				PRODUCT_NAME = HardsetAppUITests;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = nonisolated;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_STRICT_CONCURRENCY = complete;
+				SWIFT_UPCOMING_FEATURE_NONISOLATED_NONSENDING_BY_DEFAULT = YES;
+				SWIFT_VERSION = 6.0;
+				TARGETED_DEVICE_FAMILY = 1;
+				TEST_TARGET_NAME = Hardset;
+
+			};
+			name = Debug;
+		};
+		46B378A863FCDD9888E59399 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CLANG_ENABLE_MODULES = YES;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = ZBP387D523;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.1;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.francisbisignano.hardset.uitests;
+				PRODUCT_NAME = HardsetAppUITests;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = nonisolated;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_STRICT_CONCURRENCY = complete;
+				SWIFT_UPCOMING_FEATURE_NONISOLATED_NONSENDING_BY_DEFAULT = YES;
+				SWIFT_VERSION = 6.0;
+				TARGETED_DEVICE_FAMILY = 1;
+				TEST_TARGET_NAME = Hardset;
 
 			};
 			name = Release;
@@ -625,6 +750,15 @@
 			buildConfigurations = (
 				AD15FD64E90D1DA7C478927C /* Debug */,
 				D717518AA03933AC05BB0EBC /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		05AF5FCA1FA6638B68D8ED4C = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				6BD02F4F8162BD3187A516B1 /* Debug */,
+				46B378A863FCDD9888E59399 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

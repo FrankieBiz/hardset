@@ -53,7 +53,8 @@ struct GuidelinesContractTests {
     let pattern = try! NSRegularExpression(
       pattern: #"^\|\s*`(\w+)`\s*\|\s*`#([0-9A-Fa-f]{6})`"#, options: [.anchorsMatchLines]
     )
-    return pattern.matches(in: doc, range: NSRange(doc.startIndex..., in: doc)).compactMap { match in
+    return pattern.matches(in: doc, range: NSRange(doc.startIndex..., in: doc)).compactMap {
+      match in
       guard let name = Range(match.range(at: 1), in: doc),
         let hex = Range(match.range(at: 2), in: doc)
       else { return nil }
@@ -152,7 +153,8 @@ struct GuidelinesContractTests {
       let directory = Self.repositoryRoot.appending(path: "Packages/HardsetKit/Sources/\(module)")
       let names = try FileManager.default.contentsOfDirectory(atPath: directory.path)
       for name in names where name.hasSuffix(".swift") && name != "DesignTokens.swift" {
-        found.append((name, try String(contentsOf: directory.appending(path: name), encoding: .utf8)))
+        found.append(
+          (name, try String(contentsOf: directory.appending(path: name), encoding: .utf8)))
       }
     }
     return found
@@ -233,7 +235,8 @@ struct GuidelinesContractTests {
   @Test("The vocabulary sweep actually reads the view modules")
   func sweepIsNotVacuous() throws {
     let sources = try viewSources()
-    #expect(sources.count > 20, "only \(sources.count) view files found -- the sweep is not running")
+    #expect(
+      sources.count > 20, "only \(sources.count) view files found -- the sweep is not running")
     let names = Set(sources.map(\.name))
     #expect(names.contains("SplitPlannerView.swift"))
     #expect(names.contains("SessionView.swift"))
@@ -249,5 +252,42 @@ struct GuidelinesContractTests {
       source.contains("public static let accent = textPrimary"),
       "the accent is no longer defined as textPrimary"
     )
+  }
+
+  @Test("Every text token clears the contrast floor of the surface it is allowed on")
+  func textContrastFloors() {
+    // These are the authored token values from DesignTokens.swift. Keeping the arithmetic here
+    // makes the WCAG claims executable, including the inverted primary action that Xcode 26.4's
+    // screenshot audit incorrectly reports as low contrast.
+    // Typed, not inferred: a bare hex literal is an `Int`, and `contrast` takes the `UInt32` the
+    // channel shifts need, so without these the suite does not compile at all.
+    let ground: UInt32 = 0x08_0A_0E
+    let surface: UInt32 = 0x15_17_1B
+    let overlay: UInt32 = 0x2F_32_36
+    let primary: UInt32 = 0xF5_F5_F7
+    let secondary: UInt32 = 0x9A_9A_A4
+    let tertiary: UInt32 = 0x7A_7D_83
+
+    #expect(contrast(primary, ground) >= 7)
+    #expect(contrast(ground, primary) >= 7)  // Inverted primary actions.
+    #expect(contrast(primary, surface) >= 7)
+    #expect(contrast(secondary, surface) >= 4.5)
+    // Tertiary is restricted to large text and non-text decoration, whose floor is 3:1, and it
+    // must clear that floor even on the brightest surface it may appear over.
+    #expect(contrast(tertiary, overlay) >= 3)
+  }
+
+  private func contrast(_ first: UInt32, _ second: UInt32) -> Double {
+    let a = luminance(first)
+    let b = luminance(second)
+    return (max(a, b) + 0.05) / (min(a, b) + 0.05)
+  }
+
+  private func luminance(_ hex: UInt32) -> Double {
+    let channels = [16, 8, 0].map { shift in
+      let value = Double((hex >> shift) & 0xFF) / 255
+      return value <= 0.04045 ? value / 12.92 : pow((value + 0.055) / 1.055, 2.4)
+    }
+    return 0.2126 * channels[0] + 0.7152 * channels[1] + 0.0722 * channels[2]
   }
 }

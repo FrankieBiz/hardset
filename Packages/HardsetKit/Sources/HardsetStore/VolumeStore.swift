@@ -1,4 +1,5 @@
 import Foundation
+import GRDB
 import HardsetCore
 import SQLiteData
 
@@ -7,7 +8,7 @@ import SQLiteData
 /// Two queries, both bounded by a date window, and then pure arithmetic in `VolumeAnalyzer`. The
 /// counting itself has no database handle, so a volume figure cannot depend on when it was asked
 /// for — which is what makes the report reproducible from the same window.
-public nonisolated struct VolumeStore {
+public nonisolated struct VolumeStore: Sendable {
   private let database: any DatabaseWriter
 
   public init(database: any DatabaseWriter) {
@@ -55,6 +56,34 @@ public nonisolated struct VolumeStore {
     )
   }
 
+  /// The report for one named seven-day window.
+  ///
+  /// Keeping the boundary in `SevenDayWindow` means the current report and a browsed older report
+  /// cannot disagree by a day, or double-count the set sitting on their shared boundary.
+  public func report(in window: SevenDayWindow) throws -> MuscleVolumeReport {
+    try report(from: window.startingAt, to: window.endingAt)
+  }
+
+  /// When the lifter's first *countable* set was logged, or nil when none has been.
+  ///
+  /// Exists so browsing backwards can stop where the training does. Without a floor, the volume tab
+  /// pages into empty seven-day windows for as long as someone keeps tapping, and "Nothing logged"
+  /// then means both "you rested that week" and "you had not started yet" -- the same ambiguity the
+  /// history list's absent footer was changed to avoid.
+  ///
+  /// Filtered exactly as `countableSets` is, and that agreement is the point rather than a detail.
+  /// Counting every row instead let the button offer a window whose only content was a warm-up,
+  /// which then rendered "0 working sets" and "Nothing logged" -- the control promising something
+  /// the screen it governs cannot show. Found by paging to the boundary against a seeded store.
+  public func earliestCountableSet() throws -> Date? {
+    try database.read { db in
+      try LoggedSet
+        .where { !$0.isWarmup && !$0.isDropSet }
+        .select { $0.completedAt.min() }
+        .fetchOne(db) ?? nil
+    }
+  }
+
   /// Every countable set belonging to one session, identified by the session rather than by time.
   public func countableSets(in sessionID: SessionID) throws -> [CountableSet] {
     try database.read { db in
@@ -94,16 +123,42 @@ public nonisolated struct VolumeStore {
   /// the training. If a calendar week is ever wanted it should be a separate, named function so
   /// the two can never be confused.
   public func rollingWeek(endingAt now: Date) throws -> MuscleVolumeReport {
-    try report(from: now.addingTimeInterval(-7 * 86_400), to: now)
+    try report(in: SevenDayWindow(endingAt: now))
   }
 }
 
 /// Reads load history for one exercise, per machine.
-public nonisolated struct ProgressionStore {
+public nonisolated struct ProgressionStore: Sendable {
   private let database: any DatabaseWriter
 
   public init(database: any DatabaseWriter) {
     self.database = database
+  }
+
+  /// Movements with working-set history, newest first.
+  ///
+  /// This is a grouped read rather than a capped recent-set scan. The browser must let someone find
+  /// every movement they have trained, and it must not run a database query for each visible row.
+  /// Its filter deliberately matches `samples(for:)`: an exercise with only a warm-up or a drop has
+  /// no progression chart to show, so it does not pretend to belong in this list.
+  public func exercisesWithHistory() throws -> [ProgressionExercise] {
+    try database.read { db in
+      try ProgressionExerciseRow.fetchAll(
+        db,
+        sql: """
+        SELECT loggedSets.exerciseID AS exerciseID,
+               exercises.name AS name,
+               MAX(loggedSets.completedAt) AS lastTrained
+        FROM loggedSets
+        JOIN exercises ON exercises.id = loggedSets.exerciseID
+        WHERE loggedSets.isWarmup = 0
+          AND loggedSets.isDropSet = 0
+        GROUP BY loggedSets.exerciseID, exercises.name
+        ORDER BY lastTrained DESC, exercises.name COLLATE NOCASE ASC
+        """
+      )
+      .map(ProgressionExercise.init(row:))
+    }
   }
 
   /// Completed working sets for one exercise, across every machine, oldest first.
@@ -176,6 +231,24 @@ public nonisolated struct ProgressionStore {
     }
   }
 
+  /// Gym names, for telling two identically named machines apart.
+  ///
+  /// A machine name is not unique and was never meant to be: DECISION #39 has a name typed at a
+  /// second gym create a *new* machine, and autocomplete makes typing the same name the likely
+  /// path. The chart keys every one of its dimensions on the series label, so two "Leg Press" rows
+  /// drew a single line — the one thing invariant #10 forbids. The gym is what actually
+  /// distinguishes them, so the label needs it.
+  public func gymNames(_ ids: [GymID]) throws -> [GymID: String] {
+    guard !ids.isEmpty else { return [:] }
+    let raws = ids.map(\.rawValue)
+    return try database.read { db in
+      try Gym
+        .where { $0.id.in(raws) }
+        .fetchAll(db)
+        .reduce(into: [GymID: String]()) { $0[GymID(rawValue: $1.id)] = $1.name }
+    }
+  }
+
   public func history(for exerciseID: ExerciseID) throws -> ProgressionHistory {
     let samples = try samples(for: exerciseID)
     let series = ProgressionAnalyzer.series(from: samples, exerciseID: exerciseID)
@@ -183,9 +256,38 @@ public nonisolated struct ProgressionStore {
     let machineIDs = series.compactMap(\.key.machineID)
     let names = try machineNames(machineIDs)
     let gyms = try machineGyms(machineIDs)
+    let gymLabels = try gymNames(Array(Set(gyms.values)))
     return ProgressionHistory(
-      series: series, machineChanges: changes, machineNames: names, machineGyms: gyms
+      series: series, machineChanges: changes, machineNames: names, machineGyms: gyms,
+      gymNames: gymLabels
     )
+  }
+}
+
+/// One movement the lifter can open directly from the load-history browser.
+public nonisolated struct ProgressionExercise: Hashable, Sendable, Identifiable {
+  public let id: ExerciseID
+  public let name: String
+  public let lastTrained: Date
+
+  public init(id: ExerciseID, name: String, lastTrained: Date) {
+    self.id = id
+    self.name = name
+    self.lastTrained = lastTrained
+  }
+}
+
+/// Private transport for the grouped read above. Keep GRDB at this storage boundary: the public
+/// record uses Core's identifiers and stays independent of the database engine.
+private nonisolated struct ProgressionExerciseRow: FetchableRecord, Decodable {
+  let exerciseID: UUID
+  let name: String
+  let lastTrained: Date
+}
+
+private extension ProgressionExercise {
+  nonisolated init(row: ProgressionExerciseRow) {
+    self.init(id: ExerciseID(rawValue: row.exerciseID), name: row.name, lastTrained: row.lastTrained)
   }
 }
 
@@ -197,23 +299,65 @@ public nonisolated struct ProgressionHistory: Hashable, Sendable {
   /// Which gym each machine sits in. Empty for free-weight series, and for a machine whose gym
   /// row has gone.
   public let machineGyms: [MachineID: GymID]
+  /// What those gyms are called, so a name shared by two machines can be qualified by place.
+  public let gymNames: [GymID: String]
 
   public init(
     series: [ProgressionSeries],
     machineChanges: [MachineChange],
     machineNames: [MachineID: String],
-    machineGyms: [MachineID: GymID] = [:]
+    machineGyms: [MachineID: GymID] = [:],
+    gymNames: [GymID: String] = [:]
   ) {
     self.series = series
     self.machineChanges = machineChanges
     self.machineNames = machineNames
     self.machineGyms = machineGyms
+    self.gymNames = gymNames
   }
 
   /// Label for a series. Free-weight work and a deleted machine are named rather than blank.
+  ///
+  /// The label is not decoration: `ProgressionChartView` keys its series, its foreground style, its
+  /// symbol and its colour-scale domain on this string, so two series sharing a label collapse into
+  /// one connected line — progress the lifter did not make, and the exact thing invariant #10
+  /// forbids. Two machines *can* share a name: DECISION #39 has a name typed at a second gym create
+  /// a new machine, and every deleted machine used to resolve to the same "Unnamed machine". So the
+  /// label is disambiguated here, where the store's names are, rather than at the chart, which is
+  /// deliberately free of storage — and it has to be the visible label rather than a synthetic key,
+  /// because the legend prints the scale domain verbatim.
   public func label(for key: ProgressionKey) -> String {
     guard let machineID = key.machineID else { return "Free weight" }
-    return machineNames[machineID] ?? "Unnamed machine"
+    let base = name(of: machineID)
+    let sharing = machineIDs(named: base)
+    guard sharing.count > 1 else { return base }
+    // The gym is the honest qualifier: this is the same equipment name in two different places,
+    // which is precisely the distinction the reader needs and the one the chart's hues already draw.
+    if let gym = machineGyms[machineID], let gymName = gymNames[gym], !gymName.isEmpty,
+      sharing.filter({ machineGyms[$0].flatMap { gymNames[$0] } == gymName }).count == 1
+    {
+      return "\(base) \u{2014} \(gymName)"
+    }
+    // No gym known, or the gym does not separate them either — two deleted machines being the case
+    // that reaches here. A number says nothing about the equipment, but it is true, and it keeps
+    // the series apart everywhere the label is a key.
+    let position = (sharing.firstIndex(of: machineID) ?? 0) + 1
+    return "\(base) (\(position))"
+  }
+
+  private func name(of machineID: MachineID) -> String {
+    machineNames[machineID] ?? "Unnamed machine"
+  }
+
+  /// Machines in this history resolving to `name`, in the order the series mention them, so a
+  /// numeric discriminator is stable for the life of one chart rather than shuffling per render.
+  private func machineIDs(named name: String) -> [MachineID] {
+    var found: [MachineID] = []
+    for entry in series {
+      guard let id = entry.key.machineID, !found.contains(id) else { continue }
+      if self.name(of: id) == name { found.append(id) }
+    }
+    return found
   }
 
   public var isEmpty: Bool { series.isEmpty }
@@ -350,7 +494,7 @@ public nonisolated struct SessionSummary: Hashable, Sendable, Identifiable {
 }
 
 /// Reads finished sessions for the history screen.
-public nonisolated struct HistoryStore {
+public nonisolated struct HistoryStore: Sendable {
   private let database: any DatabaseWriter
 
   public init(database: any DatabaseWriter) {

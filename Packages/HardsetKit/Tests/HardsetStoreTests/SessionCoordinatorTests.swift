@@ -61,6 +61,47 @@ struct SessionCoordinatorTests {
     #expect(try store.openSession()?.id == coordinator.sessionID)
   }
 
+  @Test("Async start preserves the complete session contract")
+  func asyncStartBuildsPlan() async throws {
+    let database = try migratedDatabase()
+    let store = LoggerStore(database: database)
+    let exercise = try seedExercise(database)
+
+    let coordinator = try await SessionCoordinator.startAsync(
+      store: store,
+      title: "Lower",
+      plan: [
+        PlannedExercise(exerciseID: exercise, exerciseName: "Leg Press", plannedSets: 3)
+      ],
+      now: { self.start }
+    )
+
+    #expect(coordinator.title == "Lower")
+    #expect(coordinator.exercises.count == 1)
+    #expect(coordinator.exercises[0].slots.count == 3)
+    #expect(try store.openSession()?.id == coordinator.sessionID)
+  }
+
+  @Test("Async recovery restores the open workout")
+  func asyncResumeRestoresPlan() async throws {
+    let database = try migratedDatabase()
+    let store = LoggerStore(database: database)
+    let exercise = try seedExercise(database)
+    let started = try SessionCoordinator.start(
+      store: store,
+      title: "Lower",
+      plan: [PlannedExercise(exerciseID: exercise, exerciseName: "Leg Press", plannedSets: 2)],
+      now: { self.start }
+    )
+
+    let resumed = try #require(
+      try await SessionCoordinator.resumeAsync(store: store, now: { self.start })
+    )
+    #expect(resumed.sessionID == started.sessionID)
+    #expect(resumed.title == "Lower")
+    #expect(resumed.exercises.first?.slots.count == 2)
+  }
+
   /// A resumed session must not suggest values from its own sets.
   @Test("The new session is excluded from its own history")
   func excludesOwnSession() throws {

@@ -6,7 +6,11 @@ generated from a script rather than typed so it is reproducible and reviewable i
 
 Regenerate with:  python3 Tools/generate_project.py
 """
-import os, sys
+import argparse
+import os
+import re
+import subprocess
+import sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
@@ -28,7 +32,7 @@ def oid(name):
 #
 #   HARDSET_BUNDLE_ID   Reverse-DNS identifier for a local build, e.g. com.yourname.hardset.
 #
-# The widget and test bundles derive from it, so overriding this moves all three together. Note the
+# The widget and test bundles derive from it, so overriding this moves all four together. Note the
 # free-account limit of 10 App IDs per 7 days: pick one and keep it rather than trying several.
 BUNDLE_ID = os.environ.get("HARDSET_BUNDLE_ID", "").strip() or "com.hardset.app"
 IOS_MIN = "26.1"
@@ -58,16 +62,83 @@ SWIFT_VERSION = "6.0"
 # history". `open()` tolerates it now and `LocalOnlyLaunchTests` pins the behaviour; only then did
 # the sentence become true. Everything a gym session touches -- logging, the rest timer, history,
 # plans -- is local, and unaffected.
-TEAM_ID = os.environ.get("HARDSET_TEAM_ID", "").strip()
-LOCAL_ONLY = "--local" in sys.argv or os.environ.get("HARDSET_LOCAL") == "1"
+parser = argparse.ArgumentParser(description=__doc__)
+parser.add_argument(
+    "--local",
+    action="store_true",
+    help="omit CloudKit and push entitlements for a free-account device build",
+)
+args = parser.parse_args()
 
-APP, WIDGET, TESTS = "Hardset", "HardsetWidget", "HardsetTests"
+LOCAL_ONLY = args.local or os.environ.get("HARDSET_LOCAL") == "1"
+TEAM_ID = os.environ.get("HARDSET_TEAM_ID", "").strip()
+
+
+def installed_development_team_ids():
+    """Read Team IDs from certificate OU fields, never their misleading display names."""
+    if sys.platform != "darwin":
+        return set()
+    try:
+        result = subprocess.run(
+            ["security", "find-certificate", "-a", "-c", "Apple Development", "-p"],
+            check=True,
+            capture_output=True,
+        )
+    except (FileNotFoundError, subprocess.CalledProcessError):
+        return set()
+
+    teams = set()
+    certificates = re.findall(
+        rb"-----BEGIN CERTIFICATE-----.*?-----END CERTIFICATE-----",
+        result.stdout,
+        flags=re.DOTALL,
+    )
+    for certificate in certificates:
+        try:
+            subject = subprocess.run(
+                ["openssl", "x509", "-noout", "-subject", "-nameopt", "multiline"],
+                input=certificate,
+                check=True,
+                capture_output=True,
+                text=False,
+            ).stdout.decode("utf-8", errors="replace")
+        except (FileNotFoundError, subprocess.CalledProcessError):
+            continue
+        match = re.search(r"^\s*organizationalUnitName\s*=\s*([A-Z0-9]{10})\s*$", subject, re.MULTILINE)
+        if match:
+            teams.add(match.group(1))
+    return teams
+
+
+certificate_team_ids = installed_development_team_ids() if LOCAL_ONLY or TEAM_ID else set()
+if LOCAL_ONLY and not TEAM_ID and len(certificate_team_ids) == 1:
+    TEAM_ID = next(iter(certificate_team_ids))
+    print(f"using Team ID {TEAM_ID} from the installed Apple Development certificate")
+elif TEAM_ID and certificate_team_ids and TEAM_ID not in certificate_team_ids:
+    installed = ", ".join(sorted(certificate_team_ids))
+    raise SystemExit(
+        f"HARDSET_TEAM_ID={TEAM_ID} does not match an installed Apple Development certificate "
+        f"(found: {installed}). The Team ID is the certificate subject's OU, not the "
+        "parenthesized suffix shown by security find-identity."
+    )
+
+if TEAM_ID and not re.fullmatch(r"[A-Z0-9]{10}", TEAM_ID):
+    raise SystemExit("HARDSET_TEAM_ID must be exactly 10 uppercase letters or digits")
+
+APP, WIDGET, TESTS, UI_TESTS = (
+    "Hardset",
+    "HardsetWidget",
+    "HardsetTests",
+    "HardsetAppUITests",
+)
+TARGETS = (APP, WIDGET, TESTS, UI_TESTS)
 
 # (file name, group dir, target)
 SOURCES = [
     ("HardsetApp.swift", "Hardset", APP),
     ("HardsetWidgetBundle.swift", "HardsetWidget", WIDGET),
     ("AppSmokeTests.swift", "HardsetTests", TESTS),
+    ("HardsetAppUITests.swift", "HardsetAppUITests", UI_TESTS),
 ]
 RESOURCES = [
     ("PrivacyInfo.xcprivacy", "Hardset", APP),
@@ -115,13 +186,24 @@ def build_settings(target):
             "SKIP_INSTALL": "YES",
             "LD_RUNPATH_SEARCH_PATHS": '"$(inherited) @executable_path/Frameworks @executable_path/../../Frameworks"',
         })
-    else:
+    elif target == TESTS:
         s.update({
             "PRODUCT_BUNDLE_IDENTIFIER": f"{BUNDLE_ID}.tests",
             "PRODUCT_NAME": "HardsetTests",
             "GENERATE_INFOPLIST_FILE": "YES",
             "TEST_HOST": '"$(BUILT_PRODUCTS_DIR)/Hardset.app/$(BUNDLED_BINARY_NAME_PREFIX)Hardset"',
             "BUNDLE_LOADER": '"$(TEST_HOST)"',
+        })
+    else:
+        s.update({
+            "PRODUCT_BUNDLE_IDENTIFIER": f"{BUNDLE_ID}.uitests",
+            "PRODUCT_NAME": "HardsetAppUITests",
+            "GENERATE_INFOPLIST_FILE": "YES",
+            # XCTestCase's Objective-C initializers and lifecycle overrides are nonisolated.
+            # Defaulting this target to MainActor makes every otherwise ordinary subclass fail to
+            # compile before a test can run; app and package targets keep the stricter default.
+            "SWIFT_DEFAULT_ACTOR_ISOLATION": "nonisolated",
+            "TEST_TARGET_NAME": APP,
         })
     return s
 
@@ -134,6 +216,7 @@ PRODUCTS = {
     APP: ["HardsetCore", "HardsetStore", "HardsetUI", "HardsetAlarm", "HardsetFeature"],
     WIDGET: ["HardsetCore", "HardsetUI", "HardsetAlarm"],
     TESTS: ["HardsetCore"],
+    UI_TESTS: [],
 }
 
 L = []
@@ -165,6 +248,13 @@ for dep, name in ((WIDGET, "HardsetWidget"), (APP, "Hardset")):
     w(f"\t\t\tremoteGlobalIDString = {oid('target_'+dep)};")
     w(f"\t\t\tremoteInfo = {name};")
     w("\t\t};")
+w(f"\t\t{oid('proxy_'+APP+'_ui')} /* PBXContainerItemProxy */ = {{")
+w("\t\t\tisa = PBXContainerItemProxy;")
+w(f"\t\t\tcontainerPortal = {oid('project')} /* Project object */;")
+w("\t\t\tproxyType = 1;")
+w(f"\t\t\tremoteGlobalIDString = {oid('target_'+APP)};")
+w("\t\t\tremoteInfo = Hardset;")
+w("\t\t};")
 w("/* End PBXContainerItemProxy section */\n")
 
 # ---- PBXCopyFilesBuildPhase (embed the extension) ----
@@ -202,6 +292,7 @@ for fname, group in (("Info.plist", "Hardset"), ("Hardset.entitlements", "Hardse
 w(f"\t\t{oid('prod_'+APP)} /* Hardset.app */ = {{isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Hardset.app; sourceTree = BUILT_PRODUCTS_DIR; }};")
 w(f"\t\t{oid('prod_'+WIDGET)} /* HardsetWidget.appex */ = {{isa = PBXFileReference; explicitFileType = \"wrapper.app-extension\"; includeInIndex = 0; path = HardsetWidget.appex; sourceTree = BUILT_PRODUCTS_DIR; }};")
 w(f"\t\t{oid('prod_'+TESTS)} /* HardsetTests.xctest */ = {{isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = HardsetTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; }};")
+w(f"\t\t{oid('prod_'+UI_TESTS)} /* HardsetAppUITests.xctest */ = {{isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = HardsetAppUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; }};")
 w("/* End PBXFileReference section */\n")
 
 # ---- XCLocalSwiftPackageReference ----
@@ -224,7 +315,7 @@ w("/* End XCSwiftPackageProductDependency section */\n")
 
 # ---- PBXFrameworksBuildPhase ----
 w("/* Begin PBXFrameworksBuildPhase section */")
-for target in (APP, WIDGET, TESTS):
+for target in TARGETS:
     w(f"\t\t{oid('fw_'+target)} /* Frameworks */ = {{")
     w("\t\t\tisa = PBXFrameworksBuildPhase;")
     w("\t\t\tbuildActionMask = 2147483647;")
@@ -241,7 +332,7 @@ w("/* Begin PBXGroup section */")
 w(f"\t\t{oid('grp_root')} = {{")
 w("\t\t\tisa = PBXGroup;")
 w("\t\t\tchildren = (")
-for g in ("Hardset", "HardsetWidget", "HardsetTests"):
+for g in ("Hardset", "HardsetWidget", "HardsetTests", "HardsetAppUITests"):
     w(f"\t\t\t\t{oid('grp_'+g)} /* {g} */,")
 w(f"\t\t\t\t{oid('grp_products')} /* Products */,")
 w("\t\t\t);")
@@ -251,6 +342,7 @@ group_children = {
     "Hardset": ["HardsetApp.swift", "Assets.xcassets", "Info.plist", "Hardset.entitlements", "PrivacyInfo.xcprivacy"],
     "HardsetWidget": ["HardsetWidgetBundle.swift", "Info.plist"],
     "HardsetTests": ["AppSmokeTests.swift"],
+    "HardsetAppUITests": ["HardsetAppUITests.swift"],
 }
 for g, children in group_children.items():
     w(f"\t\t{oid('grp_'+g)} /* {g} */ = {{")
@@ -265,7 +357,12 @@ for g, children in group_children.items():
 w(f"\t\t{oid('grp_products')} /* Products */ = {{")
 w("\t\t\tisa = PBXGroup;")
 w("\t\t\tchildren = (")
-for t, prod in ((APP, "Hardset.app"), (WIDGET, "HardsetWidget.appex"), (TESTS, "HardsetTests.xctest")):
+for t, prod in (
+    (APP, "Hardset.app"),
+    (WIDGET, "HardsetWidget.appex"),
+    (TESTS, "HardsetTests.xctest"),
+    (UI_TESTS, "HardsetAppUITests.xctest"),
+):
     w(f"\t\t\t\t{oid('prod_'+t)} /* {prod} */,")
 w("\t\t\t);")
 w("\t\t\tname = Products;")
@@ -279,8 +376,9 @@ meta = {
     APP: ("Hardset", "com.apple.product-type.application", "Hardset.app", oid('prod_'+APP)),
     WIDGET: ("HardsetWidget", "com.apple.product-type.app-extension", "HardsetWidget.appex", oid('prod_'+WIDGET)),
     TESTS: ("HardsetTests", "com.apple.product-type.bundle.unit-test", "HardsetTests.xctest", oid('prod_'+TESTS)),
+    UI_TESTS: ("HardsetAppUITests", "com.apple.product-type.bundle.ui-testing", "HardsetAppUITests.xctest", oid('prod_'+UI_TESTS)),
 }
-for target in (APP, WIDGET, TESTS):
+for target in TARGETS:
     name, ptype, pref, prodid = meta[target]
     w(f"\t\t{oid('target_'+target)} /* {name} */ = {{")
     w("\t\t\tisa = PBXNativeTarget;")
@@ -298,6 +396,8 @@ for target in (APP, WIDGET, TESTS):
         w(f"\t\t\t\t{oid('dep_'+WIDGET)} /* PBXTargetDependency */,")
     if target == TESTS:
         w(f"\t\t\t\t{oid('dep_'+APP)} /* PBXTargetDependency */,")
+    if target == UI_TESTS:
+        w(f"\t\t\t\t{oid('dep_'+APP+'_ui')} /* PBXTargetDependency */,")
     w("\t\t\t);")
     w(f"\t\t\tname = {name};")
     w("\t\t\tpackageProductDependencies = (")
@@ -319,7 +419,7 @@ w("\t\t\t\tBuildIndependentTargetsInParallel = 1;")
 w("\t\t\t\tLastSwiftUpdateCheck = 2640;")
 w("\t\t\t\tLastUpgradeCheck = 2640;")
 w("\t\t\t\tTargetAttributes = {")
-for target in (APP, WIDGET, TESTS):
+for target in TARGETS:
     w(f"\t\t\t\t\t{oid('target_'+target)} = {{\n\t\t\t\t\t\tCreatedOnToolsVersion = 26.4;\n\t\t\t\t\t}};")
 w("\t\t\t\t};")
 w("\t\t\t};")
@@ -336,7 +436,7 @@ w(f"\t\t\tproductRefGroup = {oid('grp_products')} /* Products */;")
 w('\t\t\tprojectDirPath = "";')
 w('\t\t\tprojectRoot = "";')
 w("\t\t\ttargets = (")
-for target in (APP, WIDGET, TESTS):
+for target in TARGETS:
     w(f"\t\t\t\t{oid('target_'+target)} /* {meta[target][0]} */,")
 w("\t\t\t);")
 w("\t\t};")
@@ -344,7 +444,7 @@ w("/* End PBXProject section */\n")
 
 # ---- PBXResourcesBuildPhase ----
 w("/* Begin PBXResourcesBuildPhase section */")
-for target in (APP, WIDGET, TESTS):
+for target in TARGETS:
     w(f"\t\t{oid('res_'+target)} /* Resources */ = {{")
     w("\t\t\tisa = PBXResourcesBuildPhase;")
     w("\t\t\tbuildActionMask = 2147483647;")
@@ -359,7 +459,7 @@ w("/* End PBXResourcesBuildPhase section */\n")
 
 # ---- PBXSourcesBuildPhase ----
 w("/* Begin PBXSourcesBuildPhase section */")
-for target in (APP, WIDGET, TESTS):
+for target in TARGETS:
     w(f"\t\t{oid('src_'+target)} /* Sources */ = {{")
     w("\t\t\tisa = PBXSourcesBuildPhase;")
     w("\t\t\tbuildActionMask = 2147483647;")
@@ -380,6 +480,11 @@ for dep in (WIDGET, APP):
     w(f"\t\t\ttarget = {oid('target_'+dep)} /* {meta[dep][0]} */;")
     w(f"\t\t\ttargetProxy = {oid('proxy_'+dep)} /* PBXContainerItemProxy */;")
     w("\t\t};")
+w(f"\t\t{oid('dep_'+APP+'_ui')} /* PBXTargetDependency */ = {{")
+w("\t\t\tisa = PBXTargetDependency;")
+w(f"\t\t\ttarget = {oid('target_'+APP)} /* {meta[APP][0]} */;")
+w(f"\t\t\ttargetProxy = {oid('proxy_'+APP+'_ui')} /* PBXContainerItemProxy */;")
+w("\t\t};")
 w("/* End PBXTargetDependency section */\n")
 
 # ---- XCBuildConfiguration ----
@@ -417,7 +522,7 @@ for cfg in ("Debug", "Release"):
     w("\t\t\t};")
     w(f"\t\t\tname = {cfg};")
     w("\t\t};")
-for target in (APP, WIDGET, TESTS):
+for target in TARGETS:
     for cfg in ("Debug", "Release"):
         w(f"\t\t{oid('cfg_'+target+cfg)} /* {cfg} */ = {{")
         w("\t\t\tisa = XCBuildConfiguration;")
@@ -430,7 +535,7 @@ w("/* End XCBuildConfiguration section */\n")
 
 # ---- XCConfigurationList ----
 w("/* Begin XCConfigurationList section */")
-for key in ("project", APP, WIDGET, TESTS):
+for key in ("project",) + TARGETS:
     w(f"\t\t{oid('cfglist_'+key)} = {{")
     w("\t\t\tisa = XCConfigurationList;")
     w("\t\t\tbuildConfigurations = (")
@@ -472,6 +577,10 @@ with open(os.path.join(sd, "Hardset.xcscheme"), "w") as f:
          <TestableReference skipped="NO">
             <BuildableReference BuildableIdentifier="primary" BlueprintIdentifier="{oid('target_'+TESTS)}"
                BuildableName="HardsetTests.xctest" BlueprintName="HardsetTests" ReferencedContainer="container:Hardset.xcodeproj"/>
+         </TestableReference>
+         <TestableReference skipped="NO">
+            <BuildableReference BuildableIdentifier="primary" BlueprintIdentifier="{oid('target_'+UI_TESTS)}"
+               BuildableName="HardsetAppUITests.xctest" BlueprintName="HardsetAppUITests" ReferencedContainer="container:Hardset.xcodeproj"/>
          </TestableReference>
       </Testables>
    </TestAction>

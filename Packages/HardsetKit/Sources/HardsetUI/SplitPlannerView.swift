@@ -1,6 +1,21 @@
 import HardsetCore
 import SwiftUI
 
+/// What a row must say about the machine planned on it, beyond the machine's name.
+///
+/// Two different facts, and the app is certain of both. A machine belongs to one gym, so one
+/// named at another gym will not be the machine used. And with no gym chosen at all
+/// `plannedExercises(for:at:)` drops the machine outright, because a session with no gym can only
+/// ever log `machineID == nil` -- so a named machine on the row is a promise the start would break.
+public enum PlannedMachineNote: Hashable, Sendable {
+  /// Nothing to say: the machine is at the gym the next workout will be at, or none is named.
+  case none
+  /// The machine named here is at a different gym.
+  case elsewhere
+  /// No gym is chosen, so no machine can be resolved, named, or carried into a workout.
+  case noGym
+}
+
 /// One movement on a plan's day, as the planner draws it.
 public struct PlannedMovementRow: Hashable, Sendable, Identifiable {
   public let id: SplitEntryID
@@ -15,6 +30,20 @@ public struct PlannedMovementRow: Hashable, Sendable, Identifiable {
   /// True when the app cannot attribute the movement at all, so the row must say so rather than
   /// render an empty muscle list as though it meant "trains nothing".
   public let isUnattributed: Bool
+  /// Working sets the lifter said they intend here, or nil when they have not said.
+  ///
+  /// Theirs, never the app's. nil renders as nothing at all rather than a suggested number.
+  public let targetSets: Int?
+  /// True when the movement has been retired, so it is still in the plan but no longer offered.
+  public let isRetired: Bool
+  /// What the row must say about the machine planned on it, beyond its name.
+  public let machineNote: PlannedMachineNote
+  /// True when the lifter owns this movement and may rename it.
+  ///
+  /// False for curated rows, whose names come from the catalogue and are compared against
+  /// `curatedName` on every seed -- `ExerciseStore.rename` refuses them, so a rename control on one
+  /// would be an affordance that cannot finish.
+  public let isEditable: Bool
 
   public init(
     id: SplitEntryID,
@@ -23,7 +52,11 @@ public struct PlannedMovementRow: Hashable, Sendable, Identifiable {
     creditedMuscleNames: [String],
     machineID: MachineID?,
     machineName: String?,
-    isUnattributed: Bool
+    isUnattributed: Bool,
+    targetSets: Int? = nil,
+    isRetired: Bool = false,
+    machineNote: PlannedMachineNote = .none,
+    isEditable: Bool = false
   ) {
     self.id = id
     self.exerciseID = exerciseID
@@ -32,6 +65,33 @@ public struct PlannedMovementRow: Hashable, Sendable, Identifiable {
     self.machineID = machineID
     self.machineName = machineName
     self.isUnattributed = isUnattributed
+    self.targetSets = targetSets
+    self.isRetired = isRetired
+    self.machineNote = machineNote
+    self.isEditable = isEditable
+  }
+
+  /// The intended-set line, or nil when the lifter has not said.
+  ///
+  /// Singular/plural spelled out rather than interpolated: `^[\(n) set](inflect: true)` is only
+  /// honoured for a `LocalizedStringKey`, and putting it in a `String` shipped the markup once.
+  public var targetSetsText: String? {
+    guard let targetSets, targetSets > 0 else { return nil }
+    return targetSets == 1 ? "1 set planned" : "\(targetSets) sets planned"
+  }
+}
+
+/// One modelled muscle and the number of a plan's days that credit it.
+///
+/// A count, deliberately not a rank -- see `SplitPlanAssessment.modelledDayCredits`.
+public struct MuscleDayCount: Hashable, Sendable, Identifiable {
+  public var id: String { name }
+  public let name: String
+  public let days: Int
+
+  public init(name: String, days: Int) {
+    self.name = name
+    self.days = days
   }
 }
 
@@ -42,12 +102,50 @@ public struct PlannedDay: Hashable, Sendable, Identifiable {
   /// Describes what is on the day. Never a training archetype -- see `SplitPlanDay.dominantGroups`.
   public let subtitle: String
   public let movements: [PlannedMovementRow]
+  /// When a workout was last started from this day, or nil when none ever has.
+  ///
+  /// A fact read from `sessions.splitDayID`, never inferred from what a session contained.
+  public let lastTrained: Date?
+  /// Whether this is the day of the plan that has gone longest without being trained.
+  ///
+  /// Decided by `SplitRotation.longestSinceTrained`, which refuses to answer for a plan of one day
+  /// or a plan nothing has been trained from. It is a statement about the lifter's own history and
+  /// deliberately not a recommendation -- the app still never says what to train.
+  public let isLongestSinceTrained: Bool
 
-  public init(id: SplitDayID, name: String, subtitle: String, movements: [PlannedMovementRow]) {
+  public init(
+    id: SplitDayID,
+    name: String,
+    subtitle: String,
+    movements: [PlannedMovementRow],
+    lastTrained: Date? = nil,
+    isLongestSinceTrained: Bool = false
+  ) {
     self.id = id
     self.name = name
     self.subtitle = subtitle
     self.movements = movements
+    self.lastTrained = lastTrained
+    self.isLongestSinceTrained = isLongestSinceTrained
+  }
+
+  /// One line saying when this day was last trained, and whether it is the one waiting longest.
+  ///
+  /// Phrased through `TrainingRecency` so the load-history browser words the same fact identically,
+  /// and so the second week reads in days -- "10 days ago" and "7 days ago" are the two a lifter on
+  /// a weekly split is choosing between, and the system's named format calls both "last week".
+  ///
+  /// Returns nil for a day with nothing to say, so the caller renders no line rather than an empty
+  /// one. Takes `now` rather than reading the clock, so what it says is testable.
+  public func rotationText(asOf now: Date = Date()) -> String? {
+    let recency: String? =
+      lastTrained.map { "Last trained \(TrainingRecency.phrase(since: $0, asOf: now))" }
+    switch (recency, isLongestSinceTrained) {
+    case (let recency?, true): return "\(recency) · longest since trained"
+    case (let recency?, false): return recency
+    case (nil, true): return "Not trained yet · longest since trained"
+    case (nil, false): return "Not trained yet"
+    }
   }
 }
 
@@ -65,19 +163,23 @@ public struct PlanCoverageSummary: Hashable, Sendable {
   public let leastCreditedModelledNames: [String]
   /// Some movements could not be attributed, so every statement here is a floor.
   public let isLowerBound: Bool
+  /// How many of the plan's days credit each modelled muscle. A readout, never sorted by size.
+  public let modelledDayCredits: [MuscleDayCount]
 
   public init(
     movementCount: Int,
     dayCount: Int,
     uncreditedMuscleNames: [String],
     leastCreditedModelledNames: [String],
-    isLowerBound: Bool
+    isLowerBound: Bool,
+    modelledDayCredits: [MuscleDayCount] = []
   ) {
     self.movementCount = movementCount
     self.dayCount = dayCount
     self.uncreditedMuscleNames = uncreditedMuscleNames
     self.leastCreditedModelledNames = leastCreditedModelledNames
     self.isLowerBound = isLowerBound
+    self.modelledDayCredits = modelledDayCredits
   }
 }
 
@@ -100,6 +202,20 @@ public enum PlanDealSource: Hashable, Sendable {
   }
 }
 
+/// Which straightforward job the planner can offer right now.
+///
+/// An empty plan can be built deliberately, either from scratch or from completed training
+/// history. A populated plan can only be redistributed; it must never silently pull more
+/// movements in from history.
+public enum PlanBuilderMode: Hashable, Sendable {
+  case empty(historyCount: Int)
+  case populated
+
+  public init(planMovementCount: Int, historyMovementCount: Int) {
+    self = planMovementCount > 0 ? .populated : .empty(historyCount: max(0, historyMovementCount))
+  }
+}
+
 /// A plan: days, the movements on them, and what that covers.
 ///
 /// ## What this screen refuses to draw
@@ -115,10 +231,9 @@ public enum PlanDealSource: Hashable, Sendable {
 public struct SplitPlannerView: View {
   private let days: [PlannedDay]
   private let coverage: PlanCoverageSummary
-  /// Re-deals the plan across a chosen number of days. `nil` hides the affordance.
-  private let onRedeal: ((Int) -> Void)?
-  /// What a deal would draw on, which decides both the wording and whether it can do anything.
-  private let dealSource: PlanDealSource
+  private let historyMovementCount: Int
+  private let onRedistribute: ((Int) -> Void)?
+  private let onStartFromHistory: ((Int) -> Void)?
   /// Adds a movement to a day.
   private let onAddMovement: ((SplitDayID) -> Void)?
   private let onRemoveMovement: ((PlannedMovementRow) -> Void)?
@@ -129,10 +244,31 @@ public struct SplitPlannerView: View {
   private let onDeleteDay: ((PlannedDay) -> Void)?
   /// Moves a movement to another day. The arrangement is a starting point, not a verdict.
   private let onMoveMovement: ((PlannedMovementRow, SplitDayID) -> Void)?
+  /// Reorders a movement within its own day. The store has always supported a target position; the
+  /// only interaction offered dropped it, so what the lifter does first when fresh was unorderable.
+  private let onReorderMovement: ((PlannedMovementRow, Int) -> Void)?
+  /// Records the lifter's own intended set count, or clears it with nil.
+  private let onSetTargetSets: ((PlannedMovementRow, Int?) -> Void)?
+  /// Changes which movement a slot holds, keeping its place in the day and the sets intended on it.
+  ///
+  /// Every other property of a planned movement was editable in place; the movement itself was not,
+  /// so fixing a wrong one meant removing it and adding the right one -- which appends at the bottom
+  /// and forgets the intended sets.
+  private let onSwapMovement: ((PlannedMovementRow) -> Void)?
+  /// Renames a movement the lifter owns, from the plan they are looking at.
+  ///
+  /// Offered only for rows where `isEditable` is true. `ExerciseStore.rename` refuses curated rows,
+  /// so showing it on one would be a control that cannot finish.
+  private let onRenameMovement: ((PlannedMovementRow) -> Void)?
+  /// Moves a day within the plan. Day order is the order the plan reads in.
+  private let onMoveDay: ((PlannedDay, Int) -> Void)?
   /// Starts this day as today's workout. `nil` hides the affordance -- which is what happens while
   /// a workout is already open, because offering it would either abandon that session or do
   /// nothing.
   private let onStartDay: ((PlannedDay) -> Void)?
+  /// The day whose workout payload is being prepared. Exposed so the tapped row gives immediate
+  /// feedback and all other start buttons stop accepting duplicate taps during that short read.
+  private let startingDayID: SplitDayID?
 
   @State private var redealDayCount: Int
   @State private var isConfirmingRedeal = false
@@ -140,8 +276,9 @@ public struct SplitPlannerView: View {
   public init(
     days: [PlannedDay],
     coverage: PlanCoverageSummary,
-    dealSource: PlanDealSource = .planContents(count: 0),
-    onRedeal: ((Int) -> Void)? = nil,
+    historyMovementCount: Int = 0,
+    onRedistribute: ((Int) -> Void)? = nil,
+    onStartFromHistory: ((Int) -> Void)? = nil,
     onAddMovement: ((SplitDayID) -> Void)? = nil,
     onRemoveMovement: ((PlannedMovementRow) -> Void)? = nil,
     onChooseMachine: ((PlannedMovementRow) -> Void)? = nil,
@@ -149,12 +286,19 @@ public struct SplitPlannerView: View {
     onAddDay: (() -> Void)? = nil,
     onDeleteDay: ((PlannedDay) -> Void)? = nil,
     onMoveMovement: ((PlannedMovementRow, SplitDayID) -> Void)? = nil,
-    onStartDay: ((PlannedDay) -> Void)? = nil
+    onReorderMovement: ((PlannedMovementRow, Int) -> Void)? = nil,
+    onSetTargetSets: ((PlannedMovementRow, Int?) -> Void)? = nil,
+    onSwapMovement: ((PlannedMovementRow) -> Void)? = nil,
+    onRenameMovement: ((PlannedMovementRow) -> Void)? = nil,
+    onMoveDay: ((PlannedDay, Int) -> Void)? = nil,
+    onStartDay: ((PlannedDay) -> Void)? = nil,
+    startingDayID: SplitDayID? = nil
   ) {
     self.days = days
     self.coverage = coverage
-    self.dealSource = dealSource
-    self.onRedeal = onRedeal
+    self.historyMovementCount = historyMovementCount
+    self.onRedistribute = onRedistribute
+    self.onStartFromHistory = onStartFromHistory
     self.onAddMovement = onAddMovement
     self.onRemoveMovement = onRemoveMovement
     self.onChooseMachine = onChooseMachine
@@ -162,26 +306,43 @@ public struct SplitPlannerView: View {
     self.onAddDay = onAddDay
     self.onDeleteDay = onDeleteDay
     self.onMoveMovement = onMoveMovement
+    self.onReorderMovement = onReorderMovement
+    self.onSetTargetSets = onSetTargetSets
+    self.onSwapMovement = onSwapMovement
+    self.onRenameMovement = onRenameMovement
+    self.onMoveDay = onMoveDay
     self.onStartDay = onStartDay
+    self.startingDayID = startingDayID
     self._redealDayCount = State(initialValue: max(1, days.count))
   }
 
   public var body: some View {
     List {
       if days.isEmpty {
-        ContentUnavailableView {
-          Label("No days yet", systemImage: "square.split.2x2")
-        } description: {
-          Text("Add a day, or deal the movements you already train across a few of them.")
-        }
+        emptyPlanSection(showsManualBuild: true)
       } else {
         ForEach(days) { day in
           daySection(day)
         }
-        coverageSection
+        switch Self.builderMode(for: days, historyMovementCount: historyMovementCount) {
+        case .empty:
+          emptyPlanSection(showsManualBuild: false)
+        case .populated:
+          coverageSection
+          frequencySection
+          redistributionSection
+        }
       }
-      redealSection
     }
+  }
+
+  public static func builderMode(
+    for days: [PlannedDay], historyMovementCount: Int
+  ) -> PlanBuilderMode {
+    PlanBuilderMode(
+      planMovementCount: days.reduce(0) { $0 + $1.movements.count },
+      historyMovementCount: historyMovementCount
+    )
   }
 
   // MARK: - Days
@@ -191,7 +352,7 @@ public struct SplitPlannerView: View {
       if day.movements.isEmpty {
         Text("Nothing planned")
           .font(Tokens.Text.caption)
-          .foregroundStyle(Tokens.Color.textTertiary)
+          .foregroundStyle(Tokens.Color.textSecondary)
       }
       ForEach(day.movements) { movement in
         movementRow(movement, on: day)
@@ -200,9 +361,17 @@ public struct SplitPlannerView: View {
         Button {
           onStartDay(day)
         } label: {
-          Label("Start this day", systemImage: "figure.strengthtraining.traditional")
-            .font(Tokens.Text.label.weight(.semibold))
+          HStack(spacing: Tokens.Spacing.snug) {
+            if startingDayID == day.id {
+              ProgressView().controlSize(.small)
+            } else {
+              Image(systemName: "figure.strengthtraining.traditional")
+            }
+            Text(startingDayID == day.id ? "Starting…" : "Start this day")
+          }
+          .font(Tokens.Text.label.weight(.semibold))
         }
+        .disabled(startingDayID != nil)
       }
       if let onAddMovement {
         Button {
@@ -230,10 +399,37 @@ public struct SplitPlannerView: View {
             .foregroundStyle(Tokens.Color.textSecondary)
             .textCase(nil)
         }
+        if let rotationText = day.rotationText() {
+          // Brighter for the day waiting longest, rather than a second hue. Chrome in this app is
+          // achromatic and the accent is the brightest thing, so "scan for the bright line" is the
+          // cue the design already teaches -- see `docs/UI-GUIDELINES.md`.
+          Text(rotationText)
+            .font(Tokens.Text.caption)
+            .foregroundStyle(
+              day.isLongestSinceTrained ? Tokens.Color.textPrimary : Tokens.Color.textTertiary
+            )
+            .textCase(nil)
+        }
       }
       Spacer(minLength: Tokens.Spacing.snug)
-      if onRenameDay != nil || onDeleteDay != nil {
+      if onRenameDay != nil || onDeleteDay != nil || onMoveDay != nil {
         Menu {
+          if let onMoveDay, let index = days.firstIndex(of: day) {
+            if index > 0 {
+              Button {
+                onMoveDay(day, index - 1)
+              } label: {
+                Label("Move earlier", systemImage: "arrow.up")
+              }
+            }
+            if index < days.count - 1 {
+              Button {
+                onMoveDay(day, index + 1)
+              } label: {
+                Label("Move later", systemImage: "arrow.down")
+              }
+            }
+          }
           if let onRenameDay {
             Button {
               onRenameDay(day)
@@ -251,10 +447,16 @@ public struct SplitPlannerView: View {
         } label: {
           Image(systemName: "ellipsis.circle")
             .font(Tokens.Text.glyph)
+            // Inside the label and shaped, not applied to the `Menu`. A menu's hit region is its
+            // label's content shape, so a frame hung on the `Menu` grows the layout footprint and
+            // leaves the added area untappable -- the glyph itself stays around 20 pt, on the only
+            // route to renaming or deleting a day. `contentShape` is what makes the whole 44 pt
+            // rectangle hit-test, rather than just the drawn glyph inside it.
+            .frame(minWidth: Tokens.minimumTapTarget, minHeight: Tokens.minimumTapTarget)
+            .contentShape(Rectangle())
         }
         // A menu label is a glyph, so it needs a name of its own for VoiceOver.
         .accessibilityLabel("Options for \(day.name)")
-        .frame(minWidth: Tokens.minimumTapTarget, minHeight: Tokens.minimumTapTarget)
       }
     }
     .textCase(nil)
@@ -265,24 +467,54 @@ public struct SplitPlannerView: View {
   @ViewBuilder private func movementRow(_ movement: PlannedMovementRow, on day: PlannedDay)
     -> some View
   {
-    VStack(alignment: .leading, spacing: Tokens.Spacing.tight) {
-      Text(movement.name)
-        .font(Tokens.Text.label)
-        .foregroundStyle(Tokens.Color.textPrimary)
+    HStack(alignment: .top, spacing: Tokens.Spacing.snug) {
+      VStack(alignment: .leading, spacing: Tokens.Spacing.tight) {
+        Text(movement.name)
+          .font(Tokens.Text.label)
+          .foregroundStyle(Tokens.Color.textPrimary)
 
-      // The line that makes this more than a list of names, and the reason it must not be
-      // truncated: it is the attribution the whole app is built on.
-      if movement.isUnattributed {
-        Text("Not attributed")
-          .font(Tokens.Text.caption)
-          .foregroundStyle(Tokens.Color.textTertiary)
-      } else if !movement.creditedMuscleNames.isEmpty {
-        Text(movement.creditedMuscleNames.joined(separator: " · "))
-          .font(Tokens.Text.caption)
-          .foregroundStyle(Tokens.Color.textSecondary)
+        // The line that makes this more than a list of names, and the reason it must not be
+        // truncated: it is the attribution the whole app is built on.
+        if movement.isUnattributed {
+          Text("Not attributed")
+            .font(Tokens.Text.caption)
+            .foregroundStyle(Tokens.Color.textSecondary)
+        } else if !movement.creditedMuscleNames.isEmpty {
+          Text(movement.creditedMuscleNames.joined(separator: " · "))
+            .font(Tokens.Text.caption)
+            .foregroundStyle(Tokens.Color.textSecondary)
+        }
+
+        machineLabel(movement)
+
+        if let targetSetsText = movement.targetSetsText {
+          Text(targetSetsText)
+            .font(Tokens.Text.caption)
+            .foregroundStyle(Tokens.Color.textSecondary)
+        }
+
+        if movement.isRetired {
+          // Said, not silently removed. The plan is the lifter's; the app only reports that this
+          // movement is no longer one it will offer them.
+          Text("Retired — still starts, no longer offered")
+            .font(Tokens.Text.caption)
+            .foregroundStyle(Tokens.Color.certainty(.low))
+        }
       }
-
-      machineLabel(movement)
+      Spacer(minLength: Tokens.Spacing.hairline)
+      // Moving used to exist only in a long-press context menu. This visible control makes the
+      // common edit a normal tap and keeps the whole row free for readable, multiline attribution.
+      Menu {
+        movementActionItems(movement, on: day)
+      } label: {
+        Image(systemName: "arrow.up.arrow.down.circle")
+          .font(Tokens.Text.glyph)
+          .frame(minWidth: Tokens.minimumTapTarget, minHeight: Tokens.minimumTapTarget)
+          // The frame was already in the right place here; without a content shape only the drawn
+          // glyph hit-tests, so the declared 44 pt was still not the tappable area.
+          .contentShape(Rectangle())
+      }
+      .accessibilityLabel("Move or edit \(movement.name)")
     }
     .frame(maxWidth: .infinity, alignment: .leading)
     .contentShape(Rectangle())
@@ -296,39 +528,166 @@ public struct SplitPlannerView: View {
       }
     }
     .contextMenu {
-      if let onChooseMachine {
+      movementActionItems(movement, on: day)
+    }
+  }
+
+  /// The visible row menu and the long-press menu intentionally share one action list. The visible
+  /// one is for discovery; the context menu remains the fast path for someone already using it.
+  @ViewBuilder private func movementActionItems(_ movement: PlannedMovementRow, on day: PlannedDay)
+    -> some View
+  {
+    if let onReorderMovement, let index = day.movements.firstIndex(of: movement) {
+      if index > 0 {
         Button {
-          onChooseMachine(movement)
+          onReorderMovement(movement, index - 1)
         } label: {
-          Label(
-            movement.machineName == nil ? "Name the machine" : "Change machine",
-            systemImage: "dumbbell"
-          )
+          Label("Move up", systemImage: "arrow.up")
         }
       }
-      if let onMoveMovement {
-        // Moving between days is the interaction this screen exists for. A menu rather than a drag
-        // because a drag has no discoverable affordance and no VoiceOver equivalent.
-        ForEach(days.filter { $0.id != day.id }) { destination in
-          Button {
-            onMoveMovement(movement, destination.id)
-          } label: {
-            Label("Move to \(destination.name)", systemImage: "arrow.right")
-          }
+      if index < day.movements.count - 1 {
+        Button {
+          onReorderMovement(movement, index + 1)
+        } label: {
+          Label("Move down", systemImage: "arrow.down")
         }
+      }
+    }
+    if let onMoveMovement {
+      ForEach(days.filter { $0.id != day.id }) { destination in
+        Button {
+          onMoveMovement(movement, destination.id)
+        } label: {
+          Label("Move to \(destination.name)", systemImage: "arrow.right")
+        }
+      }
+    }
+    if let onSwapMovement {
+      Button {
+        onSwapMovement(movement)
+      } label: {
+        Label("Swap movement", systemImage: "arrow.triangle.2.circlepath")
+      }
+    }
+    if let onRenameMovement, movement.isEditable {
+      Button {
+        onRenameMovement(movement)
+      } label: {
+        Label("Rename movement", systemImage: "pencil")
+      }
+    }
+    if let onChooseMachine {
+      Button {
+        onChooseMachine(movement)
+      } label: {
+        Label(
+          movement.machineName == nil ? "Add machine" : "Change machine",
+          systemImage: "dumbbell"
+        )
+      }
+    }
+    if let onSetTargetSets {
+      Menu {
+        Button("Not set") { onSetTargetSets(movement, nil) }
+        ForEach(1...Self.offeredTargetSets, id: \.self) { count in
+          Button(count == 1 ? "1 set" : "\(count) sets") { onSetTargetSets(movement, count) }
+        }
+      } label: {
+        Label(movement.targetSets == nil ? "Sets you intend" : "Change sets", systemImage: "number")
+      }
+    }
+    if let onRemoveMovement {
+      Button(role: .destructive) {
+        onRemoveMovement(movement)
+      } label: {
+        Label("Remove movement", systemImage: "trash")
       }
     }
   }
 
+  /// How many set counts the menu offers. A menu length, not a training range -- `setTargetSets`
+  /// accepts up to `SplitStore.maximumTargetSets`, and nothing compares any of them to a target.
+  static let offeredTargetSets = 10
+
   @ViewBuilder private func machineLabel(_ movement: PlannedMovementRow) -> some View {
     if let machineName = movement.machineName {
-      Label(machineName, systemImage: "dumbbell")
-        .font(Tokens.Text.caption)
-        .foregroundStyle(Tokens.Color.textSecondary)
+      Button {
+        onChooseMachine?(movement)
+      } label: {
+        VStack(alignment: .leading, spacing: Tokens.Spacing.hairline) {
+          Label(machineName, systemImage: "dumbbell")
+            .font(Tokens.Text.caption)
+            .foregroundStyle(Tokens.Color.textSecondary)
+          switch movement.machineNote {
+          case .none:
+            EmptyView()
+          case .elsewhere:
+            // Said here rather than discovered mid-workout. A machine belongs to one gym, so this
+            // one will not be the machine used -- the day will open on a same-named machine here if
+            // there is one, and unbound if there is not.
+            Text("Not at the gym you are training at next")
+              .font(Tokens.Text.caption)
+              .foregroundStyle(Tokens.Color.textSecondary)
+          case .noGym:
+            // A different statement from the one above, and a certain one: with no gym chosen there
+            // is no gym to resolve this machine against, so the day opens unbound whatever its name
+            // says. The row named a machine the workout will not use, silently, until now.
+            Text("No gym chosen — this day starts without a machine")
+              .font(Tokens.Text.caption)
+              .foregroundStyle(Tokens.Color.textSecondary)
+          }
+        }
+      }
+      .buttonStyle(.plain)
+    } else if let onChooseMachine {
+      Button {
+        onChooseMachine(movement)
+      } label: {
+        Label("Add machine", systemImage: "dumbbell")
+          .font(Tokens.Text.caption)
+          .foregroundStyle(Tokens.Color.textSecondary)
+      }
+      .buttonStyle(.plain)
     }
   }
 
   // MARK: - Coverage
+
+  /// The days-credited readout.
+  ///
+  /// Counts, presented in the taxonomy's own order and never sorted by size: the app has no
+  /// registered finding about training frequency, so `SplitPlanAssessment.creditingDays` may be
+  /// shown and may not be ranked. The footnote says so on the face of it, because a bare list of
+  /// numbers invites being read as a score.
+  @ViewBuilder private var frequencySection: some View {
+    if !coverage.modelledDayCredits.isEmpty, coverage.dayCount > 1 {
+      Section {
+        ForEach(coverage.modelledDayCredits) { credit in
+          HStack(spacing: Tokens.Spacing.snug) {
+            Text(credit.name)
+              .font(Tokens.Text.caption)
+              .foregroundStyle(Tokens.Color.textSecondary)
+            Spacer(minLength: Tokens.Spacing.snug)
+            Text(Self.dayCreditText(credit.days, of: coverage.dayCount))
+              .font(Tokens.Text.caption)
+              .monospacedDigit()
+              .foregroundStyle(Tokens.Color.textPrimary)
+          }
+        }
+      } header: {
+        Text("Days credited, among the six the evidence covers")
+          .font(Tokens.Text.caption)
+          .textCase(nil)
+      } footer: {
+        Text(
+          "A count of this arrangement, not a target. No training frequency is established, so "
+            + "these are not ranked and none is better than another."
+        )
+        .font(Tokens.Text.caption)
+        .foregroundStyle(Tokens.Color.textSecondary)
+      }
+    }
+  }
 
   @ViewBuilder private var coverageSection: some View {
     Section {
@@ -361,7 +720,7 @@ public struct SplitPlannerView: View {
           // VoiceOver, which is how a lower bound gets read as a total.
           Text("Some movements could not be attributed, so this is a floor, not a total.")
             .font(Tokens.Text.caption)
-            .foregroundStyle(Tokens.Color.textTertiary)
+            .foregroundStyle(Tokens.Color.textSecondary)
         }
       }
       .padding(.vertical, Tokens.Spacing.tight)
@@ -375,7 +734,7 @@ public struct SplitPlannerView: View {
       Text("No plan is graded. No weekly set target is established for any muscle, so the app "
         + "reports what your arrangement covers rather than scoring it.")
         .font(Tokens.Text.caption)
-        .foregroundStyle(Tokens.Color.textTertiary)
+        .foregroundStyle(Tokens.Color.textSecondary)
     }
   }
 
@@ -394,44 +753,73 @@ public struct SplitPlannerView: View {
 
   // MARK: - Re-dealing
 
-  @ViewBuilder private var redealSection: some View {
-    if let onRedeal {
+  @ViewBuilder private func emptyPlanSection(showsManualBuild: Bool) -> some View {
+    Section {
+      if showsManualBuild {
+        Text(Self.planPurposeText)
+          .font(Tokens.Text.caption)
+          .foregroundStyle(Tokens.Color.textSecondary)
+        if let onAddDay {
+          Button(Self.manualBuildButtonText) { onAddDay() }
+        }
+      }
+      if let onStartFromHistory {
+        Stepper(value: $redealDayCount, in: 1...7) {
+          Text(Self.dayCountText(redealDayCount)).monospacedDigit()
+        }
+        Button(Self.historyStartButtonText) { isConfirmingRedeal = true }
+          .disabled(historyMovementCount == 0)
+        Text(Self.historyStartExplanation(movementCount: historyMovementCount))
+          .font(Tokens.Text.caption)
+          .foregroundStyle(Tokens.Color.textSecondary)
+        .confirmationDialog(
+          "Start from training history?", isPresented: $isConfirmingRedeal,
+          titleVisibility: .visible
+        ) {
+          Button("Build plan") { onStartFromHistory(redealDayCount) }
+          Button("Cancel", role: .cancel) {}
+        } message: {
+          Text(Self.historyStartExplanation(movementCount: historyMovementCount))
+        }
+      }
+    } header: {
+      Text("Build a plan").textCase(nil)
+    }
+  }
+
+  @ViewBuilder private var redistributionSection: some View {
+    if let onRedistribute {
       Section {
         Stepper(value: $redealDayCount, in: 1...7) {
-          // Monospaced digits so the row does not reflow as the count changes.
-          Text(Self.dayCountText(redealDayCount))
-            .font(Tokens.Text.label)
-            .monospacedDigit()
+          Text(Self.dayCountText(redealDayCount)).monospacedDigit()
         }
-        Button {
-          isConfirmingRedeal = true
-        } label: {
-          Label(Self.dealButtonText(redealDayCount), systemImage: "rectangle.3.group")
-            .font(Tokens.Text.label)
+        Button(Self.redistributionButtonText(redealDayCount)) { isConfirmingRedeal = true }
+        Text(
+          Self.redistributionExplanation(
+            movementCount: days.flatMap(\.movements).count,
+            currentDayCount: days.count,
+            targetDayCount: redealDayCount
+          )
+        )
+          .font(Tokens.Text.caption)
+          .foregroundStyle(Tokens.Color.textSecondary)
+        .confirmationDialog(
+          Self.redistributionButtonText(redealDayCount) + "?", isPresented: $isConfirmingRedeal,
+          titleVisibility: .visible
+        ) {
+          Button("Redistribute") { onRedistribute(redealDayCount) }
+          Button("Cancel", role: .cancel) {}
+        } message: {
+          Text(
+            Self.redistributionExplanation(
+              movementCount: days.flatMap(\.movements).count,
+              currentDayCount: days.count,
+              targetDayCount: redealDayCount
+            )
+          )
         }
-        // Nothing to deal is nothing to deal. Enabled-but-inert is the failure this codebase has
-        // shipped before: a button that appears to work and silently does nothing.
-        .disabled(dealSource.count == 0)
       } header: {
-        Text("Rearrange")
-          .font(Tokens.Text.caption)
-          .textCase(nil)
-      } footer: {
-        Text(Self.dealFootnote(dealSource))
-          .font(Tokens.Text.caption)
-          .foregroundStyle(Tokens.Color.textTertiary)
-      }
-      // Replacing an arrangement is worth one tap of confirmation. It is not destructive to
-      // training history -- nothing logged is touched -- so the wording says what it replaces.
-      .confirmationDialog(
-        Self.dealButtonText(redealDayCount) + "?",
-        isPresented: $isConfirmingRedeal,
-        titleVisibility: .visible
-      ) {
-        Button("Deal") { onRedeal(redealDayCount) }
-        Button("Cancel", role: .cancel) {}
-      } message: {
-        Text(Self.dealConfirmation(dealSource))
+        Text(Self.redistributionSectionTitle).textCase(nil)
       }
     }
   }
@@ -457,6 +845,35 @@ public struct SplitPlannerView: View {
     "Deal across \(dayCountText(days))"
   }
 
+  public static let planPurposeText =
+    "A plan is a reusable weekly structure for exercises you already train."
+  public static let manualBuildButtonText = "Build it myself"
+  public static let historyStartButtonText = "Start from training history"
+  public static let redistributionSectionTitle = "Redistribute exercises"
+
+  public static func redistributionButtonText(_ days: Int) -> String {
+    "Redistribute across \(dayCountText(days))"
+  }
+
+  public static func redistributionExplanation(movementCount: Int) -> String {
+    "Spreads the \(movementCountText(movementCount)) already in this plan across the days you choose, keeping similar-muscle work apart where possible. It does not add or remove movements, does not decide your sets, or change named machines. Your logged weights and reps stay."
+  }
+
+  public static func redistributionExplanation(
+    movementCount: Int, currentDayCount: Int, targetDayCount: Int
+  ) -> String {
+    let base = redistributionExplanation(movementCount: movementCount)
+    guard targetDayCount < currentDayCount else { return base }
+    return base
+      + " Workouts linked to a removed day will no longer count toward this plan's rotation history."
+  }
+
+  public static func historyStartExplanation(movementCount: Int) -> String {
+    movementCount > 0
+      ? "Arranges \(movementCountText(movementCount)) from completed workouts across the days you choose. It does not change completed workouts."
+      : "Complete a workout first, then you can build a plan from its movements."
+  }
+
   /// Says which movements a deal would use, because "deal" means two different things depending on
   /// whether the plan already has any.
   static func dealFootnote(_ source: PlanDealSource) -> String {
@@ -474,13 +891,26 @@ public struct SplitPlannerView: View {
     }
   }
 
+  /// What dealing actually does, in full.
+  ///
+  /// This used to say only that the arrangement was replaced and logged workouts were safe. Both
+  /// true, and materially incomplete: dealing discarded every machine the lifter had named and
+  /// renamed their days back to "Day 1". Those are now carried across, and the wording says so --
+  /// a confirmation has to describe what the button really does, or agreeing to it means nothing.
   static func dealConfirmation(_ source: PlanDealSource) -> String {
+    let kept =
+      "Machines you have named, the sets you intend and your day names are kept. "
+      + "Your logged workouts are not affected."
     switch source {
     case .planContents:
-      "This replaces the current arrangement. Your logged workouts are not affected."
+      return "This moves the movements already in this plan onto different days. \(kept)"
     case .loggedHistory:
-      "The movements you have logged will be arranged across these days. Nothing is added that you "
-        + "have not trained."
+      return "The movements you have logged will be arranged across these days. Nothing is added "
+        + "that you have not trained. \(kept)"
     }
+  }
+
+  static func dayCreditText(_ days: Int, of total: Int) -> String {
+    "\(days) of \(total)"
   }
 }

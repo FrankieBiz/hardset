@@ -1,4 +1,5 @@
 import Foundation
+import HardsetStore
 import Testing
 
 /// Every extension of a `nonisolated` store type declares its isolation.
@@ -63,6 +64,26 @@ struct IsolationContractTests {
     #expect(types.contains("GymStore"))
     #expect(types.contains("LoggerStore"))
     #expect(types.count >= 10)
+  }
+
+  /// A store wrapper only holds SQLiteData's thread-safe database writer. Declaring that fact is
+  /// what lets long reads leave the UI actor while strict concurrency continues checking every
+  /// capture; removing any conformance below makes this test fail to compile.
+  @Test("Store handles can be sent to the database-reading task")
+  func storeHandlesAreSendable() {
+    func requireSendable<T: Sendable>(_: T.Type) {}
+
+    requireSendable(BodyweightStore.self)
+    requireSendable(CatalogSeeder.self)
+    requireSendable(ExerciseStore.self)
+    requireSendable(ExportStore.self)
+    requireSendable(GymStore.self)
+    requireSendable(HistoryStore.self)
+    requireSendable(LoggerStore.self)
+    requireSendable(ProgressionStore.self)
+    requireSendable(RestTimerStore.self)
+    requireSendable(SplitStore.self)
+    requireSendable(VolumeStore.self)
   }
 
   /// Either the extension itself is `nonisolated`, or every member it declares is. Both spellings

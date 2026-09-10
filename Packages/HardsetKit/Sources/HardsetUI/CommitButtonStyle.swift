@@ -48,7 +48,9 @@ public struct CommitButtonStyle: ButtonStyle {
         .scaleEffect(reduceMotion ? 1 : (configuration.isPressed ? pressedScale : 1))
         // The dim survives, because the acknowledgement is information rather than decoration --
         // guideline M7. Reduce Motion means "stop moving things", not "stop telling me anything".
-        .opacity(configuration.isPressed ? 0.82 : 1)
+        // It deepens to the 0.7 §5.3 specifies for that setting, because with the scale gone the
+        // dim is the whole acknowledgement and 0.82 was calibrated as one cue of two.
+        .opacity(configuration.isPressed ? (reduceMotion ? 0.7 : 0.82) : 1)
         .animation(
           reduceMotion
             // A crossfade, not a spring: a spring is a statement about mass and there is no mass

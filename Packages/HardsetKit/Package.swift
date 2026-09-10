@@ -58,6 +58,9 @@ let package = Package(
       dependencies: [
         "HardsetCore",
         .product(name: "SQLiteData", package: "sqlite-data"),
+        // The history browser is a grouped read over logged sets. SQLiteData intentionally exposes
+        // its query builder, but not GRDB's row decoding API needed for this aggregate.
+        .product(name: "GRDB", package: "GRDB.swift"),
       ],
       swiftSettings: mainActorByDefault
     ),

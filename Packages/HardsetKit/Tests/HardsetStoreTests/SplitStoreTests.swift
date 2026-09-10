@@ -379,7 +379,7 @@ struct SplitStoreTests {
     try f.splits.addEntry(to: day, exercise: f.bench, machine: machine, now: now)
     try f.splits.addEntry(to: day, exercise: f.curl, now: now)
 
-    let plan = try f.splits.plannedExercises(for: day)
+    let plan = try f.splits.plannedExercises(for: day, at: gym)
 
     #expect(plan.map(\.exerciseID) == [f.bench, f.curl])
     #expect(plan.map(\.exerciseName) == ["Bench Press", "Barbell Curl"])
@@ -388,6 +388,56 @@ struct SplitStoreTests {
     // Carried so a progression suggestion cannot propose a step the equipment will not honour.
     #expect(plan[0].machineIncrementKg == 5)
     #expect(plan[1].machineID == nil)
+  }
+
+  @Test("A planned machine is dropped when a workout has no gym")
+  func plannedMachineWithoutGym() throws {
+    let f = try fixture()
+    let gym = try f.gyms.createGym(name: "Home", now: now)
+    let machine = try f.gyms.createMachine(at: gym, name: "Cable", now: now)
+    let split = try f.splits.createSplit(name: "Week", now: now)
+    let day = try f.splits.addDay(to: split, name: "Push", now: now)
+    try f.splits.addEntry(to: day, exercise: f.bench, machine: machine, now: now)
+
+    let plan = try f.splits.plannedExercises(for: day)
+
+    #expect(plan.first?.machineID == nil)
+    #expect(plan.first?.machineName == nil)
+  }
+
+  @Test("A planned machine resolves to the same-named machine at today's gym")
+  func plannedMachineResolvesAtCurrentGym() throws {
+    let f = try fixture()
+    let home = try f.gyms.createGym(name: "Home", now: now)
+    let away = try f.gyms.createGym(name: "Away", now: now)
+    let planned = try f.gyms.createMachine(at: home, name: "Cable Crossover", now: now)
+    let counterpart = try f.gyms.createMachine(
+      at: away, name: "  cable crossover  ", stackIncrementKg: 2.5, now: now
+    )
+    let split = try f.splits.createSplit(name: "Week", now: now)
+    let day = try f.splits.addDay(to: split, name: "Push", now: now)
+    try f.splits.addEntry(to: day, exercise: f.bench, machine: planned, now: now)
+
+    let plan = try f.splits.plannedExercises(for: day, at: away)
+
+    #expect(plan.first?.machineID == counterpart)
+    #expect(plan.first?.machineIncrementKg == 2.5)
+  }
+
+  @Test("A planned machine is dropped at another gym without a counterpart")
+  func plannedMachineWithoutCounterpart() throws {
+    let f = try fixture()
+    let home = try f.gyms.createGym(name: "Home", now: now)
+    let away = try f.gyms.createGym(name: "Away", now: now)
+    let planned = try f.gyms.createMachine(at: home, name: "Cable", now: now)
+    let split = try f.splits.createSplit(name: "Week", now: now)
+    let day = try f.splits.addDay(to: split, name: "Push", now: now)
+    try f.splits.addEntry(to: day, exercise: f.bench, machine: planned, now: now)
+
+    let plan = try f.splits.plannedExercises(for: day, at: away)
+
+    #expect(plan.first?.machineID == nil)
+    #expect(plan.first?.machineName == nil)
   }
 
   /// The invariant that makes this path safe. `VolumeStore.plan(for:)` carries a set count because a
@@ -473,5 +523,48 @@ struct SplitStoreTests {
     #expect(movements == [f.bench])
     // The squat was never logged, so it is not offered.
     #expect(!movements.contains(f.squat))
+  }
+
+  @Test("A first plan uses completed workouts, not the workout currently open")
+  func completedWorkoutMovementsExcludeOpenSession() throws {
+    let f = try fixture()
+    let logger = LoggerStore(database: f.database)
+    let finished = try logger.startSession(at: now)
+    _ = try logger.logSet(
+      sessionID: finished, exerciseID: f.bench,
+      draft: SetEntryDraft(weightKg: 60, reps: 10), at: now
+    )
+    try logger.finishSession(finished, at: now.addingTimeInterval(60))
+
+    let open = try logger.startSession(at: now.addingTimeInterval(120))
+    _ = try logger.logSet(
+      sessionID: open, exerciseID: f.squat,
+      draft: SetEntryDraft(weightKg: 80, reps: 8), at: now.addingTimeInterval(120)
+    )
+
+    #expect(try f.splits.completedWorkoutMovements() == [f.bench])
+  }
+
+  @Test("Recent open sets cannot crowd completed movements out of a first plan")
+  func openSetsDoNotConsumeTheCompletedMovementLimit() throws {
+    let f = try fixture()
+    let logger = LoggerStore(database: f.database)
+    let finished = try logger.startSession(at: now)
+    _ = try logger.logSet(
+      sessionID: finished, exerciseID: f.bench,
+      draft: SetEntryDraft(weightKg: 60, reps: 10), at: now
+    )
+    try logger.finishSession(finished, at: now.addingTimeInterval(60))
+
+    let open = try logger.startSession(at: now.addingTimeInterval(120))
+    for ordinal in 0..<12 {
+      _ = try logger.logSet(
+        sessionID: open, exerciseID: f.squat,
+        draft: SetEntryDraft(weightKg: 80, reps: 8),
+        at: now.addingTimeInterval(120 + Double(ordinal))
+      )
+    }
+
+    #expect(try f.splits.completedWorkoutMovements(limit: 1) == [f.bench])
   }
 }

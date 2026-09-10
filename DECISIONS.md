@@ -565,13 +565,15 @@ or a lifter deciding whether to trust any of it — had no way to see the whole 
 every screen that hides one. The sources are already public values, so listing them costs nothing
 and gives App Review a single place to be pointed at.
 
-### 32. Nothing invents a legal URL
+### 32. Nothing invents a legal URL; privacy remains readable offline
 
-The privacy policy and Terms of Use pages do not exist yet, so `LegalLinks.live` holds `nil` and
-each Settings row renders only when its link is set. A link to a page that does not exist is worse
-than no link: App Review taps every one, and a 404 is a rejection with a slower turnaround than a
-missing feature. `submissionBlockers` names what is still owed in the same words
-`DEVICE-CHECKLIST.md` §E uses, so "are we ready" has one answer rather than a memory of one.
+The public privacy policy and Terms of Use pages do not exist yet, so `LegalLinks.live` holds `nil`
+for external links. A link to a page that does not exist is worse than no link: App Review taps
+every one, and a 404 is a rejection with a slower turnaround than a missing feature. Privacy is the
+exception to hiding the surface: Settings always opens the policy bundled with the binary, and the
+same screen adds the canonical online copy when `LegalLinks.live.privacyPolicy` is configured.
+`submissionBlockers` names what is still owed in the same words `DEVICE-CHECKLIST.md` §E uses, so
+"are we ready" has one answer rather than a memory of one.
 
 ---
 
@@ -747,3 +749,242 @@ compiler name a main-actor-isolated call.
 `IsolationContractTests` sweeps `Sources/HardsetStore` and fails when an extension of a nonisolated
 store type declares members that are neither. `extension GymStore` in `GymStore.swift` was already
 carrying the same latent defect and is now fixed.
+
+## Knowing where you are in your own plan
+
+### 41. A plan day's identity is recorded on the session, not inferred from what it contained
+
+`SplitDayRecord` carried no notion of when a day was last trained, so on a three- or four-day split
+the lifter had to remember where they were — which is the job a training log exists to do. The
+figure is now read from a new `sessions.splitDayID`, written when "Start this day" opens a workout.
+
+**Recorded rather than derived, and that is the decision.** The alternative was matching a session's
+movements back onto a plan day, which is a guess: two days sharing a movement, a day trained with a
+substitution, or an empty workout that happened to contain the right three lifts all defeat it.
+"You last trained Pull six days ago" either is a fact or has no business on screen. DECISION #4
+permits adding a column at any time and forbids removing one, so the honest option was also the
+cheap one.
+
+`ON DELETE SET NULL`, never CASCADE: deleting a day from a plan reshapes the plan and must not delete
+the training done on it. The linkage is forgotten, the workout stays. `SchemaTests` pins the column
+and `SplitRotationStoreTests` pins the invariant.
+
+**What is on screen is a fact, not a recommendation.** Each day reads "Last trained 10 days ago", and
+the single day waiting longest also says "longest since trained" — a statement about the lifter's own
+history, in the same family as the planner's existing "Fewest movements" label. It is deliberately
+not "next up", "due", or "today's workout": `SplitRotation.longestSinceTrained` returns nil for a
+one-day plan and for a plan nothing has ever been trained from, because in both cases naming a day
+would assert an order the lifter never established. A never-trained day counts as longest, ties break
+on the lifter's own ordering, and `SplitRotationCopyTests` bans the prescriptive vocabulary outright.
+
+### 42. Recency is counted in days through the second week, because the system format is not usable here
+
+`Date.formatted(.relative(presentation: .named))` collapses everything from seven to thirteen days
+into "last week". That is precisely the range a weekly split lives in, so a day trained ten days ago
+and a day trained seven days ago rendered **identically** — and those are the two the lifter is
+choosing between. Found by seeding twenty weeks and reading the screen; the suite was green.
+
+`TrainingRecency.phrase` says "today", "yesterday", "N days ago" to thirteen, then "N weeks ago".
+The boundary at thirteen also makes "1 weeks ago" unreachable. Counted in **calendar** days rather
+than elapsed seconds: a set logged at 22:00 and one at 07:00 the next morning are a day apart to the
+person who did them. The progression browser was moved onto the same function, so the app words one
+fact one way.
+
+### 43. Browsing backwards stops where the training does
+
+The volume tab's week navigator had no floor, so it paged into empty seven-day windows for as long as
+someone kept tapping, and "Nothing logged" meant both "you rested that week" and "you had not started
+yet" — the same ambiguity the history list's absent footer was changed to avoid.
+
+`VolumeStore.earliestCountableSet` is the floor, and it is filtered **exactly** as `countableSets`
+is. That agreement is the point rather than a detail: counting every row instead let the control
+offer an earlier window whose only content was a warm-up, which then rendered "0 working sets" and
+"Nothing logged" — the button promising something the screen it governs cannot show. Found by paging
+to the boundary against a seeded store, not by a test.
+
+### 44. A workout started from a plan day takes that day's name
+
+Every session the app created was nameless: `SessionCoordinator.start` accepted a `title` and no
+caller ever passed one, so history could label a workout only with its date. Starting the day the
+lifter had already called "Push" and then showing them a dateless row discards a name the app was
+holding. It is still renameable from the live session, which is the path that always existed.
+
+Fixing it exposed a latent defect worth recording: `start` wrote the title to the session row but
+built the coordinator **without** it, while `resume` reads it back. Harmless while nothing passed a
+title; the moment a plan day did, the live screen said "Name this workout" over a row that said
+"Push", and a force-quit made the name appear out of nowhere.
+
+### 45. Seeding a realistic *length* of history is a repo tool, not an ad-hoc script
+
+Four of the defects above were found by running the app against twenty weeks of training and none by
+the suite. A week of data hides all of them, and a week is what a hand-driven walkthrough produces.
+`Tools/seed_history.py` writes sixty sessions across twenty weeks through sqlite3 directly, and is
+the first thing to reach for before judging any progress surface.
+
+Three things it must keep doing, each learned by getting it wrong: resolve the **bundle identifier**
+from the device rather than assuming one (it is configurable, and a wrong guess reports itself as a
+missing schema); resolve movements by **`catalogSlug`**, not display name, because seeding by name
+creates uncurated duplicates that the app then honestly reports as "Not attributed" — making every
+muscle figure downstream unjudgeable; and re-resolve the **container path** every run, because it
+changes on each reinstall.
+
+### 46. A changed v1 migration does not upgrade a v1 database
+
+Adding `sessions.splitDayID` inside the existing `v1` `CREATE TABLE` made every fresh database and
+every schema test pass, but did nothing for an installed database whose `grdb_migrations` already
+contained `v1`. The first Release smoke test against a retained simulator container found the real
+result: every session query failed with `no such column: sessions.splitDayID`.
+
+The v1 table definition is restored to the shape already installed, and
+`v2-session-split-day` adds the nullable foreign key with `ALTER TABLE`. `SchemaTests` now creates an
+actual v1 database, inserts an existing workout, runs the remaining migration, and proves the row,
+column, and `ON DELETE SET NULL` relationship all survive. The Release app was then installed over
+the same failing simulator container without uninstalling; both migrations are recorded, SQLite's
+integrity check is `ok`, and the recovery error is gone.
+
+## Perfecting the plan system
+
+### 46. A plan has no gym, so its machines are reconciled at the moment one is known
+
+A machine belongs to one gym. A plan does not, and its entries were chosen from whatever
+`lastUsedGym()` happened to be — so starting a plan built at one gym while standing in another opened
+every row bound to the *other* gym's machine and showed its load history as though it were the
+equipment in front of you. Sets logged that way go into a machine series the lifter never touched,
+which corrupts differentiator #2 silently. Proven on device: four movements, four `MISMATCH`.
+
+It was an oversight, not a design. The logger's picker has always been gym-scoped
+(`canPickMachines` requires a gym; `machines(at:)`, `recentMachines(for:at:)`), and `logSet` validates
+nothing — the plan was the one path around it. The gym sheet even states the invariant being broken:
+"machines belong to a gym."
+
+**A plan still has no gym, deliberately.** `splits.gymID` would force a lifter who runs one
+arrangement at two gyms to keep two plans, which is a worse product than reconciling. So
+`plannedExercises(for:at:)` decides per movement: same gym keeps it; a different gym resolves to a
+same-named machine *here* if one exists; otherwise the row opens unbound; and no gym at all drops it,
+because a session with no gym can only ever log `machineID == nil`.
+
+Name resolution is scoped to this gym and normalises the way `existingMachine(named:at:)` does, so
+DECISION #39 and invariant #10 both hold — nothing is created and no two histories merge. It composes
+with the machine-change disclosure already in the logger: the resolved row shows "From another
+machine", so the lifter knows the prefill is not from the machine they are standing at.
+
+The planner's gym is now the root's `selectedGym` rather than its own `lastUsedGym()` in three places.
+Those are different questions, and after switching gyms the planner went on offering the old gym's
+machines while its own button would start a workout somewhere else.
+
+### 47. Re-dealing rearranges movements; it does not reset what the lifter authored
+
+`replace` wrote `machineID: nil` for every entry and took day names from the dealer, so one tap of
+"Deal" discarded every machine the lifter had named and renamed "Push / Pull / Legs" to "Day 1 / Day 2
+/ Day 3". No undo. The confirmation said only "This replaces the current arrangement. Your logged
+workouts are not affected" — true, and materially incomplete, which makes agreeing to it meaningless.
+
+Machines and intended set counts are now carried by movement (queued, so a movement planned twice
+keeps both of its machines), and day names by position. The confirmation names what it keeps.
+
+### 48. An intended set count is the lifter's, and three guards keep it that way
+
+`splitEntries.targetSets`, additive and nullable. The spec's section 3 argued against a set-count
+column and the argument was about the *dealer* being able to fill one; section 6 then named this exact
+extension — "per-movement set targets of the lifter's own. Additive later if asked for" — and it was
+asked for. The refusal was never "no number may exist", it is "the app may not author one".
+
+The hop needed no new machinery: `PlannedExercise.plannedSets` was already `Int?` and
+`sessionExercises.plannedSets` already existed, so a day with set counts opens the logger with that
+many rows, and a day without still takes its rows from history.
+
+Guarded harder than the ban it replaces. `splitsCarryNoPrescription` still bans every name the app
+could deal out and argues this exemption in its own doc comment rather than dropping a list entry;
+`targetSetsIsNullableAndUndefaulted` proves the schema cannot supply a value (a `NOT NULL DEFAULT 3`
+would prescribe three sets to everyone without a line of code); and
+`appNeverAuthorsATargetSetCount` sweeps `Sources` for a literal assignment. That last one was verified
+to fail, naming file and line, before being trusted, and strips comments first — a ban that trips on
+its own explanation is the trap HANDOFF §9 records for the "score" substring test.
+
+### 49. Order is the lifter's, in both directions, and a plan may report frequency without ranking it
+
+`moveEntry` had always taken a target position and the only interaction that reached it dropped it, so
+what the lifter does first when fresh was unorderable. There was no `moveDay` at all, and day order is
+both the order the plan reads in and the tie-break `SplitRotation.longestSinceTrained` uses — a plan
+whose days cannot be reordered has an arrangement the lifter cannot correct. Both are menus, for the
+reason already recorded: a drag has no discoverable affordance and no VoiceOver equivalent.
+
+`SplitPlanAssessment.creditingDays` existed with no consumer and its own note says how it may be
+shown: "a UI may show this and may **not rank it**", because no training frequency is established. So
+`modelledDayCredits` is ordered by `Muscle.allCases` (ordering by count would be the ranking the note
+forbids), restricted to the six `.modelled` muscles (§2 permits no claim about the other 16 beyond
+zero-versus-nonzero, and a per-day count is such a claim), and omits muscles nothing credits. The
+footer says it on its face: "not a target… these are not ranked and none is better than another."
+
+### 50. A movement the lifter retired is reported, not removed — and keeps its name
+
+Archiving is a soft delete, so a retired movement stays in the plan while the picker stops offering
+it. `retiredMovements(in:)` reports them and the row says "Retired — still starts, no longer offered".
+Reported rather than filtered, because dropping the row would be the app quietly editing someone's
+plan.
+
+Adding that marker exposed a second defect, found by archiving a movement and looking: the planner
+built its rows only from `selectableExercises()`, which excludes archived rows, so the retired
+movement rendered as "Unknown movement / Not attributed" — a movement the lifter named, reported as
+though the app had never heard of it. `CatalogSeeder.entries(for:)` looks up by id and does not filter
+on archived. **Naming what is already there is a different question from offering something new**, and
+one list cannot answer both.
+
+### 51. v1 is immutable; a new column is its own migration
+
+Recorded because this pass got it wrong first. `splitDayID` and `targetSets` were both added by
+editing v1's `CREATE TABLE`, which makes *fresh* installs pass `SchemaTests` while leaving an
+already-installed database without the column forever — v1 is already recorded in `grdb_migrations`
+there, so it will never run again. `eraseDatabaseOnSchemaChange` hides this in DEBUG only when the
+schema differs, and here it did not.
+
+Both are now additive migrations (`v2-session-split-day`, `v3-split-entry-target-sets`). The symptom
+when the two conventions were mixed was a launch-time `duplicate column name` and the app's own
+"Can't open your training history" screen — which behaved exactly as designed, naming the failing
+statement and stating that nothing had been deleted.
+
+Consequence for the column pin: `ALTER TABLE` appends, so a migrated column sorts **last** in
+`columnInventoryIsPinned`. Its position there is the migration's fingerprint, not a preference.
+
+### 52. A named gym machine is one authoring action, and movement order is visible
+
+Movement actions existed only in a long-press context menu. That made changing order technically
+possible and practically hidden, especially when the row itself gave no indication that it had
+actions. Every plan row now has a visible move/edit control with up, down, and move-to-day actions;
+the machine label is also a direct button, including an explicit “Add machine” state. The context
+menu remains as a shortcut, but it is no longer the only route.
+
+The second dead end was split across two otherwise working flows. “Your own movement” created an
+exercise, while “Add a machine” existed only inside the live workout's machine picker — the planner
+did not pass that picker's creation closure at all. A proper noun such as “Panatta Chest Press”
+therefore required typing the same name twice and, from a plan, leaving the flow entirely.
+
+`NewExerciseDraft` now carries an optional same-named machine. When a gym is selected, the creation
+sheet offers to save the name as both the movement and that gym's physical machine, defaults that
+choice on when the modality is Machine, resolves rather than duplicates an existing machine at that
+gym, links it to the new movement, and selects it immediately in either a plan or a live workout.
+The machine picker in the planner also exposes its own add path for an existing movement.
+
+### 53. Storage latency never masquerades as a dead interaction
+
+The first performance pass optimized the logger's render loop and left almost every other screen
+performing synchronous SQLite work from a `@MainActor` view. That was hard to notice with an empty
+simulator and increasingly visible with years of workouts: opening History, Volume, Progress,
+Machines, or Plan; searching movements; preparing an export; starting a workout; and recovering an
+interrupted workout could all monopolize the UI actor. Some flows then swallowed their read failure
+or briefly rendered a false empty state, so latency and failure both looked like an unresponsive
+tap.
+
+Store handles explicitly conform to `Sendable` because their only stored dependency is
+SQLiteData's thread-safe `DatabaseWriter`; a compile-time contract pins that promise. Feature
+screens now build their read models in user-initiated detached tasks, batch related reads, debounce
+movement search by 120 ms, discard cancelled or stale results, and publish only completed snapshots
+back on the main actor. Launch catalogue seeding, session start, and crash recovery use the same
+boundary. Busy states disable duplicate commits and say what is happening; failed reads keep saved
+data intact and say so instead of presenting a convincing empty list.
+
+Two interaction corrections belong to the same rule. A checked set button now performs the inverse
+action—unlog—instead of calling log again and appearing dead, and movement notes/superset/removal
+actions have a visible menu instead of requiring an undiscoverable long press. Removing a movement
+that already has logged rows asks for confirmation because that action changes the current workout,
+while earlier history remains untouched.

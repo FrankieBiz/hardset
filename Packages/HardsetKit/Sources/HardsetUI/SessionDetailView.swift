@@ -200,6 +200,11 @@ public struct SessionDetailView: View {
                 .foregroundStyle(Tokens.Color.accent)
             }
           }
+          // Without the minimum height the hit area is the text's own line box -- around 24 pt --
+          // and this heading is the only route from a past workout to that movement's chart.
+          // Left-aligned rather than full width: unlike a list row, this heading sits in a
+          // left-aligned stack, and widening it would swallow taps beside the machine label.
+          .frame(minHeight: Tokens.minimumTapTarget, alignment: .leading)
           .contentShape(Rectangle())
         }
         .buttonStyle(.plain)

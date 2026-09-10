@@ -23,6 +23,15 @@ public struct SessionDetailScreen: View {
   /// The workout's own note, read alongside its sets.
   @State private var notes = ""
   @State private var loadFailed = false
+  @State private var isLoading = true
+  @State private var isRepeating = false
+  @State private var repeatFailed = false
+  /// True once the read has returned, successful or not.
+  ///
+  /// Gating the spinner on `isLoading` instead flipped the branch out from under a pull-to-refresh
+  /// on a workout with no logged sets -- `sets` stays empty there, so the refresh replaced the
+  /// scrollable content, and its own pull indicator, with a spinner mid-gesture.
+  @State private var hasLoadedOnce = false
   /// Which movement's load history is open.
   @State private var progressTarget: ProgressTarget?
 
@@ -46,11 +55,19 @@ public struct SessionDetailScreen: View {
 
   public var body: some View {
     Group {
-      if loadFailed {
+      if !hasLoadedOnce {
+        ProgressView()
+          .frame(maxWidth: .infinity, maxHeight: .infinity)
+      } else if loadFailed {
+        // An explicit button rather than the pull the copy used to name: this branch is a bare
+        // `ContentUnavailableView` with nothing scrollable beneath it, so the `.refreshable` below
+        // has no descendant to attach to and the gesture the sentence described did not exist.
         ContentUnavailableView {
           Label("Could not read this workout", systemImage: "exclamationmark.triangle")
         } description: {
-          Text("Your logged sets are safe. Pull down to try again.")
+          Text("Your logged sets are safe.")
+        } actions: {
+          Button("Try again") { Task { await load() } }
         }
       } else {
         SessionDetailView(
@@ -65,6 +82,10 @@ public struct SessionDetailScreen: View {
         )
       }
     }
+    // Painted across every branch, matching `ProgressionBrowserScreen`. `SessionDetailView` fills
+    // itself with `ground`, so leaving the spinner and the error state unpainted showed the system
+    // background for as long as they were up and then jumped.
+    .background(Tokens.Color.ground)
     .navigationDestination(item: $progressTarget) { target in
       if let progression {
         ExerciseProgressScreen(
@@ -77,24 +98,42 @@ public struct SessionDetailScreen: View {
     }
     .navigationTitle(row.title.isEmpty ? "Workout" : row.title)
     .toolbar {
-      if let onRepeat, !sets.isEmpty {
+      // Gated on there being a working set, not merely a set. `plan(for:)` filters to
+      // `countsAsWorkingSet`, so an all-warm-up or all-drop workout produced an empty plan, and
+      // the root's `!plan.isEmpty` guard then dropped it -- the spinner flickered and nothing
+      // happened. An absent control is this app's own idiom for "this cannot act".
+      if onRepeat != nil, sets.contains(where: { $0.kind.countsAsWorkingSet }) {
         ToolbarItem(placement: .primaryAction) {
-          Button {
-            // Rebuilt from what was logged, not from what was planned.
-            onRepeat((try? store.plan(for: row.id)) ?? [])
-          } label: {
-            Label("Do it again", systemImage: "arrow.clockwise")
+          Button(action: repeatWorkout) {
+            if isRepeating {
+              ProgressView()
+            } else {
+              Label("Do it again", systemImage: "arrow.clockwise")
+            }
           }
+          .disabled(isRepeating)
+          .accessibilityLabel(isRepeating ? "Preparing workout" : "Do it again")
         }
       }
     }
-    .task { load() }
-    .refreshable { load() }
+    .task { await load() }
+    .refreshable { await load() }
+    .alert("Could not prepare that workout", isPresented: $repeatFailed) {
+      Button("OK", role: .cancel) {}
+    } message: {
+      Text("Your history is unchanged. Try again from this workout.")
+    }
   }
 
-  private func load() {
-    do {
-      sets = try store.sets(in: row.id).map {
+  private func load() async {
+    isLoading = true
+    let store = store
+    let sessionID = row.id
+    let result = await readOffMain { (try store.sets(in: sessionID), try store.notes(for: sessionID)) }
+    guard !Task.isCancelled else { return }
+    switch result {
+    case .success(let loaded):
+      sets = loaded.0.map {
         LoggedSetRow(
           id: $0.id.rawValue,
           exerciseID: $0.exerciseID,
@@ -107,12 +146,35 @@ public struct SessionDetailScreen: View {
           kind: $0.kind
         )
       }
-      notes = try store.notes(for: row.id)
+      notes = loaded.1
       loadFailed = false
-    } catch {
+    case .failure:
       sets = []
       notes = ""
       loadFailed = true
+    }
+    isLoading = false
+    hasLoadedOnce = true
+  }
+
+  private func repeatWorkout() {
+    guard let onRepeat else { return }
+    isRepeating = true
+    repeatFailed = false
+    let store = store
+    let sessionID = row.id
+    Task {
+      let result = await readOffMain { try store.plan(for: sessionID) }
+      guard !Task.isCancelled else { return }
+      isRepeating = false
+      switch result {
+      case .success(let plan):
+        onRepeat(plan)
+      case .failure:
+        // The old `try? ?? []` path invoked the action with an empty plan and made a failed read
+        // look like a successful tap that opened an empty workout.
+        repeatFailed = true
+      }
     }
   }
 }

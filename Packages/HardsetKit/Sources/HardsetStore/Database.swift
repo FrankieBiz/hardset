@@ -7,6 +7,20 @@ import SQLiteData
 // these declarations are pure. Isolating them to the main actor would both mislead and
 // force every caller -- including the test suite -- to hop actors for no reason.
 public nonisolated enum HardsetDatabase {
+  /// A fully migrated, process-local store for app UI tests and previews that need real storage.
+  ///
+  /// This is intentionally not the production fallback. If the on-disk store cannot open, the app
+  /// must say so rather than quietly accepting workout data into memory and losing it at quit.
+  /// Keeping the constructor here gives the UI runner the exact shipping schema without teaching
+  /// the app target how to assemble a database.
+  public static func ephemeral() throws -> any DatabaseWriter {
+    var configuration = Configuration()
+    configuration.foreignKeysEnabled = true
+    let database = try DatabaseQueue(configuration: configuration)
+    try HardsetMigrations.migrator().migrate(database)
+    return database
+  }
+
   /// Opens the on-disk database and runs migrations.
   ///
   /// Must be called exactly once per process, from `App.init()`.

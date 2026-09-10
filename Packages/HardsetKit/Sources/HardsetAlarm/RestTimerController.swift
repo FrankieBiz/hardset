@@ -34,6 +34,8 @@ public final class RestTimerController {
   private var alarmID: UUID?
   private var metadata: RestMetadata?
   private var commitTask: Task<Void, Never>?
+  /// One sleep until the deadline, so a finished rest puts itself away.
+  private var expiryTask: Task<Void, Never>?
 
   /// Where state changes are written so they survive the app being killed.
   ///
@@ -59,6 +61,7 @@ public final class RestTimerController {
     alarmID = UUID()
     save()
     scheduleCommit()
+    scheduleExpiry()
   }
 
   /// Asks for AlarmKit permission, once, at a moment the user will understand.
@@ -85,12 +88,15 @@ public final class RestTimerController {
     state = state.adjusted(by: delta, at: now)
     save()
     scheduleCommit()
+    scheduleExpiry()
   }
 
   public func pause(now: Date = .now) {
     guard state.isRunning else { return }
     state = state.paused(at: now)
     commitTask?.cancel()
+    expiryTask?.cancel()
+    expiryTask = nil
     save()
     if let alarmID { try? RestAlarmService.pause(id: alarmID) }
   }
@@ -102,11 +108,14 @@ public final class RestTimerController {
     // Resuming shifts the deadline, and AlarmKit cannot be told a new one -- so the alarm is
     // replaced rather than resumed in place.
     scheduleCommit()
+    scheduleExpiry()
   }
 
   public func cancel() {
     commitTask?.cancel()
     commitTask = nil
+    expiryTask?.cancel()
+    expiryTask = nil
     state = .idle
     if let alarmID { try? RestAlarmService.cancel(id: alarmID) }
     alarmID = nil
@@ -135,7 +144,50 @@ public final class RestTimerController {
     case .running, .paused:
       state = stored
       alarmID = storedAlarmID
+      scheduleExpiry()
     }
+  }
+
+  /// Puts a finished rest away by itself.
+  ///
+  /// `restore` already refuses to bring back a deadline that has passed -- "a rest bar from last
+  /// night" -- but nothing did the same thing while the app was running, so the state stayed
+  /// `.running` at a deadline in the past for as long as the workout lasted. `hasElapsed` existed
+  /// to answer exactly this and had no caller. The visible cost was a rest bar and a tab-bar
+  /// countdown both frozen at 0:00 from the first set to the last, with skip and +15 still offered
+  /// on a timer that was over.
+  ///
+  /// One sleep until the deadline rather than a ticking clock, the same technique the rest of the
+  /// timer uses. Owned by the controller rather than by the bar, because the bar is only on screen
+  /// while the Train tab is.
+  private func scheduleExpiry() {
+    expiryTask?.cancel()
+    guard case .running(let endsAt) = state else {
+      expiryTask = nil
+      return
+    }
+    let wait = endsAt.timeIntervalSinceNow
+    expiryTask = Task { [weak self] in
+      if wait > 0 { try? await Task.sleep(for: .seconds(wait)) }
+      guard !Task.isCancelled else { return }
+      self?.expireIfElapsed()
+    }
+  }
+
+  /// Moves a run-out timer to idle. Safe to call at any time; does nothing until the deadline.
+  ///
+  /// The alarm is deliberately *not* cancelled here. This runs at the instant AlarmKit is firing,
+  /// and cancelling then would race the alert the lifter is waiting for. The id is kept so a later
+  /// `start` or `cancel` can still clear it.
+  public func expireIfElapsed(now: Date = .now) {
+    guard state.hasElapsed(at: now) else { return }
+    commitTask?.cancel()
+    commitTask = nil
+    expiryTask?.cancel()
+    expiryTask = nil
+    state = .idle
+    metadata = nil
+    save()
   }
 
   /// The metadata a restored timer no longer has.
@@ -172,6 +224,17 @@ public final class RestTimerController {
       try await RestAlarmService.schedule(
         .init(id: id, duration: .seconds(remaining), metadata: metadata)
       )
+      // `schedule` is the only suspension in here and the main actor is free across it, so a set
+      // logged in that window runs `start` first. `start` cancels `alarmID` -- still `id`, because
+      // this alarm does not exist yet, so the cancel lands on nothing -- and then overwrites it.
+      // This `schedule` then creates `id` for a rest that is already over, and nothing holds its id
+      // any more, so it fires in the middle of the following set. That is exactly the orphan the
+      // comment on `start` describes, reached from the other side. Keep the alarm only while it is
+      // still the current one; otherwise it is already superseded and has to go.
+      guard alarmID == id else {
+        try? RestAlarmService.cancel(id: id)
+        return
+      }
       lastError = nil
       isDenied = false
       // Written after the schedule, so the persisted id is one that really exists in AlarmKit.

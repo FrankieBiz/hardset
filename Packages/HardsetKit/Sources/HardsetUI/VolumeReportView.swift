@@ -16,6 +16,9 @@ public struct VolumeReportView: View {
   private let report: MuscleVolumeReport
   private let excludedFromGaps: Set<Muscle>
   private let onExplainCounting: (() -> Void)?
+  /// `this week` for the current report, or `in this seven-day window` while browsing history.
+  /// Every sentence that names the window reads this rather than assuming the report is current.
+  private let periodDescription: String
 
   @Environment(\.accessibilityReduceMotion) private var reduceMotion
   /// Bars grow once per visit to this screen, never again on scroll. Re-animating on every
@@ -25,10 +28,12 @@ public struct VolumeReportView: View {
   public init(
     report: MuscleVolumeReport,
     excludedFromGaps: Set<Muscle> = [],
+    periodDescription: String = "this week",
     onExplainCounting: (() -> Void)? = nil
   ) {
     self.report = report
     self.excludedFromGaps = excludedFromGaps
+    self.periodDescription = periodDescription
     self.onExplainCounting = onExplainCounting
   }
 
@@ -37,17 +42,23 @@ public struct VolumeReportView: View {
       VStack(alignment: .leading, spacing: Tokens.Spacing.section) {
         header
         if report.hardSets == 0 {
-          ContentUnavailableView {
-            Label("Nothing logged this week", systemImage: "chart.bar")
-          } description: {
-            Text("Sets per muscle appear here once you log a workout.")
-          }
+          UnavailableStateView(
+            title: "Nothing logged \(periodDescription)",
+            systemImage: "chart.bar",
+            message: "Sets per muscle appear here once you log a workout."
+          )
         } else {
-          trainedSection
+          // Sets were logged but nothing could be attributed, so there are no bars to scale. The
+          // heading and the "bars are relative to your biggest muscle" caption used to render over
+          // an empty column; `gapsSection` already owns the wording for that case.
+          if !trained.isEmpty {
+            trainedSection
+          }
           gapsSection
         }
       }
-      .padding(Tokens.Spacing.regular)
+      .padding(.horizontal, Tokens.Spacing.edge)
+      .padding(.vertical, Tokens.Spacing.regular)
     }
     .background(Tokens.Color.ground)
     .task {
@@ -60,7 +71,7 @@ public struct VolumeReportView: View {
 
   private var header: some View {
     VStack(alignment: .leading, spacing: Tokens.Spacing.snug) {
-      Text("^[\(report.hardSets) working set](inflect: true) this week")
+      Text(Self.workingSetText(report.hardSets, periodDescription: periodDescription))
         .font(Tokens.Text.readout)
         .monospacedDigit()
 
@@ -90,9 +101,10 @@ public struct VolumeReportView: View {
           }
           .font(Tokens.Text.caption)
           .foregroundStyle(Tokens.Color.accent)
+          .frame(minHeight: Tokens.minimumTapTarget)
+          .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .frame(minHeight: Tokens.minimumTapTarget)
       }
     }
   }
@@ -106,9 +118,11 @@ public struct VolumeReportView: View {
 
       // No goal line, so the scale is the report's own maximum. Stated in the caption rather than
       // left for the user to assume it means something absolute.
-      Text("Bars are relative to your biggest muscle this week. There is no target line, because no weekly set target is established.")
-        .font(Tokens.Text.caption)
-        .foregroundStyle(Tokens.Color.textSecondary)
+      Text(
+        "Bars are relative to your biggest muscle \(periodDescription). There is no target line, because no weekly set target is established."
+      )
+      .font(Tokens.Text.caption)
+      .foregroundStyle(Tokens.Color.textSecondary)
 
       ForEach(Array(trained.enumerated()), id: \.element.muscle) { index, row in
         bar(for: row, index: index)
@@ -198,7 +212,7 @@ public struct VolumeReportView: View {
     .accessibilityElement(children: .combine)
     .accessibilityLabel(
       "\(ExercisePickerView.displayName(MuscleKey(row.muscle))), "
-        + "\(report.isLowerBound ? "at least " : "")\(Self.format(row.sets)) sets"
+        + "\(report.isLowerBound ? "at least " : "")\(Self.spokenSetCount(row.sets))"
         // Spoken, not implied by a dagger. The old per-row caption was never in this label at all,
         // so the caveat has been invisible to VoiceOver for as long as it has existed.
         + (row.muscle.tier == .counted ? ". Counted, not modelled." : "")
@@ -220,7 +234,7 @@ public struct VolumeReportView: View {
           Text("Where the work went is unknown")
             .font(Tokens.Text.label.weight(.semibold))
           Text(
-            "^[\(report.hardSets) set](inflect: true) logged this week, and none of them could be "
+            "\(Self.setCountText(report.hardSets)) logged \(periodDescription), and none of them could be "
               + "matched to a muscle. That is a gap in the app's movement data, not in your training."
           )
           .font(Tokens.Text.caption)
@@ -232,14 +246,14 @@ public struct VolumeReportView: View {
           Text("Nothing logged for")
             .font(Tokens.Text.label.weight(.semibold))
           // A gap is a fact, not a verdict. No "you should", no red.
-          Text("These had no sets this week. Whether that matters depends on your plan.")
+          Text("These had no sets \(periodDescription). Whether that matters depends on your plan.")
             .font(Tokens.Text.caption)
             .foregroundStyle(Tokens.Color.textSecondary)
           if report.isLowerBound {
             // "Credited nothing" is not "not trained". Some sets could not be attributed, so a
             // muscle below may have been trained by one of them, and the list is a maximum.
             Text(
-              "^[\(report.unattributedHardSets) set](inflect: true) this week could not be matched "
+              "\(Self.setCountText(report.unattributedHardSets)) \(periodDescription) could not be matched "
                 + "to a muscle, so some of these may have been trained after all."
             )
             .font(Tokens.Text.caption)
@@ -262,8 +276,26 @@ public struct VolumeReportView: View {
     }
   }
 
+  /// Formatted through the locale rather than `String(format: "%.1f")`, which writes a POSIX point
+  /// whatever the reader's decimal separator is. The fraction-length range drops a trailing zero on
+  /// its own, so a whole number still reads as one.
   static func format(_ sets: Double) -> String {
-    sets == sets.rounded() ? String(Int(sets)) : String(format: "%.1f", sets)
+    sets.formatted(.number.precision(.fractionLength(0...1)))
+  }
+
+  static func workingSetText(_ count: Int, periodDescription: String) -> String {
+    "\(count) working set\(count == 1 ? "" : "s") \(periodDescription)"
+  }
+
+  static func setCountText(_ count: Int) -> String {
+    "\(count) set\(count == 1 ? "" : "s")"
+  }
+
+  /// The spoken form of a fractional set count. Separate from `setCountText` because credits are
+  /// fractional and that helper takes an `Int`; the visible row prints the bare number, so this
+  /// noun is VoiceOver's alone and was reading "1 sets".
+  static func spokenSetCount(_ sets: Double) -> String {
+    "\(format(sets)) set\(sets == 1 ? "" : "s")"
   }
 }
 

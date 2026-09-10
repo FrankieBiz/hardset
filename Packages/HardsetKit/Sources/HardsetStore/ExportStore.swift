@@ -13,7 +13,7 @@ import SQLiteData
 /// max, no weekly totals. Those are all computed from these rows by code whose conventions are
 /// stated elsewhere and may be revised; exporting them would freeze a convention into a file that
 /// outlives it. What is exported is what the lifter actually did, which cannot go stale.
-public nonisolated struct ExportStore {
+public nonisolated struct ExportStore: Sendable {
   private let database: any DatabaseWriter
 
   public init(database: any DatabaseWriter) {

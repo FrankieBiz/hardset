@@ -43,6 +43,11 @@ public struct RestBarView: View {
   /// already restacks for exactly this reason; the bar pinned to the bottom of the same screen did
   /// not.
   @Environment(\.dynamicTypeSize) private var typeSize
+  /// Watched only so the rule can be re-derived on return to the foreground. Suspension tears down
+  /// the one interpolation this view relies on, and nothing else brings it back: mid-rest
+  /// foregrounding changes no `RestTimerState`, so `onChange(of: state)` never fires and the rule
+  /// resumes drawing at whatever fraction the animation was abandoned at.
+  @Environment(\.scenePhase) private var scenePhase
   private let onAdjust: (Duration) -> Void
   private let onPauseResume: () -> Void
   private let onSkip: () -> Void
@@ -85,6 +90,13 @@ public struct RestBarView: View {
       .accessibilityLabel(spokenLabel)
       .onAppear { retarget() }
       .onChange(of: state) { retarget() }
+      // The third call site `retarget`'s own documentation already claimed. Without it the rule was
+      // the one part of this bar that lied after a phone came out of a pocket: the countdown is
+      // system-rendered from the deadline and comes back correct, while the rule sat frozen at the
+      // fraction the suspended animation left behind.
+      .onChange(of: scenePhase) { _, phase in
+        if phase == .active { retarget() }
+      }
       // Four one-shot sleeps derived from the deadline, not a ticking clock: nothing redraws, and
       // `.task(id:)` cancels the whole thing the moment the state changes -- so skipping or
       // pausing silences the cues rather than needing to be handled.
@@ -102,8 +114,18 @@ public struct RestBarView: View {
     HStack(spacing: Tokens.Spacing.regular) {
       VStack(alignment: .leading, spacing: Tokens.Spacing.hairline) {
         countdown
-        stationLabel.lineLimit(1)
+        // Two lines, not one, for the same reason the stacked bar below drops its limit
+        // altogether: "Incline Barbell..." is worse than a wrap. A real movement name plus its set
+        // number does not fit beside four 56 pt controls at any priority, and the set number is the
+        // half that gets cut -- so the line that says *which set you just did* was the one being
+        // thrown away. A second caption line fits inside the height the controls already set.
+        stationLabel.lineLimit(2)
       }
+      // Without this the station line is the only horizontally flexible child in the row, so the
+      // layout resolves it to roughly the countdown's width and truncates -- "Chest Press \u{00B7}..."
+      // beside a Spacer holding a hundred and eighty points of nothing. The controls are fixed
+      // width and the Spacer wants zero, so giving this column priority costs the row nothing.
+      .layoutPriority(1)
 
       Spacer(minLength: 0)
 
@@ -195,7 +217,12 @@ public struct RestBarView: View {
     case .running(let endsAt):
       let remaining = endsAt.timeIntervalSince(Date())
       guard remaining > 0 else { snap(to: 0); return }
-      snap(to: min(1, remaining / total.seconds))
+      // The denominator is widened to whatever rest is actually in progress. `total` is the
+      // configured length and +15 moves only the deadline, so dividing by `total` clamped the rule
+      // at full and left it motionless until the remainder fell back under the configured value --
+      // the one continuous depiction of remaining rest, depicting nothing for the extension.
+      let denominator = max(total.seconds, remaining)
+      snap(to: remaining / denominator)
       // Runs regardless of Reduce Motion, and that is deliberate: §5.4 says "the rule still
       // retreats -- it is the timer (M7)". This is not decoration. It is the only continuous
       // depiction of how much rest is left, and freezing it leaves a bar that shows a static

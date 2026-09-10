@@ -288,6 +288,15 @@ public struct BodyweightView: View {
               }
             }
           }
+          // A context menu is a long press, which Voice Control and Switch Control cannot reliably
+          // perform -- so correcting a wrong fact was gated on a gesture some people do not have,
+          // and this was the only route to it. `MachinePickerView` already pairs its swipe actions
+          // with an accessibility action for exactly this reason.
+          .accessibilityActions {
+            if let onDelete {
+              Button("Delete this reading") { onDelete(row.id) }
+            }
+          }
         }
       }
     }

@@ -69,4 +69,20 @@ public enum WeightUnit: String, Sendable, CaseIterable, Codable {
     guard step > 0 else { return value }
     return (value / step).rounded() * step
   }
+
+  /// A session's tonnage, as the one sentence every screen prints it in.
+  ///
+  /// It existed three times and disagreed with itself three ways: the history row and the live
+  /// footer interpolated `Int(rounded())`, so a real workout read "13465 lb" with no digit grouping;
+  /// the summary used a one-decimal formatter, so the same 300 lb read "300.0 lb" one screen later.
+  /// Tonnage is a five-figure number a lifter reads at a glance, and a bare Int is both harder to
+  /// read and wrong for anyone whose locale does not group with a comma.
+  ///
+  /// Rounded to whole units on purpose. A tenth of a kilogram of tonnage is noise, and the
+  /// suffix is the unit the lifter chose, never the storage unit.
+  public func tonnageText(fromKilograms kilograms: Double) -> String {
+    let displayed = fromKilograms(kilograms).rounded()
+    let number = displayed.formatted(.number.precision(.fractionLength(0)).grouping(.automatic))
+    return "\(number) \(abbreviation)"
+  }
 }

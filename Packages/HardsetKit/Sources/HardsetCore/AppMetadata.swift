@@ -6,13 +6,13 @@ import Foundation
 ///
 /// A privacy policy URL is required in App Store Connect, and a Terms of Use (EULA) link is
 /// required **inside the app** the moment an auto-renewable subscription ships — Guideline 3.1.2.
-/// None of those pages exist yet, and a link to a page that does not exist is worse than no link:
-/// App Review taps every one of them, and a 404 is a rejection with a slower turnaround than a
-/// missing feature.
+/// None of those public pages exist yet, and a link to a page that does not exist is worse than no
+/// link: App Review taps every one of them, and a 404 is a rejection with a slower turnaround than
+/// a missing feature. The app still ships an offline-readable privacy policy in Settings.
 ///
-/// So each is `URL?`, every row renders only when its link is set, and the one place to fill them
-/// in is `LegalLinks.live` below. `submissionBlockers` names what is still missing in the same
-/// words the checklist uses, so "are we ready" has one answer rather than a memory of one.
+/// So each external link is `URL?`, and the one place to fill them in is `LegalLinks.live` below.
+/// `submissionBlockers` names what is still missing in the same words the checklist uses, so "are
+/// we ready" has one answer rather than a memory of one.
 public struct LegalLinks: Sendable, Hashable {
   public let privacyPolicy: URL?
   public let termsOfUse: URL?
@@ -26,8 +26,9 @@ public struct LegalLinks: Sendable, Hashable {
 
   /// **Fill these in before the first TestFlight build that leaves your own devices.**
   ///
-  /// Set each to a real, reachable page and nothing else has to change: the rows appear on their
-  /// own. See `DEVICE-CHECKLIST.md` §E.
+  /// Set each to a real, reachable page and nothing else has to change: optional web rows appear
+  /// on their own and the bundled privacy screen gains its canonical web link. See
+  /// `DEVICE-CHECKLIST.md` §E.
   public static let live = LegalLinks(
     privacyPolicy: nil,
     termsOfUse: nil,

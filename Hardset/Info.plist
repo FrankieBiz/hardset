@@ -21,9 +21,9 @@
 	<key>CFBundleDisplayName</key>
 	<string>Hardset</string>
 	<key>CFBundleShortVersionString</key>
-	<string>1.0</string>
+	<string>$(MARKETING_VERSION)</string>
 	<key>CFBundleVersion</key>
-	<string>1</string>
+	<string>$(CURRENT_PROJECT_VERSION)</string>
 	<!-- Dark, and dark before SwiftUI exists.
 	     `HardsetRootView` sets `.preferredColorScheme(.dark)`, but that only governs the SwiftUI
 	     tree. The launch screen is drawn by the system before any of it runs, so an empty
@@ -41,6 +41,23 @@
 	<key>UIUserInterfaceStyle</key>
 	<string>Dark</string>
 
+	<!-- Portrait only, and load-bearing rather than taste.
+	     With this key absent and GENERATE_INFOPLIST_FILE = NO, Xcode injects nothing, so the app
+	     shipped iPhone's default set: portrait plus both landscapes. Nothing in the app adapts to
+	     that -- there is no `verticalSizeClass` or `horizontalSizeClass` reader anywhere in
+	     HardsetKit -- and the numeric pad, the one control every weight and every rep is typed on,
+	     is a sheet sized to its own content: 7 * 56 + 6 * 8 + 2 * 12 = 464 pt, every row floored at
+	     `loggerTapTarget` and no ScrollView to compress into. Landscape on every supported iPhone is
+	     375-440 pt tall, so the detent clamped and the bottom key row and Done were clipped off the
+	     screen -- the pad could be opened and not dismissed, and a decimal load could not be typed
+	     at all. The same clipping in the vertical direction is documented at SetRowView.swift:47.
+	     iPhone-only (TARGETED_DEVICE_FAMILY = 1), so no iPad multitasking rule requires the others.
+	     If landscape is ever wanted, the pad has to become scrollable first. -->
+	<key>UISupportedInterfaceOrientations</key>
+	<array>
+		<string>UIInterfaceOrientationPortrait</string>
+	</array>
+
 	<!-- Declared so App Store Connect stops asking on every single upload. Hardset ships no
 	     encryption of its own; HTTPS and the platform's own CloudKit transport are exempt under
 	     the standard exemption, so this is `false` rather than a filed year-long exemption.
@@ -54,6 +71,9 @@
 	     value". There is no AlarmKit entitlement and no Xcode capability to add. -->
 	<key>NSAlarmKitUsageDescription</key>
 	<string>Hardset uses alarms so your rest timer still alerts you when the app is closed, silenced, or in Focus.</string>
+	<!-- Required by ActivityKit for the AlarmKit countdown presentation embedded below. -->
+	<key>NSSupportsLiveActivities</key>
+	<true/>
 
 	<!-- Remote notifications: CKSyncEngine needs them to learn about changes from other
 	     devices. Declared here and enabled as a capability on the target. -->

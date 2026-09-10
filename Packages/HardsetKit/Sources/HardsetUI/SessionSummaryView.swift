@@ -45,7 +45,7 @@ public struct SessionSummaryView: View {
     ScrollView {
       VStack(alignment: .leading, spacing: Tokens.Spacing.section) {
         headline
-        if outcome.isEmpty {
+        if !hasHardSets {
           emptyState
         } else {
           readouts
@@ -91,6 +91,17 @@ public struct SessionSummaryView: View {
     }
   }
 
+  /// Whether anything was logged that the readouts and the payout are actually about.
+  ///
+  /// Deliberately narrower than `SessionOutcome.isEmpty`, which is false as soon as a warm-up
+  /// exists -- so a warm-up-only workout took the readouts branch and showed Length beside a reps
+  /// count of 0 and a tonnage of "0 kg", a row of zeroes that reads as a measurement. Branching
+  /// here rather than widening the Core value: `isEmpty` is pinned by `SessionOutcomeTests` and
+  /// used elsewhere, and "there is nothing to summarise" is a view's call to make.
+  private var hasHardSets: Bool {
+    outcome.volume.workingSets > 0 || outcome.volume.dropSets > 0
+  }
+
   // MARK: - Hero
 
   /// The hero number and its certainty, in one container on purpose.
@@ -123,7 +134,10 @@ public struct SessionSummaryView: View {
   /// How much of this session the app could actually attribute, as a certainty rather than a
   /// percentage dressed up as precision.
   private var coverageBadge: (level: CertaintyLevel, detail: String)? {
-    guard let muscles, !outcome.isEmpty else { return nil }
+    // `hasHardSets`, not `!outcome.isEmpty`: a warm-up-only session has nothing to attribute, so
+    // `unattributedHardSets == 0` was true and the badge congratulated the lifter with "Every set
+    // attributed to a muscle." over a session that contained no attributable set at all.
+    guard let muscles, hasHardSets else { return nil }
     if muscles.unattributedHardSets == 0 {
       return (.high, "Every set attributed to a muscle.")
     }
@@ -131,6 +145,17 @@ public struct SessionSummaryView: View {
     // Pluralised by hand. `CertaintyBadge` takes a `String` and renders it with `Text(String)`, so
     // `^[...](inflect:)` would have shown up verbatim on screen -- the same defect that reached the
     // history list. Markup only works inside an inline `Text("...")` literal.
+    //
+    // The sentence has to know whether there is a breakdown to point at. `payout` draws nothing
+    // when `shares` is empty, which is exactly what a session of entirely unattributable movements
+    // produces -- and "the breakdown below is a floor" then cited a section that is not on screen.
+    if shares.isEmpty {
+      return (
+        .low,
+        "\(n) set\(n == 1 ? "" : "s") had no muscles recorded, "
+          + "so no breakdown could be produced."
+      )
+    }
     return (
       .low,
       "\(n) set\(n == 1 ? "" : "s") had no muscles recorded, "
@@ -187,8 +212,7 @@ public struct SessionSummaryView: View {
   }
 
   private var tonnageText: String {
-    let value = unit.fromKilograms(outcome.volume.volumeKg)
-    return "\(Self.format(value)) \(unit.abbreviation)"
+    unit.tonnageText(fromKilograms: outcome.volume.volumeKg)
   }
 
   // MARK: - Records
@@ -375,10 +399,24 @@ public struct SessionSummaryView: View {
 
   // MARK: - Chrome
 
+  /// States what actually happened, which for a warm-up-only session is not "no sets".
+  ///
+  /// The warm-ups were real work and they were logged; saying nothing was would be the app
+  /// contradicting the rows the lifter can still see in the logger.
   private var emptyState: some View {
-    Text("No sets were logged, so there is nothing to summarise.")
+    Text(Self.emptyStateText(warmupSets: outcome.volume.warmupSets))
       .font(Tokens.Text.label)
       .foregroundStyle(Tokens.Color.textSecondary)
+  }
+
+  static func emptyStateText(warmupSets: Int) -> String {
+    guard warmupSets > 0 else {
+      return "No sets were logged, so there is nothing to summarise."
+    }
+    // Pluralised by hand, for the same reason every other count on this screen is: this reaches
+    // `Text(String)`, where `^[...](inflect:)` renders verbatim.
+    let sets = "\(warmupSets) warm-up set\(warmupSets == 1 ? " was" : "s were")"
+    return "No working sets were logged. \(sets)."
   }
 
   private var doneButton: some View {
@@ -394,7 +432,10 @@ public struct SessionSummaryView: View {
     .buttonStyle(CommitButtonStyle())
     .padding(.horizontal, Tokens.Spacing.edge)
     .padding(.bottom, Tokens.Spacing.regular)
-    .background(.clear)
+    // Paints, like every other pinned bottom surface (`SetRowView`, `ExerciseSectionView`,
+    // `RestBarView`). The button face was opaque but its gutters were not, so on a long session
+    // the payout bars scrolled visibly through the inset around it.
+    .background(Tokens.Color.ground)
   }
 
   static func format(_ value: Double) -> String {

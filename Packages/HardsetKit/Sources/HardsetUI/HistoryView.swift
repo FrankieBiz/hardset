@@ -66,11 +66,13 @@ public struct HistoryView: View {
   public var body: some View {
     List {
       if rows.isEmpty {
-        ContentUnavailableView {
-          Label("No workouts yet", systemImage: "clock.arrow.circlepath")
-        } description: {
-          Text("Finished workouts appear here.")
-        }
+        UnavailableStateView(
+          title: "No workouts yet",
+          systemImage: "clock.arrow.circlepath",
+          message: "Finished workouts appear here."
+        )
+        .listRowBackground(Tokens.Color.ground)
+        .listRowSeparator(.hidden)
       } else {
         ForEach(rows) { row in
           Button {
@@ -87,7 +89,12 @@ public struct HistoryView: View {
           // Swipe rather than a menu: this is a `List`, so the gesture is the platform's own and
           // needs no discovery. It discards the workout and every set in it, which is why the
           // label says so rather than just "Delete".
-          .swipeActions(edge: .trailing) {
+          //
+          // `allowsFullSwipe: false` because the delete is a cascading hard delete with no undo:
+          // the default lets a single continuous swipe fire the destructive action without ever
+          // drawing the button, so a workout could be destroyed by a gesture whose target the
+          // lifter never saw. The button must be revealed and then tapped.
+          .swipeActions(edge: .trailing, allowsFullSwipe: false) {
             if let onDelete {
               Button(role: .destructive) {
                 onDelete(row)
@@ -117,11 +124,21 @@ public struct HistoryView: View {
 
   private func content(_ row: HistoryRow) -> some View {
     VStack(alignment: .leading, spacing: Tokens.Spacing.tight) {
-      HStack(alignment: .firstTextBaseline) {
-        Text(row.title.isEmpty ? Self.dateText(row.date) : row.title)
-          .font(Tokens.Text.label.weight(.semibold))
-        Spacer(minLength: Tokens.Spacing.snug)
-        durationLabel(row)
+      // Measured rather than branched on `dynamicTypeSize`. At AX5 a long title and the
+      // Label-plus-glyph "Length unknown" competed for one unbroken line and both clipped, and a
+      // size threshold would still have clipped a genuinely long title at ordinary sizes.
+      // `ViewThatFits` measures the actual title, so it stacks exactly when the two do not fit --
+      // the same treatment `SessionSummaryView.readouts` gives its columns.
+      ViewThatFits(in: .horizontal) {
+        HStack(alignment: .firstTextBaseline) {
+          titleText(row)
+          Spacer(minLength: Tokens.Spacing.snug)
+          durationLabel(row)
+        }
+        VStack(alignment: .leading, spacing: Tokens.Spacing.hairline) {
+          titleText(row)
+          durationLabel(row)
+        }
       }
 
       if !row.title.isEmpty {
@@ -148,23 +165,39 @@ public struct HistoryView: View {
     .accessibilityLabel(Self.spokenLabel(row, unit: unit))
   }
 
+  private func titleText(_ row: HistoryRow) -> some View {
+    Text(row.title.isEmpty ? Self.dateText(row.date) : row.title)
+      .font(Tokens.Text.label.weight(.semibold))
+  }
+
   @ViewBuilder private func durationLabel(_ row: HistoryRow) -> some View {
-    if row.hasImplausibleDuration {
-      // The honest statement. A 20-hour span means the session was left open, not that it was
-      // trained through, so the number is withheld rather than displayed.
-      Label("Length unknown", systemImage: "exclamationmark.circle")
-        .font(Tokens.Text.caption)
-        .foregroundStyle(Tokens.Color.certainty(.low))
-    } else if let duration = row.duration {
+    if let duration = row.duration, !row.hasImplausibleDuration {
       Text(duration.clockString)
         .font(Tokens.Text.caption)
         .foregroundStyle(Tokens.Color.textSecondary)
         .monospacedDigit()
+    } else {
+      // The honest statement, and it now covers every way the span can fail rather than only the
+      // implausible one. A 20-hour span means the session was left open; a *negative* span --
+      // which `SessionTimeline` refuses to create but a synced row can carry -- yields a nil
+      // duration that is not flagged implausible, and that combination rendered nothing at all
+      // here while the detail screen said "Length unknown" about the very same workout.
+      Label("Length unknown", systemImage: "exclamationmark.circle")
+        .font(Tokens.Text.caption)
+        .foregroundStyle(Tokens.Color.certainty(.low))
     }
   }
 
-  static func dateText(_ date: Date) -> String {
-    date.formatted(.dateTime.weekday(.abbreviated).day().month(.abbreviated))
+  /// The year is appended only outside the current one.
+  ///
+  /// Paging back through years is reachable by design, so a bare "Tue 3 Mar" in a list that
+  /// reaches 2024 states a date it cannot support. Adding the year unconditionally would clutter
+  /// the recent rows that are almost all of them, so the row carries it exactly when it disambiguates.
+  static func dateText(_ date: Date, now: Date = Date(), calendar: Calendar = .current) -> String {
+    let base = Date.FormatStyle.dateTime.weekday(.abbreviated).day().month(.abbreviated)
+    let sameYear =
+      calendar.component(.year, from: date) == calendar.component(.year, from: now)
+    return date.formatted(sameYear ? base : base.year())
   }
 
   static func volumeText(_ volume: SessionVolume, unit: WeightUnit) -> String {
@@ -178,10 +211,17 @@ public struct HistoryView: View {
       "\(volume.reps) rep\(volume.reps == 1 ? "" : "s")",
     ]
     if volume.volumeKg > 0 {
-      let displayed = unit.fromKilograms(volume.volumeKg)
-      parts.append("\(Int(displayed.rounded())) \(unit.abbreviation)")
+      parts.append(unit.tonnageText(fromKilograms: volume.volumeKg))
     }
-    if volume.warmupSets > 0 { parts.append("\(volume.warmupSets) warm-up") }
+    if volume.warmupSets > 0 {
+      parts.append("\(volume.warmupSets) warm-up\(volume.warmupSets == 1 ? "" : "s")")
+    }
+    // Drops were the one figure this line omitted while silently including their reps and their
+    // tonnage in the two figures beside it, so the row read as more reps per set than were done.
+    // `SessionVolume` reports them separately for the same reason it reports warm-ups separately.
+    if volume.dropSets > 0 {
+      parts.append("\(volume.dropSets) drop\(volume.dropSets == 1 ? "" : "s")")
+    }
     return parts.joined(separator: " · ")
   }
 
@@ -192,6 +232,9 @@ public struct HistoryView: View {
       parts.append("length unknown, this session was left open")
     } else if let duration = row.duration {
       parts.append(duration.clockString)
+    } else {
+      // Matches the printed column, which now states the absence instead of leaving a gap.
+      parts.append("length unknown")
     }
     // The movements are printed on every row and were absent from the spoken label, so the one
     // detail that tells two workouts apart was the one detail VoiceOver did not get.

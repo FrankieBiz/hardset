@@ -12,6 +12,7 @@ import SwiftUI
 @MainActor
 public struct ExerciseProgressScreen: View {
   @State private var history: ProgressionHistory?
+  @State private var isLoading = true
   @State private var loadFailed = false
   @State private var isShowingMethodology = false
 
@@ -34,7 +35,10 @@ public struct ExerciseProgressScreen: View {
 
   public var body: some View {
     ScrollView {
-      if loadFailed {
+      if isLoading && history == nil {
+        ProgressView()
+          .frame(maxWidth: .infinity, minHeight: 240)
+      } else if loadFailed {
         ContentUnavailableView {
           Label("Could not read this history", systemImage: "exclamationmark.triangle")
         } description: {
@@ -51,13 +55,13 @@ public struct ExerciseProgressScreen: View {
           // The comparison the chart draws but never states. Same data, no second read.
           MachineComparisonView(rows: comparisonRows, unit: unit)
         }
-        .padding(.horizontal, Tokens.Spacing.regular)
+        .padding(.horizontal, Tokens.Spacing.edge)
       }
     }
     .background(Tokens.Color.ground)
     .navigationTitle(exerciseName)
-    .task { load() }
-    .refreshable { load() }
+    .task { await load() }
+    .refreshable { await load() }
     .sheet(isPresented: $isShowingMethodology) {
       // The estimate is a formula applied to the user's own sets, not a study finding, and the
       // sheet says which formula and where it stops being meaningful.
@@ -76,17 +80,21 @@ public struct ExerciseProgressScreen: View {
     // Hue is assigned per gym, in the order this chart first mentions each one, so it is stable
     // for the life of the chart and does not shift when a series drops out.
     let gyms = history.gymOrder(for: ordered.map(\.key))
-    var machinesSeenPerGym: [GymID: Int] = [:]
+    // Counted per *colour bucket*, not per gym. Keyed on `GymID` the counter never advanced for a
+    // series with no gym -- free weights, and a machine whose gym row is gone -- so two of them
+    // drew the same neutral grey with the same solid stroke and were indistinguishable. Everything
+    // past the third gym shares the overflow colour for the same reason, so it shares the counter.
+    let overflowBucket = Tokens.Color.Series.ordered.count
+    var machinesSeenPerBucket: [Int: Int] = [:]
 
     return ordered.map { series in
       let gym = series.key.machineID.flatMap { history.machineGyms[$0] }
       let gymIndex = gym.flatMap { gyms.firstIndex(of: $0) }
-      var withinGym = 0
-      if let gym {
-        withinGym = machinesSeenPerGym[gym, default: 0]
-        machinesSeenPerGym[gym] = withinGym + 1
-      }
+      let bucket = gymIndex.map { min($0, overflowBucket) } ?? overflowBucket
+      let withinGym = machinesSeenPerBucket[bucket, default: 0]
+      machinesSeenPerBucket[bucket] = withinGym + 1
       return ProgressionChartView.SeriesInput(
+        key: series.key,
         label: history.label(for: series.key),
         points: series.points,
         gymIndex: gymIndex,
@@ -116,13 +124,21 @@ public struct ExerciseProgressScreen: View {
     }
   }
 
-  private func load() {
-    do {
-      history = try store.history(for: exerciseID)
+  private func load() async {
+    isLoading = true
+    let store = store
+    let exerciseID = exerciseID
+    let result = await readOffMain { try store.history(for: exerciseID) }
+    guard !Task.isCancelled else { return }
+
+    switch result {
+    case .success(let loaded):
+      history = loaded
       loadFailed = false
-    } catch {
+    case .failure:
       history = nil
       loadFailed = true
     }
+    isLoading = false
   }
 }

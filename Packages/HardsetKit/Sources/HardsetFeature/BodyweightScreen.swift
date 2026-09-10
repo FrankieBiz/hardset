@@ -14,6 +14,7 @@ public struct BodyweightScreen: View {
   private let unit: WeightUnit
 
   @State private var records: [BodyweightRecord] = []
+  @State private var isLoading = true
   @State private var smoothedKg: Double?
   @State private var weeklyRate: Claim<Double> = .unevaluated(source: BodyweightTrend.source)
   @State private var isAdding = false
@@ -35,7 +36,14 @@ public struct BodyweightScreen: View {
       onAdd: { isAdding = true },
       onDelete: delete
     )
-    .task { reload() }
+    .overlay {
+      if isLoading, records.isEmpty {
+        ProgressView()
+          .frame(maxWidth: .infinity, maxHeight: .infinity)
+          .background(Tokens.Color.ground)
+      }
+    }
+    .task { await reload() }
     .sheet(isPresented: $isAdding) {
       NameEntrySheet(
         title: "Add a reading",
@@ -74,31 +82,55 @@ public struct BodyweightScreen: View {
       errorMessage = "\"\(text)\" is not a weight this can read. Try a number like 82.5."
       return
     }
-    do {
-      try store.record(weightKg: unit.toKilograms(entered))
-      reload()
-    } catch {
-      errorMessage = error.localizedDescription
+    let store = store
+    let weightKg = unit.toKilograms(entered)
+    Task {
+      let result = await readOffMain { try store.record(weightKg: weightKg) }
+      guard !Task.isCancelled else { return }
+      switch result {
+      case .success: await reload()
+      case .failure(let error): errorMessage = error.localizedDescription
+      }
     }
   }
 
   private func delete(_ id: UUID) {
-    do {
-      try store.delete(id)
-      reload()
-    } catch {
-      errorMessage = error.localizedDescription
+    let store = store
+    Task {
+      let result = await readOffMain { try store.delete(id) }
+      guard !Task.isCancelled else { return }
+      switch result {
+      case .success: await reload()
+      case .failure(let error): errorMessage = error.localizedDescription
+      }
     }
   }
 
-  private func reload() {
-    do {
-      let trend = try store.trend()
-      records = try store.history()
-      smoothedKg = trend.smoothedKg
-      weeklyRate = trend.weeklyRate
-    } catch {
+  private func reload() async {
+    isLoading = true
+    let store = store
+    let asOf = Date()
+    let result = await readOffMain {
+      // One history scan. `trend()` plus `history()` performed the same potentially decade-long
+      // read twice every time this screen appeared.
+      let records = try store.history()
+      let readings = records.map(\.reading)
+      return (
+        records,
+        BodyweightTrend.smoothed(readings, endingAt: asOf),
+        BodyweightTrend.weeklyRate(readings, asOf: asOf)
+      )
+    }
+    guard !Task.isCancelled else { return }
+    switch result {
+    case .success(let loaded):
+      records = loaded.0
+      smoothedKg = loaded.1
+      weeklyRate = loaded.2
+      errorMessage = nil
+    case .failure(let error):
       errorMessage = error.localizedDescription
     }
+    isLoading = false
   }
 }

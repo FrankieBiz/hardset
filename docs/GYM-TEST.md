@@ -23,15 +23,19 @@ ever happened, and the rest timer is the thing worth proving first.
 
 ## 2. Find your Team ID
 
-Fastest, and it does not need Xcode open:
+Do not copy the value in parentheses from `security find-identity`. That value is part of the
+certificate's display name and is not necessarily its Team ID. The Team ID is the certificate
+subject's `OU` field. Read it directly:
 
 ```bash
-security find-identity -v -p codesigning
+security find-certificate -c "Apple Development" -p \
+  | openssl x509 -noout -subject -nameopt multiline \
+  | sed -n 's/^[[:space:]]*organizationalUnitName[[:space:]]*=[[:space:]]*//p'
 ```
 
-The 10 characters in parentheses are the Team ID — e.g.
-`Apple Development: you@example.com (7R2SW36YX3)` → `7R2SW36YX3`. **This Mac already has one**, so
-an identity exists and step 3 can use it immediately.
+That prints the 10-character Team ID. On this Mac it is `ZBP387D523`; the certificate display name
+ends in `(7R2SW36YX3)`, which is exactly why copying the parenthesized value generated a project
+Xcode could not sign.
 
 What that output does *not* tell you is whether the team is paid or free — an "Apple Development"
 certificate looks identical either way. Check at
@@ -40,6 +44,16 @@ Membership section with an expiry date; a free Apple ID does not. If in doubt, u
 step 3 — it works on both, and the only thing it costs is sync, which is not on tomorrow's list.
 
 If no identity is listed at all: Xcode → Settings → Accounts → add your Apple ID first.
+
+Check free space before the first Release build:
+
+```bash
+df -h /System/Volumes/Data
+```
+
+Leave at least 4 GB free. A clean Hardset device build uses about 2.8 GB of DerivedData; with only
+103 MB free, SwiftPM reported `databaseFull` and code signing ended with an unrelated-looking
+"internal error in Code Signing subsystem".
 
 ## 3. Generate the project with signing in it
 
@@ -60,8 +74,15 @@ cd ~/dev/hardset && HARDSET_TEAM_ID=YOURTEAMID python3 Tools/generate_project.py
 ```
 
 If Xcode complains the bundle identifier is unavailable, someone else has registered
-`com.hardset.app`. Change `BUNDLE_ID` near the top of `Tools/generate_project.py` to something like
-`com.yourname.hardset` and regenerate.
+`com.hardset.app`. Override it locally rather than editing the generator:
+
+```bash
+HARDSET_BUNDLE_ID=com.yourname.hardset \
+HARDSET_TEAM_ID=YOURTEAMID \
+python3 Tools/generate_project.py --local
+```
+
+The app, widget and test bundle identifiers move together, so the widget remains embeddable.
 
 ## 4. Build to the phone — as Release, not Debug
 

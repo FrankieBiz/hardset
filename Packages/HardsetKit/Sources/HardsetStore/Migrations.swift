@@ -1,7 +1,7 @@
 import Foundation
 import SQLiteData
 
-/// The entire v1 schema, as one migration, written before any UI exists.
+/// Hardset's additive schema history, beginning with the original v1 migration.
 ///
 /// Why one migration and why now: CloudKit's production schema is additive-only, and
 /// SQLiteData additionally forbids -- permanently -- removing columns, renaming columns,
@@ -79,11 +79,11 @@ public nonisolated enum HardsetMigrations {
   public static func migrator() -> DatabaseMigrator {
     var migrator = DatabaseMigrator()
 
-    // Only ever safe before the first release. Once a build is in anyone's hands this
-    // must be gone, or a schema tweak silently destroys their history.
-    #if DEBUG
-      migrator.eraseDatabaseOnSchemaChange = true
-    #endif
+    // Never enable `eraseDatabaseOnSchemaChange`, including in DEBUG. A debug-signed build can
+    // hold the only copy of a real workout log, and the first external install turns this from a
+    // development convenience into silent data loss. An incompatible migration must fail open
+    // and show `StoreUnavailableView`; it must never manufacture a fresh database behind a normal
+    // looking logger.
 
     migrator.registerMigration("v1") { db in
       // MARK: Exercises
@@ -313,6 +313,8 @@ public nonisolated enum HardsetMigrations {
           "exerciseID" TEXT NOT NULL REFERENCES "exercises"("id") ON DELETE CASCADE,
           "machineID" TEXT REFERENCES "machines"("id") ON DELETE SET NULL,
           "position" INTEGER NOT NULL ON CONFLICT REPLACE DEFAULT 0,
+          -- No set-count column here. See "v3-split-entry-target-sets" below for the one that was
+          -- added, and why it is the lifter's rather than the app's.
           "createdAt" TEXT NOT NULL ON CONFLICT REPLACE DEFAULT (datetime('now', 'subsec'))
         ) STRICT
         """
@@ -408,6 +410,62 @@ public nonisolated enum HardsetMigrations {
       try #sql(
         """
         CREATE INDEX "splitEntries_on_splitDayID" ON "splitEntries"("splitDayID")
+        """
+      )
+      .execute(db)
+    }
+
+    // Keep v1 immutable. Builds installed before split rotation existed have already recorded it in
+    // `grdb_migrations`; changing the CREATE TABLE above cannot change their database. This
+    // additive migration is what makes an upgrade safe instead of merely making fresh installs
+    // pass the schema tests.
+    migrator.registerMigration("v2-session-split-day") { db in
+      // One development build briefly shipped this column inside v1 before v2 was registered.
+      // Those databases correctly report only `v1` in `grdb_migrations`, but the column is already
+      // present. Treat that exact schema as migrated instead of failing launch with SQLite's
+      // "duplicate column name" error. The normal v1 upgrade path still executes the ALTER below.
+      let alreadyPresent = try db.columns(in: "sessions").contains { $0.name == "splitDayID" }
+      guard !alreadyPresent else { return }
+
+      try #sql(
+        """
+        ALTER TABLE "sessions"
+          ADD COLUMN "splitDayID" TEXT REFERENCES "splitDays"("id") ON DELETE SET NULL
+        """
+      )
+      .execute(db)
+    }
+
+    // Same reasoning as v2, and this pass got it wrong once before fixing it: the column was first
+    // added to v1's CREATE TABLE, which only makes *fresh* installs pass `SchemaTests` while leaving
+    // an already-installed database without it forever. v1 is immutable once anything has recorded
+    // it in `grdb_migrations`.
+    //
+    // How many working sets the LIFTER intends on a planned movement, or NULL for "they have not
+    // said". Nullable is load-bearing, not incidental.
+    //
+    // The spec's section 3 argued against a set-count column here, and the argument was about the
+    // APP arranging volume: "a set-count column there is the hole a prescription engine climbs
+    // through". That still holds, and nothing writes this except the lifter. What changed is that
+    // section 6 named this exact extension -- "per-movement set targets of the lifter's own.
+    // Additive later if asked for" -- and it was asked for.
+    //
+    // The distinction the whole column rests on: the app may record what the lifter intends and may
+    // never author it. There is no default, no suggestion and no derivation from their history, so
+    // NULL survives untouched until they type a number. That is why `weeklyTarget` returning
+    // `.unevaluated` (DECISION #19) is unaffected -- this is a statement of intent, not an
+    // established target, and nothing compares it to one. `appNeverAuthorsATargetSetCount` sweeps
+    // the sources to keep it that way.
+    migrator.registerMigration("v3-split-entry-target-sets") { db in
+      // The same pre-migration development schema existed briefly for this column too. Skipping an
+      // already-present column lets those installs advance their migration ledger without erasing
+      // or rebuilding the plan table.
+      let alreadyPresent = try db.columns(in: "splitEntries").contains { $0.name == "targetSets" }
+      guard !alreadyPresent else { return }
+
+      try #sql(
+        """
+        ALTER TABLE "splitEntries" ADD COLUMN "targetSets" INTEGER
         """
       )
       .execute(db)

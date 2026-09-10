@@ -178,8 +178,13 @@ public struct MachineLibraryView: View {
           Label("Options", systemImage: "ellipsis.circle")
             .labelStyle(.iconOnly)
             .foregroundStyle(Tokens.Color.textSecondary)
+            // Inside the label and shaped, not applied to the `Menu`: a menu's hit region is its
+            // label's content shape, so a frame hung on the `Menu` grew the layout footprint and
+            // left the added area untappable. This is the only route to rename, set the stack step,
+            // or put a machine away. Same pattern as ExerciseSectionView.swift:244.
+            .frame(minWidth: Tokens.minimumTapTarget, minHeight: Tokens.minimumTapTarget)
+            .contentShape(Rectangle())
         }
-        .frame(minWidth: Tokens.minimumTapTarget, minHeight: Tokens.minimumTapTarget)
       }
 
       if !detail(row).isEmpty {

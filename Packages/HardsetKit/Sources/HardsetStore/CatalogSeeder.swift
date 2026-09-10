@@ -12,7 +12,7 @@ import SQLiteData
 /// It is also **non-destructive**. A user who renames or archives a curated movement keeps that
 /// change: seeding refreshes only the fields the catalogue owns, and never resurrects something
 /// the user archived. Re-running it on every launch is therefore safe and is the intended usage.
-public nonisolated struct CatalogSeeder {
+public nonisolated struct CatalogSeeder: Sendable {
   private let database: any DatabaseWriter
 
   public init(database: any DatabaseWriter) {
@@ -100,6 +100,24 @@ public nonisolated struct CatalogSeeder {
   ///
   /// Archived rows are excluded — that is what archiving is for — and the sort puts a movement
   /// the user just created where they will look for it.
+  /// Entries for specific movements, **including retired ones**.
+  ///
+  /// `selectableExercises()` excludes archived movements because they must not be offered. But a
+  /// plan can still contain one, and a row built only from the selectable list rendered it as
+  /// "Unknown movement / Not attributed" — a movement the lifter named themselves, reported as
+  /// though the app had never heard of it. Naming what is already there is a different question from
+  /// offering something new.
+  public func entries(for ids: [ExerciseID]) throws -> [CatalogEntry] {
+    guard !ids.isEmpty else { return [] }
+    return try database.read { db in
+      try Exercise
+        .where { $0.id.in(ids.map(\.rawValue)) }
+        .order { ($0.isCurated, $0.name) }
+        .fetchAll(db)
+        .map(CatalogEntry.init(row:))
+    }
+  }
+
   public func selectableExercises() throws -> [CatalogEntry] {
     try database.read { db in
       try Exercise

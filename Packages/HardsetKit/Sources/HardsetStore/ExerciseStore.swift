@@ -14,7 +14,7 @@ import SQLiteData
 /// rename-detection branch exist to stop a catalogue correction overwriting a name the lifter
 /// changed, which no screen could change; `isArchived` was read to filter the picker and set by
 /// nothing.
-public nonisolated struct ExerciseStore {
+public nonisolated struct ExerciseStore: Sendable {
   private let database: any DatabaseWriter
 
   public init(database: any DatabaseWriter) {
@@ -97,7 +97,7 @@ public nonisolated struct ExerciseStore {
     guard !trimmed.isEmpty else { throw ExerciseStoreError.blankName }
 
     try database.write { db in
-      guard let row = try Exercise.where { $0.id.eq(exerciseID.rawValue) }.fetchOne(db) else {
+      guard let row = try Exercise.where({ $0.id.eq(exerciseID.rawValue) }).fetchOne(db) else {
         throw ExerciseStoreError.notFound
       }
       guard !row.isCurated else { throw ExerciseStoreError.curatedRowIsNotEditable }
