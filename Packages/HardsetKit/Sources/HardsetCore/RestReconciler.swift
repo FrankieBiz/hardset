@@ -36,7 +36,8 @@ public struct PersistedRest: Hashable, Sendable {
 public struct RestReconciliation: Hashable, Sendable {
   public let state: RestTimerState
   public let alarmID: UUID?
-  /// Alarms to cancel. Leaving them would ring for a rest the app no longer shows.
+  /// Alarms to cancel. Leaving them would ring for a rest the app no longer shows. An alerting
+  /// alarm is never listed: the system owns it until the lifter dismisses it.
   public let staleAlarmIDs: [UUID]
 
   public init(state: RestTimerState, alarmID: UUID?, staleAlarmIDs: [UUID]) {
@@ -63,7 +64,7 @@ public enum RestReconciler {
     guard let alarm = matched else {
       return adoptOrDiscard(persisted: persisted, alarms: alarms)
     }
-    let others = alarms.map(\.id).filter { $0 != alarm.id }
+    let others = staleCandidates(alarms.filter { $0.id != alarm.id })
 
     switch alarm.mode {
     case .countdown(let fireDate?):
@@ -71,24 +72,23 @@ public enum RestReconciler {
         state: .running(endsAt: fireDate), alarmID: alarm.id, staleAlarmIDs: others)
     case .countdown(nil):
       // The alarm exists and is counting; only the persisted deadline says when it ends.
-      guard case .running = persisted?.state else {
+      // Resumed at an unseen time: showing paused or a guessed deadline would both be invented.
+      guard let persisted, case .running = persisted.state else {
         return RestReconciliation(state: .idle, alarmID: nil, staleAlarmIDs: [alarm.id] + others)
       }
-      return RestReconciliation(
-        state: persisted!.state, alarmID: alarm.id, staleAlarmIDs: others)
+      return RestReconciliation(state: persisted.state, alarmID: alarm.id, staleAlarmIDs: others)
     case .paused(let remaining?):
       return RestReconciliation(
         state: .paused(remaining: remaining), alarmID: alarm.id, staleAlarmIDs: others)
     case .paused(nil):
       // A remainder we cannot read is never invented from a deadline.
-      if case .paused = persisted?.state {
-        return RestReconciliation(
-          state: persisted!.state, alarmID: alarm.id, staleAlarmIDs: others)
+      if let persisted, case .paused = persisted.state {
+        return RestReconciliation(state: persisted.state, alarmID: alarm.id, staleAlarmIDs: others)
       }
       return RestReconciliation(state: .idle, alarmID: nil, staleAlarmIDs: [alarm.id] + others)
     case .alerting:
-      // The rest is over and the system is presenting the alert. Cancelling it here would
-      // silence the very alert the lifter is waiting for.
+      // The rest is over and the system is presenting the alert. Cancelling it would silence the
+      // very alert the lifter is waiting for, so an alerting alarm is never stale, matched or not.
       return RestReconciliation(state: .idle, alarmID: nil, staleAlarmIDs: others)
     }
   }
@@ -103,6 +103,12 @@ public enum RestReconciler {
       return RestReconciliation(
         state: .running(endsAt: fireDate), alarmID: alarms[0].id, staleAlarmIDs: [])
     }
-    return RestReconciliation(state: .idle, alarmID: nil, staleAlarmIDs: alarms.map(\.id))
+    return RestReconciliation(state: .idle, alarmID: nil, staleAlarmIDs: staleCandidates(alarms))
+  }
+
+  /// The ids that may be cancelled. Alerting alarms are excluded on every path: the system owns
+  /// one until the lifter dismisses it, so no pass over the same alarm may cancel it.
+  private static func staleCandidates(_ alarms: [AlarmSnapshot]) -> [UUID] {
+    alarms.filter { $0.mode != .alerting }.map(\.id)
   }
 }

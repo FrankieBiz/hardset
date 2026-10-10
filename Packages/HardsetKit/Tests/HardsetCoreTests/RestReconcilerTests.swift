@@ -141,4 +141,106 @@ struct RestReconcilerTests {
     #expect(result.state == .running(endsAt: fire))
     #expect(result.staleAlarmIDs == [other])
   }
+
+  @Test("R3: a counting alarm with no fire date over a persisted pause is cancelled, not invented")
+  func countingOverPausedIsCancelled() {
+    let result = RestReconciler.reconcile(
+      persisted: persisted(.paused(remaining: .seconds(50)), alarm: ours),
+      alarms: [AlarmSnapshot(id: ours, mode: .countdown(fireDate: nil))],
+      now: now
+    )
+    #expect(result == RestReconciliation(state: .idle, alarmID: nil, staleAlarmIDs: [ours]))
+  }
+
+  @Test("R7: a lost alarm does not adopt an unrelated countdown while a rest is recorded")
+  func lostAlarmDoesNotAdoptStranger() {
+    let result = RestReconciler.reconcile(
+      persisted: persisted(.running(endsAt: now.addingTimeInterval(40)), alarm: ours),
+      alarms: [AlarmSnapshot(id: other, mode: .countdown(fireDate: now.addingTimeInterval(90)))],
+      now: now
+    )
+    #expect(result == RestReconciliation(state: .idle, alarmID: nil, staleAlarmIDs: [other]))
+  }
+
+  @Test("R8: an idle record with no alarm still adopts a lone countdown")
+  func idleRecordAdoptsLoneCountdown() {
+    let fire = now.addingTimeInterval(90)
+    let result = RestReconciler.reconcile(
+      persisted: persisted(.idle, alarm: nil),
+      alarms: [AlarmSnapshot(id: other, mode: .countdown(fireDate: fire))],
+      now: now
+    )
+    #expect(
+      result == RestReconciliation(state: .running(endsAt: fire), alarmID: other, staleAlarmIDs: [])
+    )
+  }
+
+  @Test("R8: a lone paused alarm is not adopted, and is stale")
+  func lonePausedIsNotAdopted() {
+    let result = RestReconciler.reconcile(
+      persisted: nil,
+      alarms: [AlarmSnapshot(id: other, mode: .paused(remaining: .seconds(10)))],
+      now: now
+    )
+    #expect(result == RestReconciliation(state: .idle, alarmID: nil, staleAlarmIDs: [other]))
+  }
+
+  @Test("R8: a lone countdown with no fire date is not adopted, and is stale")
+  func loneUnreadableCountdownIsNotAdopted() {
+    let result = RestReconciler.reconcile(
+      persisted: nil,
+      alarms: [AlarmSnapshot(id: other, mode: .countdown(fireDate: nil))],
+      now: now
+    )
+    #expect(result == RestReconciliation(state: .idle, alarmID: nil, staleAlarmIDs: [other]))
+  }
+
+  @Test("R6: an unmatched alerting alarm is never stale")
+  func unmatchedAlertingIsNotStale() {
+    let result = RestReconciler.reconcile(
+      persisted: nil,
+      alarms: [AlarmSnapshot(id: other, mode: .alerting)],
+      now: now
+    )
+    #expect(result == RestReconciliation(state: .idle, alarmID: nil, staleAlarmIDs: []))
+  }
+
+  @Test("R6: the pass after an alert was persisted as idle still leaves it alone")
+  func alertingSurvivesASecondPass() {
+    let result = RestReconciler.reconcile(
+      persisted: persisted(.idle, alarm: nil),
+      alarms: [AlarmSnapshot(id: other, mode: .alerting)],
+      now: now
+    )
+    #expect(result == RestReconciliation(state: .idle, alarmID: nil, staleAlarmIDs: []))
+  }
+
+  @Test("R6: a matched alert is kept while other countdowns are still stale")
+  func alertingKeptWhileOthersStale() {
+    let result = RestReconciler.reconcile(
+      persisted: persisted(.running(endsAt: now.addingTimeInterval(-1)), alarm: ours),
+      alarms: [
+        AlarmSnapshot(id: ours, mode: .alerting),
+        AlarmSnapshot(id: other, mode: .countdown(fireDate: now.addingTimeInterval(500))),
+      ],
+      now: now
+    )
+    #expect(result == RestReconciliation(state: .idle, alarmID: nil, staleAlarmIDs: [other]))
+  }
+
+  @Test("R6: an alert nothing accounts for is kept even while our countdown runs")
+  func unmatchedAlertingSurvivesMatchedCountdown() {
+    let fire = now.addingTimeInterval(30)
+    let result = RestReconciler.reconcile(
+      persisted: persisted(.running(endsAt: fire), alarm: ours),
+      alarms: [
+        AlarmSnapshot(id: ours, mode: .countdown(fireDate: fire)),
+        AlarmSnapshot(id: other, mode: .alerting),
+      ],
+      now: now
+    )
+    #expect(
+      result == RestReconciliation(state: .running(endsAt: fire), alarmID: ours, staleAlarmIDs: [])
+    )
+  }
 }
