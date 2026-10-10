@@ -1,4 +1,6 @@
+#if canImport(CloudKit)
 import CloudKit
+#endif
 import Foundation
 import SQLiteData
 import Synchronization
@@ -68,6 +70,9 @@ public nonisolated enum AccountChangePolicy {
   }
 }
 
+// The delegate needs CloudKit, which exists only on Apple platforms. `AccountChange` and
+// `AccountChangePolicy` above are pure and stay unguarded so their tests run on Linux too.
+#if canImport(CloudKit)
 // `nonisolated` is deliberate. This module defaults to MainActor isolation, which is right
 // for view-facing types and wrong for this: schema work runs on GRDB's database queues and
 // these declarations are pure. Isolating them to the main actor would both mislead and
@@ -132,3 +137,4 @@ public nonisolated final class HardsetSyncDelegate: SyncEngineDelegate {
     }
   }
 }
+#endif

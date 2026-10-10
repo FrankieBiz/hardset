@@ -1,4 +1,6 @@
 import Foundation
+// Explicit: on Apple platforms `@Observable` arrives transitively, on Linux it does not.
+import Observation
 import HardsetCore
 import SQLiteData
 

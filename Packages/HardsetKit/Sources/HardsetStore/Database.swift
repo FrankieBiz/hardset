@@ -15,8 +15,11 @@ public nonisolated enum HardsetDatabase {
     // Required for ON DELETE CASCADE / SET NULL to actually fire.
     configuration.foreignKeysEnabled = true
     configuration.prepareDatabase { db in
-      // Attaches SQLiteData's sync metadatabase under the `sqlitedata_icloud` schema.
+      // Attaches SQLiteData's sync metadatabase under the `sqlitedata_icloud` schema. CloudKit
+      // only: on Linux (tests only) there is no sync engine to attach for.
+      #if canImport(CloudKit)
       try db.attachMetadatabase(containerIdentifier: containerIdentifier)
+      #endif
     }
 
     // Spelled with the module prefix on purpose: inside a `DependencyValues` extension the
@@ -53,6 +56,7 @@ public nonisolated enum HardsetDatabase {
   ///   entitlement. Tests pass a unique identifier so each gets its own metadatabase -- the
   ///   metadatabase path derives from this, and sharing one across parallel tests deadlocks
   ///   SQLite.
+  #if canImport(CloudKit)
   public static func makeSyncEngine(
     for database: any DatabaseWriter,
     delegate: HardsetSyncDelegate,
@@ -71,4 +75,5 @@ public nonisolated enum HardsetDatabase {
       delegate: delegate
     )
   }
+  #endif
 }
