@@ -11,11 +11,8 @@ catalogue and a picker; plus the permanent muscle vocabulary, fractional sets-pe
 with coverage, per-machine load history, and a session history screen. 256 tests across 32 suites
 run on the host in about two tenths of a second.
 
-**Not yet true:** the app and widget targets have never been compiled. `xcodebuild` fails here
-because the Swift macro plugin server does not survive the shell sandbox, so everything real lives
-in package targets that build with `swift build`, and the `.xcodeproj` app target is a thin shell.
-Unblocking it is a one-time Trust & Enable inside Xcode — see `DEVICE-CHECKLIST.md`. Nothing in
-this repo has run on a device.
+The app builds and runs in the simulator (see `DEVICE-CHECKLIST.md` §A), and has never run on a
+physical device.
 
 ## Layout
 
@@ -45,6 +42,13 @@ Packages/HardsetKit/
 non-live `SyncEngine` attaches an in-memory metadatabase at a fixed shared-cache path, and the task
 local that resets it between constructions is `package`-scoped, so two engines in one process
 contend for the same SQLite file.
+
+On Linux (no Xcode), the Core and Store suites run in a container:
+
+    Tools/linux-test.sh            # needs podman; builds the image on first run
+
+Sync, UI, AlarmKit and the app target cannot build there. What they still need checking on the
+Mac is listed in `docs/MAC-VERIFICATION.md`.
 
 ## Regenerating the project
 

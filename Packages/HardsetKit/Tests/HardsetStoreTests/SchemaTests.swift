@@ -1,4 +1,6 @@
+#if canImport(CloudKit)
 import CloudKit
+#endif
 import Foundation
 import GRDB
 import SQLiteData
@@ -29,7 +31,7 @@ struct SchemaTests {
   /// `DatabaseQueue()` is constructed directly rather than via `defaultDatabase()`, which
   /// returns a temp-file `DatabasePool` even in test contexts.
   private func migratedDatabase(container: String) throws -> any DatabaseWriter {
-    var configuration = Configuration()
+    var configuration = Configuration.forTesting()
     configuration.foreignKeysEnabled = true
     // Deliberately NOT calling `attachMetadatabase` here, unlike production.
     //
@@ -44,6 +46,8 @@ struct SchemaTests {
     return queue
   }
 
+  #if canImport(CloudKit)
+  // CloudKit-only: SyncEngine does not exist on Linux. Run on the Mac via ./test.sh.
   /// The gate. If this throws, the schema cannot ship.
   ///
   /// The trap this avoids: `validateSchema()` reads `pragma_index_list` and
@@ -70,6 +74,7 @@ struct SchemaTests {
       }
     }
   }
+  #endif
 
   @Test("Every migrated table actually exists after the migration")
   func allTablesExist() throws {

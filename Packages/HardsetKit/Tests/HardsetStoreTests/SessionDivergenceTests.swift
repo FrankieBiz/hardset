@@ -17,7 +17,7 @@ struct SessionDivergenceTests {
   let now = Date(timeIntervalSince1970: 18_000_000)
 
   private func migratedDatabase() throws -> any DatabaseWriter {
-    var configuration = Configuration()
+    var configuration = Configuration.forTesting()
     configuration.foreignKeysEnabled = true
     let queue = try DatabaseQueue(configuration: configuration)
     try HardsetMigrations.migrator().migrate(queue)
@@ -208,7 +208,7 @@ struct FailedFinishTests {
 
   @Test("A session whose finish was refused is still the open session, holding its sets")
   func refusedFinishKeepsTheSessionOpen() throws {
-    var configuration = Configuration()
+    var configuration = Configuration.forTesting()
     configuration.foreignKeysEnabled = true
     let database = try DatabaseQueue(configuration: configuration)
     try HardsetMigrations.migrator().migrate(database)

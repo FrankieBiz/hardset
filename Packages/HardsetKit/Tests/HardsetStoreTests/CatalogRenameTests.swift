@@ -10,7 +10,7 @@ import Testing
 @Suite("Catalogue renames versus user renames")
 struct CatalogRenameTests {
   private func migratedDatabase() throws -> any DatabaseWriter {
-    var configuration = Configuration()
+    var configuration = Configuration.forTesting()
     configuration.foreignKeysEnabled = true
     let queue = try DatabaseQueue(configuration: configuration)
     try HardsetMigrations.migrator().migrate(queue)

@@ -11,7 +11,7 @@ struct CatalogSeederTests {
   let now = Date(timeIntervalSince1970: 7_000_000)
 
   private func migratedDatabase() throws -> any DatabaseWriter {
-    var configuration = Configuration()
+    var configuration = Configuration.forTesting()
     configuration.foreignKeysEnabled = true
     let queue = try DatabaseQueue(configuration: configuration)
     try HardsetMigrations.migrator().migrate(queue)

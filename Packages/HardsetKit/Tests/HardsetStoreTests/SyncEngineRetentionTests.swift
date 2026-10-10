@@ -1,3 +1,5 @@
+#if canImport(CloudKit)
+// CloudKit-only: SyncEngine does not exist on Linux. Run on the Mac via ./test.sh.
 import CloudKit
 import Foundation
 import GRDB
@@ -23,7 +25,7 @@ struct SyncEngineRetentionTests {
   private func uniqueContainer() -> String { "iCloud.hardset.tests.\(UUID().uuidString)" }
 
   private func migratedDatabase() throws -> any DatabaseWriter {
-    var configuration = Configuration()
+    var configuration = Configuration.forTesting()
     configuration.foreignKeysEnabled = true
     // As in `SyncDelegateTests`: the engine attaches its own in-memory metadatabase in a
     // non-live context, so attaching one here as well throws `.metadatabaseMismatch`.
@@ -68,3 +70,4 @@ struct SyncEngineRetentionTests {
   // The guard against the original bug is therefore the compiler: `makeSyncEngine` is not
   // `@discardableResult`, so dropping the engine is a warning at the call site.
 }
+#endif

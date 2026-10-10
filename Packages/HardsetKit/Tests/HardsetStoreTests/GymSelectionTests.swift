@@ -14,7 +14,7 @@ struct GymSelectionTests {
   let now = Date(timeIntervalSince1970: 18_000_000)
 
   private func fixture() throws -> (LoggerStore, GymStore, ExerciseID) {
-    var configuration = Configuration()
+    var configuration = Configuration.forTesting()
     configuration.foreignKeysEnabled = true
     let database = try DatabaseQueue(configuration: configuration)
     try HardsetMigrations.migrator().migrate(database)

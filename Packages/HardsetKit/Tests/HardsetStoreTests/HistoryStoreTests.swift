@@ -11,7 +11,7 @@ struct HistoryStoreTests {
   let now = Date(timeIntervalSince1970: 15_000_000)
 
   private func migratedDatabase() throws -> any DatabaseWriter {
-    var configuration = Configuration()
+    var configuration = Configuration.forTesting()
     configuration.foreignKeysEnabled = true
     let queue = try DatabaseQueue(configuration: configuration)
     try HardsetMigrations.migrator().migrate(queue)
