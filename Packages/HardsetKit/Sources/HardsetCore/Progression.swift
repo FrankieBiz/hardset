@@ -106,19 +106,16 @@ public struct MachineChange: Hashable, Sendable, Identifiable {
     self.heaviestLoadDeltaKg = heaviestLoadDeltaKg
   }
 
-  /// The sentence the chart must show. Deliberately refuses to characterise the change as progress
-  /// or regression, because across a machine switch it is neither.
-  public var explanation: String {
+  /// The sentence the chart must show, in the lifter's unit. Deliberately refuses to characterise
+  /// the change as progress or regression, because across a machine switch it is neither.
+  public func explanation(in unit: WeightUnit, locale: Locale = .current) -> String {
     let direction = heaviestLoadDeltaKg >= 0 ? "higher" : "lower"
     let magnitude = abs(heaviestLoadDeltaKg)
     guard magnitude > 0 else {
       return "You changed machines here. The load happened to match, which is a coincidence, not a comparison."
     }
-    return "You changed machines here. The load is \(Self.format(magnitude)) kg \(direction), which is a difference between the machines rather than a change in strength."
-  }
-
-  static func format(_ value: Double) -> String {
-    value == value.rounded() ? String(Int(value)) : String(format: "%.1f", value)
+    let load = WeightFormatter(unit: unit, locale: locale).load(kilograms: magnitude)
+    return "You changed machines here. The load is \(load) \(direction), which is a difference between the machines rather than a change in strength."
   }
 }
 

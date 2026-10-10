@@ -128,8 +128,8 @@ struct ProgressionTests {
     #expect(change.toMachineID == cybex)
     #expect(change.heaviestLoadDeltaKg == -20)
     // And it refuses to call the drop a regression.
-    #expect(change.explanation.contains("difference between the machines"))
-    #expect(!change.explanation.lowercased().contains("weaker"))
+    #expect(change.explanation(in: .kilograms, locale: Locale(identifier: "en_US_POSIX")).contains("difference between the machines"))
+    #expect(!change.explanation(in: .kilograms, locale: Locale(identifier: "en_US_POSIX")).lowercased().contains("weaker"))
   }
 
   @Test("Staying on one machine produces no changes")
@@ -160,7 +160,17 @@ struct ProgressionTests {
     let all = samples([(1, hammer, 100, 8, 0), (2, cybex, 100, 8, 7)])
     let change = try #require(ProgressionAnalyzer.machineChanges(from: all).first)
     #expect(change.heaviestLoadDeltaKg == 0)
-    #expect(change.explanation.contains("coincidence, not a comparison"))
+    #expect(change.explanation(in: .kilograms, locale: Locale(identifier: "en_US_POSIX")).contains("coincidence, not a comparison"))
+  }
+
+  @Test("The machine-change sentence speaks the lifter's unit")
+  func machineChangeInPounds() {
+    let change = MachineChange(
+      date: Date(timeIntervalSince1970: 0), fromMachineID: nil, toMachineID: nil,
+      heaviestLoadDeltaKg: WeightUnit.pounds.toKilograms(20))
+    let text = change.explanation(in: .pounds, locale: Locale(identifier: "en_US_POSIX"))
+    #expect(text.contains("20 lb higher"))
+    #expect(!text.contains("kg"))
   }
 
   @Test("A move to or from free weights is a machine change too")
