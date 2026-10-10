@@ -17,9 +17,16 @@ if ! podman image exists "$IMAGE"; then
   podman build -t "$IMAGE" -f "$ROOT/Tools/linux/Containerfile" "$ROOT/Tools/linux"
 fi
 
+# Linux resolution adds a Linux-only OpenCombine pin to Package.resolved. That pin must never
+# reach the Mac's resolution, so put the file back however this run ends.
+RESOLVED="$ROOT/Packages/HardsetKit/Package.resolved"
+SNAPSHOT="$(mktemp)"
+cp "$RESOLVED" "$SNAPSHOT"
+trap 'cp "$SNAPSHOT" "$RESOLVED"; rm -f "$SNAPSHOT"' EXIT
+
 # `.build-linux`, not `.build`: a Mac checkout of the same tree must never pick up Linux
 # artefacts from a shared cache directory.
-exec podman run --rm \
+podman run --rm \
   -v "$ROOT/Packages/HardsetKit:/w:Z" -w /w \
   "$IMAGE" \
   swift test --scratch-path /w/.build-linux "$@"
