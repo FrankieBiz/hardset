@@ -22,3 +22,8 @@ the `Hardset` scheme for the iOS 26.4 simulator.
 
 - [ ] (feat(core): one weight formatter, so pounds mode stops reading kilograms) HardsetUI builds
       with ProgressionChartView calling `explanation(in:)`.
+
+## Phase 1
+
+- [ ] (feat(store): remember each exercise's rest…) HardsetFeature and the app build after the
+      restAfterSet → restPreferences rename.

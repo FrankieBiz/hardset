@@ -59,18 +59,18 @@ public struct HardsetRootView: View {
   /// user's own choice wins.
   private let unitOverride: WeightUnit?
   private let hooks: RestTimerHooks
-  private let restAfterSet: Duration?
+  private let restPreferences: any RestPreferenceStore
 
   public init(
     environment: HardsetEnvironment,
     unit: WeightUnit? = nil,
     hooks: RestTimerHooks = .inert,
-    restAfterSet: Duration? = nil
+    restPreferences: any RestPreferenceStore = InMemoryRestPreferences()
   ) {
     self.environment = environment
     self.unitOverride = unit
     self.hooks = hooks
-    self.restAfterSet = restAfterSet
+    self.restPreferences = restPreferences
   }
 
   /// What every screen displays in. One derivation, so no screen can disagree with another.
@@ -89,7 +89,7 @@ public struct HardsetRootView: View {
         if coordinator == nil {
           coordinator = try? SessionCoordinator.resume(
             store: environment.logger,
-            restAfterSet: restAfterSet,
+            restPreferences: restPreferences,
             onStartRest: { duration, metadata in hooks.start(duration, metadata) }
           )
         }
@@ -346,7 +346,7 @@ public struct HardsetRootView: View {
         store: environment.logger,
         gymID: selectedGym,
         plan: [],
-        restAfterSet: restAfterSet,
+        restPreferences: restPreferences,
         hooks: hooks
       )
       startFailed = false

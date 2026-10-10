@@ -77,11 +77,7 @@ private struct RootView: View {
           if restTimer.state.isRunning { restTimer.pause() } else { restTimer.resume() }
         },
         cancel: { restTimer.cancel() }
-      ),
-      // No default rest prescription. A rest duration is a training decision, and inventing 90
-      // seconds here would be the app asserting something it has no basis for. This becomes a
-      // per-exercise setting; until then the timer is started explicitly or not at all.
-      restAfterSet: nil
+      )
     )
     .task {
       // Sync starts after the UI exists, so a CloudKit hiccup cannot block launch.

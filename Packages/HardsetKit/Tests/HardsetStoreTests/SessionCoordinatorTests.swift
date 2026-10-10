@@ -103,7 +103,7 @@ struct SessionCoordinatorTests {
         )
       ],
       now: { self.start },
-      restAfterSet: .seconds(120),
+      restPreferences: InMemoryRestPreferences([exercise: .seconds(120)]),
       onStartRest: { duration, metadata in spy.requests.append((duration, metadata)) }
     )
 
@@ -137,7 +137,7 @@ struct SessionCoordinatorTests {
       store: store,
       plan: [PlannedExercise(exerciseID: exercise, exerciseName: "Leg Press")],
       now: { self.start },
-      restAfterSet: .seconds(120),
+      restPreferences: InMemoryRestPreferences([exercise: .seconds(120)]),
       onStartRest: { duration, metadata in spy.requests.append((duration, metadata)) }
     )
 
@@ -164,7 +164,7 @@ struct SessionCoordinatorTests {
       store: store,
       plan: [PlannedExercise(exerciseID: exercise, exerciseName: "Leg Press")],
       now: { self.start },
-      restAfterSet: .seconds(120),
+      restPreferences: InMemoryRestPreferences([exercise: .seconds(120)]),
       onStartRest: { duration, metadata in spy.requests.append((duration, metadata)) }
     )
     coordinator.addSet(inExercise: coordinator.exercises[0].id, isWarmup: true)
@@ -187,6 +187,7 @@ struct SessionCoordinatorTests {
       store: store,
       plan: [PlannedExercise(exerciseID: exercise, exerciseName: "Leg Press")],
       now: { self.start },
+      restPreferences: InMemoryRestPreferences(),
       onStartRest: { duration, metadata in spy.requests.append((duration, metadata)) }
     )
     coordinator.exercises[0].slots[0].draft = SetEntryDraft(weightKg: 100, reps: 8)
@@ -229,6 +230,149 @@ struct SessionCoordinatorTests {
     )
     #expect(!coordinator.logSet(slotID: UUID(), inExercise: coordinator.exercises[0].id))
     #expect(coordinator.lastError as? SessionCoordinatorError == .unknownSlot)
+  }
+
+  // MARK: - Rest choice
+
+  @Test("Choosing a rest persists it and applies it to the next working set")
+  func choosingRestApplies() throws {
+    let database = try migratedDatabase()
+    let store = LoggerStore(database: database)
+    let exercise = try seedExercise(database)
+    let prefs = InMemoryRestPreferences()
+    let spy = RestSpy()
+    let coordinator = try SessionCoordinator.start(
+      store: store,
+      plan: [PlannedExercise(exerciseID: exercise, exerciseName: "Leg Press", plannedSets: 2)],
+      now: { self.start },
+      restPreferences: prefs,
+      onStartRest: { spy.requests.append(($0, $1)) }
+    )
+    let stateID = coordinator.exercises[0].id
+    #expect(coordinator.restChoices[exercise] == nil)
+
+    coordinator.setRestChoice(.seconds(150), forExercise: stateID)
+    #expect(coordinator.restChoices[exercise] == .seconds(150))
+    #expect(prefs.rest(for: exercise) == .seconds(150))
+
+    coordinator.exercises[0].slots[0].draft = SetEntryDraft(weightKg: 100, reps: 8)
+    #expect(coordinator.logSet(slotID: coordinator.exercises[0].slots[0].id, inExercise: stateID))
+    #expect(spy.requests.map(\.0) == [.seconds(150)])
+    #expect(coordinator.activeRest?.exerciseName == "Leg Press")
+  }
+
+  @Test("A remembered choice is loaded when the session starts")
+  func rememberedChoiceLoads() throws {
+    let database = try migratedDatabase()
+    let store = LoggerStore(database: database)
+    let exercise = try seedExercise(database)
+    let coordinator = try SessionCoordinator.start(
+      store: store,
+      plan: [PlannedExercise(exerciseID: exercise, exerciseName: "Leg Press")],
+      now: { self.start },
+      restPreferences: InMemoryRestPreferences([exercise: .seconds(90)])
+    )
+    #expect(coordinator.restChoices[exercise] == .seconds(90))
+  }
+
+  @Test("A movement added mid-session gets its remembered choice too")
+  func addedExerciseLoadsChoice() throws {
+    let database = try migratedDatabase()
+    let store = LoggerStore(database: database)
+    let first = try seedExercise(database, name: "Leg Press")
+    let second = try seedExercise(database, name: "Leg Curl")
+    let coordinator = try SessionCoordinator.start(
+      store: store,
+      plan: [PlannedExercise(exerciseID: first, exerciseName: "Leg Press")],
+      now: { self.start },
+      restPreferences: InMemoryRestPreferences([second: .seconds(60)])
+    )
+    #expect(coordinator.restChoices[second] == nil)
+    let entry = CatalogEntry(
+      id: second, name: "Leg Curl", slug: "seated-leg-curl", isCurated: true,
+      modality: .machine, primaryMuscle: MuscleKey(.hamstrings),
+      contributions: [.init(.hamstrings, role: .direct, certainty: .moderate, source: .anatomy)]
+    )
+    #expect(coordinator.addExercise(entry))
+    #expect(coordinator.restChoices[second] == .seconds(60))
+  }
+
+  @Test("Two blocks of one movement share one choice")
+  func blocksShareChoice() throws {
+    let database = try migratedDatabase()
+    let store = LoggerStore(database: database)
+    let exercise = try seedExercise(database)
+    let coordinator = try SessionCoordinator.start(
+      store: store,
+      plan: [
+        PlannedExercise(exerciseID: exercise, exerciseName: "Leg Press"),
+        PlannedExercise(exerciseID: exercise, exerciseName: "Leg Press"),
+      ],
+      now: { self.start },
+      restPreferences: InMemoryRestPreferences()
+    )
+    coordinator.setRestChoice(.seconds(120), forExercise: coordinator.exercises[1].id)
+    #expect(coordinator.restChoices[exercise] == .seconds(120))
+  }
+
+  @Test("An out-of-range choice is refused and nothing is stored")
+  func outOfRangeRefused() throws {
+    let database = try migratedDatabase()
+    let store = LoggerStore(database: database)
+    let exercise = try seedExercise(database)
+    let prefs = InMemoryRestPreferences()
+    let coordinator = try SessionCoordinator.start(
+      store: store,
+      plan: [PlannedExercise(exerciseID: exercise, exerciseName: "Leg Press")],
+      now: { self.start },
+      restPreferences: prefs
+    )
+    coordinator.setRestChoice(.seconds(5), forExercise: coordinator.exercises[0].id)
+    #expect(coordinator.restChoices[exercise] == nil)
+    #expect(prefs.rest(for: exercise) == nil)
+  }
+
+  @Test("Starting a rest by hand needs a choice, and records what is resting")
+  func manualStart() throws {
+    let database = try migratedDatabase()
+    let store = LoggerStore(database: database)
+    let exercise = try seedExercise(database)
+    let spy = RestSpy()
+    let coordinator = try SessionCoordinator.start(
+      store: store,
+      plan: [PlannedExercise(exerciseID: exercise, exerciseName: "Leg Press", plannedSets: 3)],
+      now: { self.start },
+      restPreferences: InMemoryRestPreferences(),
+      onStartRest: { spy.requests.append(($0, $1)) }
+    )
+    let stateID = coordinator.exercises[0].id
+    // No choice yet: nothing to start, and nothing invented.
+    #expect(!coordinator.startRest(forExercise: stateID))
+    #expect(spy.requests.isEmpty)
+
+    coordinator.setRestChoice(.seconds(90), forExercise: stateID)
+    #expect(coordinator.startRest(forExercise: stateID))
+    #expect(spy.requests.map(\.0) == [.seconds(90)])
+    #expect(coordinator.activeRest?.exerciseName == "Leg Press")
+
+    coordinator.endRest()
+    #expect(coordinator.activeRest == nil)
+  }
+
+  @Test("A refused write starts no rest and sets no active rest")
+  func refusedWriteNoActiveRest() throws {
+    let database = try migratedDatabase()
+    let store = LoggerStore(database: database)
+    let exercise = try seedExercise(database)
+    let coordinator = try SessionCoordinator.start(
+      store: store,
+      plan: [PlannedExercise(exerciseID: exercise, exerciseName: "Leg Press")],
+      now: { self.start },
+      restPreferences: InMemoryRestPreferences([exercise: .seconds(120)])
+    )
+    let state = coordinator.exercises[0]
+    #expect(!coordinator.logSet(slotID: state.slots[0].id, inExercise: state.id))
+    #expect(coordinator.activeRest == nil)
   }
 
   // MARK: - Finishing

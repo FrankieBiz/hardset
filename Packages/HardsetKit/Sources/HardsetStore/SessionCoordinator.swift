@@ -47,14 +47,14 @@ public final class SessionCoordinator {
 
   private let store: LoggerStore
   private let now: () -> Date
-  private let restAfterSet: Duration?
+  private let restPreferences: any RestPreferenceStore
   private let onStartRest: (Duration, RestMetadata) -> Void
 
   /// - Parameters:
-  ///   - restAfterSet: Rest to request after a working set is logged. `nil` means the app does
-  ///     not start a timer on its own. There is no built-in default: a rest prescription is a
-  ///     training decision, and inventing 90 seconds here would be the app asserting something
-  ///     it has no basis for.
+  ///   - restPreferences: Where the lifter's per-exercise rest choice is remembered. It is read
+  ///     once, here, into `restChoices`. There is no built-in default: a rest prescription is a
+  ///     training decision, and inventing 90 seconds would be the app asserting something it has
+  ///     no basis for, so an exercise with no stored choice starts no timer.
   ///   - onStartRest: Where a rest request goes. Left empty in tests and in previews.
   /// The gym this session is at, when one is known.
   ///
@@ -63,13 +63,19 @@ public final class SessionCoordinator {
   /// database inside the logging path.
   public private(set) var gymID: GymID?
 
+  /// The lifter's rest choice per exercise, loaded once at start so the chip renders without
+  /// touching storage. Two blocks of one movement share an entry — the choice is per exercise.
+  public private(set) var restChoices: [ExerciseID: Duration] = [:]
+  /// What is resting right now, set only after the rest was actually requested.
+  public private(set) var activeRest: RestMetadata?
+
   public init(
     store: LoggerStore,
     sessionID: SessionID,
     exercises: [ExerciseLogState],
     gymID: GymID? = nil,
     now: @escaping () -> Date = { Date() },
-    restAfterSet: Duration? = nil,
+    restPreferences: any RestPreferenceStore = InMemoryRestPreferences(),
     onStartRest: @escaping (Duration, RestMetadata) -> Void = { _, _ in }
   ) {
     self.store = store
@@ -77,8 +83,11 @@ public final class SessionCoordinator {
     self.exercises = exercises
     self.gymID = gymID
     self.now = now
-    self.restAfterSet = restAfterSet
+    self.restPreferences = restPreferences
     self.onStartRest = onStartRest
+    for exercise in exercises {
+      loadRestChoice(for: exercise.exerciseID)
+    }
   }
 
   /// Opens a session and builds its exercise states from one history read.
@@ -91,7 +100,7 @@ public final class SessionCoordinator {
     title: String = "",
     plan: [PlannedExercise],
     now: @escaping () -> Date = { Date() },
-    restAfterSet: Duration? = nil,
+    restPreferences: any RestPreferenceStore = InMemoryRestPreferences(),
     onStartRest: @escaping (Duration, RestMetadata) -> Void = { _, _ in }
   ) throws -> SessionCoordinator {
     let startedAt = now()
@@ -137,7 +146,7 @@ public final class SessionCoordinator {
       exercises: states,
       gymID: gymID,
       now: now,
-      restAfterSet: restAfterSet,
+      restPreferences: restPreferences,
       onStartRest: onStartRest
     )
     coordinator.planRowIDs = rowIDs
@@ -156,7 +165,7 @@ public final class SessionCoordinator {
   public static func resume(
     store: LoggerStore,
     now: @escaping () -> Date = { Date() },
-    restAfterSet: Duration? = nil,
+    restPreferences: any RestPreferenceStore = InMemoryRestPreferences(),
     onStartRest: @escaping (Duration, RestMetadata) -> Void = { _, _ in }
   ) throws -> SessionCoordinator? {
     guard let session = try store.openSession() else { return nil }
@@ -234,7 +243,7 @@ public final class SessionCoordinator {
       // Read back from the session row, so a recovered workout offers the same gym's equipment.
       gymID: session.gymID,
       now: now,
-      restAfterSet: restAfterSet,
+      restPreferences: restPreferences,
       onStartRest: onStartRest
     )
     coordinator.planRowIDs = rowIDs
@@ -280,6 +289,7 @@ public final class SessionCoordinator {
       )
       planRowIDs[state.id] = rowID
       exercises.append(state)
+      loadRestChoice(for: exerciseID)
       lastError = nil
       return true
     } catch {
@@ -364,17 +374,11 @@ public final class SessionCoordinator {
         lastRecords = []
       }
 
-      // Warm-ups do not start a rest timer: the user is still warming up.
-      if let restAfterSet, !slot.isWarmup {
-        onStartRest(
-          restAfterSet,
-          RestMetadata(
-            exerciseName: exercise.exerciseName,
-            setOrdinal: exercises[exerciseIndex].workingOrdinal(ofSlotID: slotID) ?? 1,
-            plannedSets: exercises[exerciseIndex].workingSetCount,
-            machineName: exercise.machineName
-          )
-        )
+      // Rest only if the lifter chose one for this exercise; never after a warm-up.
+      if let rest = RestPlan.restAfterLogging(
+        isWarmup: slot.isWarmup, choice: restChoices[exercise.exerciseID])
+      {
+        requestRest(rest, forExerciseAt: exerciseIndex, slotID: slotID)
       }
       return true
     } catch {
@@ -442,6 +446,59 @@ public final class SessionCoordinator {
     } catch {
       lastError = error
       return false
+    }
+  }
+
+  // MARK: - Rest
+
+  /// Persists the lifter's choice for this movement, or forgets it when `rest` is nil.
+  /// Out-of-range values are refused rather than clamped.
+  public func setRestChoice(_ rest: Duration?, forExercise stateID: UUID) {
+    guard let exercise = exercises.first(where: { $0.id == stateID }) else {
+      lastError = SessionCoordinatorError.unknownExercise
+      return
+    }
+    let validated = rest.flatMap(RestPlan.validated)
+    guard rest == nil || validated != nil else { return }
+    restPreferences.setRest(validated, for: exercise.exerciseID)
+    restChoices[exercise.exerciseID] = validated
+  }
+
+  /// Starts this exercise's chosen rest now. Returns false, and starts nothing, without a choice.
+  @discardableResult
+  public func startRest(forExercise stateID: UUID) -> Bool {
+    guard let index = exercises.firstIndex(where: { $0.id == stateID }),
+      let rest = restChoices[exercises[index].exerciseID]
+    else { return false }
+    requestRest(rest, forExerciseAt: index, slotID: nil)
+    return true
+  }
+
+  /// The rest ended, was skipped, or the workout finished.
+  public func endRest() { activeRest = nil }
+
+  /// The only place `onStartRest` is called, so `activeRest` cannot disagree with what was asked
+  /// of the timer.
+  private func requestRest(_ rest: Duration, forExerciseAt index: Int, slotID: UUID?) {
+    let exercise = exercises[index]
+    let ordinal =
+      slotID.flatMap { exercises[index].workingOrdinal(ofSlotID: $0) }
+      ?? max(1, exercise.slots.filter { $0.isLogged && !$0.isWarmup }.count)
+    let metadata = RestMetadata(
+      exerciseName: exercise.exerciseName,
+      setOrdinal: ordinal,
+      plannedSets: exercises[index].workingSetCount,
+      machineName: exercise.machineName
+    )
+    onStartRest(rest, metadata)
+    activeRest = metadata
+  }
+
+  /// Reads one exercise's remembered choice into memory. Called at start, resume and when a
+  /// movement is added — never per render.
+  private func loadRestChoice(for exerciseID: ExerciseID) {
+    if let rest = restPreferences.rest(for: exerciseID) {
+      restChoices[exerciseID] = rest
     }
   }
 

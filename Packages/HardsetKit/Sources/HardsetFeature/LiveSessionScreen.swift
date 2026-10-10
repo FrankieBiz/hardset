@@ -317,7 +317,7 @@ extension SessionCoordinator {
     gymID: GymID? = nil,
     title: String = "",
     plan: [PlannedExercise],
-    restAfterSet: Duration?,
+    restPreferences: any RestPreferenceStore,
     hooks: RestTimerHooks,
     now: @escaping () -> Date = { Date() }
   ) throws -> SessionCoordinator {
@@ -327,7 +327,7 @@ extension SessionCoordinator {
       title: title,
       plan: plan,
       now: now,
-      restAfterSet: restAfterSet,
+      restPreferences: restPreferences,
       onStartRest: { duration, metadata in hooks.start(duration, metadata) }
     )
   }
