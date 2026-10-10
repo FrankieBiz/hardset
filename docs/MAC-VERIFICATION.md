@@ -27,3 +27,21 @@ the `Hardset` scheme for the iOS 26.4 simulator.
 
 - [ ] (feat(store): remember each exercise's rest…) HardsetFeature and the app build after the
       restAfterSet → restPreferences rename.
+- [ ] (fix(ui): a set row shows what it saves, and a logged row stays locked) HardsetUI builds with
+      `SetRowView` using `.onChange(of: draft)`, `.accessibilityActions` and `WeightFormatter`.
+      In the iOS 26.4 simulator, with a session that has a prefilled row:
+  - [ ] Change machine on that row. The field shows the new machine's prefill, and logging saves
+        that number (confirm in history), not the old one.
+  - [ ] Open the weight pad and type. Digits are never overwritten mid-keystroke.
+  - [ ] Log a set. Tapping its weight and reps fields does nothing, and VoiceOver offers no
+        "Edit weight" or "Edit reps" action on it. Its values stay legible: a disabled plain
+        button may dim them, and if they read too faint, replace `.disabled(isLogged)` with a
+        hit-test guard.
+  - [ ] Type a weight, leave the pad open, then tap the row's check mark. The pad closes.
+  - [ ] VoiceOver on a row says "kilograms" ("pounds" in pounds mode), never "kg" or "lb". The
+        "Last time" caption reads "60 kg × 8" in kilograms mode and "132.28 lb × 8" in pounds mode.
+        A logged row has no hint. A 62.25 kg set reads 62.25, not 62.3 (the old formatter
+        rounded to one decimal).
+  - [ ] Known residual: change machine while the pad is still open. The field keeps what was typed
+        (reseeding is skipped while editing), so note whether the pad can be left showing a
+        value other than the draft that logging will save.

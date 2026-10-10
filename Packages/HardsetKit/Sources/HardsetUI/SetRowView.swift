@@ -106,12 +106,23 @@ public struct SetRowView: View {
     .background(Tokens.Color.surface)
     .accessibilityElement(children: .combine)
     .accessibilityLabel(spokenLabel)
-    .accessibilityHint(draft.isLoggable ? "Double tap to log this set." : "Enter a weight and reps to log.")
+    // A logged row is read-only (see `valueField`), so it has no hint to give.
+    .accessibilityHint(
+      isLogged
+        ? ""
+        : (draft.isLoggable ? "Double tap to log this set." : "Enter a weight and reps to log.")
+    )
     .accessibilityAction(named: Text("Log set")) {
       if draft.isLoggable { onLog() }
     }
-    .accessibilityAction(named: Text("Edit weight")) { editing = .weight }
-    .accessibilityAction(named: Text("Edit reps")) { editing = .reps }
+    // The row is one combined element, so `.disabled` on the field buttons does not reach these.
+    // Left in place on a logged row they would still open the pad and edit an unsaved draft.
+    .accessibilityActions {
+      if !isLogged {
+        Button("Edit weight") { editing = .weight }
+        Button("Edit reps") { editing = .reps }
+      }
+    }
     .sheet(item: $editing) { field in
       padSheet(for: field)
     }
@@ -120,6 +131,14 @@ public struct SetRowView: View {
     // Editing that row would then have written 132.28 kg to storage — a wrong number the user
     // never typed. The draft is canonical kilograms, so reseeding from it is always correct.
     .onChange(of: unit) { reseedBuffers() }
+    // Reseeded when the draft changes from outside, never mid-edit. After a machine change the
+    // coordinator rewrote this row's draft while the field kept the old number, and logging then
+    // saved a value the lifter never saw. While `editing` is set every draft change is this row's
+    // own keystroke (`pushToDraft`), so reseeding then would overwrite what is being typed.
+    .onChange(of: draft) { if editing == nil { reseedBuffers() } }
+    // The pad stays interactive behind the sheet, so a row can be logged with it still open.
+    // Close it, or it would keep editing a row that is now read-only.
+    .onChange(of: isLogged) { if isLogged { editing = nil } }
   }
 
   /// Rebuilds both display buffers from the draft, in the current unit.
@@ -173,6 +192,10 @@ public struct SetRowView: View {
       .contentShape(Rectangle())
     }
     .buttonStyle(.plain)
+    // Editing a logged set changed only the in-memory draft, never the database, so the row showed
+    // a check mark beside an unsaved value. Logged rows are read-only until editing returns
+    // properly in Phase 2 (2.3).
+    .disabled(isLogged)
     .background(
       Tokens.Color.background,
       in: RoundedRectangle(cornerRadius: Tokens.Radius.control)
@@ -226,31 +249,28 @@ public struct SetRowView: View {
     draft.reps = repsBuffer.value.map { Int($0) }
   }
 
+  private var formatter: WeightFormatter { WeightFormatter(unit: unit) }
+
   private var previousDescription: String {
     guard let previous else { return "—" }
-    let weight = unit.fromKilograms(previous.weightKg)
-    return "\(Self.format(weight)) \(unit.abbreviation) × \(previous.reps)"
+    return "\(formatter.load(kilograms: previous.weightKg)) × \(previous.reps)"
   }
 
   private var spokenLabel: String {
     var parts: [String] = [isWarmup ? "Warm-up set" : "Set \(ordinal + 1)"]
     if let weight = weightBuffer.value, let reps = repsBuffer.value {
-      parts.append("\(Self.format(weight)) \(unit.abbreviation), \(Int(reps)) reps")
+      // The buffer holds display units; the formatter takes canonical kilograms.
+      parts.append("\(formatter.spoken(kilograms: unit.toKilograms(weight))), \(Int(reps)) reps")
     } else {
       parts.append("no values entered")
     }
     if let previous {
-      parts.append(
-        "last time \(Self.format(unit.fromKilograms(previous.weightKg))) \(unit.abbreviation) for \(previous.reps)"
-      )
+      let lastLoad = formatter.spoken(kilograms: previous.weightKg)
+      parts.append("last time \(lastLoad) for \(previous.reps)")
     }
     if let priorNote { parts.append(priorNote) }
     if isLogged { parts.append("logged") }
     return parts.joined(separator: ", ")
-  }
-
-  private static func format(_ value: Double) -> String {
-    value == value.rounded() ? String(Int(value)) : String(format: "%.1f", value)
   }
 }
 
