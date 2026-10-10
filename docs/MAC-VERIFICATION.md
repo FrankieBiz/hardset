@@ -17,3 +17,8 @@ the `Hardset` scheme for the iOS 26.4 simulator.
       Expected: no change, since `os(Linux)` is false on macOS.
 - [ ] After the generator re-baseline, Xcode still resolves the `HardsetFeature` package product
       for the app target. Only its object IDs changed.
+
+## Phase 1
+
+- [ ] (feat(core): one weight formatter, so pounds mode stops reading kilograms) HardsetUI builds
+      with ProgressionChartView calling `explanation(in:)`.
