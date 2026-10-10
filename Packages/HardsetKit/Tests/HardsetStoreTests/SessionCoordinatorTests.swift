@@ -332,6 +332,34 @@ struct SessionCoordinatorTests {
     #expect(prefs.rest(for: exercise) == nil)
   }
 
+  @Test("A stored out-of-range choice is not trusted: it shows nothing and starts nothing")
+  func storedOutOfRangeIgnored() throws {
+    let database = try migratedDatabase()
+    let store = LoggerStore(database: database)
+    let exercise = try seedExercise(database)
+    let long = try seedExercise(database, name: "Leg Curl")
+    let spy = RestSpy()
+    let coordinator = try SessionCoordinator.start(
+      store: store,
+      plan: [PlannedExercise(exerciseID: exercise, exerciseName: "Leg Press")],
+      now: { self.start },
+      restPreferences: InMemoryRestPreferences([exercise: .seconds(5), long: .seconds(7200)]),
+      onStartRest: { spy.requests.append(($0, $1)) }
+    )
+    #expect(coordinator.restChoices[exercise] == nil)
+
+    let stateID = coordinator.exercises[0].id
+    coordinator.exercises[0].slots[0].draft = SetEntryDraft(weightKg: 100, reps: 8)
+    #expect(coordinator.logSet(slotID: coordinator.exercises[0].slots[0].id, inExercise: stateID))
+    #expect(spy.requests.isEmpty)
+    #expect(coordinator.activeRest == nil)
+    #expect(!coordinator.startRest(forExercise: stateID))
+
+    // Too long is refused as well, and on the add-mid-session path too.
+    #expect(coordinator.addExercise(exerciseID: long, exerciseName: "Leg Curl"))
+    #expect(coordinator.restChoices[long] == nil)
+  }
+
   @Test("Starting a rest by hand needs a choice, and records what is resting")
   func manualStart() throws {
     let database = try migratedDatabase()
@@ -396,5 +424,23 @@ struct SessionCoordinatorTests {
     #expect(throws: SessionTimelineError.alreadyFinished) {
       try coordinator.finish()
     }
+  }
+
+  @Test("Finishing ends any rest in progress")
+  func finishingEndsRest() throws {
+    let database = try migratedDatabase()
+    let store = LoggerStore(database: database)
+    let exercise = try seedExercise(database)
+    let coordinator = try SessionCoordinator.start(
+      store: store,
+      plan: [PlannedExercise(exerciseID: exercise, exerciseName: "Leg Press")],
+      now: { self.start },
+      restPreferences: InMemoryRestPreferences([exercise: .seconds(90)])
+    )
+    #expect(coordinator.startRest(forExercise: coordinator.exercises[0].id))
+    #expect(coordinator.activeRest != nil)
+
+    try coordinator.finish()
+    #expect(coordinator.activeRest == nil)
   }
 }

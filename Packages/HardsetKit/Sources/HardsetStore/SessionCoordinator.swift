@@ -496,8 +496,12 @@ public final class SessionCoordinator {
 
   /// Reads one exercise's remembered choice into memory. Called at start, resume and when a
   /// movement is added — never per render.
+  ///
+  /// A stored value is validated like a typed one. It can predate the current range, come from
+  /// an older build, or be written by hand, and an out-of-range rest is refused, not clamped, on
+  /// every path in.
   private func loadRestChoice(for exerciseID: ExerciseID) {
-    if let rest = restPreferences.rest(for: exerciseID) {
+    if let rest = restPreferences.rest(for: exerciseID).flatMap(RestPlan.validated) {
       restChoices[exerciseID] = rest
     }
   }
@@ -508,6 +512,8 @@ public final class SessionCoordinator {
   public func finish() throws {
     try store.finishSession(sessionID, at: now())
     isFinished = true
+    // After the write, like every other claim here: a rest must not outlive the workout.
+    endRest()
   }
 
   public var loggedSetCount: Int {
