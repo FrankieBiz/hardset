@@ -30,6 +30,7 @@ public struct MachinePickerView: View {
   private let recent: [MachineOption]
   private let others: [MachineOption]
   private let selected: MachineID?
+  private let unit: WeightUnit
   private let onSelect: (MachineID?) -> Void
   private let onAddMachine: (() -> Void)?
 
@@ -37,12 +38,14 @@ public struct MachinePickerView: View {
     recent: [MachineOption],
     others: [MachineOption] = [],
     selected: MachineID?,
+    unit: WeightUnit,
     onSelect: @escaping (MachineID?) -> Void,
     onAddMachine: (() -> Void)? = nil
   ) {
     self.recent = recent
     self.others = others
     self.selected = selected
+    self.unit = unit
     self.onSelect = onSelect
     self.onAddMachine = onAddMachine
   }
@@ -107,7 +110,7 @@ public struct MachinePickerView: View {
             .foregroundStyle(Tokens.Color.textPrimary)
           if let increment = option.stackIncrementKg {
             // Stated because it constrains what a progression suggestion may propose.
-            Text("moves in \(Self.format(increment)) kg steps")
+            Text("moves in \(WeightFormatter(unit: unit).load(kilograms: increment)) steps")
               .font(Tokens.Text.caption)
               .foregroundStyle(Tokens.Color.textSecondary)
           }
@@ -127,10 +130,6 @@ public struct MachinePickerView: View {
       selected == option.id ? "\(option.displayName), selected" : option.displayName
     )
   }
-
-  static func format(_ value: Double) -> String {
-    value == value.rounded() ? String(Int(value)) : String(format: "%.1f", value)
-  }
 }
 
 #if DEBUG
@@ -148,6 +147,7 @@ public struct MachinePickerView: View {
         ],
         others: [MachineOption(id: panatta, displayName: "Panatta Leg Press")],
         selected: selected,
+        unit: .kilograms,
         onSelect: { selected = $0 },
         onAddMachine: {}
       )

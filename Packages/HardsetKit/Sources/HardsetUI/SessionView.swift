@@ -82,7 +82,7 @@ public struct SessionView: View {
                 VStack(alignment: .leading, spacing: 0) {
                   Text(record.kind.label)
                     .font(Tokens.Text.label.weight(.semibold))
-                  Text(Self.describe(record))
+                  Text(Self.describe(record, unit: unit))
                     .font(Tokens.Text.caption)
                     .foregroundStyle(Tokens.Color.textSecondary)
                 }
@@ -158,30 +158,34 @@ public struct SessionView: View {
     }
   }
 
-  /// Spells out the comparison. An estimated-1RM record says it is an estimate, because
-  /// guideline 1.4.1 is about not presenting an estimate as a measurement.
-  static func describe(_ record: PersonalRecord) -> String {
+  /// Spells out the comparison. An estimated-1RM record says it is an estimate, and states the new
+  /// estimate as well as the old one, because guideline 1.4.1 is about not presenting an estimate
+  /// as a measurement and "up from about 80 kg" alone never said what it was up to.
+  static func describe(_ record: PersonalRecord, unit: WeightUnit) -> String {
+    let f = WeightFormatter(unit: unit)
     switch record.kind {
     case .heaviestLoad:
       if let previous = record.previousWeightKg {
-        return "\(Self.trim(record.weightKg)) kg, up from \(Self.trim(previous)) kg"
+        return "\(f.load(kilograms: record.weightKg)), up from \(f.load(kilograms: previous))"
       }
-      return "\(Self.trim(record.weightKg)) kg"
+      return f.load(kilograms: record.weightKg)
     case .repsAtLoad:
+      let reps = CountText.reps(record.reps)
       if let previousReps = record.previousReps {
-        return "\(record.reps) reps at \(Self.trim(record.weightKg)) kg, up from \(previousReps)"
+        return "\(reps) at \(f.load(kilograms: record.weightKg)), up from \(previousReps)"
       }
-      return "\(record.reps) reps at \(Self.trim(record.weightKg)) kg"
+      return "\(reps) at \(f.load(kilograms: record.weightKg))"
     case .estimatedOneRepMax:
+      // The record carries the set that earned it. For this kind `previousWeightKg` is the
+      // previous best estimate rather than a lifted weight, so the new estimate is derived here
+      // from the same function the detector used.
+      let estimate = StrengthMath.estimatedOneRepMax(weightKg: record.weightKg, reps: record.reps)
+      guard let newEstimate = estimate.value else { return "estimated" }
       if let previous = record.previousWeightKg {
-        return "estimated, up from about \(Self.trim(previous)) kg"
+        return "\(f.estimate(kilograms: newEstimate)), up from \(f.estimate(kilograms: previous))"
       }
-      return "estimated"
+      return f.estimate(kilograms: newEstimate)
     }
-  }
-
-  static func trim(_ value: Double) -> String {
-    value == value.rounded() ? String(Int(value)) : String(format: "%.1f", value)
   }
 
   private var summary: some View {
@@ -212,13 +216,9 @@ public struct SessionView: View {
   private var volumeDescription: String {
     let volume = SessionVolume(exercises: exercises)
     guard !volume.isEmpty else { return "No sets logged yet" }
-    let displayed = unit.fromKilograms(volume.volumeKg)
-    var parts = [
-      volume.workingSets == 1 ? "1 set" : "\(volume.workingSets) sets",
-      volume.reps == 1 ? "1 rep" : "\(volume.reps) reps",
-    ]
+    var parts = [CountText.sets(volume.workingSets), CountText.reps(volume.reps)]
     if volume.volumeKg > 0 {
-      parts.append("\(Int(displayed.rounded())) \(unit.abbreviation) volume")
+      parts.append("\(WeightFormatter(unit: unit).load(kilograms: volume.volumeKg)) volume")
     }
     if volume.warmupSets > 0 { parts.append("\(volume.warmupSets) warm-up") }
     return parts.joined(separator: " · ")

@@ -45,3 +45,21 @@ the `Hardset` scheme for the iOS 26.4 simulator.
   - [ ] Known residual: change machine while the pad is still open. The field keeps what was typed
         (reseeding is skipped while editing), so note whether the pad can be left showing a
         value other than the draft that logging will save.
+- [ ] (fix(ui): weights and counts read in the chosen unit, and "This week" says "Last 7 days")
+      HardsetUI and HardsetFeature build with `MachinePickerView(unit:)` (no default, so the
+      `LiveSessionScreen` call site and the preview must both pass it),
+      `SessionView.describe(_:unit:)` using `WeightFormatter`, `CountText` and `StrengthMath`, and
+      `HistoryView.volumeText`. In the iOS 26.4 simulator with Settings set to lb:
+  - [ ] Log a set that earns each record kind. The PR banner reads in lb: "N lb, up from M lb",
+        "N reps at W lb, up from P", and for an estimated 1RM "about X lb, up from about Y lb"
+        (the new estimate is now stated; lb rounds to a whole pound, kg to 0.5 kg).
+  - [ ] Open the machine picker from a machine chip. A machine with a known stack step reads
+        "moves in N lb steps" (a 10 kg stack shows as 22.05 lb), and the chip on the session
+        screen reads "· N lb steps". Nothing on the session screen says "kg" in lb mode.
+  - [ ] The session footer reads "1 set · 1 rep · N lb volume" with the right plurals, and a
+        History row reads "1 set · N reps · W lb" (never "1 sets"). Volume now shows up to two
+        decimals where it used to be a whole number; confirm "20723.24 lb" reads acceptably.
+  - [ ] Weekly volume screen: the empty state ("Nothing logged in the last 7 days"), the header
+        ("N working sets in the last 7 days") and both captions say "the last 7 days". Known
+        residual outside this task's files: the tab's navigation title (`HardsetRootView`) and
+        the error label in `WeeklyVolumeScreen` still say "this week".

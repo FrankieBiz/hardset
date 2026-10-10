@@ -129,10 +129,9 @@ public struct HistoryView: View {
 
   static func volumeText(_ volume: SessionVolume, unit: WeightUnit) -> String {
     guard !volume.isEmpty else { return "No sets" }
-    var parts = ["\(volume.workingSets) sets", "\(volume.reps) reps"]
+    var parts = [CountText.sets(volume.workingSets), CountText.reps(volume.reps)]
     if volume.volumeKg > 0 {
-      let displayed = unit.fromKilograms(volume.volumeKg)
-      parts.append("\(Int(displayed.rounded())) \(unit.abbreviation)")
+      parts.append(WeightFormatter(unit: unit).load(kilograms: volume.volumeKg))
     }
     if volume.warmupSets > 0 { parts.append("\(volume.warmupSets) warm-up") }
     return parts.joined(separator: " · ")

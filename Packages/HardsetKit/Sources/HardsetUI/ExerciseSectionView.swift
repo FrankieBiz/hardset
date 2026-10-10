@@ -124,7 +124,7 @@ public struct ExerciseSectionView: View {
         Text(state.machineName ?? "Choose machine")
         if let increment = state.machineIncrementKg {
           // Shown because it is the constraint on what a suggestion may propose.
-          Text("· \(Self.format(increment)) kg steps")
+          Text("· \(WeightFormatter(unit: unit).load(kilograms: increment)) steps")
         }
       }
       .font(Tokens.Text.caption)
@@ -138,10 +138,6 @@ public struct ExerciseSectionView: View {
     .accessibilityLabel(
       state.machineName.map { "Machine: \($0). Change." } ?? "No machine recorded. Choose one."
     )
-  }
-
-  static func format(_ value: Double) -> String {
-    value == value.rounded() ? String(Int(value)) : String(format: "%.1f", value)
   }
 
   private var addSetButton: some View {

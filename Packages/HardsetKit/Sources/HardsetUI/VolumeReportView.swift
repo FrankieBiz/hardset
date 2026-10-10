@@ -1,7 +1,7 @@
 import HardsetCore
 import SwiftUI
 
-/// Sets per muscle for a week.
+/// Sets per muscle over the last 7 days.
 ///
 /// The hard constraint on this screen: **there are no targets.** No per-muscle weekly set target
 /// is established for any muscle, so there is nothing to draw a goal line against and nothing to
@@ -33,7 +33,7 @@ public struct VolumeReportView: View {
         header
         if report.hardSets == 0 {
           ContentUnavailableView {
-            Label("Nothing logged this week", systemImage: "chart.bar")
+            Label("Nothing logged in the last 7 days", systemImage: "chart.bar")
           } description: {
             Text("Sets per muscle appear here once you log a workout.")
           }
@@ -51,7 +51,7 @@ public struct VolumeReportView: View {
 
   private var header: some View {
     VStack(alignment: .leading, spacing: Tokens.Spacing.snug) {
-      Text("^[\(report.hardSets) working set](inflect: true) this week")
+      Text("^[\(report.hardSets) working set](inflect: true) in the last 7 days")
         .font(Tokens.Text.readout)
         .monospacedDigit()
 
@@ -97,7 +97,7 @@ public struct VolumeReportView: View {
 
       // No goal line, so the scale is the report's own maximum. Stated in the caption rather than
       // left for the user to assume it means something absolute.
-      Text("Bars are relative to your biggest muscle this week. There is no target line, because no weekly set target is established.")
+      Text("Bars are relative to your biggest muscle in the last 7 days. There is no target line, because no weekly set target is established.")
         .font(Tokens.Text.caption)
         .foregroundStyle(Tokens.Color.textSecondary)
 
@@ -170,7 +170,7 @@ public struct VolumeReportView: View {
           Text("Nothing logged for")
             .font(Tokens.Text.label.weight(.semibold))
           // A gap is a fact, not a verdict. No "you should", no red.
-          Text("These had no sets this week. Whether that matters depends on your plan.")
+          Text("These had no sets in the last 7 days. Whether that matters depends on your plan.")
             .font(Tokens.Text.caption)
             .foregroundStyle(Tokens.Color.textSecondary)
 

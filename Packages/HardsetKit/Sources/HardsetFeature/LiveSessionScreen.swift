@@ -142,6 +142,7 @@ public struct LiveSessionScreen: View {
           recent: machineOptions.recent,
           others: machineOptions.others,
           selected: coordinator.exercises.first { $0.id == target }?.machineID,
+          unit: unit,
           onSelect: { machineID in
             selectMachine(machineID, forExercise: target)
             machineTarget = nil
