@@ -15,3 +15,5 @@ the `Hardset` scheme for the iOS 26.4 simulator.
       run there.
 - [ ] `Hardset.xcodeproj` opens and the app builds after the manifest became conditional.
       Expected: no change, since `os(Linux)` is false on macOS.
+- [ ] After the generator re-baseline, Xcode still resolves the `HardsetFeature` package product
+      for the app target. Only its object IDs changed.
