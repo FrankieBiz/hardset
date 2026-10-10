@@ -218,7 +218,7 @@ public struct SessionView: View {
     guard !volume.isEmpty else { return "No sets logged yet" }
     var parts = [CountText.sets(volume.workingSets), CountText.reps(volume.reps)]
     if volume.volumeKg > 0 {
-      parts.append("\(WeightFormatter(unit: unit).load(kilograms: volume.volumeKg)) volume")
+      parts.append("\(WeightFormatter(unit: unit).total(kilograms: volume.volumeKg)) volume")
     }
     if volume.warmupSets > 0 { parts.append("\(volume.warmupSets) warm-up") }
     return parts.joined(separator: " · ")

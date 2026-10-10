@@ -38,6 +38,35 @@ struct WeightFormatterTests {
     #expect(f.number(kilograms: WeightUnit.pounds.toKilograms(1100)) == "1100")
   }
 
+  @Test("A total is a whole number in the lifter's unit")
+  func totals() {
+    let kg = WeightFormatter(unit: .kilograms, locale: posix)
+    let lb = WeightFormatter(unit: .pounds, locale: posix)
+    #expect(kg.total(kilograms: 9400) == "9400 kg")
+    #expect(kg.total(kilograms: 9400.4) == "9400 kg")
+    // 9400 kg is 20723.45 lb: converted, then rounded, never "kg".
+    #expect(lb.total(kilograms: 9400) == "20723 lb")
+    #expect(lb.total(kilograms: 1000) == "2205 lb")
+    #expect(!lb.total(kilograms: 9400).contains("kg"))
+  }
+
+  @Test("A total rounds halves up, not to even")
+  func totalRoundsHalvesUp() {
+    let kg = WeightFormatter(unit: .kilograms, locale: posix)
+    #expect(kg.total(kilograms: 9400.5) == "9401 kg")
+    #expect(kg.total(kilograms: 2.5) == "3 kg")
+    #expect(kg.total(kilograms: 0.5) == "1 kg")
+  }
+
+  @Test("A whole-number total has no stray separator in any locale")
+  func totalHasNoSeparator() {
+    let f = WeightFormatter(unit: .kilograms, locale: german)
+    #expect(f.total(kilograms: 12_345) == "12345 kg")
+    #expect(f.total(kilograms: 9400.4) == "9400 kg")
+    #expect(!f.total(kilograms: 12_345.4).contains(","))
+    #expect(!f.total(kilograms: 12_345.4).contains("."))
+  }
+
   @Test("Estimates round to display precision and say they are estimates")
   func estimates() {
     #expect(WeightFormatter(unit: .kilograms, locale: posix).estimate(kilograms: 80.26) == "about 80.5 kg")

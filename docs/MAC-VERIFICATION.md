@@ -57,8 +57,8 @@ the `Hardset` scheme for the iOS 26.4 simulator.
         "moves in N lb steps" (a 10 kg stack shows as 22.05 lb), and the chip on the session
         screen reads "· N lb steps". Nothing on the session screen says "kg" in lb mode.
   - [ ] The session footer reads "1 set · 1 rep · N lb volume" with the right plurals, and a
-        History row reads "1 set · N reps · W lb" (never "1 sets"). Volume now shows up to two
-        decimals where it used to be a whole number; confirm "20723.24 lb" reads acceptably.
+        History row reads "1 set · N reps · W lb" (never "1 sets"). Volumes are whole numbers in
+        the chosen unit ("20723 lb", "9400 kg"), never "20723.45 lb".
   - [ ] Weekly volume screen: the empty state ("Nothing logged in the last 7 days"), the header
         ("N working sets in the last 7 days") and both captions say "the last 7 days". Known
         residual outside this task's files: the tab's navigation title (`HardsetRootView`) and

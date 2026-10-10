@@ -131,7 +131,7 @@ public struct HistoryView: View {
     guard !volume.isEmpty else { return "No sets" }
     var parts = [CountText.sets(volume.workingSets), CountText.reps(volume.reps)]
     if volume.volumeKg > 0 {
-      parts.append(WeightFormatter(unit: unit).load(kilograms: volume.volumeKg))
+      parts.append(WeightFormatter(unit: unit).total(kilograms: volume.volumeKg))
     }
     if volume.warmupSets > 0 { parts.append("\(volume.warmupSets) warm-up") }
     return parts.joined(separator: " · ")

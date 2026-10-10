@@ -24,6 +24,13 @@ public struct WeightFormatter: Hashable, Sendable {
     Self.text(unit.fromKilograms(kilograms), fractionDigits: 2, locale: locale)
   }
 
+  /// A sum of loads, such as a session's or a period's volume: "20723 lb". A whole number, because
+  /// two decimals on a total implies a precision nobody reads or trusts. Halves round up.
+  public func total(kilograms: Double) -> String {
+    let rounded = unit.fromKilograms(kilograms).rounded()
+    return "\(Self.text(rounded, fractionDigits: 0, locale: locale)) \(unit.abbreviation)"
+  }
+
   /// A derived load: "about 80.5 kg". Rounded to display precision, because an estimate shown to
   /// 10 g reads as a measurement (guideline 1.4.1).
   public func estimate(kilograms: Double) -> String {
