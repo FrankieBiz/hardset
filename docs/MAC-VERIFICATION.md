@@ -63,3 +63,39 @@ the `Hardset` scheme for the iOS 26.4 simulator.
         ("N working sets in the last 7 days") and both captions say "the last 7 days". Known
         residual outside this task's files: the tab's navigation title (`HardsetRootView`) and
         the error label in `WeeklyVolumeScreen` still say "this week".
+- [ ] (feat(ui): a rest chip per exercise, with presets, a custom time and Off) HardsetUI builds
+      with `ExerciseSectionView(restChoice:onChooseRest:onStartRest:)` and
+      `SessionView(restChoices:onChooseRest:onStartRest:)`. The new inputs all default, so
+      `LiveSessionScreen` is unchanged and must still compile; nothing passes them until Task 11,
+      so on the shipped screen the chip is hidden. New APIs: `Menu`, `ViewThatFits`,
+      `accessibilityAddTraits(.isSelected)`, `labelsHidden()`, `sheet(isPresented:)`, and a `Picker`
+      with `.pickerStyle(.wheel)` behind `#if os(iOS)`. Also run the macOS host build, because
+      `.wheel` does not exist there. Check in the Xcode previews first ("Exercise section" and
+      "Live session" both pass the rest inputs), then in the iOS 26.4 simulator once Task 11 is in:
+  - [ ] A fresh exercise's chip reads "Rest · Off", in the same font, colour and 44 pt height as
+        the machine chip. Open it: 1:00, 1:30, 2:00, 3:00, 4:00, 5:00 and "Custom…", and no check
+        mark on any of them. "Off" and "Start rest now" are absent.
+  - [ ] Choose 2:00. The chip reads "Rest · 2:00" in the accent colour. Reopen it: 2:00 has a
+        check mark and the others do not, and "Off" and "Start rest now" (below a divider) appear.
+        The check mark must be drawn by `Label(systemImage: "checkmark")` inside a menu `Button`;
+        if the menu draws it oddly or not at all, fall back to a `Picker` with `.pickerStyle(.inline)`
+        and tags wrapped in `Optional`, and confirm nothing is selected while the choice is nil.
+  - [ ] "Custom…" opens a sheet with minutes and seconds wheels, at 0:00 with "Set" disabled on a
+        fresh exercise, and at the current rest otherwise. The two wheels scroll independently
+        (known SwiftUI hazard: wheel pickers in an `HStack` can overlap each other's touch area;
+        if so, add `.compositingGroup().clipped()` to each). 0:10 and 30:30 leave "Set" disabled;
+        0:15, 2:15 and 30:00 enable it. Confirming 2:15 makes the chip read "Rest · 2:15" and no
+        preset is checked. Cancel changes nothing. The "Between 0:15 and 30:00." note is always
+        visible.
+  - [ ] Choose "Off". The chip reads "Rest · Off" again, no preset is checked, and "Start rest now"
+        is gone.
+  - [ ] VoiceOver on the chip reads "Rest after each set, off" or "..., 2:00" (never "Rest · Off").
+        Inside the open menu the checked preset is announced as selected; if it is not, the chip's
+        own label still carries the current value, so note it as a known gap.
+  - [ ] With a long machine name, or at the largest Dynamic Type size, the machine chip and rest
+        chip stack vertically instead of truncating. With no gym (no machine chip) the rest chip
+        shows alone. With the custom sheet open, rotating the device does not dismiss it.
+  - [ ] Once Task 11 wires it: choosing 2:00 then logging a working set starts a 2:00 rest and the
+        bar shows "Exercise · Set N of M" (`RestBarView` already renders `RestMetadata`, so this
+        needed no change). A warm-up starts nothing. "Start rest now" starts the chosen rest.
+        Relaunching the app keeps the chip at 2:00.

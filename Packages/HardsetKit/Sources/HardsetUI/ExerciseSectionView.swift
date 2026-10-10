@@ -16,22 +16,38 @@ public struct ExerciseSectionView: View {
   private let onLogSet: (SetSlot) -> Void
   private let onSelectMachine: (() -> Void)?
   private let onShowHistory: (() -> Void)?
+  private let restChoice: Duration?
+  private let onChooseRest: ((Duration?) -> Void)?
+  private let onStartRest: (() -> Void)?
+
+  @State private var isChoosingCustomRest = false
 
   /// - Parameter onSelectMachine: Opens the machine picker. Passing `nil` hides the chip, which is
   ///   correct when no gym is known — an affordance that opens an empty list is worse than none.
   /// - Parameter onShowHistory: Opens this movement's load history. `nil` leaves the name inert.
+  /// - Parameter restChoice: The rest the lifter chose for this exercise, or `nil` for none. There
+  ///   is no default rest, so `nil` reads "Off" and no preset is shown as selected.
+  /// - Parameter onChooseRest: Reports a rest chosen from the menu, or `nil` for Off. Passing `nil`
+  ///   hides the rest chip, as `onSelectMachine` does for the machine chip.
+  /// - Parameter onStartRest: Starts the chosen rest now. `nil` leaves "Start rest now" out.
   public init(
     state: Binding<ExerciseLogState>,
     unit: WeightUnit,
     onLogSet: @escaping (SetSlot) -> Void,
     onSelectMachine: (() -> Void)? = nil,
-    onShowHistory: (() -> Void)? = nil
+    onShowHistory: (() -> Void)? = nil,
+    restChoice: Duration? = nil,
+    onChooseRest: ((Duration?) -> Void)? = nil,
+    onStartRest: (() -> Void)? = nil
   ) {
     self._state = state
     self.unit = unit
     self.onLogSet = onLogSet
     self.onSelectMachine = onSelectMachine
     self.onShowHistory = onShowHistory
+    self.restChoice = restChoice
+    self.onChooseRest = onChooseRest
+    self.onStartRest = onStartRest
   }
 
   public var body: some View {
@@ -94,8 +110,8 @@ public struct ExerciseSectionView: View {
           .foregroundStyle(Tokens.Color.textSecondary)
           .monospacedDigit()
       }
-      if let onSelectMachine {
-        machineChip(action: onSelectMachine)
+      if onSelectMachine != nil || onChooseRest != nil {
+        chipRow
       }
       if let note = state.priorNote {
         // Stated as a caveat about where the numbers came from, in words, once.
@@ -106,6 +122,36 @@ public struct ExerciseSectionView: View {
       }
     }
     .padding(.horizontal, Tokens.Spacing.regular)
+    // Attached to the header rather than to the chip, so the sheet's anchor survives the chip row
+    // switching layout (see `chipRow`) while the sheet is up.
+    .sheet(isPresented: $isChoosingCustomRest) {
+      RestCustomSheet(
+        initial: restChoice,
+        onConfirm: { duration in
+          onChooseRest?(duration)
+          isChoosingCustomRest = false
+        },
+        onCancel: { isChoosingCustomRest = false }
+      )
+    }
+  }
+
+  /// The machine chip and the rest chip, side by side when they fit and stacked when they do not —
+  /// a long machine name or a large Dynamic Type size would otherwise truncate one of them.
+  private var chipRow: some View {
+    ViewThatFits(in: .horizontal) {
+      HStack(spacing: Tokens.Spacing.loose) { chips }
+      VStack(alignment: .leading, spacing: 0) { chips }
+    }
+  }
+
+  @ViewBuilder private var chips: some View {
+    if let onSelectMachine {
+      machineChip(action: onSelectMachine)
+    }
+    if let onChooseRest {
+      restChip(onChoose: onChooseRest)
+    }
   }
 
   /// Where per-machine tracking is actually reached.
@@ -138,6 +184,49 @@ public struct ExerciseSectionView: View {
     .accessibilityLabel(
       state.machineName.map { "Machine: \($0). Change." } ?? "No machine recorded. Choose one."
     )
+  }
+
+  /// Where an exercise's rest is chosen. It sits beside the machine chip for the same reason the
+  /// machine chip sits here: the lifter decides how long to rest while standing at the exercise,
+  /// not on a settings screen.
+  ///
+  /// There is no default. With no choice the chip reads "Rest · Off" and no preset carries a
+  /// check mark. The presets are plain buttons marking the current one, rather than a `Picker`
+  /// bound to `restChoice`: a picker needs a tag for the `nil` selection, and what it does with
+  /// none is not documented, so "nothing selected" would rest on behaviour nobody here can check.
+  /// Here a preset is marked only when `restChoice == preset`, which is `false` for `nil`.
+  private func restChip(onChoose: @escaping (Duration?) -> Void) -> some View {
+    Menu {
+      ForEach(RestPlan.presets, id: \.self) { preset in
+        Button {
+          onChoose(preset)
+        } label: {
+          if restChoice == preset {
+            Label(preset.clockString, systemImage: "checkmark")
+          } else {
+            Text(preset.clockString)
+          }
+        }
+        .accessibilityAddTraits(restChoice == preset ? .isSelected : [])
+      }
+      Button("Custom…") { isChoosingCustomRest = true }
+      if restChoice != nil {
+        Button("Off") { onChoose(nil) }
+        if let onStartRest {
+          Divider()
+          Button("Start rest now", action: onStartRest)
+        }
+      }
+    } label: {
+      Label("Rest · \(RestPlan.label(for: restChoice))", systemImage: "timer")
+        .font(Tokens.Text.caption)
+        .foregroundStyle(
+          restChoice == nil ? Tokens.Color.textSecondary : Tokens.Color.accent
+        )
+        .frame(minHeight: Tokens.minimumTapTarget, alignment: .leading)
+        .contentShape(Rectangle())
+    }
+    .accessibilityLabel("Rest after each set, \(restChoice?.clockString ?? "off")")
   }
 
   private var addSetButton: some View {
@@ -178,10 +267,97 @@ public struct ExerciseSectionView: View {
   }
 }
 
+/// Asks for a rest length the presets do not cover, on minutes and seconds wheels.
+///
+/// It opens at the exercise's current rest, and at 0:00 when there is none. 0:00 is out of range on
+/// purpose: with no rest chosen there is no honest number to start from, so Set stays disabled
+/// until the lifter turns a wheel to a valid time. A time outside `RestPlan.allowedRange` is
+/// refused, by the same `RestPlan.validated` the coordinator applies, and never clamped into range
+/// — a typo must not become a different rest.
+private struct RestCustomSheet: View {
+  private static let maxMinutes = Int(RestPlan.allowedRange.upperBound.seconds) / 60
+
+  private let onConfirm: (Duration) -> Void
+  private let onCancel: () -> Void
+
+  @State private var minutes: Int
+  @State private var seconds: Int
+
+  init(
+    initial: Duration?,
+    onConfirm: @escaping (Duration) -> Void,
+    onCancel: @escaping () -> Void
+  ) {
+    let start = initial.flatMap { RestPlan.validated($0) }.map { Int($0.seconds.rounded()) } ?? 0
+    self._minutes = State(initialValue: start / 60)
+    self._seconds = State(initialValue: start % 60)
+    self.onConfirm = onConfirm
+    self.onCancel = onCancel
+  }
+
+  private var validChoice: Duration? {
+    RestPlan.validated(.seconds(minutes * 60 + seconds))
+  }
+
+  /// Always shown, so a disabled Set never leaves the lifter guessing why.
+  private var rangeNote: String {
+    let range = RestPlan.allowedRange
+    return "Between \(range.lowerBound.clockString) and \(range.upperBound.clockString)."
+  }
+
+  var body: some View {
+    NavigationStack {
+      VStack(spacing: Tokens.Spacing.regular) {
+        HStack(spacing: 0) {
+          wheel("Minutes", suffix: "min", range: 0...Self.maxMinutes, selection: $minutes)
+          wheel("Seconds", suffix: "sec", range: 0...59, selection: $seconds)
+        }
+        Text(rangeNote)
+          .font(Tokens.Text.caption)
+          .foregroundStyle(Tokens.Color.textSecondary)
+      }
+      .padding(.horizontal, Tokens.Spacing.regular)
+      .navigationTitle("Custom rest")
+      .toolbar {
+        ToolbarItem(placement: .cancellationAction) {
+          Button("Cancel", action: onCancel)
+        }
+        ToolbarItem(placement: .confirmationAction) {
+          Button("Set", action: confirm)
+            .disabled(validChoice == nil)
+        }
+      }
+    }
+    .presentationDetents([.medium])
+  }
+
+  private func wheel(
+    _ title: String, suffix: String, range: ClosedRange<Int>, selection: Binding<Int>
+  ) -> some View {
+    Picker(title, selection: selection) {
+      ForEach(range, id: \.self) { value in
+        Text("\(value) \(suffix)").tag(value)
+      }
+    }
+    .labelsHidden()
+    // The wheel style does not exist on macOS, where the host test suite builds this target.
+    #if os(iOS)
+      .pickerStyle(.wheel)
+    #endif
+    .frame(maxWidth: .infinity)
+  }
+
+  private func confirm() {
+    guard let validChoice else { return }
+    onConfirm(validChoice)
+  }
+}
+
 #if DEBUG
   #Preview("Exercise section") {
     struct Harness: View {
       @State private var state: ExerciseLogState
+      @State private var rest: Duration?
 
       init() {
         let exercise = ExerciseID()
@@ -209,10 +385,17 @@ public struct ExerciseSectionView: View {
 
       var body: some View {
         ScrollView {
-          ExerciseSectionView(state: $state, unit: .kilograms) { slot in
-            // Stands in for the store write.
-            state.markLogged(slotID: slot.id, setID: SetID())
-          }
+          ExerciseSectionView(
+            state: $state,
+            unit: .kilograms,
+            onLogSet: { slot in
+              // Stands in for the store write.
+              state.markLogged(slotID: slot.id, setID: SetID())
+            },
+            restChoice: rest,
+            onChooseRest: { rest = $0 },
+            onStartRest: {}
+          )
         }
         .background(Tokens.Color.background)
       }

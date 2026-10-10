@@ -25,8 +25,16 @@ public struct SessionView: View {
   private let onAddExercise: (() -> Void)?
   private let onSelectMachine: ((UUID) -> Void)?
   private let onShowHistory: ((UUID) -> Void)?
+  private let restChoices: [ExerciseID: Duration]
+  private let onChooseRest: ((UUID, Duration?) -> Void)?
+  private let onStartRest: ((UUID) -> Void)?
   private let onFinish: () -> Void
 
+  /// - Parameter restChoices: Each exercise's chosen rest. An exercise with no entry has no rest,
+  ///   and its chip reads "Off" — there is no default.
+  /// - Parameter onChooseRest: Reports a rest chosen for an exercise (by its state id), or `nil`
+  ///   for Off. Passing `nil` hides the rest chips.
+  /// - Parameter onStartRest: Starts an exercise's chosen rest now.
   public init(
     exercises: Binding<[ExerciseLogState]>,
     unit: WeightUnit,
@@ -41,6 +49,9 @@ public struct SessionView: View {
     onAddExercise: (() -> Void)? = nil,
     onSelectMachine: ((UUID) -> Void)? = nil,
     onShowHistory: ((UUID) -> Void)? = nil,
+    restChoices: [ExerciseID: Duration] = [:],
+    onChooseRest: ((UUID, Duration?) -> Void)? = nil,
+    onStartRest: ((UUID) -> Void)? = nil,
     onFinish: @escaping () -> Void = {}
   ) {
     self._exercises = exercises
@@ -56,6 +67,9 @@ public struct SessionView: View {
     self.onAddExercise = onAddExercise
     self.onSelectMachine = onSelectMachine
     self.onShowHistory = onShowHistory
+    self.restChoices = restChoices
+    self.onChooseRest = onChooseRest
+    self.onStartRest = onStartRest
     self.onFinish = onFinish
   }
 
@@ -109,6 +123,13 @@ public struct SessionView: View {
             },
             onShowHistory: onShowHistory.map { show in
               { show(exercise.id) }
+            },
+            restChoice: restChoices[exercise.exerciseID],
+            onChooseRest: onChooseRest.map { choose in
+              { choice in choose(exercise.id, choice) }
+            },
+            onStartRest: onStartRest.map { start in
+              { start(exercise.id) }
             }
           )
           .background(Tokens.Color.surface.opacity(0.4), in: RoundedRectangle(cornerRadius: Tokens.Radius.card))
@@ -229,6 +250,7 @@ public struct SessionView: View {
   #Preview("Live session") {
     struct Harness: View {
       @State private var exercises: [ExerciseLogState]
+      @State private var restChoices: [ExerciseID: Duration] = [:]
 
       init() {
         let press = ExerciseID()
@@ -269,7 +291,13 @@ public struct SessionView: View {
           onLogSet: { stateID, slot in
             guard let index = exercises.firstIndex(where: { $0.id == stateID }) else { return }
             exercises[index].markLogged(slotID: slot.id, setID: SetID())
-          }
+          },
+          restChoices: restChoices,
+          onChooseRest: { stateID, choice in
+            guard let exercise = exercises.first(where: { $0.id == stateID }) else { return }
+            restChoices[exercise.exerciseID] = choice
+          },
+          onStartRest: { _ in }
         )
       }
     }
