@@ -73,15 +73,19 @@ current tip of `FrankieBiz/porgy`. They merge back one at a time, rebased on the
 | 5 Rest timer persistence | Store/RestTimerStore.swift, StoreTests/RestTimerStoreTests.swift | 2 |
 | 6 Failure copy | Store/FailureCopy.swift, StoreTests/FailureCopyTests.swift | — |
 | 9 Set row: displayed = saved, logged = locked | UI/SetRowView.swift | — |
-| 4 Rest preferences and coordinator | Store/RestPreferences.swift, Store/SessionCoordinator.swift, StoreTests/RestPreferencesTests.swift, StoreTests/SessionCoordinatorTests.swift | 1 |
+| 4 Rest preferences and coordinator | Store/RestPreferences.swift, Store/SessionCoordinator.swift, StoreTests/RestPreferencesTests.swift, StoreTests/SessionCoordinatorTests.swift, plus the mechanical call-site rename in Feature/LiveSessionScreen.swift, Feature/HardsetRootView.swift and Hardset/HardsetApp.swift | 1 |
 | 7 Alarm controller | HardsetAlarm/*.swift | 2, 5 |
-| 8 Formatter adoption in UI | UI/SessionView.swift, UI/ExerciseSectionView.swift, UI/MachinePickerView.swift, UI/HistoryView.swift, UI/ProgressionChartView.swift, UI/VolumeReportView.swift | 3, 9 (SetRowView's helper is removed in 9) |
+| 8 Formatter adoption in UI | UI/SessionView.swift, UI/ExerciseSectionView.swift, UI/MachinePickerView.swift, UI/HistoryView.swift, UI/ProgressionChartView.swift, UI/VolumeReportView.swift, plus the one `MachinePickerView(` call site in Feature/LiveSessionScreen.swift | 3, 4, 9 |
 | 10 Rest chip | UI/ExerciseSectionView.swift, UI/SessionView.swift, UI/RestBarView.swift | 4, 8 |
 | 11 Live session wiring | Feature/LiveSessionScreen.swift, Hardset/HardsetApp.swift, HardsetTests/AppSmokeTests.swift | 4, 6, 7, 10 |
 | 12 Root and screen wiring | Feature/HardsetRootView.swift, Feature/WeeklyVolumeScreen.swift, Feature/HistoryScreen.swift | 3, 6, 11 |
 
-Wave 1: 1, 2, 3, 6 and 9 in parallel, then 5 once 2 lands. Wave 2: 4, 7 and 8. Wave 3: 10.
-Wave 4: 11, then 12.
+Wave 1: 1, 2, 3, 6 and 9 in parallel, then 5 once 2 lands. Wave 2: 4 and 7 in parallel, then 8
+once 4 lands (they share LiveSessionScreen.swift). Wave 3: 10. Wave 4: 11, then 12.
+
+**Rule:** no task may leave a caller of an API it changed uncompiled. A task that changes a
+signature updates every call site in the same task, even in files another task owns later. Those
+edits are mechanical, nothing more.
 
 ---
 
@@ -838,6 +842,17 @@ Co-Authored-By: <your model's trailer>"
 - Create: `Packages/HardsetKit/Tests/HardsetStoreTests/RestPreferencesTests.swift`
 - Modify: `Packages/HardsetKit/Tests/HardsetStoreTests/SessionCoordinatorTests.swift` (the three
   `restAfterSet: .seconds(120)` call sites at 106, 140 and 167; `noRestByDefault`)
+- Modify (call sites only, mechanical — see Step 5):
+  - `Packages/HardsetKit/Sources/HardsetFeature/LiveSessionScreen.swift`: the
+    `extension SessionCoordinator` convenience `start(...restAfterSet:hooks:now:)` takes
+    `restPreferences: any RestPreferenceStore` instead.
+  - `Packages/HardsetKit/Sources/HardsetFeature/HardsetRootView.swift`: the `restAfterSet` init
+    parameter and stored property become
+    `restPreferences: any RestPreferenceStore = InMemoryRestPreferences()`, passed at the
+    `resume` and `start` call sites.
+  - `Hardset/HardsetApp.swift`: delete the `restAfterSet: nil` argument and its comment. The
+    default applies until Task 11 passes `UserDefaultsRestPreferences()`.
+- Modify: `docs/MAC-VERIFICATION.md`
 
 **Interfaces:**
 - Consumes: `RestPlan.restAfterLogging(isWarmup:choice:)` and `RestPlan.validated` (Task 1).
@@ -864,6 +879,10 @@ and needs no schema change; UserDefaults is already declared as CA92.1. Mark the
 `nonisolated` and `@unchecked Sendable`, with a comment that `UserDefaults` is documented as
 thread-safe. `InMemoryRestPreferences` guards its dictionary with a `Mutex` from the
 `Synchronization` module, which `SyncSetup.swift` already imports.
+
+HardsetStore defaults to MainActor isolation, so the protocol must not inherit it. Declare it
+`public nonisolated protocol RestPreferenceStore` if the compiler accepts that; otherwise mark
+each requirement `nonisolated`. The Linux build tells you which.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -1207,10 +1226,24 @@ Expected: PASS. The full suite matters here, because `resume` and `start` have m
 other store tests. Any call site still passing `restAfterSet:` fails to compile; update it to
 `restPreferences: InMemoryRestPreferences([...])`, with the same exercise and duration.
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 5: Rename the Feature and app call sites (mechanical)**
+
+In the three files listed under Files, replace `restAfterSet` with `restPreferences` exactly as
+described, with no other edits. Afterwards `rg -n restAfterSet Packages Hardset` must return
+nothing.
+
+These files cannot compile on Linux, so add to `docs/MAC-VERIFICATION.md` under `## Phase 1`:
+
+```markdown
+- [ ] (feat(store): remember each exercise's rest…) HardsetFeature and the app build after the
+      restAfterSet → restPreferences rename.
+```
+
+- [ ] **Step 6: Commit**
 
 ```bash
-git add Packages/HardsetKit/Sources/HardsetStore Packages/HardsetKit/Tests/HardsetStoreTests
+git add Packages/HardsetKit/Sources Packages/HardsetKit/Tests/HardsetStoreTests \
+  Hardset/HardsetApp.swift docs/MAC-VERIFICATION.md
 git commit -m "feat(store): remember each exercise's rest, and publish what is resting
 
 The rest timer was unreachable: the coordinator took one optional duration and the
@@ -1584,8 +1617,19 @@ and after `commit` assigns the new `alarmID`.
 
 In `start`, before scheduling: if authorization is not determined, `await
 RestAlarmService.requestAuthorization()` inside the commit task. Set `authorization` from the
-result. When denied, keep the on-screen state, skip scheduling, and leave `lastError` nil. The
+result. When denied, keep the on-screen state, skip the alarm, and leave `lastError` nil. The
 denial is shown by the UI (Task 11), and it is not an error.
+
+Then fall back to a plain local notification (spec §7 item 1.3; `DEVICE-CHECKLIST.md` §B
+"Denied path"):
+- Request `UNUserNotificationCenter` authorization for `.alert` and `.sound`, once.
+- Schedule a `UNNotificationRequest` with the fixed identifier `"hardset.rest"` and a
+  `UNTimeIntervalNotificationTrigger` for the remaining time.
+- `adjust` and `resume` replace it. `pause` and `cancel` remove it, using
+  `removePendingNotificationRequests(withIdentifiers:)`.
+
+Put these calls in a small `RestNotificationFallback` type in `HardsetAlarm`, so the controller
+stays readable. Cite https://developer.apple.com/documentation/usernotifications/unusernotificationcenter.
 
 - [ ] **Step 5: Remove the dead Skip button**
 
@@ -1637,8 +1681,9 @@ Changes:
 2. **ExerciseSectionView step chip.** `"· \(f.load(kilograms: increment)) steps"`. Delete
    `format`.
 3. **MachinePickerView.** `"moves in \(f.load(kilograms: increment)) steps"`. Delete `format`.
-   It needs a `unit` input: add `unit: WeightUnit` to its initialiser, and note it for Task 11,
-   which passes it.
+   It needs a `unit` input. Add `unit: WeightUnit` to its initialiser with **no default**,
+   because a default would silently show kilograms. Pass `unit: unit` at its one call site in
+   `Feature/LiveSessionScreen.swift`.
 4. **HistoryView.** Replace the hand-built set count with `CountText.sets(n)` and the volume
    string with `f.load(kilograms:)`.
 5. **ProgressionChartView.** `Text(change.explanation(in: unit))`.
@@ -1698,10 +1743,13 @@ Ledger entry, simulator:
 - Consumes: `RestPlan.presets`, `RestPlan.label(for:)` and `RestPlan.allowedRange` (Task 1);
   `restChoices` from the coordinator (Task 4), passed in as plain values.
 - Produces three new inputs, which Task 11 wires:
-  - `ExerciseSectionView`: `restChoice: Duration?`,
-    `onChooseRest: ((Duration?) -> Void)?`, `onStartRest: (() -> Void)?`
-  - `SessionView`: `restChoices: [ExerciseID: Duration]`,
-    `onChooseRest: ((UUID, Duration?) -> Void)?`, `onStartRest: ((UUID) -> Void)?`
+  - `ExerciseSectionView`: `restChoice: Duration? = nil`,
+    `onChooseRest: ((Duration?) -> Void)? = nil`, `onStartRest: (() -> Void)? = nil`
+  - `SessionView`: `restChoices: [ExerciseID: Duration] = [:]`,
+    `onChooseRest: ((UUID, Duration?) -> Void)? = nil`, `onStartRest: ((UUID) -> Void)? = nil`
+
+  The defaults keep existing callers compiling. When `onChooseRest` is nil the chip is hidden,
+  the same rule as the optional machine chip.
 
 Changes:
 1. In `ExerciseSectionView`'s header row, next to the machine chip, add a `Menu` labelled
@@ -1775,9 +1823,8 @@ Changes:
    - add `.task { await restTimer.reconcile(); await restTimer.observeAlarms() }` to `RootView`
    - set the hooks' `authorizationDenied: { restTimer.authorization == .denied }` and
      `lastErrorMessage: { restTimer.lastError.map { FailureCopy.message(for: $0, during: .scheduleRest) } }`
-   - pass `restPreferences: UserDefaultsRestPreferences()`, which Task 12 adds to
-     `HardsetRootView`'s initialiser, and delete the `restAfterSet: nil` argument along with its
-     comment
+   - pass `restPreferences: UserDefaultsRestPreferences()` to `HardsetRootView`. The parameter
+     has existed since Task 4.
 
    `RestTimerController` is created in `@State`, so construct it in `init()` once the database
    is available. If that needs a non-trivial restructuring of `HardsetApp`, keep it minimal and
@@ -1825,29 +1872,26 @@ Ledger entry, simulator and device:
 - Modify: `docs/MAC-VERIFICATION.md`
 
 **Interfaces:**
-- Consumes: `FailureCopy` (Task 6), `MuscleVolumeReport.highestCertainty` (Task 3),
-  `restPreferences:` (Task 4), and the Task 11 `start(...hooks:)` signature.
+- Consumes: `FailureCopy` (Task 6) and `MuscleVolumeReport.highestCertainty` (Task 3). Task 4
+  already did the `restPreferences` rename in this file, mechanically.
 
 Changes:
-1. **HardsetRootView initialiser.** Replace `restAfterSet: Duration? = nil` with
-   `restPreferences: any RestPreferenceStore = InMemoryRestPreferences()`. Pass it to `resume`
-   (line ~90) and `start` (line ~345).
-2. **Resume failure** (line ~90). Replace `coordinator = try? SessionCoordinator.resume(...)`
+1. **Resume failure** (line ~90). Replace `coordinator = try? SessionCoordinator.resume(...)`
    with a `do/catch`. On failure set `@State private var resumeError: String?` to
    `FailureCopy.message(for:during: .resumeWorkout)`, and show it in place of the start button
    with a "Try again" button that reruns the resume. **While `resumeError` is set, Start workout
    is not offered**, because a stranded open session must never look like "no workout".
-3. **Catalogue seed** (line ~86). Replace `try? catalog.seed()` with a `do/catch` that sets
+2. **Catalogue seed** (line ~86). Replace `try? catalog.seed()` with a `do/catch` that sets
    `catalogueError` (`.prepareCatalogue` copy). Show it in the empty picker state with a retry.
-4. **Raw error** (line ~337). Replace the `\(error)` text with
+3. **Raw error** (line ~337). Replace the `\(error)` text with
    `FailureCopy.message(for: error, during: .saveGym)`.
-5. **Tab title** (line ~124). "This week" becomes "Last 7 days".
-6. **WeeklyVolumeScreen.**
+4. **Tab title** (line ~124). "This week" becomes "Last 7 days".
+5. **WeeklyVolumeScreen.**
    - The methodology sheet's certainty becomes `report?.highestCertainty` (nil hides the badge).
    - The failure state's "Pull down to try again" becomes a `Button("Try again") { load() }`,
      because pull-to-refresh cannot fire outside a scroll view.
    - The failure text uses `.loadVolume` copy.
-7. **HistoryScreen.** Same retry fix, with `.loadHistory` copy.
+6. **HistoryScreen.** Same retry fix, with `.loadHistory` copy.
 
 Ledger entry, simulator:
 - with the database made unreadable (or a forced throw in a debug build), each screen shows its
