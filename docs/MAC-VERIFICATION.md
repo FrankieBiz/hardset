@@ -124,3 +124,35 @@ the `Hardset` scheme for the iOS 26.4 simulator.
 - Task 6 (`LiveSessionScreen.errorMessage`): the exhaustive `LoggerStoreError` switch gained
   `.setNotFound, .sessionNotEmpty, .sessionNotOpen` falling to the generic message. HardsetFeature
   does not compile on Linux, so confirm it builds on the Mac.
+- [ ] (feat(alarm): reconcile and persist the rest timer; ask at the first rest) Build HardsetAlarm
+      for iOS (`Hardset` scheme, iOS 26.4 simulator) with no new warnings. It has never been
+      compiled against the SDK. It was written from Apple's documentation and compiled here only
+      against stub modules built from that documentation (URLs in the commit body). Confirm:
+  - [ ] `AlarmPresentation.Alert(title:)` resolves to the 26.1
+        `init(title:secondaryButton:secondaryButtonBehavior:)`, with no deprecation warning.
+  - [ ] `for await _ in RestAlarmService.alarmUpdates()` on the main actor raises no Sendable or
+        isolation diagnostic (`AlarmManager.AlarmUpdates` is not documented as `Sendable`).
+  - [ ] `RestNotificationFallback` raises no "sending … risks causing data races" diagnostic. The
+        UserNotifications classes are not documented as `Sendable` either.
+  - [ ] The `@unknown default` cases over `Alarm.State` and `AlarmManager.AuthorizationState`
+        compile, and so does `if case .fixed(let fireDate)? = alarm.schedule`.
+  - [ ] Task 11 conforms the store in the app target as
+        `extension RestTimerStore: @retroactive RestTimerPersistence {}`. Without `@retroactive`,
+        Swift warns, because the app target is outside the package.
+  Then on device:
+  - [ ] Start a rest, force-quit, relaunch: the app shows the same countdown.
+  - [ ] Pause from the Lock Screen, open the app: it shows paused with the right remainder.
+        **Expected to fail**: `Alarm` exposes no remainder, so the reconciler (Task 2 ruling)
+        cancels the alarm and the app shows idle. A Lock Screen resume of a rest paused in the app
+        ends the same way. Record what happens. If it fails as expected, a decision is needed:
+        read `AlarmPresentationState` (only if the app can see the alarm's Live Activity), or
+        drop the Lock Screen pause and resume buttons.
+  - [ ] First rest ever: the permission prompt appears.
+  - [ ] Deny it: the on-screen countdown still runs and the denial banner shows (with Task 11).
+  - [ ] The alert has no button that does nothing.
+  - [ ] Alarms denied: the notification prompt appears once. Allow it. The rest ends with a
+        notification at the deadline; +15 s moves it; pause removes it; Skip removes it. Relaunch
+        mid-rest: the countdown is still there.
+  - [ ] Tap +15 s five times fast with the app in front. `AlarmManager.shared.alarms` holds exactly
+        one alarm, and the rest never drops to idle.
+  - [ ] Note whether `alarmUpdates` emits on pause and resume. The code works either way.
