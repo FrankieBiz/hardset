@@ -52,6 +52,7 @@ public nonisolated enum HardsetMigrations {
   public static let deviceLocalTableNames: [String] = [
     "deviceHealthSamples",
     "deviceRestTimer",
+    "deviceHealthExports",
   ]
 
   /// Tables that exist locally but are deliberately NOT synchronized in v1, pending a
@@ -310,6 +311,36 @@ public nonisolated enum HardsetMigrations {
       try #sql(
         """
         CREATE INDEX "sessions_on_startedAt" ON "sessions"("startedAt")
+        """
+      )
+      .execute(db)
+    }
+
+    // MARK: v2 -- which sessions went to Apple Health (DECISIONS.md §24)
+    //
+    // Additive: one new device-local table, nothing in v1 touched. Device-local because a
+    // HealthKit object id means nothing on another device, and because what was sent to Health is
+    // health information that must not reach iCloud (guideline 5.1.3(ii)).
+    //
+    // `sessionID` is deliberately NOT a foreign key, like `deviceRestTimer.sessionID`. A sign-out
+    // wipe or a deletion arriving from another device removes the session row; with a cascade the
+    // record of the export would go with it, and the same session downloaded again would be sent
+    // to Health a second time.
+    migrator.registerMigration("v2-deviceHealthExports") { db in
+      try #sql(
+        """
+        CREATE TABLE "deviceHealthExports" (
+          "id" TEXT PRIMARY KEY NOT NULL ON CONFLICT REPLACE DEFAULT (uuid()),
+          "sessionID" TEXT NOT NULL ON CONFLICT REPLACE DEFAULT '',
+          "healthWorkoutID" TEXT NOT NULL ON CONFLICT REPLACE DEFAULT '',
+          "exportedAt" TEXT NOT NULL ON CONFLICT REPLACE DEFAULT (datetime('now', 'subsec'))
+        ) STRICT
+        """
+      )
+      .execute(db)
+      try #sql(
+        """
+        CREATE INDEX "deviceHealthExports_on_sessionID" ON "deviceHealthExports"("sessionID")
         """
       )
       .execute(db)

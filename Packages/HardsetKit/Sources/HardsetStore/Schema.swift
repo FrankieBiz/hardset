@@ -141,3 +141,13 @@ nonisolated struct DeviceRestTimer: Hashable, Identifiable, Sendable {
   var pausedRemainingSeconds: Double?
   var updatedAt = Date(timeIntervalSince1970: 0)
 }
+
+/// Which sessions were saved to Apple Health, and as which HealthKit object (`DECISIONS.md` §24).
+@Table("deviceHealthExports")
+nonisolated struct DeviceHealthExport: Hashable, Identifiable, Sendable {
+  let id: UUID
+  /// Not a foreign key, on purpose: the record outlives the session row (see the migration).
+  var sessionID: UUID
+  var healthWorkoutID: UUID
+  var exportedAt = Date(timeIntervalSince1970: 0)
+}
