@@ -28,6 +28,8 @@ public nonisolated enum FailureCopy {
     case archiveGym
     case renameMachine
     case archiveMachine
+    case addMovement
+    case changeMachine
   }
 
   /// The message for `error` raised while performing `action`.
@@ -119,6 +121,12 @@ public nonisolated enum FailureCopy {
 
     case .archiveMachine:
       return "That machine could not be archived. It is still in your list — try again."
+
+    case .addMovement:
+      return "That movement could not be added. Try again."
+
+    case .changeMachine:
+      return "The machine could not be changed. Your logged sets are safe. Try again."
     }
   }
 }

@@ -244,9 +244,7 @@ public struct LiveSessionScreen: View {
             pickerQuery = ""
           }
         ) { entry in
-          // No copy of its own yet: this keeps the log-set copy every coordinator failure had
-          // before the action was tracked.
-          attempt(.logSet) { coordinator.addExercise(entry) }
+          attempt(.addMovement) { coordinator.addExercise(entry) }
           isPickerPresented = false
           pickerQuery = ""
         }
@@ -423,9 +421,8 @@ public struct LiveSessionScreen: View {
         (machineOptions.recent + machineOptions.others).first { $0.id == id }?.displayName
       }
     // The coordinator persists before it mutates memory, and reads the increment from the machines
-    // table itself, so nothing here needs to know either. Like adding a movement, a machine change
-    // has no copy of its own yet and keeps the log-set copy it always had.
-    attempt(.logSet) {
+    // table itself, so nothing here needs to know either.
+    attempt(.changeMachine) {
       coordinator.changeMachine(to: machineID, machineName: name, inExercise: target)
     }
   }
@@ -440,7 +437,7 @@ public struct LiveSessionScreen: View {
       // for no reason. The stack step is left unknown rather than guessed — an invented increment
       // would licence progression suggestions the equipment cannot honour.
       refreshMachines(forExercise: target)
-      attempt(.logSet) {
+      attempt(.changeMachine) {
         coordinator.changeMachine(to: machineID, machineName: name, inExercise: target)
       }
       machineError = nil
@@ -484,6 +481,11 @@ public struct LiveSessionScreen: View {
     if let finishError {
       return FailureCopy.message(for: finishError, during: .finishWorkout)
     }
+    // A failed Undo says "Tap Undo to try again", which is true only while the deletion can still
+    // be undone. Once its window closes the bar is gone and the set stays deleted, as the lifter
+    // first asked, so the instruction would point at a button that no longer exists. The
+    // coordinator keeps `lastError` until the next write, so the screen stops showing it here.
+    if lastAction == .undoDelete && coordinator.undoableDeletion == nil { return nil }
     return coordinator.lastError.map { FailureCopy.message(for: $0, during: lastAction) }
   }
 

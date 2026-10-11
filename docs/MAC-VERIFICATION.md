@@ -578,10 +578,13 @@ the `Hardset` scheme for the iOS 26.4 simulator.
     when it appears (moments after the delete), and restarts after a tab switch. The
     coordinator's `DeletedSet.expiresAt` stays the authority: an Undo after it does nothing and
     shows no error. Passing the expiry needs a HardsetUI change (`PendingUndo(expiresAt:)`).
-  - Known limit, copy: a failed Undo reads "That set could not be put back. Tap Undo to try
-    again." If the window then closes, the copy stays with no Undo to tap, because the
-    coordinator's `lastError` is cleared only by the next write. `FailureCopy` has no wording for
-    that case yet.
+  - [ ] Force an Undo failure (debug throw in `LoggerStore.restoreSet`): "That set could not be
+        put back. Tap Undo to try again." shows while the bar is up. When the bar times out, the
+        copy goes with it; the set stays deleted.
+  - [ ] Force an add-movement failure (debug throw in `LoggerStore.addExercise`): "That movement
+        could not be added. Try again." Force a machine-change failure (debug throw in
+        `LoggerStore.setSessionExerciseMachine`): "The machine could not be changed. Your logged
+        sets are safe. Try again." Neither reads as a failed set.
   - Written without a compiler. The non-SwiftUI parts (every `SessionView` callback, the picker
     call, `attempt(_:_:)`, `requestFinish`, `discard`, `refreshRecent`, `SessionExit`) were
     type-checked on Linux in a scratch target against the real HardsetCore and HardsetStore, with

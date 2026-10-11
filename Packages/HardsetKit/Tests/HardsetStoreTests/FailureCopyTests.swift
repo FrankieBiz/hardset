@@ -137,6 +137,12 @@ struct FailureCopyTests {
       CopyRow(
         error: Opaque(), action: .archiveMachine,
         expected: "That machine could not be archived. It is still in your list — try again."),
+      CopyRow(
+        error: Opaque(), action: .addMovement,
+        expected: "That movement could not be added. Try again."),
+      CopyRow(
+        error: Opaque(), action: .changeMachine,
+        expected: "The machine could not be changed. Your logged sets are safe. Try again."),
     ]
   )
   func copyMatchesTable(row: CopyRow) {
