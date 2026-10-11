@@ -204,3 +204,19 @@ the `Hardset` scheme for the iOS 26.4 simulator.
     `ExercisePickerView` (conditional toolbar content), and `Button(_:systemImage:action:)` and
     `.accessibilityAction(named: Text(…))` in `HistoryView`. The picker still compiles for
     existing callers (new inputs default); Cancel appears only once Task 18 passes `onCancel`.
+- [ ] (feat(ui): one rest cluster …) HardsetUI builds (iOS, and macOS 15 via `./test.sh`). With
+      Task 19 merged, on the simulator:
+  - [ ] During a rest, the countdown appears once: in the tab accessory, never also in the
+        Train screen.
+  - [ ] Scroll the set list down: the tab bar collapses and the accessory shows only the
+        countdown and pause; scroll up: −15 / +15 / skip return.
+  - [ ] ±15 plays a selection haptic (device) and the paused remainder rolls (off with Reduce
+        Motion).
+  - [ ] All accessory buttons are at least 44 pt (Accessibility Inspector).
+  - [ ] VoiceOver reaches the countdown, −15, +15, pause/resume and skip as separate elements
+        (the old `.combine` hid the buttons). The countdown reads "Resting, m:ss remaining …"
+        and, with `onOpen` set, adds the hint "Opens the workout".
+  - [ ] Written without a compiler. If it fails, look first at `@Environment(\.tabViewBottomAccessoryPlacement)`
+        (inside `#if os(iOS)`), `.background { if !inAccessory { … } }`, and `readout`, which
+        is a plain view, not a disabled Button, when `onOpen` is nil (a disabled plain Button
+        dims the countdown).

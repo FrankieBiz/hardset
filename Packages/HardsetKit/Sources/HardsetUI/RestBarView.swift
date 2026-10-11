@@ -13,6 +13,10 @@ import SwiftUI
 /// carries only durations and no dates, so there is no deadline to hand SwiftUI. It renders as
 /// static text from the frozen remainder instead, which is why `RestTimerState` models paused
 /// as a `Duration` rather than as a stopped clock.
+///
+/// This is the one rest cluster. It is built to live in the tab bar's bottom accessory, which is
+/// already Liquid Glass, so inside it the view draws no background of its own and adapts to the
+/// accessory's `.inline` (collapsed tab bar) and `.expanded` placements.
 public struct RestBarView: View {
   private let state: RestTimerState
   private let metadata: RestMetadata?
@@ -20,6 +24,13 @@ public struct RestBarView: View {
   private let onAdjust: (Duration) -> Void
   private let onPauseResume: () -> Void
   private let onSkip: () -> Void
+  private let onOpen: (() -> Void)?
+
+  #if os(iOS)
+    @Environment(\.tabViewBottomAccessoryPlacement) private var placement
+  #endif
+  @Environment(\.accessibilityReduceMotion) private var reduceMotion
+  @State private var adjustCount = 0
 
   public init(
     state: RestTimerState,
@@ -27,7 +38,8 @@ public struct RestBarView: View {
     referenceDate: Date = Date(),
     onAdjust: @escaping (Duration) -> Void,
     onPauseResume: @escaping () -> Void,
-    onSkip: @escaping () -> Void
+    onSkip: @escaping () -> Void,
+    onOpen: (() -> Void)? = nil
   ) {
     self.state = state
     self.metadata = metadata
@@ -35,6 +47,29 @@ public struct RestBarView: View {
     self.onAdjust = onAdjust
     self.onPauseResume = onPauseResume
     self.onSkip = onSkip
+    self.onOpen = onOpen
+  }
+
+  /// True when hosted in the tab accessory, which supplies its own glass and is short.
+  private var inAccessory: Bool {
+    #if os(iOS)
+      placement != nil
+    #else
+      false
+    #endif
+  }
+
+  /// True when the tab bar is collapsed and the accessory shows only the countdown and pause.
+  private var isInline: Bool {
+    #if os(iOS)
+      placement == .inline
+    #else
+      false
+    #endif
+  }
+
+  private var tapTarget: CGFloat {
+    inAccessory ? Tokens.minimumTapTarget : Tokens.loggerTapTarget
   }
 
   public var body: some View {
@@ -42,29 +77,58 @@ public struct RestBarView: View {
       EmptyView()
     } else {
       HStack(spacing: Tokens.Spacing.regular) {
-        VStack(alignment: .leading, spacing: Tokens.Spacing.hairline) {
-          countdown
-          if let metadata {
-            Text("\(metadata.exerciseName) · \(metadata.setLabel)")
-              .font(Tokens.Text.caption)
-              .foregroundStyle(Tokens.Color.textSecondary)
-              .lineLimit(1)
-          }
-        }
+        readout
 
         Spacer(minLength: 0)
 
-        adjustButton(label: "−15", delta: .seconds(-15))
-        adjustButton(label: "+15", delta: .seconds(15))
+        if !isInline {
+          adjustButton(label: "−15", delta: .seconds(-15))
+          adjustButton(label: "+15", delta: .seconds(15))
+        }
         pauseResumeButton
-        skipButton
+        if !isInline {
+          skipButton
+        }
       }
       .padding(.horizontal, Tokens.Spacing.regular)
-      .padding(.vertical, Tokens.Spacing.snug)
-      .background(Tokens.Color.surface)
-      .accessibilityElement(children: .combine)
-      .accessibilityLabel(spokenLabel)
+      .padding(.vertical, inAccessory ? 0 : Tokens.Spacing.snug)
+      // The accessory is already glass; glass on an opaque fill (or on glass) is wrong.
+      .background {
+        if !inAccessory { Tokens.Color.surface }
+      }
+      .sensoryFeedback(Tokens.Haptic.feedback(for: .restAdjust), trigger: adjustCount)
     }
+  }
+
+  /// The countdown and, when there is room, the caption. It opens the workout when tapped.
+  /// Without an `onOpen` it is plain content rather than a disabled button, which the system
+  /// would dim. Only this element carries the spoken status; the controls beside it keep their
+  /// own labels so VoiceOver can reach each of them.
+  @ViewBuilder private var readout: some View {
+    if let onOpen {
+      Button(action: onOpen) { readoutContent }
+        .buttonStyle(.plain)
+        .accessibilityLabel(spokenLabel)
+        .accessibilityHint("Opens the workout")
+    } else {
+      readoutContent
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(spokenLabel)
+    }
+  }
+
+  private var readoutContent: some View {
+    VStack(alignment: .leading, spacing: Tokens.Spacing.hairline) {
+      countdown
+      if let metadata, !isInline {
+        Text("\(metadata.exerciseName) · \(metadata.setLabel)")
+          .font(Tokens.Text.caption)
+          .foregroundStyle(Tokens.Color.textSecondary)
+          .lineLimit(1)
+      }
+    }
+    .frame(minHeight: Tokens.minimumTapTarget, alignment: .leading)
+    .contentShape(Rectangle())
   }
 
   @ViewBuilder private var countdown: some View {
@@ -81,6 +145,8 @@ public struct RestBarView: View {
       HStack(spacing: Tokens.Spacing.tight) {
         Text(remaining.clockString)
           .font(Tokens.Text.readout)
+          .contentTransition(.numericText(countsDown: true))
+          .animation(Tokens.Motion.quick(reduceMotion), value: remaining)
         Image(systemName: "pause.fill")
           .font(Tokens.Text.caption)
       }
@@ -89,11 +155,14 @@ public struct RestBarView: View {
   }
 
   private func adjustButton(label: String, delta: Duration) -> some View {
-    Button { onAdjust(delta) } label: {
+    Button {
+      adjustCount += 1
+      onAdjust(delta)
+    } label: {
       Text(label)
         .font(Tokens.Text.label.weight(.semibold))
         .monospacedDigit()
-        .frame(minWidth: Tokens.loggerTapTarget, minHeight: Tokens.loggerTapTarget)
+        .frame(minWidth: tapTarget, minHeight: tapTarget)
         .contentShape(Rectangle())
     }
     .buttonStyle(.plain)
@@ -105,7 +174,7 @@ public struct RestBarView: View {
     Button(action: onPauseResume) {
       Image(systemName: state.isRunning ? "pause.circle" : "play.circle")
         .font(.title2)
-        .frame(width: Tokens.loggerTapTarget, height: Tokens.loggerTapTarget)
+        .frame(width: tapTarget, height: tapTarget)
         .contentShape(Rectangle())
     }
     .buttonStyle(.plain)
@@ -117,7 +186,7 @@ public struct RestBarView: View {
     Button(action: onSkip) {
       Image(systemName: "forward.end")
         .font(.body)
-        .frame(width: Tokens.loggerTapTarget, height: Tokens.loggerTapTarget)
+        .frame(width: tapTarget, height: tapTarget)
         .contentShape(Rectangle())
     }
     .buttonStyle(.plain)
