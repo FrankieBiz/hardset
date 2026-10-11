@@ -17,6 +17,10 @@ public struct HardsetEnvironment {
   public let history: HistoryStore
   public let progression: ProgressionStore
   public let gyms: GymStore
+  /// Reads a finished workout's summary back from the database.
+  public let summaries: WorkoutSummaryStore
+  /// The picker's Recent movements, and "Repeat this workout".
+  public let shortcuts: WorkoutShortcutsStore
 
   public init(database: any DatabaseWriter) {
     self.logger = LoggerStore(database: database)
@@ -25,10 +29,25 @@ public struct HardsetEnvironment {
     self.history = HistoryStore(database: database)
     self.progression = ProgressionStore(database: database)
     self.gyms = GymStore(database: database)
+    self.summaries = WorkoutSummaryStore(database: database)
+    self.shortcuts = WorkoutShortcutsStore(database: database)
   }
 }
 
-/// The app's three tabs, plus the workout-in-progress bar.
+/// The root's tabs, as a selection value, so the accessory and "Repeat this workout" can bring
+/// the lifter back to Train. `nonisolated` like the Store's value types: it is a plain value, and
+/// its `Hashable` conformance should not be tied to the main actor.
+private nonisolated enum RootTab: Hashable {
+  case train, volume, history
+}
+
+/// The finished workout whose summary is showing. Wrapped because `sheet(item:)` needs
+/// `Identifiable`, the same reason `LiveSessionScreen` wraps its machine target.
+private nonisolated struct SummaryTarget: Identifiable, Hashable {
+  let id: SessionID
+}
+
+/// The app's three tabs, plus the workout-in-progress bar, which is also the one rest cluster.
 ///
 /// A live session is deliberately NOT a full-screen modal. It lives in the tab bar's bottom
 /// accessory, so a lifter mid-workout can still open their history or check the last 7 days of
@@ -38,6 +57,12 @@ public struct HardsetEnvironment {
 @MainActor
 public struct HardsetRootView: View {
   @State private var coordinator: SessionCoordinator?
+  /// Which tab shows. Held here so tapping the accessory, or repeating a workout from History,
+  /// can return the lifter to Train.
+  @State private var selectedTab: RootTab = .train
+  /// The workout just finished, whose summary is presented over the tabs. Set only after
+  /// `LiveSessionScreen` reports the finish written; a discarded workout has nothing to show.
+  @State private var summaryTarget: SummaryTarget?
   @State private var startFailed = false
   /// Why a workout left open could not be reopened, in the user's words. While this is set the
   /// start button is not offered: a `try?` here made a stranded open session look like "no
@@ -87,6 +112,13 @@ public struct HardsetRootView: View {
 
   public var body: some View {
     tabs
+      // On the TabView, not inside Train: `LiveSessionScreen` is torn down the moment its session
+      // ends, so a sheet it presented would go with it.
+      .sheet(item: $summaryTarget) { target in
+        SummarySheet(sessionID: target.id, store: environment.summaries, unit: unit) {
+          summaryTarget = nil
+        }
+      }
       .task {
         prepareCatalogue()
         // A workout left open is offered back before anything else. Nothing is closed on the
@@ -126,8 +158,8 @@ public struct HardsetRootView: View {
   }
 
   @ViewBuilder private var tabs: some View {
-    let content = TabView {
-      Tab("Train", systemImage: "figure.strengthtraining.traditional") {
+    let content = TabView(selection: $selectedTab) {
+      Tab("Train", systemImage: "figure.strengthtraining.traditional", value: RootTab.train) {
         NavigationStack {
           trainTab
             .safeAreaInset(edge: .top, spacing: 0) { catalogueNotice }
@@ -147,35 +179,43 @@ public struct HardsetRootView: View {
             }
         }
       }
-      Tab("Volume", systemImage: "chart.bar") {
+      Tab("Volume", systemImage: "chart.bar", value: RootTab.volume) {
         NavigationStack {
           WeeklyVolumeScreen(store: environment.volume)
             .navigationTitle("Last 7 days")
         }
       }
-      Tab("History", systemImage: "clock.arrow.circlepath") {
+      Tab("History", systemImage: "clock.arrow.circlepath", value: RootTab.history) {
         NavigationStack {
-          HistoryScreen(store: environment.history, unit: unit)
-            .navigationTitle("History")
+          HistoryScreen(
+            store: environment.history,
+            unit: unit,
+            // Hidden, not swapped for a confirmation, while a workout is open or may be open
+            // unread: repeating then would start a second workout on top of the first.
+            onRepeat: canStartWorkout ? { repeatWorkout($0) } : nil
+          )
+          .navigationTitle("History")
         }
       }
     }
 
     #if os(iOS)
-      // The accessory is attached only while a session exists. Attaching it unconditionally and
-      // returning an empty view inside drew an empty pill above the tab bar on the start screen —
-      // the slot is reserved by the modifier, not by its content.
-      if coordinator != nil {
-        content
-          .tabViewBottomAccessory { liveSessionAccessory }
-          .tabBarMinimizeBehavior(.onScrollDown)
-      } else {
-        content
-      }
+      // `isEnabled:` keeps one TabView identity whether or not a session exists. The old `if/else`
+      // swapped identity, which reset tab state on every start and finish. Attaching the
+      // accessory unconditionally, with an empty view inside, drew an empty pill above the tab
+      // bar on the start screen — the slot is reserved by the modifier, not by its content.
+      // `isEnabled:` is the documented way to show and hide it.
+      content
+        .tabViewBottomAccessory(isEnabled: coordinator != nil) { liveSessionAccessory }
+        .tabBarMinimizeBehavior(.onScrollDown)
     #else
       content
     #endif
   }
+
+  /// Whether a new workout may start: none is open, and none may be sitting open unread. The same
+  /// rule that hides Start while `resumeError` is set.
+  private var canStartWorkout: Bool { coordinator == nil && resumeError == nil }
 
   // MARK: - Train
 
@@ -188,7 +228,14 @@ public struct HardsetRootView: View {
         catalog: environment.catalog,
         gyms: environment.gyms,
         progression: environment.progression,
-        onFinished: { _ in self.coordinator = nil }
+        shortcuts: environment.shortcuts,
+        // `self.` because `coordinator` here is the unwrapped local. A finished workout's summary
+        // is read back by its id; a discarded one no longer exists, so it goes straight back to
+        // the start screen.
+        onFinished: { exit in
+          self.coordinator = nil
+          if case .finished(let id) = exit { summaryTarget = SummaryTarget(id: id) }
+        }
       )
       .navigationTitle("Workout")
     } else if let resumeError {
@@ -220,7 +267,7 @@ public struct HardsetRootView: View {
       VStack(alignment: .leading, spacing: Tokens.Spacing.tight) {
         Text(catalogueError)
           .font(Tokens.Text.caption)
-          .foregroundStyle(Tokens.Color.certainty(.low))
+          .foregroundStyle(Tokens.Color.critical)
         Button {
           prepareCatalogue()
         } label: {
@@ -247,6 +294,33 @@ public struct HardsetRootView: View {
       }
       gymRow
 
+      startButton
+        .padding(.horizontal, Tokens.Spacing.section)
+
+      if startFailed {
+        Text("Could not start a workout. Nothing has been lost — try again.")
+          .font(Tokens.Text.caption)
+          .foregroundStyle(Tokens.Color.critical)
+      }
+    }
+    .frame(maxWidth: .infinity, maxHeight: .infinity)
+    .background(Tokens.Color.background)
+    .sheet(isPresented: $isChoosingGym) { gymSheet }
+  }
+
+  /// The start screen's prominent action, and one of the four places glass is allowed: it is for
+  /// the functional layer (Start, the Finish toolbar action, the rest accessory and the Undo bar),
+  /// never a set row or a card. `.glassProminent` is iOS 26 and macOS 26, and this target also
+  /// builds for macOS 15, which keeps the plain button.
+  @ViewBuilder private var startButton: some View {
+    if #available(iOS 26.0, macOS 26.0, *) {
+      Button(action: startEmptyWorkout) {
+        Text("Start workout")
+          .font(Tokens.Text.label.weight(.semibold))
+          .frame(maxWidth: .infinity, minHeight: Tokens.loggerTapTarget)
+      }
+      .buttonStyle(.glassProminent)
+    } else {
       Button(action: startEmptyWorkout) {
         Text("Start workout")
           .font(Tokens.Text.label.weight(.semibold))
@@ -255,17 +329,7 @@ public struct HardsetRootView: View {
       .buttonStyle(.plain)
       .foregroundStyle(Tokens.Color.accent)
       .background(Tokens.Color.surface, in: RoundedRectangle(cornerRadius: Tokens.Radius.control))
-      .padding(.horizontal, Tokens.Spacing.section)
-
-      if startFailed {
-        Text("Could not start a workout. Nothing has been lost — try again.")
-          .font(Tokens.Text.caption)
-          .foregroundStyle(Tokens.Color.certainty(.low))
-      }
     }
-    .frame(maxWidth: .infinity, maxHeight: .infinity)
-    .background(Tokens.Color.background)
-    .sheet(isPresented: $isChoosingGym) { gymSheet }
   }
 
   /// Sets where this workout is, which is what makes per-machine tracking reachable at all: a
@@ -323,7 +387,7 @@ public struct HardsetRootView: View {
           }
         } footer: {
           if let gymError {
-            Text(gymError).foregroundStyle(Tokens.Color.certainty(.low))
+            Text(gymError).foregroundStyle(Tokens.Color.critical)
           } else {
             Text("Loads are tracked per machine, and machines belong to a gym.")
           }
@@ -426,30 +490,129 @@ public struct HardsetRootView: View {
     }
   }
 
+  /// Starts a workout from a past one: its movements, in order, on the machines it ended on.
+  ///
+  /// Runs only from the lifter's own choice of "Repeat this workout" on a history row; nothing
+  /// preselects or suggests it. The plan is read here, from that action, never in `body`. It holds
+  /// no loads, so rows and prefills come from the latest history at start, as for any workout,
+  /// not from the one being repeated.
+  private func repeatWorkout(_ id: SessionID) {
+    // The action is hidden while this is false; this guards a menu opened just before that.
+    guard canStartWorkout else { return }
+    do {
+      let plan = try environment.shortcuts.repeatPlan(of: id)
+      guard !plan.isEmpty else { return }
+      coordinator = try SessionCoordinator.start(
+        store: environment.logger,
+        gymID: plan.gymID,
+        plan: plan.plannedExercises,
+        restPreferences: restPreferences,
+        hooks: hooks
+      )
+      selectedGym = plan.gymID
+      startFailed = false
+      selectedTab = .train
+    } catch {
+      // Nothing was started. Train's start screen says so, so the lifter is taken there.
+      startFailed = true
+      selectedTab = .train
+    }
+  }
+
   // MARK: - Accessory
 
+  /// While a rest runs, the one rest cluster: `SessionView` no longer draws a rest bar on iOS, so
+  /// the countdown and its controls are drawn here, once. Otherwise, the workout's status. Either
+  /// way a tap brings the lifter back to Train, where the workout is.
   @ViewBuilder private var liveSessionAccessory: some View {
     if let coordinator {
-      HStack(spacing: Tokens.Spacing.snug) {
-        Image(systemName: "figure.strengthtraining.traditional")
-        // Inflected rather than concatenated, so one set does not read "1 sets".
-        Text("^[\(coordinator.loggedSetCount) set](inflect: true) logged")
-          .font(Tokens.Text.caption)
-          .monospacedDigit()
-        Spacer(minLength: 0)
-        if case .running(let endsAt) = hooks.state() {
-          // System-rendered from the deadline, so the accessory costs no updates.
-          Text(timerInterval: Date()...max(endsAt, Date()), countsDown: true)
-            .font(Tokens.Text.caption)
-            .monospacedDigit()
-            .foregroundStyle(Tokens.Color.accent)
+      let restState = hooks.state()
+      if restState != .idle {
+        RestBarView(
+          state: restState,
+          // The coordinator's record of what was asked of the timer, so the bar names the set that
+          // actually started this rest.
+          metadata: coordinator.activeRest,
+          onAdjust: hooks.adjust,
+          onPauseResume: hooks.pauseOrResume,
+          onSkip: {
+            hooks.cancel()
+            coordinator.endRest()
+          },
+          onOpen: { selectedTab = .train }
+        )
+      } else {
+        Button {
+          selectedTab = .train
+        } label: {
+          HStack(spacing: Tokens.Spacing.snug) {
+            Image(systemName: "figure.strengthtraining.traditional")
+            // Inflected rather than concatenated, so one set does not read "1 sets".
+            Text("^[\(coordinator.loggedSetCount) set](inflect: true) logged")
+              .font(Tokens.Text.caption)
+              .monospacedDigit()
+            Spacer(minLength: 0)
+          }
+          .padding(.horizontal, Tokens.Spacing.regular)
+          .frame(minHeight: Tokens.minimumTapTarget)
+          // The whole pill opens the workout, not only the glyph and the words.
+          .contentShape(Rectangle())
         }
+        .buttonStyle(.plain)
+        .accessibilityLabel(
+          Text("Workout in progress, ^[\(coordinator.loggedSetCount) set](inflect: true) logged")
+        )
+        .accessibilityHint("Opens the workout")
       }
-      .padding(.horizontal, Tokens.Spacing.regular)
-      .accessibilityElement(children: .combine)
-      .accessibilityLabel(
-        Text("Workout in progress, ^[\(coordinator.loggedSetCount) set](inflect: true) logged")
-      )
+    }
+  }
+}
+
+/// A finished workout's summary, read back from the database rather than carried over from the
+/// screen, so it states what was saved.
+///
+/// It is presented only after the finish was written, which is why its failure copy says the
+/// workout is saved. The read runs in `.task` and on Try again, never in `body`.
+private struct SummarySheet: View {
+  private let sessionID: SessionID
+  private let store: WorkoutSummaryStore
+  private let unit: WeightUnit
+  private let onDone: () -> Void
+  @State private var summary: WorkoutSummary?
+  /// Why the read failed, in the lifter's words.
+  @State private var loadError: String?
+
+  /// Spelled out: the stored properties are private, which makes the synthesised memberwise
+  /// initialiser private too, and the root could not call it.
+  init(
+    sessionID: SessionID,
+    store: WorkoutSummaryStore,
+    unit: WeightUnit,
+    onDone: @escaping () -> Void
+  ) {
+    self.sessionID = sessionID
+    self.store = store
+    self.unit = unit
+    self.onDone = onDone
+  }
+
+  var body: some View {
+    WorkoutSummaryView(
+      summary: summary,
+      unit: unit,
+      errorMessage: loadError,
+      onRetry: { load() },
+      onDone: onDone
+    )
+    .task { load() }
+  }
+
+  private func load() {
+    do {
+      summary = try store.summary(for: sessionID)
+      loadError = nil
+    } catch {
+      loadError = FailureCopy.message(for: error, during: .loadSummary)
     }
   }
 }

@@ -411,6 +411,75 @@ the `Hardset` scheme for the iOS 26.4 simulator.
           VoiceOver's focus change. If it is, post it with a high
           `accessibilitySpeechAnnouncementPriority` (Apple's example on the Announcement page).
 
+- [ ] (feat(feature): one tab identity, the rest accessory, glass Start, the summary, repeat)
+      HardsetFeature and the app build for the iOS 26.4 simulator, and HardsetFeature for macOS 15
+      via `./test.sh`. In the simulator:
+  - [ ] Start a workout on Train and start a rest from a chip, then switch to History: the
+        accessory shows the countdown with −15 / +15 / pause / skip; tap its countdown: the app
+        returns to Train.
+  - [ ] Task 13's known gap is closed: during a rest on iOS the Train tab has ±15 s, pause and
+        skip, in the accessory, and the countdown is drawn once (not also in the screen).
+  - [ ] With no rest running, the accessory reads "1 set logged" (inflected); tapping anywhere on
+        the pill, not only its words, returns to Train. VoiceOver reads "Workout in progress, 1
+        set logged" with the hint "Opens the workout".
+  - [ ] Start and finish a workout: the tabs keep their navigation state (no identity reset),
+        and no empty pill shows above the tab bar on the start screen.
+  - [ ] After finishing, open History and Volume: the new workout is there. The TabView is no
+        longer rebuilt on finish, so this relies on each tab's `.task` re-running when the tab
+        reappears. If it does not, reload on `selectedTab` change.
+  - [ ] Start workout is a prominent glass button; no set row or card is glass. Note its height:
+        the label's 56 pt minimum sits inside the style's own padding. The macOS 15 host build
+        keeps the plain button.
+  - [ ] Finish a workout: the summary sheet appears over whichever tab is showing; Done
+        dismisses it. Force a read failure (debug): "Your workout is saved, but its summary
+        could not be read." with Try again.
+  - [ ] Finish through the unlogged dialog's "Finish workout" too: the summary still appears. A
+        sheet asked for while the confirmation dialog is dismissing can be dropped; if it is,
+        set `summaryTarget` once the dialog has gone.
+  - [ ] Finish with nothing logged and Discard: no summary, straight back to the start screen.
+  - [ ] History › long-press › Repeat this workout: a session starts on Train with the same
+        movements and machines, prefilled from the latest history (not the repeated loads).
+        With a workout already open, the action is absent.
+  - [ ] With "Workout unavailable" showing on Train (force a resume failure), History offers no
+        Repeat either: starting one then would put a second workout on top of the unread one.
+  - [ ] Force `repeatPlan` to throw (debug): the app goes to Train, which reads "Could not
+        start a workout. Nothing has been lost — try again." in the critical colour.
+  - [ ] Known limit, from the brief: Repeat on a history workout with no logged sets does
+        nothing (an empty plan starts nothing). Note whether such rows exist in real data; if
+        they do, the action needs either hiding per row (a HardsetUI change) or a stated reason.
+  - [ ] The long-press works anywhere on a History row, including the gaps between its lines.
+        If only the text responds, add `.contentShape(Rectangle())` to `HistoryView.content(_:)`
+        (HardsetUI, outside this task's files).
+  - [ ] Add movement: the picker's Recent section now lists the movements logged most recently
+        (Task 18's "Recent stays empty until Task 19" is closed).
+  - [ ] The catalogue notice, the start failure and the gym-save failure read in the critical
+        colour, legible in light, dark and with Increase Contrast on.
+  - [ ] With no workout open, scrolling History or Volume also minimises the tab bar: the
+        modifier is now unconditional, so the TabView keeps one identity. Expected.
+  - Not done here, outside this task's files: `LiveSessionScreen.swift:346` and `:383` (the
+    alarm-failure line and the machine-error footer) still use `Tokens.Color.certainty(.low)`,
+    so the brief's `rg -n 'certainty\(' …/HardsetFeature` check is not yet empty. They want
+    `Tokens.Color.critical` in a LiveSessionScreen change.
+  - Written without a compiler. The non-SwiftUI parts (`HardsetEnvironment`, `RootTab`,
+    `SummaryTarget`, `canStartWorkout`, `repeatWorkout`, the `onFinished` closure, the
+    accessory's `RestBarView` call and `onSkip`, `SummarySheet`'s init and `load`, and
+    `HistoryScreen`'s `onRepeat.map`) were type-checked on Linux in a scratch target against the
+    real HardsetCore and HardsetStore, with the `LiveSessionScreen`, `RestBarView`,
+    `WorkoutSummaryView` and `HistoryView` signatures copied verbatim. That run also showed the
+    brief's literal forms do not compile: `coordinator = nil` inside `if let coordinator`, the
+    method reference in `coordinator == nil ? repeatWorkout : nil` (ambiguous), and calling a
+    memberwise initialiser of a struct with private properties. If the build fails anyway, look
+    first at:
+    - `TabView(selection:)` with `Tab(_:systemImage:value:content:)`, each given a `RootTab`.
+    - `.tabViewBottomAccessory(isEnabled:content:)` (iOS 26.1) and
+      `.tabBarMinimizeBehavior(.onScrollDown)`, both inside `#if os(iOS)`.
+    - `let restState = hooks.state()` inside `if let coordinator { … }` in the `@ViewBuilder`
+      accessory.
+    - `startButton`'s `if #available(iOS 26.0, macOS 26.0, *) { … .buttonStyle(.glassProminent) }
+      else { … }`.
+    - `private nonisolated enum RootTab` and `private nonisolated struct SummaryTarget` at file
+      scope, used by `TabView(selection:)` and `.sheet(item:)`.
+
 ## Phase 3
 
 - [ ] (feat(core): the chart says what changed on one machine …) HardsetUI and HardsetFeature build

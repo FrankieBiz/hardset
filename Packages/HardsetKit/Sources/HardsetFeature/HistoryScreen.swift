@@ -13,10 +13,15 @@ public struct HistoryScreen: View {
 
   private let store: HistoryStore
   private let unit: WeightUnit
+  private let onRepeat: ((SessionID) -> Void)?
 
-  public init(store: HistoryStore, unit: WeightUnit) {
+  /// - Parameter onRepeat: Starts a workout from a past one. Offered only in its row's menu, and
+  ///   run only when the lifter picks it. Passing `nil` hides the action, which is how a workout
+  ///   in progress keeps it from replacing the session.
+  public init(store: HistoryStore, unit: WeightUnit, onRepeat: ((SessionID) -> Void)? = nil) {
     self.store = store
     self.unit = unit
+    self.onRepeat = onRepeat
   }
 
   public var body: some View {
@@ -32,7 +37,12 @@ public struct HistoryScreen: View {
           Button("Try again") { load() }
         }
       } else {
-        HistoryView(rows: rows, unit: unit)
+        HistoryView(
+          rows: rows,
+          unit: unit,
+          // The view reports the row; the root starts from the session's id.
+          onRepeat: onRepeat.map { repeatSession in { (row: HistoryRow) in repeatSession(row.id) } }
+        )
       }
     }
     .task { load() }
