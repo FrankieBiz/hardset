@@ -392,6 +392,73 @@ public nonisolated struct LoggerStore {
     }
   }
 
+  // MARK: - Records, as judged at the time
+
+  /// Which sets in a session earned records, judged as `SessionCoordinator.logSet` judged each one
+  /// when it was logged. That means against every earlier working set on the same exercise and
+  /// machine: workouts before this one, plus this workout's own earlier sets.
+  ///
+  /// Read from the database, never from memory. An edited set is judged on its corrected values,
+  /// and a deleted one is not judged at all. The summary, a resumed workout and a correction all
+  /// rely on that. This is not on the tap path: it runs at resume, after a correction, and for the
+  /// summary.
+  public func recordsBySet(in sessionID: SessionID) throws -> [SetID: [PersonalRecord]] {
+    try database.read { db in
+      guard let session = try Session.where({ $0.id.eq(sessionID.rawValue) }).fetchOne(db) else {
+        throw LoggerStoreError.sessionNotFound
+      }
+      let own = try LoggedSet
+        .where { $0.sessionID.eq(sessionID.rawValue) }
+        .fetchAll(db)
+        .sorted {
+          ($0.completedAt, $0.setOrdinal, $0.id.uuidString)
+            < ($1.completedAt, $1.setOrdinal, $1.id.uuidString)
+        }
+      guard !own.isEmpty else { return [:] }
+
+      // History before this workout. A later workout cannot un-earn a record.
+      let exerciseIDs = Array(Set(own.map(\.exerciseID)))
+      let startedAt = session.startedAt
+      let earlier = try LoggedSet
+        .where { $0.exerciseID.in(exerciseIDs) }
+        .where { !$0.isWarmup }
+        .where { $0.completedAt < startedAt }
+        .fetchAll(db)
+      var prior: [ProgressionKey: [PriorSetRecord]] = [:]
+      for row in earlier where row.sessionID != sessionID.rawValue {
+        prior[Self.key(of: row), default: []].append(Self.record(from: row))
+      }
+
+      let machineIDs = Array(Set(own.compactMap(\.machineID)))
+      let increments =
+        machineIDs.isEmpty
+        ? [:]
+        : try Machine
+          .where { $0.id.in(machineIDs) }
+          .fetchAll(db)
+          .reduce(into: [MachineID: Double]()) { result, row in
+            if let increment = row.stackIncrementKg { result[MachineID(rawValue: row.id)] = increment }
+          }
+
+      return SessionRecordReplay.records(
+        session: own.map { row in
+          SessionRecordReplay.Entry(
+            setID: SetID(rawValue: row.id), key: Self.key(of: row), weightKg: row.weightKg,
+            reps: row.reps, isWarmup: row.isWarmup, completedAt: row.completedAt)
+        },
+        priorHistory: prior,
+        increments: increments
+      )
+    }
+  }
+
+  private static func key(of row: LoggedSet) -> ProgressionKey {
+    ProgressionKey(
+      exerciseID: ExerciseID(rawValue: row.exerciseID),
+      machineID: row.machineID.map(MachineID.init(rawValue:))
+    )
+  }
+
   // MARK: - The one hoisted read
 
   /// Reads every exercise's history in a single query and returns it as an immutable value.
