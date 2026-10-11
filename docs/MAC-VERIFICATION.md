@@ -436,3 +436,34 @@ the `Hardset` scheme for the iOS 26.4 simulator.
         entries only for keyed lookups either way.
   - [ ] If any of these fails: apply the fallback in `DECISIONS.md` §23, record the failure and
         the fallback here, and only then unblock Task 11.
+
+## Phase 3
+
+- [ ] (feat(ui): a badge says how sure, and opens where from) HardsetUI and HardsetFeature build
+      (iOS, and macOS 15 via `./test.sh`) with `CertaintyLevel` and
+      `ExercisePickerView.displayName` gone. Then in the simulator:
+  - [ ] Volume tab › "How sets are counted": the sheet opens with "In short" first, the three
+        credit bars (1, 0.5, 0) with their basis lines, then "How it works". Done closes it.
+  - [ ] The Source section shows "Open the paper at doi.org"; it opens
+        https://doi.org/10.1007/s40279-025-02344-w (no trailing comma).
+  - [ ] The title is inline and reads "Fractional set counting".
+  - [ ] SF Symbols render (not blank): `circle.dashed`, `greaterthan.circle`,
+        `clock.badge.questionmark`, `checkmark.seal`, `circle.lefthalf.filled`,
+        `questionmark.circle`. If one is missing, choose another non-error glyph in the SF Symbols
+        app and change it in `CertaintyMark.swift` (Core tests do not pin names).
+  - [ ] Increase Contrast on: badge text darkens (light) or lightens (dark).
+  - [ ] VoiceOver on a badge: "Moderate confidence. Shows how this was calculated", and double tap
+        opens the sheet. The credit rows each read as one element.
+  - [ ] Muscle names in the picker, the Volume tab and the summary are unchanged ("Quads", …).
+  - [ ] The 0 credit row draws an empty track, and the whole 44 pt "Open the paper" row is
+        tappable, not only its words (the frame is on the link's label).
+  - [ ] VoiceOver's Headings rotor steps through "In short", "How it works", "Where it holds, and
+        where it does not" and "Source"; the sheet's certainty line reads as its word alone.
+  - Written without a compiler. If the build fails, look first at:
+    - `MethodologySheet.section`'s `let bodyFont: Font = if … else if … else …` (an if
+      expression, Swift 5.9).
+    - `CertaintyBadge.Style` is main-actor isolated by the target's default isolation, and
+      `style == .full` runs in `body`. An isolated-conformance diagnostic there is fixed by
+      declaring it `nonisolated public enum Style`.
+    - The `#if os(iOS) .navigationBarTitleDisplayMode(.inline) #endif` between
+      `.navigationTitle` and `.toolbar` (the API is unavailable on macOS).

@@ -44,13 +44,15 @@ public enum Tokens {
     /// as secondary through its small type, not through a fainter colour.
     public static let caveat = adaptive(Palette.swatch(.certaintyUnevaluated))
 
-    /// Certainty is communicated with colour *and* text, never colour alone -- a
-    /// colour-only signal is inaccessible and, for a claim about someone's training, unclear.
+    /// Certainty is communicated with colour *and* a glyph and a word, never colour alone -- a
+    /// colour-only signal is inaccessible and, for a claim about someone's training, unclear. The
+    /// glyph and the word are `CertaintyMark`'s, decided and tested in Core; this is only the
+    /// colour.
     ///
     /// The values are `Palette`'s certainty roles, whose contrast as text is tested in Core, with
     /// darker (light mode) or lighter (dark mode) variants under Increase Contrast.
-    public static func certainty(_ level: CertaintyLevel) -> SwiftUI.Color {
-      switch level {
+    public static func certainty(_ certainty: Certainty) -> SwiftUI.Color {
+      switch certainty {
       case .high: certaintyHigh
       case .moderate: certaintyModerate
       case .low: certaintyLow
@@ -202,32 +204,4 @@ public enum Tokens {
   /// heavy sets. 44 pt is the accessibility floor for a calm user sitting still; the set row
   /// and the keypad get 56 because a missed tap there costs a set.
   public static let loggerTapTarget: CGFloat = 56
-}
-
-/// Mirror of `HardsetCore.Certainty` for the UI layer.
-///
-/// Declared here so `HardsetUI` does not need to import the engine merely to colour a badge,
-/// and so a rendering change can never alter engine semantics.
-public enum CertaintyLevel: String, Sendable, CaseIterable {
-  case unevaluated, low, moderate, high
-
-  /// The word shown to the user. "Unevaluated" is stated plainly rather than hidden, because
-  /// the app's claim is that it says when it does not know.
-  public var label: String {
-    switch self {
-    case .high: "High confidence"
-    case .moderate: "Moderate confidence"
-    case .low: "Low confidence"
-    case .unevaluated: "Not evaluated"
-    }
-  }
-
-  public var symbolName: String {
-    switch self {
-    case .high: "checkmark.seal"
-    case .moderate: "circle.lefthalf.filled"
-    case .low: "exclamationmark.triangle"
-    case .unevaluated: "questionmark.circle"
-    }
-  }
 }

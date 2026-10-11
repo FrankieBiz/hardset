@@ -1,52 +1,46 @@
+import HardsetCore
 import SwiftUI
 
 /// Shows how much the app trusts the number next to it, and where that number came from.
 ///
-/// App Review guideline 1.4.1 requires disclosing the data and methodology behind
-/// health-related accuracy claims. Making the disclosure a property of the badge -- rather
-/// than a paragraph in a settings screen -- means it cannot drift away from the value it
-/// describes, because the same view renders both.
+/// A glyph and a word, never colour alone (spec 3.1). Both come from `CertaintyMark` in Core,
+/// where they are tested. Tapping opens the source, which is what App Review guideline 1.4.1 asks
+/// for, attached to the number rather than buried in settings.
 public struct CertaintyBadge: View {
-  private let level: CertaintyLevel
-  private let methodology: String
-  private let citation: String?
-  @State private var isShowingDetail = false
+  /// `.full` shows the whole word ("Moderate confidence"); `.compact` the short one ("Moderate"),
+  /// for dense rows where the full word would repeat down a list. VoiceOver hears the whole word
+  /// either way.
+  public enum Style: Sendable { case full, compact }
 
-  public init(level: CertaintyLevel, methodology: String, citation: String? = nil) {
-    self.level = level
-    self.methodology = methodology
-    self.citation = citation
+  private let mark: CertaintyMark
+  private let source: EvidenceSource
+  private let style: Style
+  @State private var isShowingSource = false
+
+  public init(_ certainty: Certainty, source: EvidenceSource, style: Style = .full) {
+    self.mark = certainty.mark
+    self.source = source
+    self.style = style
   }
 
   public var body: some View {
     Button {
-      isShowingDetail = true
+      isShowingSource = true
     } label: {
       HStack(spacing: Tokens.Spacing.tight) {
-        Image(systemName: level.symbolName)
-        // Colour is never the only carrier of meaning.
-        Text(level.label)
+        Image(systemName: mark.symbolName)
+        Text(style == .full ? mark.word : mark.shortWord)
       }
       .font(Tokens.Text.caption)
-      .foregroundStyle(Tokens.Color.certainty(level))
+      .foregroundStyle(Tokens.Color.certainty(mark.certainty))
+      .frame(minHeight: Tokens.minimumTapTarget)
+      .contentShape(Rectangle())
     }
     .buttonStyle(.plain)
-    .accessibilityLabel("\(level.label). How this was calculated.")
-    .popover(isPresented: $isShowingDetail) {
-      VStack(alignment: .leading, spacing: Tokens.Spacing.regular) {
-        Text("How this is calculated")
-          .font(.headline)
-        Text(methodology)
-          .font(Tokens.Text.label)
-        if let citation {
-          Text(citation)
-            .font(Tokens.Text.caption)
-            .foregroundStyle(Tokens.Color.textSecondary)
-        }
-      }
-      .padding(Tokens.Spacing.loose)
-      .frame(maxWidth: 320)
-      .presentationCompactAdaptation(.popover)
+    .accessibilityLabel(mark.word)
+    .accessibilityHint("Shows how this was calculated")
+    .sheet(isPresented: $isShowingSource) {
+      MethodologySheet(source: source, certainty: mark.certainty)
     }
   }
 }

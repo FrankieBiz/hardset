@@ -126,7 +126,7 @@ public struct VolumeReportView: View {
   private func bar(for row: Row) -> some View {
     VStack(alignment: .leading, spacing: Tokens.Spacing.hairline) {
       HStack(alignment: .firstTextBaseline) {
-        Text(ExercisePickerView.displayName(MuscleKey(row.muscle)))
+        Text(row.muscle.displayName)
           .font(Tokens.Text.label)
         Spacer(minLength: Tokens.Spacing.snug)
         // The "≥" is load-bearing, not decorative.
@@ -155,7 +155,7 @@ public struct VolumeReportView: View {
     .padding(.vertical, Tokens.Spacing.tight)
     .accessibilityElement(children: .combine)
     .accessibilityLabel(
-      "\(ExercisePickerView.displayName(MuscleKey(row.muscle))), "
+      "\(row.muscle.displayName), "
         + "\(report.isLowerBound ? "at least " : "")\(Self.format(row.sets)) sets"
     )
   }
@@ -176,7 +176,7 @@ public struct VolumeReportView: View {
 
           FlowLayout(spacing: Tokens.Spacing.snug) {
             ForEach(gaps, id: \.self) { muscle in
-              Text(ExercisePickerView.displayName(MuscleKey(muscle)))
+              Text(muscle.displayName)
                 .font(Tokens.Text.caption)
                 .padding(.horizontal, Tokens.Spacing.snug)
                 .padding(.vertical, Tokens.Spacing.tight)

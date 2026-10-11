@@ -145,7 +145,7 @@ public struct WorkoutSummaryView: View {
   private func musclesSection(_ summary: WorkoutSummary) -> some View {
     Section {
       ForEach(summary.muscles) { line in
-        let name = ExercisePickerView.displayName(line.muscle)
+        let name = line.muscle.displayName
         HStack {
           Text(name)
           Spacer(minLength: Tokens.Spacing.snug)

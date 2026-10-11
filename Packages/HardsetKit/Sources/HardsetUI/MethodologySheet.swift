@@ -14,6 +14,7 @@ import SwiftUI
 public struct MethodologySheet: View {
   private let source: EvidenceSource
   private let certainty: Certainty?
+  @Environment(\.dismiss) private var dismiss
 
   public init(source: EvidenceSource, certainty: Certainty? = nil) {
     self.source = source
@@ -26,23 +27,48 @@ public struct MethodologySheet: View {
         VStack(alignment: .leading, spacing: Tokens.Spacing.section) {
           if let certainty {
             HStack(spacing: Tokens.Spacing.tight) {
-              Image(systemName: Self.symbol(for: certainty))
-              Text(Self.label(for: certainty))
+              Image(systemName: certainty.mark.symbolName)
+              Text(certainty.mark.word)
             }
             .font(Tokens.Text.caption)
-            .foregroundStyle(Tokens.Color.certainty(Self.level(for: certainty)))
+            .foregroundStyle(Tokens.Color.certainty(certainty))
+            // One element, read as the word, as the badge is: the glyph repeats it in a shape.
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(certainty.mark.word)
           }
 
-          section("How this is calculated", source.methodology)
+          // First, because most people read only this. It summarises the methodology below and
+          // never replaces it: that text is the disclosure, shown verbatim.
+          if let summary = source.summary {
+            section("In short", summary, emphasized: true)
+          }
+
+          if source.id == SetCounting.source.id {
+            creditScheme
+          }
+
+          section("How it works", source.methodology)
 
           if let validRange = source.validRange {
             // Deliberately its own section rather than a parenthetical. The limits of a number are
             // as much a part of the disclosure as the method.
-            section("Where this applies, and where it does not", validRange)
+            section("Where it holds, and where it does not", validRange)
           }
 
           if let citation = source.citation {
-            section("Source", citation, monospaced: true)
+            VStack(alignment: .leading, spacing: Tokens.Spacing.snug) {
+              section("Source", citation, monospaced: true)
+              if let url = source.doiURL {
+                // The label carries the frame so the whole 44 pt row is the link, not only the
+                // words.
+                Link(destination: url) {
+                  Text("Open the paper at doi.org")
+                    .font(Tokens.Text.label)
+                    .frame(minHeight: Tokens.minimumTapTarget)
+                    .contentShape(Rectangle())
+                }
+              }
+            }
           }
         }
         .padding(Tokens.Spacing.regular)
@@ -50,34 +76,71 @@ public struct MethodologySheet: View {
       }
       .background(Tokens.Color.background)
       .navigationTitle(source.title)
+      #if os(iOS)
+        .navigationBarTitleDisplayMode(.inline)
+      #endif
+      .toolbar {
+        ToolbarItem(placement: .confirmationAction) {
+          Button("Done") { dismiss() }
+        }
+      }
     }
   }
 
-  private func section(_ heading: String, _ body: String, monospaced: Bool = false) -> some View {
-    VStack(alignment: .leading, spacing: Tokens.Spacing.snug) {
+  private func section(
+    _ heading: String, _ body: String, monospaced: Bool = false, emphasized: Bool = false
+  ) -> some View {
+    let bodyFont: Font =
+      if monospaced {
+        Tokens.Text.caption.monospaced()
+      } else if emphasized {
+        Tokens.Text.label.weight(.semibold)
+      } else {
+        Tokens.Text.label
+      }
+    return VStack(alignment: .leading, spacing: Tokens.Spacing.snug) {
       Text(heading)
         .font(Tokens.Text.label.weight(.semibold))
+        // So VoiceOver's headings rotor moves section to section.
+        .accessibilityAddTraits(.isHeader)
       Text(body)
-        .font(monospaced ? Tokens.Text.caption.monospaced() : Tokens.Text.label)
+        .font(bodyFont)
         .foregroundStyle(monospaced ? Tokens.Color.textSecondary : Tokens.Color.textPrimary)
         .textSelection(.enabled)
     }
     .frame(maxWidth: .infinity, alignment: .leading)
   }
 
-  /// Maps engine certainty onto the UI's own scale. Kept here so `HardsetUI` does not need the
-  /// engine's enum to colour a chip, matching how `CertaintyLevel` is already used.
-  static func level(for certainty: Certainty) -> CertaintyLevel {
-    switch certainty {
-    case .high: .high
-    case .moderate: .moderate
-    case .low: .low
-    case .unevaluated: .unevaluated
+  /// The 1 / 0.5 / 0 credits as bars, one row per role, read from Core so the picture cannot
+  /// drift from the arithmetic. Each row says where its number comes from.
+  private var creditScheme: some View {
+    VStack(alignment: .leading, spacing: Tokens.Spacing.regular) {
+      ForEach(SetCounting.creditScheme()) { tier in
+        VStack(alignment: .leading, spacing: Tokens.Spacing.hairline) {
+          HStack(alignment: .firstTextBaseline) {
+            Text(tier.meaning).font(Tokens.Text.label)
+            Spacer(minLength: Tokens.Spacing.snug)
+            Text(tier.creditText)
+              .font(Tokens.Text.label.weight(.semibold))
+              .monospacedDigit()
+          }
+          // The bar is the picture; the number beside it is what VoiceOver reads.
+          GeometryReader { proxy in
+            ZStack(alignment: .leading) {
+              Capsule().fill(Tokens.Color.surface)
+              Capsule().fill(Tokens.Color.accent).frame(width: proxy.size.width * tier.credit)
+            }
+          }
+          .frame(height: 8)
+          .accessibilityHidden(true)
+          Text(tier.basis)
+            .font(Tokens.Text.caption)
+            .foregroundStyle(Tokens.Color.textSecondary)
+        }
+        .accessibilityElement(children: .combine)
+      }
     }
   }
-
-  static func label(for certainty: Certainty) -> String { level(for: certainty).label }
-  static func symbol(for certainty: Certainty) -> String { level(for: certainty).symbolName }
 }
 
 #if DEBUG
@@ -87,5 +150,9 @@ public struct MethodologySheet: View {
 
   #Preview("No target exists") {
     MethodologySheet(source: VolumeAnalyzer.targetSource, certainty: .unevaluated)
+  }
+
+  #Preview("Epley") {
+    MethodologySheet(source: StrengthMath.epleySource, certainty: .high)
   }
 #endif
