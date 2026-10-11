@@ -1,3 +1,4 @@
+import Accessibility
 import Charts
 import HardsetCore
 import SwiftUI
@@ -17,8 +18,13 @@ public struct ProgressionChartView: View {
   private let series: [SeriesInput]
   private let machineChanges: [MachineChange]
   private let unit: WeightUnit
+  private let exerciseName: String
   private let onExplain: (() -> Void)?
   @State private var metric: ProgressionMetric = .heaviestLoad
+  /// Where the finger is, as a date; the readout snaps it to the nearest logged session.
+  @State private var selectedDate: Date?
+  /// The chart grows with Dynamic Type, so its axis labels keep their room at large sizes.
+  @ScaledMetric(relativeTo: .body) private var chartHeight: CGFloat = 220
 
   /// A series plus the label the store resolved for it, so this view does no lookups.
   public typealias SeriesInput = ProgressionChartSeries
@@ -27,11 +33,13 @@ public struct ProgressionChartView: View {
     series: [SeriesInput],
     machineChanges: [MachineChange] = [],
     unit: WeightUnit,
+    exerciseName: String = "",
     onExplain: (() -> Void)? = nil
   ) {
     self.series = series
     self.machineChanges = machineChanges
     self.unit = unit
+    self.exerciseName = exerciseName
     self.onExplain = onExplain
   }
 
@@ -44,16 +52,15 @@ public struct ProgressionChartView: View {
           Text("Log this movement a few times and its load history appears here.")
         }
       } else {
+        headline
         picker
         chart
         if hasNoEstimates && metric == .estimatedOneRepMax {
           // Says why the chart is empty instead of drawing nothing and letting the user guess.
-          Text(
-            "No estimate is available. A one-rep max is only estimated from sets of twelve reps "
-              + "or fewer, and none of these sessions qualify."
+          UnevaluatedReadout(
+            explanation:
+              "A one-rep max is only estimated from sets of twelve reps or fewer, and none of these sessions qualify."
           )
-          .font(Tokens.Text.caption)
-          .foregroundStyle(Tokens.Color.caveat)
         }
         machineChangeNotes
         if let onExplain {
@@ -72,6 +79,22 @@ public struct ProgressionChartView: View {
     }
   }
 
+  private var formatter: WeightFormatter { WeightFormatter(unit: unit) }
+
+  /// "Cybex Leg Press: +5 kg over 2 sessions", always for one machine; Core words it.
+  @ViewBuilder private var headline: some View {
+    if let headline = ProgressionHeadline.current(in: series, metric: metric, formatter: formatter) {
+      HStack(alignment: .firstTextBaseline, spacing: Tokens.Spacing.snug) {
+        Text(headline.text)
+          .font(Tokens.Text.label.weight(.semibold))
+          .accessibilityLabel(headline.spoken)
+        if let certainty = headline.certainty {
+          CertaintyBadge(certainty, source: StrengthMath.epleySource, style: .compact)
+        }
+      }
+    }
+  }
+
   private var picker: some View {
     Picker("Metric", selection: $metric) {
       ForEach(ProgressionMetric.allCases, id: \.self) { option in
@@ -85,17 +108,23 @@ public struct ProgressionChartView: View {
     Chart {
       ForEach(series) { input in
         ForEach(plottable(input.points), id: \.sessionID) { point in
-          LineMark(
-            x: .value("Date", point.date),
-            y: .value(metric.label, value(point)),
-            series: .value("Machine", input.label)
-          )
-          .foregroundStyle(by: .value("Machine", input.label))
-          PointMark(
-            x: .value("Date", point.date),
-            y: .value(metric.label, value(point))
-          )
-          .foregroundStyle(by: .value("Machine", input.label))
+          if let value = metric.displayValue(of: point, unit: unit) {
+            // Shape as well as colour tells machines apart, and a dash marks an estimate.
+            LineMark(
+              x: .value("Date", point.date),
+              y: .value(metric.label, value),
+              series: .value("Machine", input.label)
+            )
+            .foregroundStyle(by: .value("Machine", input.label))
+            .symbol(by: .value("Machine", input.label))
+            .lineStyle(StrokeStyle(lineWidth: 2, dash: metric.isEstimate ? [5, 3] : []))
+            PointMark(
+              x: .value("Date", point.date),
+              y: .value(metric.label, value)
+            )
+            .foregroundStyle(by: .value("Machine", input.label))
+            .symbol(by: .value("Machine", input.label))
+          }
         }
       }
       // A switch is drawn on the chart, not just described below it, so the eye meets the caveat
@@ -110,10 +139,29 @@ public struct ProgressionChartView: View {
               .foregroundStyle(Tokens.Color.caveat)
           }
       }
+      if let selectedDate,
+        let selection = ProgressionSelection.nearest(
+          to: selectedDate, in: series, metric: metric, formatter: formatter)
+      {
+        RuleMark(x: .value("Selected", selection.point.date))
+          .foregroundStyle(Tokens.Color.textSecondary)
+          .annotation(position: .top, overflowResolution: .init(x: .fit, y: .disabled)) {
+            Text(selection.text)
+              .font(Tokens.Text.caption.weight(.semibold))
+              .padding(Tokens.Spacing.tight)
+              .background(
+                Tokens.Color.surface, in: RoundedRectangle(cornerRadius: Tokens.Radius.control))
+          }
+      }
     }
+    .chartXSelection(value: $selectedDate)
     .chartYAxisLabel(unit.abbreviation)
     .chartLegend(position: .bottom)
-    .frame(height: 220)
+    .frame(height: chartHeight)
+    .modifier(
+      AudioGraph(
+        description: ProgressionChartDescription.make(
+          exerciseName: exerciseName, series: series, metric: metric, formatter: formatter)))
   }
 
   private var machineChangeNotes: some View {
@@ -135,22 +183,57 @@ public struct ProgressionChartView: View {
   /// Points that actually have a value for the selected metric. An unestimable session is dropped
   /// from the estimate chart rather than plotted at zero.
   private func plottable(_ points: [ProgressionPoint]) -> [ProgressionPoint] {
-    switch metric {
-    case .heaviestLoad: points
-    case .estimatedOneRepMax: points.filter { $0.bestEstimatedOneRepMaxKg != nil }
-    }
-  }
-
-  private func value(_ point: ProgressionPoint) -> Double {
-    switch metric {
-    case .heaviestLoad: unit.fromKilograms(point.heaviestLoadKg)
-    case .estimatedOneRepMax: unit.fromKilograms(point.bestEstimatedOneRepMaxKg ?? 0)
-    }
+    points.filter { metric.kilograms(of: $0) != nil }
   }
 
   private var hasNoEstimates: Bool {
     series.allSatisfy { input in
       input.points.allSatisfy { $0.bestEstimatedOneRepMaxKg == nil }
+    }
+  }
+}
+
+/// The chart as VoiceOver's audio graph hears it. Every value comes from Core's description;
+/// this only converts types.
+private struct ProgressionAudioGraph: AXChartDescriptorRepresentable {
+  let description: ProgressionChartDescription
+
+  func makeChartDescriptor() -> AXChartDescriptor {
+    let dates = description.dateRange
+    let xAxis = AXNumericDataAxisDescriptor(
+      title: "Date",
+      range: dates.lowerBound.timeIntervalSince1970...dates.upperBound.timeIntervalSince1970,
+      gridlinePositions: []
+    ) { Date(timeIntervalSince1970: $0).formatted(date: .abbreviated, time: .omitted) }
+    let yAxis = AXNumericDataAxisDescriptor(
+      title: description.valueAxisTitle, range: description.valueRange, gridlinePositions: []
+    ) { [description] in description.spokenValue($0) }
+    return AXChartDescriptor(
+      title: description.title,
+      summary: description.summary,
+      xAxis: xAxis,
+      yAxis: yAxis,
+      additionalAxes: [],
+      series: description.series.map { line in
+        AXDataSeriesDescriptor(
+          name: line.name, isContinuous: true,
+          dataPoints: line.points.map {
+            AXDataPoint(x: $0.date.timeIntervalSince1970, y: $0.value, label: $0.spokenValue)
+          })
+      })
+  }
+}
+
+/// `ProgressionChartDescription.make` returns nil only when nothing is plotted, and then no chart
+/// is drawn, so the descriptor is attached here rather than through an invented empty description.
+private struct AudioGraph: ViewModifier {
+  let description: ProgressionChartDescription?
+
+  func body(content: Content) -> some View {
+    if let description {
+      content.accessibilityChartDescriptor(ProgressionAudioGraph(description: description))
+    } else {
+      content
     }
   }
 }

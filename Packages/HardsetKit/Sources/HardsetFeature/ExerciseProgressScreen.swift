@@ -42,9 +42,10 @@ public struct ExerciseProgressScreen: View {
         }
       } else {
         ProgressionChartView(
-          series: seriesInputs,
+          series: history?.chartSeries() ?? [],
           machineChanges: history?.machineChanges ?? [],
           unit: unit,
+          exerciseName: exerciseName,
           onExplain: { isShowingMethodology = true }
         )
         .padding(.horizontal, Tokens.Spacing.regular)
@@ -59,20 +60,6 @@ public struct ExerciseProgressScreen: View {
       // sheet says which formula and where it stops being meaningful.
       MethodologySheet(source: ProgressionAnalyzer.source)
     }
-  }
-
-  /// Series are labelled here because the label needs the store's machine names, and the chart is
-  /// deliberately free of storage. Ordered by most recently used so the machine the lifter is on
-  /// now reads first in the legend.
-  private var seriesInputs: [ProgressionChartView.SeriesInput] {
-    guard let history else { return [] }
-    return history.series
-      .sorted { lhs, rhs in
-        (lhs.points.last?.date ?? .distantPast) > (rhs.points.last?.date ?? .distantPast)
-      }
-      .map {
-        ProgressionChartView.SeriesInput(label: history.label(for: $0.key), points: $0.points)
-      }
   }
 
   private func load() {

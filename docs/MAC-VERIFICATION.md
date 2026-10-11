@@ -491,3 +491,29 @@ the `Hardset` scheme for the iOS 26.4 simulator.
   - Written without a compiler. If the build fails, look first at the `[String, String?] array
     .compactMap { $0 }.joined` label arrays in `VolumeReportView.bar(for:)` and
     `WorkoutSummaryView.recordsSection`, and the `.accessibilityActions { if … { Button … } }`.
+
+- [ ] (feat(ui): the chart says what changed on one machine, and VoiceOver hears it) HardsetUI and
+      HardsetFeature build (iOS, and macOS 15 via `./test.sh`). With two machines for one movement,
+      in the simulator:
+  - [ ] Over the chart: "Cybex Leg Press: +5 kg over 2 sessions" for the machine used last, never a
+        delta across machines. In pounds the number is the difference of the two displayed loads.
+  - [ ] Each machine has its own colour and its own point shape (circle, square, ...); with colour
+        filters on (Settings > Accessibility > Display > Color Filters > Grayscale) the lines are
+        still told apart.
+  - [ ] Est. 1RM: lines are dashed, the headline says "about" and carries a badge.
+  - [ ] Drag across the chart: a rule and a label follow the nearest logged session, named by its
+        machine.
+  - [ ] A movement done only with 15-rep sets: Est. 1RM shows "Not evaluated" and the reason.
+  - [ ] VoiceOver: focus the chart, swipe up to "Chart details" / "Play audio graph". The title is
+        "<movement>, heaviest load", there is one series per machine, and values read "102.5
+        kilograms".
+  - [ ] At the largest accessibility text size the chart is taller than at the default size.
+  - Written without a compiler. If it fails, look first at:
+    - the `.symbol(by:)` and `.lineStyle` modifiers on `LineMark`;
+    - `chartXSelection(value:)` with a `Date?` binding;
+    - the `RuleMark` inside an `if let` in the chart builder, and the `if let value` inside the
+      `ForEach` in the chart builder;
+    - the `[description]` capture list in `ProgressionAudioGraph`, and whether
+      `AXChartDescriptorRepresentable` conformance needs `nonisolated` under the target's default
+      main-actor isolation;
+    - `@ScaledMetric` on a `public struct` view with a custom `init`.
