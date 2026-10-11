@@ -33,7 +33,8 @@ public protocol RestTimerPersistence {
 /// Every state change is written down at once, but its alarm arrives up to a debounce later.
 /// Reconciling in that window would find the old alarm cancelled and the new one not yet
 /// scheduled, and end the rest the lifter just started or adjusted. So a reconciliation that
-/// arrives while a commit is pending is held back, and runs as soon as the commit finishes.
+/// arrives while a commit is pending, or while its alarm is still being scheduled, is held back
+/// and runs as soon as that finishes.
 ///
 /// ## When alarms are off
 ///
@@ -62,6 +63,8 @@ public final class RestTimerController {
   private var commitTask: Task<Void, Never>?
   private var reconcileAfterCommit = false
   private var expiryTask: Task<Void, Never>?
+  /// The alarm whose `schedule` call is in flight, if any.
+  private var schedulingID: UUID?
   private let persistence: (any RestTimerPersistence)?
 
   /// Long enough to absorb a burst of taps, short enough to feel immediate.
@@ -95,7 +98,8 @@ public final class RestTimerController {
     state = state.paused(at: now)
     cancelCommit()
     RestNotificationFallback.cancel()
-    if let alarmID {
+    // An alarm still being scheduled cannot be paused yet; the commit pauses it once it exists.
+    if let alarmID, alarmID != schedulingID {
       do { try RestAlarmService.pause(id: alarmID) } catch { lastError = error }
     }
     persist()
@@ -124,9 +128,10 @@ public final class RestTimerController {
   /// Brings the on-screen timer back in line with AlarmKit. Run at launch and on every update:
   /// a force-quit relaunched the app idle while its alarm still counted down.
   public func reconcile(now: Date = .now) async {
-    // Held while a commit is pending (see "Why reconciliation waits"). The record already says
-    // what the lifter did; the alarms do not yet, and reading them now would end the rest.
-    guard commitTask == nil else {
+    // Held while a commit is pending or its alarm is still being scheduled (see "Why
+    // reconciliation waits"). The record already says what the lifter did; the alarms do not
+    // yet, and reading them now would end the rest.
+    guard commitTask == nil, schedulingID == nil else {
       reconcileAfterCommit = true
       return
     }
@@ -259,8 +264,12 @@ public final class RestTimerController {
     guard case .running(let endsAt) = state else { return }
     let remaining = Duration.seconds(endsAt.timeIntervalSince(.now))
     guard remaining > .zero else {
-      // Adjusted down to nothing: no alarm to schedule, so a rest without one ends now.
-      endAtDeadlineIfNoAlarm()
+      // Adjusted down to nothing, or the deadline passed during the permission prompt: the rest
+      // is over now. Its alarm or notification would still sound at the old deadline, so both
+      // go, and the rest ends here as an alert would have ended it.
+      retireAlarm()
+      RestNotificationFallback.cancel()
+      adopt(.idle, alarmID: nil)
       return
     }
 
@@ -282,20 +291,52 @@ public final class RestTimerController {
     alarmID = id
     persist()
 
+    schedulingID = id
+    var failure: (any Error)?
     do {
       try await RestAlarmService.schedule(
         .init(id: id, duration: remaining, metadata: metadata)
       )
     } catch {
-      // Nothing was scheduled, so the record must not name an alarm; the countdown stays. Unless
-      // the lifter has moved on meanwhile, in which case the record is already theirs.
-      if alarmID == id {
-        alarmID = nil
-        persist()
-        endAtDeadlineIfNoAlarm()
-      }
-      lastError = error
+      failure = error
     }
+    schedulingID = nil
+
+    if let failure {
+      await scheduleFailed(id, failure)
+    } else {
+      settleLateAlarm(id)
+    }
+    // Paused or skipped while AlarmKit was scheduling: that cancelled this commit, so its finish
+    // will not run the reconciliation held back meanwhile. Run it now.
+    if commitTask == nil, reconcileAfterCommit { await reconcile() }
+  }
+
+  /// Brings an alarm that finished scheduling into line with what the lifter did meanwhile.
+  private func settleLateAlarm(_ id: UUID) {
+    if alarmID != id {
+      // Skipped or replaced while scheduling: nothing on screen accounts for this alarm.
+      do { try RestAlarmService.cancelUnlessAlerting(id: id) } catch { lastError = error }
+    } else if case .paused = state {
+      // Paused while scheduling: `pause()` left this alarm to be paused once it existed.
+      do { try RestAlarmService.pause(id: id) } catch { lastError = error }
+    }
+  }
+
+  /// Nothing was scheduled, so the record must not name the alarm. The countdown stays.
+  private func scheduleFailed(_ id: UUID, _ error: any Error) async {
+    // The lifter moved on meanwhile: the record is already theirs, and the commit that replaced
+    // this one reports its own result.
+    guard alarmID == id else { return }
+    alarmID = nil
+    persist()
+    endAtDeadlineIfNoAlarm()
+    // Cancelled because the lifter paused or adjusted meanwhile: superseded, not failed.
+    guard !(error is CancellationError) else { return }
+    lastError = error
+    // A failed alarm must not end in silence: the plain notification stands in, as it does when
+    // alarms are denied.
+    if state.isRunning { await scheduleFallback() }
   }
 
   /// Ends a rest that has no alarm behind it when its deadline passes, as the alert would have.

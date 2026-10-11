@@ -139,6 +139,12 @@ the `Hardset` scheme for the iOS 26.4 simulator.
   - [ ] Task 11 conforms the store in the app target as
         `extension RestTimerStore: @retroactive RestTimerPersistence {}`. Without `@retroactive`,
         Swift warns, because the app target is outside the package.
+  - [ ] (fix(alarm): stop the old alarm when a rest is cut to zero…) `RestNotificationPresenter`
+        compiles with no "nearly matches optional requirement" warning. Its method must be the
+        documented `userNotificationCenter(_:willPresent:withCompletionHandler:)` with an
+        `@escaping @Sendable` handler; a near-miss signature compiles and is never called. Task 11
+        keeps one alive in the app and sets `UNUserNotificationCenter.current().delegate` to it
+        before launch finishes (the property is `weak`).
   Then on device:
   - [ ] Start a rest, force-quit, relaunch: the app shows the same countdown.
   - [ ] (fix(alarm): no system pause on the Lock Screen…) The Lock Screen countdown offers no pause
@@ -155,6 +161,10 @@ the `Hardset` scheme for the iOS 26.4 simulator.
         notification at the deadline; +15 s moves it; pause removes it; Skip removes it. Relaunch
         mid-rest: the countdown is still there. With the app open at the deadline, the rest bar
         goes away and the notification still arrives.
+  - [ ] Alarms denied, app in front at the deadline: banner and sound appear (needs Task 11's
+        delegate).
+  - [ ] Start a rest with under 15 s left, tap −15 s: the bar goes away and nothing sounds at the
+        old deadline. Check it with alarms allowed and with alarms denied.
   - [ ] Tap +15 s five times fast with the app in front. `AlarmManager.shared.alarms` holds exactly
         one alarm, and the rest never drops to idle.
   - [ ] Note whether `alarmUpdates` emits on pause and resume. The code works either way.
