@@ -64,8 +64,15 @@ public struct SetRowView: View {
   @ScaledMetric(relativeTo: .subheadline) private var ordinalWidth: CGFloat = 28
   @ScaledMetric(relativeTo: .caption) private var lastTimeWidth: CGFloat = 78
   // The tap targets grow with the type as well, and never fall below the 44 pt and 56 pt floors.
-  @ScaledMetric(relativeTo: .body) private var loggerTarget: CGFloat = Tokens.loggerTapTarget
-  @ScaledMetric(relativeTo: .body) private var minimumTarget: CGFloat = Tokens.minimumTapTarget
+  // Capped at 88 pt (the pad's key cap): uncapped, 56 pt reaches about 170 pt at the largest size,
+  // and the reps field plus the check mark would leave the hero weight no room (it would shrink
+  // to its 0.6 floor or truncate). The floors stay 56 and 44.
+  @ScaledMetric(relativeTo: .body) private var scaledLoggerTarget: CGFloat = Tokens.loggerTapTarget
+  @ScaledMetric(relativeTo: .body) private var scaledMinimumTarget: CGFloat =
+    Tokens.minimumTapTarget
+  private var loggerTarget: CGFloat { min(scaledLoggerTarget, Self.targetCap) }
+  private var minimumTarget: CGFloat { min(scaledMinimumTarget, Self.targetCap) }
+  private static let targetCap: CGFloat = 88
   @State private var isExplainingEstimate = false
 
   /// - Parameter keypad: The pad editing this row, or `nil` when the row is not focused. While it
@@ -204,6 +211,13 @@ public struct SetRowView: View {
         HStack(spacing: Tokens.Spacing.regular) {
           valueField(.weight, suffix: unit.abbreviation)
           valueField(.reps, suffix: "reps")
+        }
+        // On its own line: weight, reps and the check mark do not share one at these sizes.
+        // Width on a 375 pt phone at the largest size: 351 pt inside the row's padding. Weight
+        // and reps alone leave 351 - 12 (gap) - 88 (reps, at the cap) = 251 pt for the weight.
+        // With the check beside them it was 351 - 24 - 88 - 88 = 151 pt.
+        HStack(spacing: 0) {
+          Spacer(minLength: 0)
           logButton
         }
       }

@@ -533,6 +533,10 @@ the `Hardset` scheme for the iOS 26.4 simulator.
         stack (number and "Last time" above, fields and check below), nothing truncates the weight,
         and every control is at least 44 pt (Accessibility Inspector). The keypad's keys grow but
         stop growing at 88 pt, and the row being edited stays visible above the pad.
+  - [ ] AX5 on iPhone SE (375 pt): the active row's weight renders without ellipsis, and the
+        check mark sits on its own line beneath the weight and reps.
+  - [ ] Pad: the `.onChange(of: keypad.focused.text)` announcement may also fire on a reseed or a
+        field switch (Next). Watch for spurious or doubled announcements.
   - [ ] An estimated-1RM record on a row shows its certainty glyph and word, and the action "How
         this estimate is calculated" opens the Epley sheet.
   - [ ] Loads borrowed from another machine show the "From another machine" chip; tapping it opens
