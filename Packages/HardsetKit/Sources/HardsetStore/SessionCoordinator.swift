@@ -69,6 +69,17 @@ public final class SessionCoordinator {
   /// What is resting right now, set only after the rest was actually requested.
   public private(set) var activeRest: RestMetadata?
 
+  /// Records each row earned, kept for the whole workout, keyed by `SetSlot.id`.
+  ///
+  /// `lastRecords` is the moment and is cleared by the next log. This is the trophy that stays on
+  /// the row that earned it (spec 2.5). It is rebuilt from storage on resume, so a crash does not
+  /// take it away.
+  public private(set) var recordsBySlot: [UUID: [PersonalRecord]] = [:]
+
+  /// The latest thing worth a haptic. A new value per occurrence, so two identical events in a row
+  /// still play twice. Set only after the write it describes has succeeded or failed.
+  public private(set) var feedback: FeedbackPulse?
+
   public init(
     store: LoggerStore,
     sessionID: SessionID,
@@ -247,6 +258,17 @@ public final class SessionCoordinator {
       onStartRest: onStartRest
     )
     coordinator.planRowIDs = rowIDs
+    // Trophies come back with the workout, and nothing is announced again. A failed read loses
+    // only the trophies, never the workout, which is why this does not throw.
+    if let earned = try? store.recordsBySet(in: session.id) {
+      for exercise in states {
+        for slot in exercise.slots {
+          if let setID = slot.loggedSetID, let records = earned[setID], !records.isEmpty {
+            coordinator.recordsBySlot[slot.id] = records
+          }
+        }
+      }
+    }
     return coordinator
   }
 
@@ -330,11 +352,13 @@ public final class SessionCoordinator {
       let slotIndex = exercises[exerciseIndex].slots.firstIndex(where: { $0.id == slotID })
     else {
       lastError = SessionCoordinatorError.unknownSlot
+      emit(.error, slotID: slotID)
       return false
     }
 
     let exercise = exercises[exerciseIndex]
     let slot = exercise.slots[slotIndex]
+    // Already written: nothing new happened, so nothing plays.
     guard !slot.isLogged else { return true }
 
     do {
@@ -362,17 +386,20 @@ public final class SessionCoordinator {
 
       // Records are announced only after a successful write, for the same reason the check mark
       // is: a celebration for a set that was not saved is worse than no celebration.
+      let found: [PersonalRecord]
       if let resolved = slot.draft.resolved() {
-        lastRecords = PersonalRecordDetector.records(
-          for: .init(
-            weightKg: resolved.weightKg, reps: resolved.reps, isWarmup: slot.isWarmup
-          ),
+        found = PersonalRecordDetector.records(
+          for: .init(weightKg: resolved.weightKg, reps: resolved.reps, isWarmup: slot.isWarmup),
           history: priorHistory,
           increment: exercise.machineIncrementKg
         )
       } else {
-        lastRecords = []
+        found = []
       }
+      lastRecords = found
+      if !found.isEmpty { recordsBySlot[slotID] = found }
+      // One haptic per log, after the write. A record outranks an ordinary log.
+      emit(.afterLogging(records: found), slotID: slotID)
 
       // Rest only if the lifter chose one for this exercise; never after a warm-up.
       if let rest = RestPlan.restAfterLogging(
@@ -383,6 +410,7 @@ public final class SessionCoordinator {
       return true
     } catch {
       lastError = error
+      emit(.error, slotID: slotID)
       return false
     }
   }
@@ -450,6 +478,11 @@ public final class SessionCoordinator {
   }
 
   // MARK: - Rest
+
+  /// The only writer of `feedback`.
+  private func emit(_ event: FeedbackEvent, slotID: UUID?) {
+    feedback = FeedbackPulse.following(feedback, event: event, slotID: slotID)
+  }
 
   /// Persists the lifter's choice for this movement, or forgets it when `rest` is nil.
   /// Out-of-range values are refused rather than clamped.
