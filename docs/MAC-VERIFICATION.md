@@ -456,10 +456,11 @@ the `Hardset` scheme for the iOS 26.4 simulator.
         colour, legible in light, dark and with Increase Contrast on.
   - [ ] With no workout open, scrolling History or Volume also minimises the tab bar: the
         modifier is now unconditional, so the TabView keeps one identity. Expected.
-  - Not done here, outside this task's files: `LiveSessionScreen.swift:346` and `:383` (the
-    alarm-failure line and the machine-error footer) still use `Tokens.Color.certainty(.low)`,
-    so the brief's `rg -n 'certainty\(' …/HardsetFeature` check is not yet empty. They want
-    `Tokens.Color.critical` in a LiveSessionScreen change.
+  - [ ] (fix(feature): the live session's failures read in the critical colour) During a rest,
+        force a timer failure (debug `lastErrorMessage`): its line under the rest is the critical
+        colour, and the alarms-off line beside it stays grey (a choice, not a failure). Force an
+        add-machine failure: the picker's footer is the critical colour. Both legible in light,
+        dark and with Increase Contrast on.
   - Written without a compiler. The non-SwiftUI parts (`HardsetEnvironment`, `RootTab`,
     `SummaryTarget`, `canStartWorkout`, `repeatWorkout`, the `onFinished` closure, the
     accessory's `RestBarView` call and `onSkip`, `SummarySheet`'s init and `load`, and

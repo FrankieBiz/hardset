@@ -343,7 +343,7 @@ public struct LiveSessionScreen: View {
           if let failure {
             Text(failure)
               .font(Tokens.Text.caption)
-              .foregroundStyle(Tokens.Color.certainty(.low))
+              .foregroundStyle(Tokens.Color.critical)
               .frame(maxWidth: .infinity, alignment: .leading)
           }
         }
@@ -380,7 +380,7 @@ public struct LiveSessionScreen: View {
     if let machineError {
       Text(machineError)
         .font(Tokens.Text.caption)
-        .foregroundStyle(Tokens.Color.certainty(.low))
+        .foregroundStyle(Tokens.Color.critical)
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal, Tokens.Spacing.section)
         .padding(.vertical, Tokens.Spacing.snug)
