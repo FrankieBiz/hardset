@@ -27,7 +27,8 @@ public enum Tokens {
     public static let accent = SwiftUI.Color.accentColor
 
     public static let textPrimary = SwiftUI.Color.primary
-    public static let textSecondary = SwiftUI.Color.secondary
+    /// The palette's tested grey, not the system `secondary` (about 3.4:1 on light backgrounds).
+    public static let textSecondary = adaptive(Palette.swatch(.secondaryText))
 
     // What happened, as opposed to how sure the app is (`certainty(_:)`). A record is not "high
     // confidence" and an error is not "low confidence", so neither borrows a certainty colour.

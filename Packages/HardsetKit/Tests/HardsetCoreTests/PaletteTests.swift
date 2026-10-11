@@ -56,6 +56,21 @@ struct PaletteTests {
         > swatch.dark.contrast(with: Palette.surfaceDark))
   }
 
+  @Test("Secondary text reads as secondary: quieter than black or white primary text")
+  func secondaryIsQuieterThanPrimary() {
+    let swatch = Palette.swatch(.secondaryText)
+    let black = PaletteColor(hex: 0x000000)
+    let white = PaletteColor(hex: 0xFFFFFF)
+    for ground in [Palette.surfaceLight, Palette.backgroundLight] {
+      #expect(swatch.light.contrast(with: ground) < black.contrast(with: ground))
+      #expect(swatch.lightIncreasedContrast.contrast(with: ground) < black.contrast(with: ground))
+    }
+    for ground in [Palette.surfaceDark, Palette.backgroundDark] {
+      #expect(swatch.dark.contrast(with: ground) < white.contrast(with: ground))
+      #expect(swatch.darkIncreasedContrast.contrast(with: ground) < white.contrast(with: ground))
+    }
+  }
+
   @Test("Cards stand apart from the background in both modes")
   func cardSeparation() {
     #expect(Palette.surfaceLight.contrast(with: Palette.backgroundLight) >= 1.1)

@@ -236,3 +236,8 @@ the `Hardset` scheme for the iOS 26.4 simulator.
         `musclesSection`, the `Section { } header: { } footer: { }` with a conditional footer,
         and `Text(_:format: .dateTime…)`. The title is a large title; if it crowds on iPhone,
         add `.navigationBarTitleDisplayMode(.inline)` under `#if os(iOS)`.
+
+- [ ] (fix(ui): secondary text meets 4.5:1) Secondary text (captions, labels, prior-performance
+      notes; `Tokens.Color.textSecondary`, now the palette's `secondaryText`) is legible in
+      light, dark and with Increase Contrast on, and still reads as secondary, visibly quieter
+      than the primary text beside it.

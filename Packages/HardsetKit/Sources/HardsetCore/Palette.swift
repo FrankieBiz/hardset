@@ -64,6 +64,8 @@ public enum Palette {
   public enum Role: String, CaseIterable, Sendable {
     case certaintyHigh, certaintyModerate, certaintyLow, certaintyUnevaluated
     case success, record, caution, critical
+    /// Captions, labels and prior-performance notes: quieter than primary text, still 4.5:1.
+    case secondaryText
   }
 
   /// WCAG 1.4.3 (AA) for body text.
@@ -95,6 +97,8 @@ public enum Palette {
       PaletteSwatch(light: 0x8A4B00, lightIncreasedContrast: 0x683800, dark: 0xFFB357, darkIncreasedContrast: 0xFFD199)
     case .critical:
       PaletteSwatch(light: 0xC0262D, lightIncreasedContrast: 0x931C22, dark: 0xFF6B6B, darkIncreasedContrast: 0xFF9C9C)
+    case .secondaryText:
+      PaletteSwatch(light: 0x66666E, lightIncreasedContrast: 0x48484F, dark: 0x9E9EA6, darkIncreasedContrast: 0xC4C4CB)
     }
   }
 }
