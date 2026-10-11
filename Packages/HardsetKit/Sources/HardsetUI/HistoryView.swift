@@ -42,15 +42,18 @@ public struct HistoryView: View {
   private let rows: [HistoryRow]
   private let unit: WeightUnit
   private let onSelect: ((HistoryRow) -> Void)?
+  private let onRepeat: ((HistoryRow) -> Void)?
 
   public init(
     rows: [HistoryRow],
     unit: WeightUnit,
-    onSelect: ((HistoryRow) -> Void)? = nil
+    onSelect: ((HistoryRow) -> Void)? = nil,
+    onRepeat: ((HistoryRow) -> Void)? = nil
   ) {
     self.rows = rows
     self.unit = unit
     self.onSelect = onSelect
+    self.onRepeat = onRepeat
   }
 
   public var body: some View {
@@ -63,15 +66,34 @@ public struct HistoryView: View {
         }
       } else {
         ForEach(rows) { row in
-          Button {
-            onSelect?(row)
-          } label: {
-            content(row)
+          if let onRepeat {
+            // Offered only when the caller asks for it, and never preselected or suggested: the
+            // lifter starts a repeat deliberately, from one row.
+            selectable(row)
+              .contextMenu {
+                Button("Repeat this workout", systemImage: "arrow.clockwise") { onRepeat(row) }
+              }
+              .accessibilityAction(named: Text("Repeat this workout")) { onRepeat(row) }
+          } else {
+            selectable(row)
           }
-          .buttonStyle(.plain)
-          .disabled(onSelect == nil)
         }
       }
+    }
+  }
+
+  /// A button only when there is something to select. A disabled button made VoiceOver read every
+  /// row as "dimmed", so a read-only row is plain content instead.
+  @ViewBuilder private func selectable(_ row: HistoryRow) -> some View {
+    if let onSelect {
+      Button {
+        onSelect(row)
+      } label: {
+        content(row)
+      }
+      .buttonStyle(.plain)
+    } else {
+      content(row)
     }
   }
 
@@ -114,7 +136,7 @@ public struct HistoryView: View {
       // trained through, so the number is withheld rather than displayed.
       Label("Length unknown", systemImage: "exclamationmark.circle")
         .font(Tokens.Text.caption)
-        .foregroundStyle(Tokens.Color.certainty(.low))
+        .foregroundStyle(Tokens.Color.caveat)
     } else if let duration = row.duration {
       Text(duration.clockString)
         .font(Tokens.Text.caption)

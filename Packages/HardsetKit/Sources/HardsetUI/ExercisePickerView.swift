@@ -13,15 +13,21 @@ import SwiftUI
 public struct ExercisePickerView: View {
   @Binding private var query: String
   private let entries: [CatalogEntry]
+  private let recent: [CatalogEntry]
+  private let onCancel: (() -> Void)?
   private let onSelect: (CatalogEntry) -> Void
 
   public init(
     query: Binding<String>,
     entries: [CatalogEntry],
+    recent: [CatalogEntry] = [],
+    onCancel: (() -> Void)? = nil,
     onSelect: @escaping (CatalogEntry) -> Void
   ) {
     self._query = query
     self.entries = entries
+    self.recent = recent
+    self.onCancel = onCancel
     self.onSelect = onSelect
   }
 
@@ -40,6 +46,15 @@ public struct ExercisePickerView: View {
           )
         }
       } else {
+        // Shown only before the lifter has typed anything; the caller supplies it newest first.
+        // A recent movement also stays in its muscle group below.
+        if query.isEmpty && !recent.isEmpty {
+          Section("Recent") {
+            ForEach(recent) { entry in
+              row(entry)
+            }
+          }
+        }
         ForEach(groups) { group in
           Section(sectionTitle(group.key)) {
             ForEach(group.entries) { entry in
@@ -50,6 +65,13 @@ public struct ExercisePickerView: View {
       }
     }
     .searchable(text: $query, prompt: "Search movements")
+    .toolbar {
+      if let onCancel {
+        ToolbarItem(placement: .cancellationAction) {
+          Button("Cancel", action: onCancel)
+        }
+      }
+    }
   }
 
   private func row(_ entry: CatalogEntry) -> some View {

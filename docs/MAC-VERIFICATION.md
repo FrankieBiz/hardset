@@ -191,3 +191,16 @@ the `Hardset` scheme for the iOS 26.4 simulator.
         progression chart. Do this in light and dark mode, and with Increase Contrast on. Each one
         should be comfortably readable, and should still sit visually below the primary text
         around it.
+
+- [ ] (feat(ui): picker Recent and Cancel; repeat from history) HardsetUI builds. In the
+      simulator, with Task 18/19 merged:
+  - [ ] Add movement: the picker has Cancel, and with an empty search a "Recent" section listing
+        the last movements logged, newest first. Typing hides it.
+  - [ ] History: long-press a workout: "Repeat this workout". No row suggests it otherwise.
+  - [ ] "Length unknown" in history is grey with its glyph, not orange.
+  - [ ] History rows are no longer disabled buttons: with VoiceOver on, a row is not read as
+        "dimmed"; with `onRepeat` set, the rotor's Actions lists "Repeat this workout".
+  - Written without a compiler. Check first: `.toolbar { if let onCancel { ToolbarItem… } }` in
+    `ExercisePickerView` (conditional toolbar content), and `Button(_:systemImage:action:)` and
+    `.accessibilityAction(named: Text(…))` in `HistoryView`. The picker still compiles for
+    existing callers (new inputs default); Cancel appears only once Task 18 passes `onCancel`.
