@@ -98,6 +98,17 @@ public struct MuscleVolumeReport: Hashable, Sendable {
     }.max()
   }
 
+  /// How sure the app is of one muscle's figure, shown beside that figure (spec 3.1). Nil when the
+  /// muscle was credited nothing, because there is then no figure to qualify.
+  ///
+  /// Per muscle, because one header for the whole report could only be the best case: 16 of the 22
+  /// muscles cap at low.
+  public func certainty(for muscle: Muscle) -> Certainty? {
+    let sets = sets(for: muscle)
+    guard sets > 0 else { return nil }
+    return SetCounting.certainty(for: MuscleKey(muscle), fractionalSets: sets)
+  }
+
   public init(
     fractionalSets: [MuscleKey: Double],
     hardSets: Int,
@@ -108,6 +119,18 @@ public struct MuscleVolumeReport: Hashable, Sendable {
     self.hardSets = hardSets
     self.unattributedHardSets = unattributedHardSets
     self.setsTouchingGroup = setsTouchingGroup
+  }
+}
+
+extension SetCounting {
+  /// The certainty of a count credited to `key`.
+  ///
+  /// A token this version does not recognise has no tier, so it gets `.low`: the arithmetic is
+  /// real, but what the muscle is, and so what the count means, is not known here. Never
+  /// `.unevaluated`, because a figure is shown and `.unevaluated` means there is none.
+  public static func certainty(for key: MuscleKey, fractionalSets: Double) -> Certainty {
+    guard let muscle = key.muscle else { return .low }
+    return certaintyCeiling(for: muscle, fractionalSets: fractionalSets)
   }
 }
 

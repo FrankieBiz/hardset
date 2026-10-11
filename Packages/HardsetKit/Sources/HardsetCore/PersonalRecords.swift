@@ -34,6 +34,14 @@ public struct PersonalRecord: Sendable, Hashable, Identifiable {
 
   public var id: PersonalRecordKind { kind }
 
+  /// The certainty of the estimate behind an estimated-1RM record, derived the one way the
+  /// detector derived it. Nil for the other kinds, which are measured, not estimated.
+  public var estimateCertainty: Certainty? {
+    guard kind == .estimatedOneRepMax else { return nil }
+    let claim = StrengthMath.estimatedOneRepMax(weightKg: weightKg, reps: reps)
+    return claim.isEvaluated ? claim.certainty : nil
+  }
+
   public init(
     kind: PersonalRecordKind,
     weightKg: Double,

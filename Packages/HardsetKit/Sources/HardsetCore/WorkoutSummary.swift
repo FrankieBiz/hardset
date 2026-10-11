@@ -48,6 +48,17 @@ public struct WorkoutSummary: Hashable, Sendable {
       "\(isLowerBound ? "at least " : "")\(count(locale)) \(noun)"
     }
 
+    /// The number alone, for a row that draws its noun elsewhere: "12", "2.5", "≥ 2,5". Through the
+    /// locale, so a German lifter reads "2,5"; the volume tab printed "%.1f" and always used ".".
+    public func countText(locale: Locale = .current) -> String {
+      "\(isLowerBound ? "≥ " : "")\(count(locale))"
+    }
+
+    /// How sure the app is of this figure (spec 3.1).
+    public var certainty: Certainty {
+      SetCounting.certainty(for: muscle, fractionalSets: fractionalSets)
+    }
+
     private func count(_ locale: Locale) -> String {
       WeightFormatter.text(fractionalSets, fractionDigits: 1, locale: locale)
     }

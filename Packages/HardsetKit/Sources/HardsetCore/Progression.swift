@@ -34,6 +34,9 @@ public struct ProgressionPoint: Hashable, Sendable, Identifiable {
   /// twenty-rep sets produces no estimate, and inventing one would be the ancestor's bug.
   public let bestEstimatedOneRepMaxKg: Double?
   public let workingSets: Int
+  /// The certainty of `bestEstimatedOneRepMaxKg`, nil exactly when there is no estimate. A best
+  /// estimate from a set of ten is moderate, from a set of four high (`StrengthMath`).
+  public let bestEstimateCertainty: Certainty?
 
   public var id: SessionID { sessionID }
 
@@ -43,7 +46,8 @@ public struct ProgressionPoint: Hashable, Sendable, Identifiable {
     date: Date,
     heaviestLoadKg: Double,
     bestEstimatedOneRepMaxKg: Double?,
-    workingSets: Int
+    workingSets: Int,
+    bestEstimateCertainty: Certainty? = nil
   ) {
     self.sessionID = sessionID
     self.machineID = machineID
@@ -51,6 +55,7 @@ public struct ProgressionPoint: Hashable, Sendable, Identifiable {
     self.heaviestLoadKg = heaviestLoadKg
     self.bestEstimatedOneRepMaxKg = bestEstimatedOneRepMaxKg
     self.workingSets = workingSets
+    self.bestEstimateCertainty = bestEstimatedOneRepMaxKg == nil ? nil : bestEstimateCertainty
   }
 }
 
@@ -157,16 +162,21 @@ public enum ProgressionAnalyzer {
     let heaviest = samples.map(\.weightKg).max() ?? 0
     // Only estimable sets contribute. A session of high-rep work yields no estimate at all rather
     // than an extrapolated one.
-    let estimates = samples.compactMap {
-      StrengthMath.estimatedOneRepMax(weightKg: $0.weightKg, reps: $0.reps).value
+    let estimates = samples
+      .map { StrengthMath.estimatedOneRepMax(weightKg: $0.weightKg, reps: $0.reps) }
+      .filter(\.isEvaluated)
+    // The best estimate, and when two sets estimate the same, the better-supported of them.
+    let best = estimates.max { lhs, rhs in
+      (lhs.value ?? 0, lhs.certainty) < (rhs.value ?? 0, rhs.certainty)
     }
     return ProgressionPoint(
       sessionID: sessionID,
       machineID: machineID,
       date: samples.map(\.completedAt).min() ?? .distantPast,
       heaviestLoadKg: heaviest,
-      bestEstimatedOneRepMaxKg: estimates.max(),
-      workingSets: samples.count
+      bestEstimatedOneRepMaxKg: best?.value,
+      workingSets: samples.count,
+      bestEstimateCertainty: best?.certainty
     )
   }
 
