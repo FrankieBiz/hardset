@@ -15,13 +15,21 @@ public nonisolated struct WorkoutShortcutsStore {
   }
 
   /// Movements most recently logged, newest first, each once. Archived movements are left out,
-  /// because that is what archiving is for.
+  /// because that is what archiving is for. Sets sharing a timestamp are ordered by their id, so the
+  /// result is the same on every call.
   public func recentExercises(limit: Int = 8) throws -> [CatalogEntry] {
     guard limit > 0 else { return [] }
     return try database.read { db in
-      let sets = try LoggedSet.order { $0.completedAt.desc() }.limit(500).fetchAll(db)
+      // Archived movements are excluded before the bound, so they cannot crowd out older ones.
+      let archived = Exercise.where { $0.isArchived }.select { $0.id }
+      let sets = try LoggedSet
+        .where { !$0.exerciseID.in(archived) }
+        .order { ($0.completedAt.desc(), $0.id.asc()) }
+        .limit(500)
+        .fetchAll(db)
       var ordered: [UUID] = []
-      for set in sets where !ordered.contains(set.exerciseID) { ordered.append(set.exerciseID) }
+      var seen = Set<UUID>()
+      for set in sets where seen.insert(set.exerciseID).inserted { ordered.append(set.exerciseID) }
       guard !ordered.isEmpty else { return [] }
       let rows = try Exercise.where { $0.id.in(ordered) }.where { !$0.isArchived }.fetchAll(db)
       let byID = Dictionary(uniqueKeysWithValues: rows.map { ($0.id, $0) })

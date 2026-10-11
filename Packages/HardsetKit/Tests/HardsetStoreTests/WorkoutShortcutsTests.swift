@@ -89,6 +89,44 @@ struct WorkoutShortcutsTests {
     #expect(try f.shortcuts.recentExercises(limit: 1).map(\.id) == [f.press])
   }
 
+  @Test("Movements whose latest sets share a timestamp come back in a stable order, by set id")
+  func recentTieBreak() throws {
+    let f = try fixture()
+    let session = try f.logger.startSession(at: day(-1))
+    var logged: [(set: SetID, exercise: ExerciseID)] = []
+    for exercise in [f.press, f.curl] {
+      let set = try f.logger.logSet(
+        sessionID: session, exerciseID: exercise, draft: SetEntryDraft(weightKg: 50, reps: 10),
+        at: day(-1))
+      logged.append((set, exercise))
+    }
+    let expected = logged.sorted { $0.set.rawValue.uuidString.lowercased() < $1.set.rawValue.uuidString.lowercased() }
+      .map(\.exercise)
+    for _ in 0..<5 {
+      #expect(try f.shortcuts.recentExercises().map(\.id) == expected)
+    }
+  }
+
+  @Test("Archived movements do not use up the bound")
+  func archivedDoNotCrowd() throws {
+    let f = try fixture()
+    let retired = ExerciseID()
+    try f.database.write { db in
+      try Exercise.insert {
+        Exercise.Draft(id: retired.rawValue, name: "Old Row", isArchived: true)
+      }
+      .execute(db)
+    }
+    let session = try f.logger.startSession(at: day(-3))
+    _ = try f.logger.logSet(
+      sessionID: session, exerciseID: f.press, draft: SetEntryDraft(weightKg: 100, reps: 8),
+      at: day(-3))
+    _ = try f.logger.logSet(
+      sessionID: session, exerciseID: retired, draft: SetEntryDraft(weightKg: 50, reps: 10),
+      at: day(0))
+    #expect(try f.shortcuts.recentExercises(limit: 1).map(\.id) == [f.press])
+  }
+
   @Test("No history, no recent movements")
   func noneYet() throws {
     let f = try fixture()
