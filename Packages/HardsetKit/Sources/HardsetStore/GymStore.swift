@@ -38,6 +38,14 @@ public nonisolated struct MachineRecord: Hashable, Sendable, Identifiable {
   }
 }
 
+/// Why a gym or machine change was refused.
+public enum GymStoreError: Error, Equatable, Sendable {
+  /// The name was empty, or only spaces.
+  case blankName
+  case gymNotFound
+  case machineNotFound
+}
+
 /// Gyms and their machines.
 ///
 /// This exists because without it the machine-level tracking the app is built around is
@@ -69,6 +77,18 @@ public nonisolated struct GymStore {
       .execute(db)
     }
     return id
+  }
+
+  /// Renames a gym. The name is tidied by `EquipmentName`, and a blank one is refused before
+  /// anything is written, so the old name stays.
+  public func renameGym(_ id: GymID, to name: String) throws {
+    guard let name = EquipmentName.normalized(name) else { throw GymStoreError.blankName }
+    try database.write { db in
+      guard try Gym.where({ $0.id.eq(id.rawValue) }).fetchOne(db) != nil else {
+        throw GymStoreError.gymNotFound
+      }
+      try Gym.where { $0.id.eq(id.rawValue) }.update { $0.name = #bind(name) }.execute(db)
+    }
   }
 
   /// Archives rather than deletes. Logged sets reference machines at this gym, and a hard delete
@@ -112,6 +132,27 @@ public nonisolated struct GymStore {
       .execute(db)
     }
     return id
+  }
+
+  /// Renames a machine and sets its brand. The name is required; an empty brand means unknown.
+  ///
+  /// History follows the machine, not the name: its sets are keyed by id, so every past session
+  /// and chart reads the new name. That is right, because it is the same machine.
+  public func renameMachine(_ id: MachineID, name: String, brand: String) throws {
+    guard let name = EquipmentName.normalized(name) else { throw GymStoreError.blankName }
+    let brand = EquipmentName.normalized(brand) ?? ""
+    try database.write { db in
+      guard try Machine.where({ $0.id.eq(id.rawValue) }).fetchOne(db) != nil else {
+        throw GymStoreError.machineNotFound
+      }
+      try Machine
+        .where { $0.id.eq(id.rawValue) }
+        .update {
+          $0.name = #bind(name)
+          $0.brand = #bind(brand)
+        }
+        .execute(db)
+    }
   }
 
   public func archiveMachine(_ id: MachineID) throws {

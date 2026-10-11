@@ -119,6 +119,24 @@ struct FailureCopyTests {
       CopyRow(
         error: LoggerStoreError.setNotFound, action: .logSet,
         expected: "That set could not be saved. It has not been logged — tap to try again."),
+      CopyRow(
+        error: GymStoreError.blankName, action: .renameGym,
+        expected: "Enter a name for this gym."),
+      CopyRow(
+        error: Opaque(), action: .renameGym,
+        expected: "That gym could not be renamed. Try again."),
+      CopyRow(
+        error: Opaque(), action: .archiveGym,
+        expected: "That gym could not be archived. It is still in your list — try again."),
+      CopyRow(
+        error: GymStoreError.blankName, action: .renameMachine,
+        expected: "Enter a name for this machine."),
+      CopyRow(
+        error: Opaque(), action: .renameMachine,
+        expected: "That machine could not be renamed. Try again."),
+      CopyRow(
+        error: Opaque(), action: .archiveMachine,
+        expected: "That machine could not be archived. It is still in your list — try again."),
     ]
   )
   func copyMatchesTable(row: CopyRow) {

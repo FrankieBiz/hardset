@@ -24,6 +24,10 @@ public nonisolated enum FailureCopy {
     case undoDelete
     case discardWorkout
     case loadSummary
+    case renameGym
+    case archiveGym
+    case renameMachine
+    case archiveMachine
   }
 
   /// The message for `error` raised while performing `action`.
@@ -97,6 +101,24 @@ public nonisolated enum FailureCopy {
 
     case .loadSummary:
       return "Your workout is saved, but its summary could not be read. Try again."
+
+    case .renameGym:
+      if let gymError = error as? GymStoreError, gymError == .blankName {
+        return "Enter a name for this gym."
+      }
+      return "That gym could not be renamed. Try again."
+
+    case .archiveGym:
+      return "That gym could not be archived. It is still in your list — try again."
+
+    case .renameMachine:
+      if let gymError = error as? GymStoreError, gymError == .blankName {
+        return "Enter a name for this machine."
+      }
+      return "That machine could not be renamed. Try again."
+
+    case .archiveMachine:
+      return "That machine could not be archived. It is still in your list — try again."
     }
   }
 }
