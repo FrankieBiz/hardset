@@ -81,76 +81,123 @@ public struct SetRowView: View {
   }
 
   public var body: some View {
-    HStack(spacing: Tokens.Spacing.regular) {
-      ordinalBadge
-
-      VStack(alignment: .leading, spacing: Tokens.Spacing.hairline) {
-        Text("Last time")
-          .font(Tokens.Text.caption)
-          .foregroundStyle(Tokens.Color.textSecondary)
-        Text(previousDescription)
-          .font(Tokens.Text.caption)
-          .foregroundStyle(Tokens.Color.textSecondary)
-          .monospacedDigit()
-        if let priorNote {
-          // An assumption the user should be able to see, not a number presented as fact.
-          Text(priorNote)
-            .font(Tokens.Text.caption)
-            .foregroundStyle(Tokens.Color.caveat)
+    rowContent
+      .padding(.horizontal, Tokens.Spacing.regular)
+      .padding(.vertical, emphasis == .logged ? Tokens.Spacing.tight : Tokens.Spacing.snug)
+      // Opaque. Dense numeric rows are the one surface glass is actively wrong for.
+      .background(Tokens.Color.surface)
+      // The current set is marked by size and an outline, never by dimming the others: every row
+      // keeps full-contrast text.
+      .overlay {
+        if emphasis == .active {
+          RoundedRectangle(cornerRadius: Tokens.Radius.control)
+            .strokeBorder(Tokens.Color.accent, lineWidth: 2)
         }
       }
-      .frame(minWidth: 78, alignment: .leading)
-
-      valueField(.weight, suffix: unit.abbreviation)
-      valueField(.reps, suffix: "reps")
-
-      logButton
-    }
-    .padding(.horizontal, Tokens.Spacing.regular)
-    .padding(.vertical, emphasis == .logged ? Tokens.Spacing.tight : Tokens.Spacing.snug)
-    // Opaque. Dense numeric rows are the one surface glass is actively wrong for.
-    .background(Tokens.Color.surface)
-    // The current set is marked by size and an outline, never by dimming the others: every row
-    // keeps full-contrast text.
-    .overlay {
-      if emphasis == .active {
-        RoundedRectangle(cornerRadius: Tokens.Radius.control)
-          .strokeBorder(Tokens.Color.accent, lineWidth: 2)
+      .accessibilityElement(children: .combine)
+      .accessibilityLabel(spokenLabel)
+      // A logged row is read-only (see `valueField`), so it has no hint to give.
+      .accessibilityHint(
+        isLogged
+          ? ""
+          : (draft.isLoggable ? "Double tap to log this set." : "Enter a weight and reps to log.")
+      )
+      .accessibilityAction(named: Text("Log set")) {
+        if draft.isLoggable { onLog() }
       }
-    }
-    .accessibilityElement(children: .combine)
-    .accessibilityLabel(spokenLabel)
-    // A logged row is read-only (see `valueField`), so it has no hint to give.
-    .accessibilityHint(
-      isLogged
-        ? ""
-        : (draft.isLoggable ? "Double tap to log this set." : "Enter a weight and reps to log.")
-    )
-    .accessibilityAction(named: Text("Log set")) {
-      if draft.isLoggable { onLog() }
-    }
-    // The row is one combined element, so `.disabled` on the field buttons does not reach these.
-    // Left in place on a logged row they would still open the pad and edit an unsaved draft.
-    .accessibilityActions {
-      if !isLogged {
-        Button("Edit weight") { onFocus(.weight) }
-        Button("Edit reps") { onFocus(.reps) }
+      // The row is one combined element, so `.disabled` on the field buttons does not reach these.
+      // Left in place on a logged row they would still open the pad and edit an unsaved draft.
+      .accessibilityActions {
+        if !isLogged {
+          Button("Edit weight") { onFocus(.weight) }
+          Button("Edit reps") { onFocus(.reps) }
+        }
+      }
+  }
+
+  // MARK: - Pieces
+
+  /// The active row puts "Last time" on its own line under the fields, and its reps field takes
+  /// only the width its digits need, so the weight gets the rest.
+  ///
+  /// In the five-column row a 375 pt phone left about 44 pt for the number, and "102.5" in the
+  /// hero size needs about 90: it truncated to "10…", so the screen no longer showed what Log
+  /// would save. The active row's weight now gets about 140 pt (worked through in the Task 13
+  /// report). Other rows keep the columns, where the smaller `setEntry` type fits.
+  @ViewBuilder private var rowContent: some View {
+    if emphasis == .active {
+      VStack(alignment: .leading, spacing: Tokens.Spacing.tight) {
+        HStack(spacing: Tokens.Spacing.regular) {
+          ordinalBadge
+          valueField(.weight, suffix: unit.abbreviation)
+          valueField(.reps, suffix: "reps")
+          logButton
+        }
+        lastTimeLine
+          // Under the weight, past the ordinal badge.
+          .padding(.leading, Self.ordinalWidth + Tokens.Spacing.regular)
+      }
+    } else {
+      HStack(spacing: Tokens.Spacing.regular) {
+        ordinalBadge
+        lastTimeColumn
+          .frame(minWidth: 78, alignment: .leading)
+        valueField(.weight, suffix: unit.abbreviation)
+        valueField(.reps, suffix: "reps")
+        logButton
       }
     }
   }
 
-  // MARK: - Pieces
+  private static let ordinalWidth: CGFloat = 28
 
   private var ordinalBadge: some View {
     Text(isWarmup ? "W" : String(ordinal + 1))
       .font(Tokens.Text.label.weight(.semibold))
       .monospacedDigit()
       .foregroundStyle(isWarmup ? Tokens.Color.textSecondary : Tokens.Color.textPrimary)
-      .frame(width: 28)
+      .frame(width: Self.ordinalWidth)
+  }
+
+  /// "Last time" as a column beside the fields.
+  private var lastTimeColumn: some View {
+    VStack(alignment: .leading, spacing: Tokens.Spacing.hairline) {
+      Text("Last time")
+        .font(Tokens.Text.caption)
+        .foregroundStyle(Tokens.Color.textSecondary)
+      Text(previousDescription)
+        .font(Tokens.Text.caption)
+        .foregroundStyle(Tokens.Color.textSecondary)
+        .monospacedDigit()
+      priorNoteText
+    }
+  }
+
+  /// "Last time" as one line, under the active row's fields.
+  private var lastTimeLine: some View {
+    VStack(alignment: .leading, spacing: Tokens.Spacing.hairline) {
+      Text("Last time \(previousDescription)")
+        .font(Tokens.Text.caption)
+        .foregroundStyle(Tokens.Color.textSecondary)
+        .monospacedDigit()
+      priorNoteText
+    }
+  }
+
+  @ViewBuilder private var priorNoteText: some View {
+    if let priorNote {
+      // An assumption the user should be able to see, not a number presented as fact.
+      Text(priorNote)
+        .font(Tokens.Text.caption)
+        .foregroundStyle(Tokens.Color.caveat)
+    }
   }
 
   private func valueField(_ field: SetRowField, suffix: String) -> some View {
     let shown = value(field)
+    // On the active row the reps field is as wide as its digits (at least one key wide), so the
+    // hero weight beside it takes the rest of the row.
+    let hugsContent = emphasis == .active && field == .reps
     return Button {
       onFocus(field)
     } label: {
@@ -168,10 +215,15 @@ public struct SetRowView: View {
           .font(Tokens.Text.caption)
           .foregroundStyle(Tokens.Color.textSecondary)
       }
-      .frame(maxWidth: .infinity, minHeight: controlHeight)
+      .frame(
+        minWidth: hugsContent ? Tokens.loggerTapTarget : nil,
+        maxWidth: .infinity,
+        minHeight: controlHeight
+      )
       .contentShape(Rectangle())
     }
     .buttonStyle(.plain)
+    .fixedSize(horizontal: hugsContent, vertical: false)
     // Editing a logged set changed only the in-memory draft, never the database, so the row showed
     // a check mark beside an unsaved value. Logged rows are read-only until editing returns
     // properly in Phase 2 (2.3).

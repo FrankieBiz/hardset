@@ -302,6 +302,8 @@ the `Hardset` scheme for the iOS 26.4 simulator.
   - [ ] Clear empties the field and the log button disables.
   - [ ] The active row's weight is the largest text on screen; logged rows are compact;
         upcoming rows are not dimmed.
+  - [ ] iPhone SE, active row: kg 102.5 and lb 132.28 render with no ellipsis. "Last time" sits
+        on its own line under the fields, and the reps field is only as wide as its digits.
   - [ ] After logging, the screen scrolls to the next set, which becomes active.
   - [ ] With the pad up, the active row is fully visible on iPhone SE (3rd gen) and 17 Pro Max,
         and at the largest Dynamic Type size.
@@ -319,24 +321,25 @@ the `Hardset` scheme for the iOS 26.4 simulator.
   - Known gap until Task 19 merges: on iOS the Train tab has no rest controls (±15 s, pause,
     skip). This task stops `SessionView` drawing the rest bar on iOS; Task 19 puts the cluster in
     the tab accessory. The macOS host build still draws the inline bar.
-  - Written without a compiler. If the build fails, look first at:
-    - `SessionView.keypadBinding`: `Binding(get:set:)` takes `@isolated(any) @Sendable` closures.
-      They read `@State` and `@Binding` from the main actor, as `SetRowView`'s old buffer bindings
-      did. A capture diagnostic there is the likeliest error.
-    - `.transition(Tokens.Motion.edgeTransition(reduceMotion))` needs the iOS 13
-      `transition(_: AnyTransition)` overload. Apple's doc JSON renders only the iOS 17
-      `Transition` overload under that title.
-    - The bottom inset's `else { #if !os(iOS) RestBarView(…) #endif }` is an empty branch on iOS.
+  - Written without a compiler. Settled in review, low risk:
+    - `SessionView.keypadBinding`'s `Binding(get:set:)` closures follow a pattern that has
+      already built (e5aff33).
+    - `.transition(Tokens.Motion.edgeTransition(reduceMotion))` is the iOS 13
+      `transition(_: AnyTransition)` overload (`view/transition(_:)-5h5h0`), not deprecated.
+    - If the build fails anyway, look at the bottom inset's
+      `else { #if !os(iOS) RestBarView(…) #endif }`, which is an empty branch on iOS.
   - Behaviour that could not be reasoned out without running it:
     - [ ] Focus scrolls with `scrollTo(_:anchor: .center)` in the same animated transaction that
           inserts the pad. If the row lands under the pad (the scroll used the viewport from
           before the pad), move the scroll to after the pad is laid out, e.g. into
           `.onChange(of: focus)`, and note which fix held.
-    - [ ] Rows are nested inside the `LazyVStack`'s exercise sections. Log the last set of an
-          exercise when the next exercise is far off screen: if the screen does not move, the lazy
-          section was not built yet, and the scroll has to target the exercise first.
+    - [ ] Rows are nested inside the `LazyVStack`'s exercise sections. After a log whose next
+          set is in another exercise, the screen scrolls to that section first, then to the set.
+          Log the last set of an exercise when the next exercise is far off screen: the next set
+          is centred. If only the section's top shows, the row scroll ran before the section was
+          built; defer it.
     - [ ] At the largest Dynamic Type size the pad's `title2` keys grow. If the pad leaves no room
           for the active row on iPhone SE, cap the pad's Dynamic Type (not done here).
-    - [ ] The hero weight shares the row with "Last time", the reps and the log button, and can
-          shrink to 0.6 of its size. If it then reads smaller than the pad header's readout,
-          give the active row's weight field more of the row.
+    - [ ] On a 375 pt phone the active row's weight gets about 140 pt, against about 90 for
+          "102.5" in the hero size. At large Dynamic Type sizes it can still shrink, by up to
+          0.6. Note the first size at which it truncates.

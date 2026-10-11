@@ -154,6 +154,9 @@ public struct SessionView: View {
             )
             .background(Tokens.Color.surface.opacity(0.4), in: RoundedRectangle(cornerRadius: Tokens.Radius.card))
             .padding(.horizontal, Tokens.Spacing.snug)
+            // A section the lazy stack has not built yet has no rows to scroll to, but it can be
+            // scrolled to itself (see `logSet`).
+            .id(exercise.id)
           }
 
           if let onAddExercise {
@@ -217,6 +220,12 @@ public struct SessionView: View {
     .onChange(of: focusedDraft) { reseedKeypad() }
     .onChange(of: focusedMachineIncrementKg) { reseedKeypad() }
     .onChange(of: unit) { reseedKeypad() }
+    // A logged row is read-only, so the pad never stays on one, whichever path logged it.
+    // Task 14's correction of a saved set focuses a logged row on purpose, and must exempt itself
+    // here.
+    .onChange(of: focusedSlotIsLogged) {
+      if focusedSlotIsLogged { closeKeypad() }
+    }
   }
 
   // MARK: - Keypad
@@ -249,6 +258,10 @@ public struct SessionView: View {
 
   private var focusedDraft: SetEntryDraft? {
     focusedIndices.map { exercises[$0.exercise].slots[$0.slot].draft }
+  }
+
+  private var focusedSlotIsLogged: Bool {
+    focusedIndices.map { exercises[$0.exercise].slots[$0.slot].isLogged } == true
   }
 
   /// Watched only so a machine change rebuilds the pad's step even when the prefill is unchanged.
@@ -352,7 +365,14 @@ public struct SessionView: View {
         keypad = nil
         focus = nil
       }
-      if let next { proxy.scrollTo(next.slotID, anchor: .center) }
+      guard let next else { return }
+      // The next set may sit in a section the lazy stack has not built, whose rows cannot be
+      // found yet. Scrolling to the section first brings it in; the row scroll then lands on the
+      // set itself, or leaves the section's top in view if the row is still unbuilt.
+      if next.exerciseID != exerciseID {
+        proxy.scrollTo(next.exerciseID, anchor: .top)
+      }
+      proxy.scrollTo(next.slotID, anchor: .center)
     }
   }
 
