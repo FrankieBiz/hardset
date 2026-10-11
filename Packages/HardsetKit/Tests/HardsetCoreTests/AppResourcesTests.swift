@@ -72,17 +72,27 @@ struct AppResourcesTests {
   /// declaring it in both manifests is how an upload gets rejected, so this test fails first.
   @Test("No code opens a shared UserDefaults suite")
   func noSharedDefaultsSuite() throws {
-    let folders = ["Hardset", "HardsetWidget", "HardsetIntents", "Packages/HardsetKit/Sources"]
+    // Hardset and HardsetWidget must exist, or this scans nothing and passes for the wrong reason.
+    let required = ["Hardset", "HardsetWidget"]
+    let optional = ["HardsetIntents", "Packages/HardsetKit/Sources"]
     var offenders: [String] = []
-    for folder in folders {
+    var scanned = 0
+    for folder in required + optional {
       let url = Self.root.appendingPathComponent(folder)
+      if required.contains(folder) {
+        #expect(FileManager.default.fileExists(atPath: url.path), "\(folder) is missing")
+      }
       guard let files = FileManager.default.enumerator(at: url, includingPropertiesForKeys: nil)
       else { continue }
       for case let file as URL in files where file.pathExtension == "swift" {
+        scanned += 1
         let text = try String(contentsOf: file, encoding: .utf8)
-        if text.contains("UserDefaults(suiteName:") { offenders.append(file.lastPathComponent) }
+        if text.contains("UserDefaults(suiteName:") || text.contains(".init(suiteName:") {
+          offenders.append(file.lastPathComponent)
+        }
       }
     }
+    try #require(scanned > 0, "no Swift files were scanned; is the checkout mounted?")
     #expect(offenders.isEmpty, "declare 1C8F.1 in both privacy manifests first: \(offenders)")
   }
 }

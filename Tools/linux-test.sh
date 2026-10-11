@@ -30,7 +30,16 @@ trap 'cp "$SNAPSHOT" "$RESOLVED"; rm -f "$SNAPSHOT"' EXIT
 #
 # `.build-linux`, not `.build`: a Mac checkout of the same tree must never pick up Linux
 # artefacts from a shared cache directory.
+# SwiftPM's module cache stores absolute paths, so a cache built under another mount path breaks.
+MOUNT="/repo"
+CACHE="$ROOT/Packages/HardsetKit/.build-linux"
+if [ -f "$CACHE/.mount" ] && [ "$(cat "$CACHE/.mount")" != "$MOUNT" ]; then
+  rm -rf "$CACHE"
+fi
+mkdir -p "$CACHE"
+printf '%s' "$MOUNT" > "$CACHE/.mount"
+
 podman run --rm \
-  -v "$ROOT:/repo:Z" -w /repo/Packages/HardsetKit \
+  -v "$ROOT:$MOUNT:Z" -w "$MOUNT/Packages/HardsetKit" \
   "$IMAGE" \
-  swift test --scratch-path /repo/Packages/HardsetKit/.build-linux "$@"
+  swift test --scratch-path "$MOUNT/Packages/HardsetKit/.build-linux" "$@"
