@@ -2,19 +2,6 @@ import Charts
 import HardsetCore
 import SwiftUI
 
-/// What a series plots. Load is always available; the estimate is not.
-public enum ProgressionMetric: String, Sendable, CaseIterable, Hashable {
-  case heaviestLoad
-  case estimatedOneRepMax
-
-  public var label: String {
-    switch self {
-    case .heaviestLoad: "Heaviest load"
-    case .estimatedOneRepMax: "Est. 1RM"
-    }
-  }
-}
-
 /// One exercise's load history, one line per machine.
 ///
 /// The whole point of this chart is the thing most lifting apps get wrong: it does **not** merge
@@ -34,16 +21,7 @@ public struct ProgressionChartView: View {
   @State private var metric: ProgressionMetric = .heaviestLoad
 
   /// A series plus the label the store resolved for it, so this view does no lookups.
-  public struct SeriesInput: Identifiable, Hashable, Sendable {
-    public let label: String
-    public let points: [ProgressionPoint]
-    public var id: String { label }
-
-    public init(label: String, points: [ProgressionPoint]) {
-      self.label = label
-      self.points = points
-    }
-  }
+  public typealias SeriesInput = ProgressionChartSeries
 
   public init(
     series: [SeriesInput],

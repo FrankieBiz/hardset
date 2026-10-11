@@ -97,6 +97,9 @@ public nonisolated struct ProgressionStore {
 
   /// Machine names, for labelling the series. A machine the user deleted resolves to `nil` and the
   /// series is labelled generically rather than dropped — the sets were still performed.
+  ///
+  /// The display name, brand first, as everywhere else: "Hammer Strength Leg Press" and "Cybex Leg
+  /// Press" were both labelled "Leg Press", and the chart drew them as one line.
   public func machineNames(_ ids: [MachineID]) throws -> [MachineID: String] {
     guard !ids.isEmpty else { return [:] }
     let raws = ids.map(\.rawValue)
@@ -104,7 +107,9 @@ public nonisolated struct ProgressionStore {
       try Machine
         .where { $0.id.in(raws) }
         .fetchAll(db)
-        .reduce(into: [MachineID: String]()) { $0[MachineID(rawValue: $1.id)] = $1.name }
+        .reduce(into: [MachineID: String]()) {
+          $0[MachineID(rawValue: $1.id)] = MachineRecord(row: $1).displayName
+        }
     }
   }
 
@@ -141,6 +146,41 @@ public nonisolated struct ProgressionHistory: Hashable, Sendable {
   }
 
   public var isEmpty: Bool { series.isEmpty }
+
+  /// The series as the chart draws them: most recently used first, so the machine the lifter is on
+  /// now leads the legend and the headline, and each with a label no other series shares.
+  ///
+  /// Two machines can share a name: two unbranded "Leg Press" stacks, or the same model at two
+  /// gyms. The chart keys a line by its label, so equal labels would draw one line through two
+  /// machines, the one thing it must never do (`DECISIONS.md` §20). Duplicates are numbered in a
+  /// fixed order, by machine id, so a label does not change as the lifter's habits do.
+  public func chartSeries() -> [ProgressionChartSeries] {
+    var used = Set<String>()
+    var labels: [ProgressionKey: String] = [:]
+    let groups = Dictionary(grouping: series.map(\.key), by: label(for:))
+    for name in groups.keys.sorted() {
+      let keys = (groups[name] ?? []).sorted {
+        ($0.machineID?.rawValue.uuidString ?? "") < ($1.machineID?.rawValue.uuidString ?? "")
+      }
+      for (index, key) in keys.enumerated() {
+        var candidate = index == 0 ? name : "\(name) (\(index + 1))"
+        var next = index + 2
+        while used.contains(candidate) {
+          candidate = "\(name) (\(next))"
+          next += 1
+        }
+        used.insert(candidate)
+        labels[key] = candidate
+      }
+    }
+    return series
+      .map { ProgressionChartSeries(label: labels[$0.key] ?? label(for: $0.key), points: $0.points) }
+      .sorted { lhs, rhs in
+        let l = lhs.points.last?.date ?? .distantPast
+        let r = rhs.points.last?.date ?? .distantPast
+        return l != r ? l > r : lhs.label < rhs.label
+      }
+  }
 }
 
 /// One past session, summarised for a list.

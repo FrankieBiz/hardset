@@ -410,3 +410,12 @@ the `Hardset` scheme for the iOS 26.4 simulator.
     - [ ] A record announcement made while the screen scrolls to the next set is not cut off by
           VoiceOver's focus change. If it is, post it with a high
           `accessibilitySpeechAnnouncementPriority` (Apple's example on the Announcement page).
+
+## Phase 3
+
+- [ ] (feat(core): the chart says what changed on one machine …) HardsetUI and HardsetFeature build
+      (iOS, and macOS 15 via `./test.sh`) with `ProgressionMetric` now from HardsetCore and
+      `ProgressionChartView.SeriesInput` a typealias of `ProgressionChartSeries`. The chart's
+      metric picker still shows "Heaviest load" and "Est. 1RM". With two machines named alike
+      (create two unbranded "Leg Press" machines and log on both), the exercise's chart shows two
+      lines in the legend, "Leg Press" and "Leg Press (2)".
