@@ -31,14 +31,21 @@ public struct HardsetEnvironment {
 /// The app's three tabs, plus the workout-in-progress bar.
 ///
 /// A live session is deliberately NOT a full-screen modal. It lives in the tab bar's bottom
-/// accessory, so a lifter mid-workout can still open their history or check the week's volume
-/// without abandoning the session — which is what a modal would force. That slot is what
+/// accessory, so a lifter mid-workout can still open their history or check the last 7 days of
+/// volume without abandoning the session — which is what a modal would force. That slot is what
 /// `tabViewBottomAccessory` exists for, and the tab bar minimises on scroll so the set grid keeps
 /// the screen.
 @MainActor
 public struct HardsetRootView: View {
   @State private var coordinator: SessionCoordinator?
   @State private var startFailed = false
+  /// Why a workout left open could not be reopened, in the user's words. While this is set the
+  /// start button is not offered: a `try?` here made a stranded open session look like "no
+  /// workout", and starting a second one on top of it is the one thing that must not be possible.
+  @State private var resumeError: String?
+  /// Why the movement list could not be prepared. Does not block a workout, but the picker is
+  /// empty without it, so it is stated rather than left as a catalogue that is silently bare.
+  @State private var catalogueError: String?
   /// Where the next workout will be. Preselected from the last one, changeable in one tap, and
   /// allowed to stay nil — training somewhere new must not require setup first.
   @State private var selectedGym: GymID?
@@ -81,20 +88,41 @@ public struct HardsetRootView: View {
   public var body: some View {
     tabs
       .task {
-        // Seeding is idempotent and non-destructive, so running it every launch is the intended
-        // usage rather than something to guard with a flag that can drift from reality.
-        _ = try? environment.catalog.seed()
+        prepareCatalogue()
         // A workout left open is offered back before anything else. Nothing is closed on the
         // app's initiative.
-        if coordinator == nil {
-          coordinator = try? SessionCoordinator.resume(
-            store: environment.logger,
-            restPreferences: restPreferences,
-            onStartRest: { duration, metadata in hooks.start(duration, metadata) }
-          )
-        }
+        resumeOpenWorkout()
         refreshGyms()
       }
+  }
+
+  /// Seeding is idempotent and non-destructive, so running it every launch is the intended usage
+  /// rather than something to guard with a flag that can drift from reality. A failure is kept and
+  /// shown, with a retry, because it used to vanish and leave an empty picker with no explanation.
+  private func prepareCatalogue() {
+    do {
+      _ = try environment.catalog.seed()
+      catalogueError = nil
+    } catch {
+      catalogueError = FailureCopy.message(for: error, during: .prepareCatalogue)
+    }
+  }
+
+  /// Reopens the workout that was left open, if there is one. Finding none is a normal answer; a
+  /// read that FAILED is not, and is kept apart from it so "no workout" is never shown while one
+  /// may exist.
+  private func resumeOpenWorkout() {
+    guard coordinator == nil else { return }
+    do {
+      coordinator = try SessionCoordinator.resume(
+        store: environment.logger,
+        restPreferences: restPreferences,
+        onStartRest: { duration, metadata in hooks.start(duration, metadata) }
+      )
+      resumeError = nil
+    } catch {
+      resumeError = FailureCopy.message(for: error, during: .resumeWorkout)
+    }
   }
 
   @ViewBuilder private var tabs: some View {
@@ -102,6 +130,7 @@ public struct HardsetRootView: View {
       Tab("Train", systemImage: "figure.strengthtraining.traditional") {
         NavigationStack {
           trainTab
+            .safeAreaInset(edge: .top, spacing: 0) { catalogueNotice }
             .toolbar {
               // `.primaryAction` rather than `.topBarTrailing`: the latter does not exist on
               // macOS, and this target builds for the host so the suite can run there.
@@ -121,7 +150,7 @@ public struct HardsetRootView: View {
       Tab("Volume", systemImage: "chart.bar") {
         NavigationStack {
           WeeklyVolumeScreen(store: environment.volume)
-            .navigationTitle("This week")
+            .navigationTitle("Last 7 days")
         }
       }
       Tab("History", systemImage: "clock.arrow.circlepath") {
@@ -162,8 +191,50 @@ public struct HardsetRootView: View {
         onFinished: { self.coordinator = nil }
       )
       .navigationTitle("Workout")
+    } else if let resumeError {
+      resumeFailedView(message: resumeError)
     } else {
       startView
+    }
+  }
+
+  /// Shown INSTEAD of `startView`, never beside it. "No workout in progress" and a start button
+  /// would both be untrue claims while a workout may be sitting open that could not be read.
+  /// "Try again" is a real button because there is no scroll view here for a pull to refresh.
+  private func resumeFailedView(message: String) -> some View {
+    ContentUnavailableView {
+      Label("Workout unavailable", systemImage: "exclamationmark.triangle")
+    } description: {
+      Text(message)
+    } actions: {
+      Button("Try again") { resumeOpenWorkout() }
+    }
+    .frame(maxWidth: .infinity, maxHeight: .infinity)
+    .background(Tokens.Color.background)
+  }
+
+  /// Sits above whichever Train screen is showing, because the empty picker it explains lives
+  /// inside the live session and cannot say why it is empty.
+  @ViewBuilder private var catalogueNotice: some View {
+    if let catalogueError {
+      VStack(alignment: .leading, spacing: Tokens.Spacing.tight) {
+        Text(catalogueError)
+          .font(Tokens.Text.caption)
+          .foregroundStyle(Tokens.Color.certainty(.low))
+        Button {
+          prepareCatalogue()
+        } label: {
+          Text("Try again")
+            .font(Tokens.Text.caption.weight(.semibold))
+            .foregroundStyle(Tokens.Color.accent)
+            .frame(minHeight: Tokens.minimumTapTarget)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+      }
+      .frame(maxWidth: .infinity, alignment: .leading)
+      .padding(.horizontal, Tokens.Spacing.section)
+      .background(Tokens.Color.background)
     }
   }
 
@@ -332,9 +403,9 @@ public struct HardsetRootView: View {
       gymError = nil
       isChoosingGym = false
     } catch {
-      // Stated, not swallowed. The error text is included because there is nothing useful to say
-      // about a storage failure without it.
-      gymError = "\(name) could not be saved. \(error)"
+      // Stated, not swallowed, and in the user's words: the underlying error can carry database
+      // internals that mean nothing to a lifter and do not belong on screen.
+      gymError = FailureCopy.message(for: error, during: .saveGym)
     }
   }
 

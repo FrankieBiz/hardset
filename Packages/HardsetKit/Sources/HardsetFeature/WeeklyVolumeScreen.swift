@@ -11,7 +11,9 @@ import SwiftUI
 @MainActor
 public struct WeeklyVolumeScreen: View {
   @State private var report: MuscleVolumeReport?
-  @State private var loadFailed = false
+  /// Why the last read failed, in the user's words. Kept as the message rather than a flag so the
+  /// screen cannot show copy that was not written for this failure.
+  @State private var loadError: String?
   @State private var isShowingMethodology = false
 
   private let store: VolumeStore
@@ -31,13 +33,16 @@ public struct WeeklyVolumeScreen: View {
           excludedFromGaps: ExerciseCatalog.unauthoredDirectTokens,
           onExplainCounting: { isShowingMethodology = true }
         )
-      } else if loadFailed {
+      } else if let loadError {
         // Says what is wrong and what is not. Logged sets are safe either way, and saying so is
-        // the difference between an error and a scare.
+        // the difference between an error and a scare. "Try again" is a button because a pull to
+        // refresh cannot fire here: there is no scroll view to pull.
         ContentUnavailableView {
-          Label("Could not read this week", systemImage: "exclamationmark.triangle")
+          Label("Volume unavailable", systemImage: "exclamationmark.triangle")
         } description: {
-          Text("Your logged sets are safe. Pull down to try again.")
+          Text(loadError)
+        } actions: {
+          Button("Try again") { load() }
         }
       } else {
         ProgressView()
@@ -49,18 +54,19 @@ public struct WeeklyVolumeScreen: View {
     .refreshable { load() }
     .sheet(isPresented: $isShowingMethodology) {
       // Generated from the same value the counting uses, so the disclosure cannot drift from the
-      // arithmetic.
-      MethodologySheet(source: SetCounting.source, certainty: .moderate)
+      // arithmetic. The certainty comes from the report too: a fixed "Moderate" overstated every
+      // muscle the evidence does not model, and nil (nothing credited) hides the badge.
+      MethodologySheet(source: SetCounting.source, certainty: report?.highestCertainty)
     }
   }
 
   private func load() {
     do {
       report = try store.rollingWeek(endingAt: now())
-      loadFailed = false
+      loadError = nil
     } catch {
       report = nil
-      loadFailed = true
+      loadError = FailureCopy.message(for: error, during: .loadVolume)
     }
   }
 }

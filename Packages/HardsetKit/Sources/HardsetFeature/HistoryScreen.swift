@@ -7,7 +7,9 @@ import SwiftUI
 @MainActor
 public struct HistoryScreen: View {
   @State private var rows: [HistoryRow] = []
-  @State private var loadFailed = false
+  /// Why the last read failed, in the user's words. Kept as the message rather than a flag so the
+  /// screen cannot show copy that was not written for this failure.
+  @State private var loadError: String?
 
   private let store: HistoryStore
   private let unit: WeightUnit
@@ -19,11 +21,15 @@ public struct HistoryScreen: View {
 
   public var body: some View {
     Group {
-      if loadFailed {
+      if let loadError {
+        // "Try again" is a button because a pull to refresh cannot fire here: there is no scroll
+        // view to pull.
         ContentUnavailableView {
-          Label("Could not read your history", systemImage: "exclamationmark.triangle")
+          Label("History unavailable", systemImage: "exclamationmark.triangle")
         } description: {
-          Text("Your logged sets are safe. Pull down to try again.")
+          Text(loadError)
+        } actions: {
+          Button("Try again") { load() }
         }
       } else {
         HistoryView(rows: rows, unit: unit)
@@ -46,10 +52,10 @@ public struct HistoryScreen: View {
           hasImplausibleDuration: summary.hasImplausibleDuration
         )
       }
-      loadFailed = false
+      loadError = nil
     } catch {
       rows = []
-      loadFailed = true
+      loadError = FailureCopy.message(for: error, during: .loadHistory)
     }
   }
 }

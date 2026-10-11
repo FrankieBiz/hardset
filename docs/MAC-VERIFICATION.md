@@ -99,3 +99,22 @@ the `Hardset` scheme for the iOS 26.4 simulator.
         bar shows "Exercise · Set N of M" (`RestBarView` already renders `RestMetadata`, so this
         needed no change). A warm-up starts nothing. "Start rest now" starts the chosen rest.
         Relaunching the app keeps the chip at 2:00.
+- [ ] (fix(ui): root and screens surface real failures instead of swallowing them) HardsetFeature
+      builds with `HardsetRootView` (do/catch resume and seed, `resumeFailedView`, `catalogueNotice`
+      via `.safeAreaInset(edge: .top, spacing: 0)`), and `WeeklyVolumeScreen` / `HistoryScreen`
+      using `ContentUnavailableView(label:description:actions:)`. In the iOS 26.4 simulator, with
+      the database made unreadable (or a forced throw in a debug build):
+  - [ ] Resume failure: the Train tab shows "Workout unavailable" with the resume copy and a
+        working "Try again". "No workout in progress", the gym row and "Start workout" are all
+        absent while it shows. Fixing the cause and tapping Try again shows the workout or, if
+        none is open, the normal start screen.
+  - [ ] Seed failure: a notice with the catalogue copy and "Try again" sits under the nav bar on
+        the start screen AND over a live session, and disappears after a successful retry. With
+        no failure it takes no space. Check it does not overlap the nav bar or the set grid.
+  - [ ] A failing gym save reads "That gym could not be saved. Try again." with no error text.
+  - [ ] Volume and History each show their copy and a Try again button that actually reloads. The
+        button must look like a button and be at least 44 pt tall inside the system's
+        `ContentUnavailableView` action styling; if not, add `.buttonStyle(.bordered)`.
+  - [ ] The Volume tab is titled "Last 7 days". No screen says "this week".
+  - [ ] Methodology badge: reads Low when only counted (non-modelled) muscles were trained,
+        Moderate when a modelled muscle is credited, and is hidden when nothing is credited.
