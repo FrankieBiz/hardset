@@ -21,6 +21,8 @@
 		29707BD6CCDEC7E47EC31D99 /* HardsetUI */ = {isa = PBXBuildFile; productRef = 69B7000331548A82D7D4E305 /* HardsetUI */; };
 		5EE1CC43995B97620413EFAC /* HardsetAlarm */ = {isa = PBXBuildFile; productRef = 0D3A84FFB139E268828FF410 /* HardsetAlarm */; };
 		747C92BEEF880767AE5810FB /* HardsetCore */ = {isa = PBXBuildFile; productRef = 5892357657CA9E6F4270173F /* HardsetCore */; };
+		9BBF17B4929BCA0F5096D779 /* HardsetStore */ = {isa = PBXBuildFile; productRef = 52D15B8EECAF12F018E20C45 /* HardsetStore */; };
+		7CEC17B7ED5BE0587068F692 /* HardsetFeature */ = {isa = PBXBuildFile; productRef = B4529FF8241C44AB29DF35BE /* HardsetFeature */; };
 		1EEEB7214172DFF86B1778B3 /* HardsetWidget.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = E1B5F6FC2F875AC8EDAA1991 /* HardsetWidget.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 /* End PBXBuildFile section */
 
@@ -113,6 +115,14 @@
 			isa = XCSwiftPackageProductDependency;
 			productName = HardsetCore;
 		};
+		52D15B8EECAF12F018E20C45 /* HardsetStore */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = HardsetStore;
+		};
+		B4529FF8241C44AB29DF35BE /* HardsetFeature */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = HardsetFeature;
+		};
 /* End XCSwiftPackageProductDependency section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -143,6 +153,8 @@
 			buildActionMask = 2147483647;
 			files = (
 				747C92BEEF880767AE5810FB /* HardsetCore */,
+				9BBF17B4929BCA0F5096D779 /* HardsetStore */,
+				7CEC17B7ED5BE0587068F692 /* HardsetFeature */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -265,6 +277,8 @@
 			name = HardsetTests;
 			packageProductDependencies = (
 				5892357657CA9E6F4270173F /* HardsetCore */,
+				52D15B8EECAF12F018E20C45 /* HardsetStore */,
+				B4529FF8241C44AB29DF35BE /* HardsetFeature */,
 			);
 			productName = HardsetTests;
 			productReference = 8C78985BD17648FF5F32A8BC /* HardsetTests.xctest */;

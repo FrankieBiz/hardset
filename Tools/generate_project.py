@@ -93,7 +93,9 @@ def fmt_settings(d, indent):
 PRODUCTS = {
     APP: ["HardsetCore", "HardsetStore", "HardsetUI", "HardsetAlarm", "HardsetFeature"],
     WIDGET: ["HardsetCore", "HardsetUI", "HardsetAlarm"],
-    TESTS: ["HardsetCore"],
+    # What AppSmokeTests imports. SQLiteData stays implicit, as for the app target: it arrives with
+    # HardsetStore, and declaring it would need a package reference to sqlite-data itself.
+    TESTS: ["HardsetCore", "HardsetStore", "HardsetFeature"],
 }
 
 L = []

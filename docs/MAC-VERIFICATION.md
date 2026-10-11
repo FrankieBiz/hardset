@@ -131,13 +131,9 @@ the `Hardset` scheme for the iOS 26.4 simulator.
         builds `RestTimerController(persistence: RestTimerStore(database:))` from it. If the
         database fails to open, the controller gets no store, so the timer still runs but is not
         written down.
-  - [ ] `HardsetTests` builds and passes. It now imports `HardsetFeature`, `HardsetStore` and
-        `SQLiteData` (for `DatabaseQueue`), but the target declares only the `HardsetCore` product
-        in `project.pbxproj`. That works only if the host app's build leaves those modules where
-        the test can find them and `BUNDLE_LOADER` provides the symbols, which is how the app
-        target already imports `SQLiteData`. If you get "no such module" or undefined symbols, add
-        `HardsetFeature` and `HardsetStore` to the HardsetTests target's package products, then
-        check that the test run does not print "Class … is implemented in both" warnings.
+  - [ ] `HardsetTests` builds and passes. The target now declares the `HardsetCore`,
+        `HardsetStore` and `HardsetFeature` products (`Tools/generate_project.py`). `SQLiteData`,
+        imported for `DatabaseQueue`, stays implicit, as it is for the app target.
   Then in the simulator, and on device for the alarm items:
   - [ ] Choose 2:00 on an exercise and log a working set. The rest bar starts at 2:00 and its
         caption reads "Exercise · Set N of M". "Start rest now" on the chip starts the chosen rest
