@@ -49,16 +49,54 @@ public struct EvidenceSource: Hashable, Sendable, Codable, Identifiable {
   public let citation: String?
   /// The bounds the method was validated within, stated plainly.
   public let validRange: String?
+  /// One plain sentence, shown first as "In short".
+  ///
+  /// A new field rather than a rewrite of `methodology`: the methodology is the text App Review
+  /// reads and tests pin it, so it is never edited (spec §4). This only summarises it, and may not
+  /// claim more than it does.
+  public let summary: String?
 
   public init(
     id: String, title: String, methodology: String,
-    citation: String? = nil, validRange: String? = nil
+    citation: String? = nil, validRange: String? = nil, summary: String? = nil
   ) {
     self.id = id
     self.title = title
     self.methodology = methodology
     self.citation = citation
     self.validRange = validRange
+    self.summary = summary
+  }
+
+  /// The citation's DOI as a link to doi.org, or nil when it has none.
+  ///
+  /// The DOI is the first word holding "10.<registrant>/<suffix>", with any punctuation that
+  /// closes the sentence around it removed: "DOI 10.1007/s40279-025-02344-w, PMID …" links to
+  /// the article, not to a DOI ending in a comma, which resolves to nothing.
+  public var doiURL: URL? {
+    guard let citation else { return nil }
+    for word in citation.split(whereSeparator: \.isWhitespace) {
+      guard let start = word.range(of: "10.") else { continue }
+      var doi = word[start.lowerBound...]
+      while let last = doi.last, ".,;:)]".contains(last) { doi = doi.dropLast() }
+      let parts = doi.split(separator: "/", maxSplits: 1)
+      guard parts.count == 2, parts[0].count > 3, parts[0].dropFirst(3).allSatisfy(\.isNumber),
+        !parts[1].isEmpty
+      else { continue }
+      return URL(string: "https://doi.org/\(doi)")
+    }
+    return nil
+  }
+}
+
+extension EvidenceSource {
+  /// Every source the app shows. The methodology sheet's previews and the summary tests iterate
+  /// this, so a source added without an "In short" line fails a test instead of shipping bare.
+  public static var shipped: [EvidenceSource] {
+    [
+      SetCounting.source, VolumeAnalyzer.doseResponseSource, VolumeAnalyzer.targetSource,
+      StrengthMath.measuredSource, StrengthMath.epleySource, ProgressionAnalyzer.source,
+    ]
   }
 }
 

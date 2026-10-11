@@ -220,6 +220,7 @@ public enum ProgressionAnalyzer {
       An estimated one-rep max is only shown for sets of twelve reps or fewer; above that no \
       estimate is produced. A change in load across a machine switch is a difference between \
       machines, not a change in strength, and is labelled as such.
-      """
+      """,
+    summary: "Your best weight in each session, one line per machine, never merged across machines."
   )
 }

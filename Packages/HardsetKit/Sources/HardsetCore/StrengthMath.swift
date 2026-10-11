@@ -21,7 +21,8 @@ public enum StrengthMath {
     methodology:
       "A completed single at this load is reported directly. No estimation is involved.",
     citation: nil,
-    validRange: "Exactly 1 repetition."
+    validRange: "Exactly 1 repetition.",
+    summary: "A single rep at a weight is reported as it is, with nothing estimated."
   )
 
   public static let epleySource = EvidenceSource(
@@ -33,7 +34,11 @@ public enum StrengthMath {
       + "Accuracy falls as repetitions rise, so certainty is reduced above 6 repetitions "
       + "and no estimate is produced above 12.",
     citation: "Epley, B. (1985). Poundage Chart. Boyd Epley Workout.",
-    validRange: "2-12 repetitions, sub-maximal to maximal effort."
+    validRange: "2-12 repetitions, sub-maximal to maximal effort.",
+    summary: """
+      An estimate from a set of 2 to 12 reps, for comparing your own loads over time; it is not \
+      a measured maximum.
+      """
   )
 
   /// Estimated one-rep max in kilograms, with certainty attached.

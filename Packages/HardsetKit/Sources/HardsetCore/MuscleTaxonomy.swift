@@ -373,6 +373,10 @@ public enum SetCounting {
       Applying it to any other muscle is an extrapolation. Few studies examined more than about \
       25 fractional weekly sets, so counts above that fall outside the fitted range. No isometric \
       or stabilising contribution appears anywhere in the classification.
+      """,
+    summary: """
+      A working set counts 1 for each muscle that drives it, 0.5 for each that assists and 0 for \
+      bracing or gripping; the 0.5 is a stated convention, not a measured value.
       """
   )
 
@@ -386,6 +390,55 @@ public enum SetCounting {
     if fractionalSets > 25 { return .low }
     return muscle.tier == .modelled ? .moderate : .low
   }
+
+  /// The 1.0 / 0.5 / 0 scheme as rows the methodology sheet can draw (spec 3.2).
+  ///
+  /// The credits are read from `weight(_:)`, never restated, so the picture cannot drift from the
+  /// arithmetic. Each row says where its number comes from, and the 0.5 row says it is a
+  /// convention: Pelland et al. fixed it in advance rather than estimating it (`DECISIONS.md` §17).
+  public static func creditScheme(locale: Locale = .current) -> [CreditTier] {
+    MuscleRole.allCases.map { role in
+      let credit = weight(role)
+      return CreditTier(
+        role: role,
+        credit: credit,
+        creditText: WeightFormatter.text(credit, fractionDigits: 1, locale: locale),
+        meaning: meaning(role),
+        basis: basis(role)
+      )
+    }
+  }
+
+  private static func meaning(_ role: MuscleRole) -> String {
+    switch role {
+    case .direct: "Muscles that drive the movement"
+    case .indirect: "Muscles that assist through a real range"
+    case .stabilizer: "Muscles that only brace, grip or hold still"
+    }
+  }
+
+  private static func basis(_ role: MuscleRole) -> String {
+    switch role {
+    case .direct: "From the scheme that best fitted 67 studies in Pelland et al. (2025)."
+    case .indirect:
+      "A convention. Pelland et al. fixed this weight in advance rather than estimating it."
+    case .stabilizer: "Hardset's own convention. It is not part of the scheme that was tested."
+    }
+  }
+}
+
+/// One row of the fractional-credit picture.
+public struct CreditTier: Hashable, Sendable, Identifiable {
+  public let role: MuscleRole
+  /// Sets credited per working set, from `SetCounting.weight(_:)`.
+  public let credit: Double
+  /// The credit in the lifter's locale: "1", "0.5", "0" (or "0,5").
+  public let creditText: String
+  public let meaning: String
+  /// Where the number comes from, said honestly.
+  public let basis: String
+
+  public var id: MuscleRole { role }
 }
 
 // MARK: - Decoding

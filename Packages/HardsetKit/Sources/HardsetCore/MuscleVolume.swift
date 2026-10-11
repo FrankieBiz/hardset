@@ -195,6 +195,10 @@ extension VolumeAnalyzer {
       Applies only to the eight sites measured in that corpus. For every other muscle this is \
       unevaluated, not approximate. The ~25-set ceiling is Hardset's chosen cut point, not a \
       figure the paper states.
+      """,
+    summary: """
+      For the eight muscles the studies measured, your weekly count is placed on a published \
+      curve; past about 25 sets the app stops saying what another set buys.
       """
   )
 
@@ -244,6 +248,10 @@ extension VolumeAnalyzer {
       number you should have hit.
       """,
     citation: "Pelland JC et al. Sports Med 2025. DOI 10.1007/s40279-025-02344-w.",
-    validRange: "No muscle has an evaluated target in this version."
+    validRange: "No muscle has an evaluated target in this version.",
+    summary: """
+      No weekly set target is established for any muscle, so the app shows what you did and \
+      never what you should have done.
+      """
   )
 }
