@@ -67,7 +67,7 @@ public struct VolumeReportView: View {
           Image(systemName: "exclamationmark.circle")
         }
         .font(Tokens.Text.caption)
-        .foregroundStyle(Tokens.Color.certainty(.low))
+        .foregroundStyle(Tokens.Color.caveat)
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(Tokens.Spacing.regular)
         .background(Tokens.Color.surface, in: RoundedRectangle(cornerRadius: Tokens.Radius.card))

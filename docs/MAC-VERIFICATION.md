@@ -168,3 +168,24 @@ the `Hardset` scheme for the iOS 26.4 simulator.
   - [ ] Tap +15 s five times fast with the app in front. `AlarmManager.shared.alarms` holds exactly
         one alarm, and the rest never drops to idle.
   - [ ] Note whether `alarmUpdates` emits on pause and resume. The code works either way.
+- [ ] (feat(ui): tokens v2 …) HardsetUI builds for iOS 26.4 simulator and, via `./test.sh`, for
+      macOS. Then in the simulator:
+  - [ ] Light mode: a card on the Volume tab is visibly separate from the background.
+  - [ ] Settings › Accessibility › Display & Text Size › Increase Contrast on: the "Low confidence"
+        badge text on the methodology sheet darkens (light) / lightens (dark).
+  - [ ] The "at least this much" lower-bound note on the Volume tab reads as grey text with a
+        glyph, not orange.
+  - [ ] The machine-change rule on a progression chart is grey and dashed, not orange.
+  - Written without a compiler. If the build fails, look first at `Tokens.adaptive`: it is
+    `nonisolated` and calls only the `nonisolated` `Tokens.uiColor`; on macOS it switches over
+    `NSAppearance.Name` (unwrapped with `?? .aqua`) using `.accessibilityHighContrastAqua` and
+    `.accessibilityHighContrastDarkAqua`. The brief's `PaletteSwatch(light:…)` convenience init
+    from `PaletteColor` was not added: a cross-module struct initialiser must delegate to a public
+    one, and the only public one takes hex.
+  - Increase Contrast is read through the `UIColor` provider's `accessibilityContrast` trait, not
+    `@Environment(\.colorSchemeContrast)`. The badge check above is what proves SwiftUI passes the
+    setting into the trait collection. If the badge does not change, that assumption is wrong.
+  - [ ] Accessibility Inspector › Audit on the Volume tab with the lower-bound note showing:
+        `Tokens.Color.caveat` is the system `secondary`, which Core's palette test does not cover.
+        Note the contrast it reports for that note in light mode. Below 4.5:1 goes back to the
+        plan owner. Do not fix it here.

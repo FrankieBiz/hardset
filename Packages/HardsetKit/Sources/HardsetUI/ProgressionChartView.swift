@@ -75,7 +75,7 @@ public struct ProgressionChartView: View {
               + "or fewer, and none of these sessions qualify."
           )
           .font(Tokens.Text.caption)
-          .foregroundStyle(Tokens.Color.certainty(.low))
+          .foregroundStyle(Tokens.Color.caveat)
         }
         machineChangeNotes
         if let onExplain {
@@ -124,12 +124,12 @@ public struct ProgressionChartView: View {
       // at the same moment it meets the discontinuity.
       ForEach(machineChanges) { change in
         RuleMark(x: .value("Machine change", change.date))
-          .foregroundStyle(Tokens.Color.certainty(.low))
+          .foregroundStyle(Tokens.Color.caveat)
           .lineStyle(StrokeStyle(lineWidth: 1, dash: [4, 3]))
           .annotation(position: .top, alignment: .leading) {
             Image(systemName: "arrow.triangle.branch")
               .font(Tokens.Text.caption)
-              .foregroundStyle(Tokens.Color.certainty(.low))
+              .foregroundStyle(Tokens.Color.caveat)
           }
       }
     }
