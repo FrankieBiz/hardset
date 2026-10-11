@@ -65,12 +65,17 @@ public enum RestAlarmService {
       title: LocalizedStringResource(stringLiteral: request.alertTitle)
     )
 
+    // No system pause button (`pauseButton` is optional): a pause the app does not make leaves it
+    // no remainder to read, and reconciling would then end the rest. Phase 4.1 brings Lock Screen
+    // pause back as a LiveActivityIntent that runs in the app, so the app pauses itself.
     let countdown = AlarmPresentation.Countdown(
       // "Rest" matches the widget's own fallback when the attributes carry no metadata.
-      title: LocalizedStringResource(stringLiteral: request.metadata?.setLabel ?? "Rest"),
-      pauseButton: AlarmButton(text: "Pause", textColor: .white, systemImageName: "pause.fill")
+      title: LocalizedStringResource(stringLiteral: request.metadata?.setLabel ?? "Rest")
     )
 
+    // Kept, because the app's own `pause(id:)` needs it: `paused` is nil only for an alarm that
+    // "doesn't support pause mode". Its resume button is required by the initialiser, so the
+    // Lock Screen can still resume a rest paused in the app (a Phase 4.1 intent, too).
     let paused = AlarmPresentation.Paused(
       title: "Paused",
       resumeButton: AlarmButton(text: "Resume", textColor: .white, systemImageName: "play.fill")

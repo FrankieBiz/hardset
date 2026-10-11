@@ -141,18 +141,20 @@ the `Hardset` scheme for the iOS 26.4 simulator.
         Swift warns, because the app target is outside the package.
   Then on device:
   - [ ] Start a rest, force-quit, relaunch: the app shows the same countdown.
-  - [ ] Pause from the Lock Screen, open the app: it shows paused with the right remainder.
-        **Expected to fail**: `Alarm` exposes no remainder, so the reconciler (Task 2 ruling)
-        cancels the alarm and the app shows idle. A Lock Screen resume of a rest paused in the app
-        ends the same way. Record what happens. If it fails as expected, a decision is needed:
-        read `AlarmPresentationState` (only if the app can see the alarm's Live Activity), or
-        drop the Lock Screen pause and resume buttons.
+  - [ ] (fix(alarm): no system pause on the Lock Screen…) The Lock Screen countdown offers no pause
+        button. Pausing in the app shows paused on the Lock Screen and resumes correctly. Phase 4.1
+        re-adds Lock Screen pause and resume as `LiveActivityIntent`s that run in the app.
+  - [ ] Known residual until Phase 4.1: the paused Lock Screen view still has a Resume button,
+        because `AlarmPresentation.Paused(title:resumeButton:)` requires one. Pause in the app,
+        lock, tap Resume: expected, the rest ends on the next reconcile, because the resume time
+        cannot be read (Task 2 ruling). Record what happens.
   - [ ] First rest ever: the permission prompt appears.
   - [ ] Deny it: the on-screen countdown still runs and the denial banner shows (with Task 11).
   - [ ] The alert has no button that does nothing.
   - [ ] Alarms denied: the notification prompt appears once. Allow it. The rest ends with a
         notification at the deadline; +15 s moves it; pause removes it; Skip removes it. Relaunch
-        mid-rest: the countdown is still there.
+        mid-rest: the countdown is still there. With the app open at the deadline, the rest bar
+        goes away and the notification still arrives.
   - [ ] Tap +15 s five times fast with the app in front. `AlarmManager.shared.alarms` holds exactly
         one alarm, and the rest never drops to idle.
   - [ ] Note whether `alarmUpdates` emits on pause and resume. The code works either way.
