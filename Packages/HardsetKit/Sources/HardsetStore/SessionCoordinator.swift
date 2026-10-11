@@ -597,7 +597,13 @@ public final class SessionCoordinator {
       return fail(SessionCoordinatorError.slotNotLogged, slotID: slotID)
     }
     do {
-      let removed = try store.deleteSet(setID)
+      // A deleted working set also lowers the plan, or a resume pads the row back. A warm-up is
+      // not part of `plannedSets` (resume counts working sets only), so it leaves the plan alone.
+      let floor = exercises[found.exercise].workingSetCount - (slot.isWarmup ? 0 : 1)
+      let (removed, lowered) = try store.deleteSet(
+        setID,
+        loweringPlanRow: slot.isWarmup ? nil : planRowIDs[exerciseStateID],
+        keepingAtLeast: floor)
       exercises[found.exercise].slots.remove(at: found.slot)
       undoableDeletion = DeletedSet(
         exerciseStateID: exerciseStateID,
@@ -605,6 +611,7 @@ public final class SessionCoordinator {
         index: found.slot,
         expiresAt: now().addingTimeInterval(Self.undoWindow.seconds),
         removed: removed,
+        planLowered: lowered,
         records: recordsBySlot[slotID] ?? []
       )
       recordsBySlot[slotID] = nil
@@ -629,7 +636,9 @@ public final class SessionCoordinator {
       return false
     }
     do {
-      let newID = try store.restoreSet(pending.removed)
+      let newID = try store.restoreSet(
+        pending.removed, raisingPlanRow: planRowIDs[pending.exerciseStateID],
+        by: pending.planLowered)
       var slot = pending.slot
       slot.loggedSetID = newID
       exercises[exerciseIndex].slots.insert(
@@ -777,5 +786,7 @@ public struct DeletedSet: Sendable {
   public let index: Int
   public let expiresAt: Date
   let removed: LoggedSetRecord
+  /// How far the delete lowered the plan row's `plannedSets`, for Undo to raise it back.
+  let planLowered: Int
   let records: [PersonalRecord]
 }

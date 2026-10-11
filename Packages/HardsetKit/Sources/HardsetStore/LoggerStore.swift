@@ -227,12 +227,38 @@ public nonisolated struct LoggerStore {
   /// Deletes a written set and returns it as it was, so an undo can put it back.
   @discardableResult
   public func deleteSet(_ id: SetID) throws -> LoggedSetRecord {
+    try deleteSet(id, loweringPlanRow: nil, keepingAtLeast: 0).record
+  }
+
+  /// Deletes a written set and lowers its plan row's `plannedSets` by one, in one transaction.
+  ///
+  /// Without the second half a resume pads the exercise back up to the old plan and the deleted
+  /// row returns as an open prefill. `plannedSets` is never lowered below `floor` (the rows the
+  /// exercise still holds) and never touched when nil. `lowered` is how much it went down (0 or
+  /// 1), for `restoreSet` to put back. If either write fails, neither happens.
+  public func deleteSet(
+    _ id: SetID, loweringPlanRow planRowID: UUID?, keepingAtLeast floor: Int
+  ) throws -> (record: LoggedSetRecord, lowered: Int) {
     try database.write { db in
       guard let row = try LoggedSet.where({ $0.id.eq(id.rawValue) }).fetchOne(db) else {
         throw LoggerStoreError.setNotFound
       }
       try LoggedSet.where { $0.id.eq(id.rawValue) }.delete().execute(db)
-      return LoggedSetRecord(row: row)
+      var lowered = 0
+      if let planRowID,
+        let plan = try SessionExercise.where({ $0.id.eq(planRowID) }).fetchOne(db),
+        let planned = plan.plannedSets
+      {
+        let target = min(planned, max(planned - 1, floor))
+        lowered = planned - target
+        if lowered > 0 {
+          try SessionExercise
+            .where { $0.id.eq(planRowID) }
+            .update { $0.plannedSets = #bind(target) }
+            .execute(db)
+        }
+      }
+      return (LoggedSetRecord(row: row), lowered)
     }
   }
 
@@ -243,7 +269,9 @@ public nonisolated struct LoggerStore {
   /// before the deletion reaches iCloud therefore risks the server deleting a set this device
   /// shows (`DECISIONS.md` §22). Nothing references a set's id, so a new one costs nothing.
   @discardableResult
-  public func restoreSet(_ deleted: LoggedSetRecord) throws -> SetID {
+  public func restoreSet(
+    _ deleted: LoggedSetRecord, raisingPlanRow planRowID: UUID? = nil, by raised: Int = 0
+  ) throws -> SetID {
     let id = SetID()
     try database.write { db in
       guard try Session.where({ $0.id.eq(deleted.sessionID.rawValue) }).fetchOne(db) != nil else {
@@ -265,6 +293,15 @@ public nonisolated struct LoggerStore {
         )
       }
       .execute(db)
+      // The same transaction as the insert: both or neither.
+      if let planRowID, raised > 0,
+        let planned = try SessionExercise.where({ $0.id.eq(planRowID) }).fetchOne(db)?.plannedSets
+      {
+        try SessionExercise
+          .where { $0.id.eq(planRowID) }
+          .update { $0.plannedSets = #bind(planned + raised) }
+          .execute(db)
+      }
     }
     return id
   }
