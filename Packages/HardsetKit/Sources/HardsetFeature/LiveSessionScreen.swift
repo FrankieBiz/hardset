@@ -56,6 +56,15 @@ public struct RestTimerHooks {
   public static var inert: RestTimerHooks { RestTimerHooks() }
 }
 
+/// How a live workout ended, reported only after the write that ended it succeeded.
+///
+/// The root needs to know which: a finished workout has a summary to read back from the database
+/// by its id, and a discarded one no longer exists, so there is nothing to show for it.
+public enum SessionExit: Hashable, Sendable {
+  case finished(SessionID)
+  case discarded
+}
+
 /// The live workout, wired.
 ///
 /// Owns the `SessionCoordinator`, binds it to `SessionView`, and routes rest requests to the
@@ -72,6 +81,18 @@ public struct LiveSessionScreen: View {
   @State private var finishError: (any Error)?
   @State private var pickerQuery = ""
   @State private var pickerEntries: [CatalogEntry] = []
+  /// The movements logged most recently, newest first and each once (the store dedupes). Read when
+  /// the picker opens, never in `body`.
+  @State private var recentEntries: [CatalogEntry] = []
+  /// What Finish asks when the rows say it must (`FinishFlow`). One flag per dialog rather than a
+  /// binding derived from one optional decision: clearing that as the dialog closed would change
+  /// the count in its title while it animated away. The count stays until the next Finish.
+  @State private var isConfirmingUnlogged = false
+  @State private var unloggedCount = 0
+  @State private var isConfirmingDiscard = false
+  /// The action the coordinator's `lastError` belongs to, so a failed edit is not described as a
+  /// failed log. Set by `attempt(_:_:)`, around every coordinator write.
+  @State private var lastAction: FailureCopy.Action = .logSet
   /// The exercise whose machine is being chosen. Non-nil presents the picker.
   ///
   /// Wrapped rather than a bare `UUID` because `sheet(item:)` needs `Identifiable`, and retroactively
@@ -89,12 +110,17 @@ public struct LiveSessionScreen: View {
   private let catalog: CatalogSeeder?
   private let gyms: GymStore?
   private let progression: ProgressionStore?
-  private let onFinished: () -> Void
+  private let shortcuts: WorkoutShortcutsStore?
+  private let onFinished: (SessionExit) -> Void
 
   /// - Parameter catalog: Supplies the picker. Passing `nil` hides the add-movement affordance
   ///   entirely rather than showing a button that opens an empty list.
   /// - Parameter gyms: Supplies the machine picker. Passing `nil`, or running a session with no
   ///   gym, hides the machine affordance — the same rule as the catalogue.
+  /// - Parameter shortcuts: Supplies the picker's Recent section. Passing `nil` leaves it out; the
+  ///   full list is unaffected.
+  /// - Parameter onFinished: Called once the session has been finished or discarded, after the
+  ///   write. Never called while the session is still open.
   public init(
     coordinator: SessionCoordinator,
     unit: WeightUnit,
@@ -102,7 +128,8 @@ public struct LiveSessionScreen: View {
     catalog: CatalogSeeder? = nil,
     gyms: GymStore? = nil,
     progression: ProgressionStore? = nil,
-    onFinished: @escaping () -> Void = {}
+    shortcuts: WorkoutShortcutsStore? = nil,
+    onFinished: @escaping (SessionExit) -> Void = { _ in }
   ) {
     self._coordinator = State(initialValue: coordinator)
     self.unit = unit
@@ -110,6 +137,7 @@ public struct LiveSessionScreen: View {
     self.catalog = catalog
     self.gyms = gyms
     self.progression = progression
+    self.shortcuts = shortcuts
     self.onFinished = onFinished
   }
 
@@ -125,7 +153,7 @@ public struct LiveSessionScreen: View {
       restMetadata: coordinator.activeRest,
       errorMessage: errorMessage,
       onLogSet: { exerciseStateID, slot in
-        coordinator.logSet(slotID: slot.id, inExercise: exerciseStateID)
+        attempt(.logSet) { coordinator.logSet(slotID: slot.id, inExercise: exerciseStateID) }
       },
       onAdjustRest: hooks.adjust,
       onPauseResumeRest: hooks.pauseOrResume,
@@ -143,16 +171,82 @@ public struct LiveSessionScreen: View {
       onChooseRest: { stateID, rest in coordinator.setRestChoice(rest, forExercise: stateID) },
       // No choice means nothing to start, which the chip already reflects by not offering it.
       onStartRest: { stateID in _ = coordinator.startRest(forExercise: stateID) },
-      onFinish: finish
+      // Trophies and pulses are the coordinator's, set only after the write they describe.
+      recordsBySlot: coordinator.recordsBySlot,
+      feedback: coordinator.feedback,
+      // Keyed by the deleted row's id, which is stable for that deletion: an id made here would be
+      // new on every render, restarting the bar's timer so it never closed.
+      pendingUndo: coordinator.undoableDeletion.map {
+        PendingUndo(id: $0.slot.id, label: "Set deleted")
+      },
+      onEditSet: { exerciseStateID, slotID, draft in
+        attempt(.editSet) {
+          coordinator.editSet(slotID: slotID, inExercise: exerciseStateID, to: draft)
+        }
+      },
+      onDeleteSet: { exerciseStateID, slotID in
+        attempt(.deleteSet) { coordinator.deleteSet(slotID: slotID, inExercise: exerciseStateID) }
+      },
+      onUndoDelete: {
+        attempt(.undoDelete) {
+          // Too late is not a failure: the coordinator drops the deletion and reports nothing, so
+          // an earlier failure keeps its own copy. A failed Undo keeps the deletion for a retry.
+          coordinator.undoDelete() || coordinator.undoableDeletion == nil
+        }
+      },
+      // The coordinator holds the real window and refuses an Undo after it either way; this only
+      // tells it the bar has gone.
+      onExpireUndo: { coordinator.expireUndo() }
+      // Finish is the toolbar's prominent action, so the list is given no Finish of its own.
     )
     // Under the rest bar rather than above it: `SessionView` owns the bar's inset, and an inset
     // added out here is laid out beneath that one. It shares the bar's background, so the two read
     // as one panel.
     .safeAreaInset(edge: .bottom, spacing: 0) { restNotice }
+    .toolbar {
+      ToolbarItem(placement: .confirmationAction) {
+        // `ButtonRole.confirm` is iOS 26 and macOS 26, and this target also builds for macOS 15.
+        if #available(iOS 26.0, macOS 26.0, *) {
+          Button("Finish", role: .confirm, action: requestFinish)
+        } else {
+          Button("Finish", action: requestFinish)
+        }
+      }
+    }
+    // Two dialogs rather than one that switches, so each keeps a fixed shape: only the empty
+    // workout has a message.
+    .confirmationDialog(
+      FinishFlow.unloggedTitle(count: unloggedCount),
+      isPresented: $isConfirmingUnlogged,
+      titleVisibility: .visible
+    ) {
+      Button("Finish workout", action: finish)
+      Button("Keep logging", role: .cancel) {}
+    }
+    .confirmationDialog(
+      FinishFlow.discardTitle,
+      isPresented: $isConfirmingDiscard,
+      titleVisibility: .visible
+    ) {
+      Button("Discard workout", role: .destructive, action: discard)
+      Button("Keep logging", role: .cancel) {}
+    } message: {
+      Text(FinishFlow.discardMessage)
+    }
     .sheet(isPresented: $isPickerPresented) {
       NavigationStack {
-        ExercisePickerView(query: $pickerQuery, entries: pickerEntries) { entry in
-          coordinator.addExercise(entry)
+        ExercisePickerView(
+          query: $pickerQuery,
+          entries: pickerEntries,
+          recent: recentEntries,
+          onCancel: {
+            isPickerPresented = false
+            pickerQuery = ""
+          }
+        ) { entry in
+          // No copy of its own yet: this keeps the log-set copy every coordinator failure had
+          // before the action was tracked.
+          attempt(.logSet) { coordinator.addExercise(entry) }
           isPickerPresented = false
           pickerQuery = ""
         }
@@ -162,6 +256,8 @@ public struct LiveSessionScreen: View {
       // stays free of storage. The query is re-run on change instead of filtering in memory so a
       // user-created movement shows up without reopening the sheet.
       .task(id: pickerQuery) { refreshPicker() }
+      // Once per presentation: what was logged most recently changes as the workout goes on.
+      .task { refreshRecent() }
     }
     // A failure belongs to the attempt the lifter just made, so it goes when the picker does.
     .sheet(item: $machineTarget, onDismiss: { machineError = nil }) { wrapped in
@@ -327,8 +423,11 @@ public struct LiveSessionScreen: View {
         (machineOptions.recent + machineOptions.others).first { $0.id == id }?.displayName
       }
     // The coordinator persists before it mutates memory, and reads the increment from the machines
-    // table itself, so nothing here needs to know either.
-    _ = coordinator.changeMachine(to: machineID, machineName: name, inExercise: target)
+    // table itself, so nothing here needs to know either. Like adding a movement, a machine change
+    // has no copy of its own yet and keeps the log-set copy it always had.
+    attempt(.logSet) {
+      coordinator.changeMachine(to: machineID, machineName: name, inExercise: target)
+    }
   }
 
   /// Same argument-passing rule as `addGym`: the name arrives as a parameter, because reading it
@@ -341,7 +440,9 @@ public struct LiveSessionScreen: View {
       // for no reason. The stack step is left unknown rather than guessed — an invented increment
       // would licence progression suggestions the equipment cannot honour.
       refreshMachines(forExercise: target)
-      _ = coordinator.changeMachine(to: machineID, machineName: name, inExercise: target)
+      attempt(.logSet) {
+        coordinator.changeMachine(to: machineID, machineName: name, inExercise: target)
+      }
       machineError = nil
       // Dismissed, like choosing an existing machine does. Leaving the picker open after the
       // decision has been made asks the lifter to confirm something twice.
@@ -365,14 +466,57 @@ public struct LiveSessionScreen: View {
     }
   }
 
+  /// Loads the picker's Recent section.
+  private func refreshRecent() {
+    guard let shortcuts else { return }
+    do {
+      recentEntries = try shortcuts.recentExercises()
+    } catch {
+      // Recent is a convenience, and the full list below is unaffected, so an unreadable history
+      // leaves the section out rather than blocking the picker.
+      recentEntries = []
+    }
+  }
+
   /// A failed write is stated in the user's words, not as an error dump. The wording lives in
   /// `FailureCopy`, where it is tested; this only says which action failed.
   private var errorMessage: String? {
     if let finishError {
       return FailureCopy.message(for: finishError, during: .finishWorkout)
     }
-    guard let error = coordinator.lastError else { return nil }
-    return FailureCopy.message(for: error, during: .logSet)
+    return coordinator.lastError.map { FailureCopy.message(for: $0, during: lastAction) }
+  }
+
+  /// Runs one coordinator write and, when it fails, records which action the coordinator's
+  /// `lastError` now belongs to.
+  ///
+  /// Labelled after the call rather than before it, so a call that did nothing (logging a row that
+  /// is already logged, an Undo after its window) cannot relabel an earlier failure as its own. A
+  /// finish failure is retired first: it described an earlier attempt, and left in place it would
+  /// stand in front of this one's copy.
+  @discardableResult
+  private func attempt(_ action: FailureCopy.Action, _ write: () -> Bool) -> Bool {
+    finishError = nil
+    let succeeded = write()
+    if !succeeded { lastAction = action }
+    return succeeded
+  }
+
+  // MARK: - Finishing
+
+  /// The toolbar's Finish. The coordinator decides from the rows (`FinishFlow`): finish at once,
+  /// confirm with the count of sets that will not be saved, or offer Discard when nothing was
+  /// logged. An empty workout is never finished into history.
+  private func requestFinish() {
+    switch coordinator.finishDecision {
+    case .finish:
+      finish()
+    case .confirmUnlogged(let count):
+      unloggedCount = count
+      isConfirmingUnlogged = true
+    case .discardEmpty:
+      isConfirmingDiscard = true
+    }
   }
 
   private func finish() {
@@ -382,22 +526,31 @@ public struct LiveSessionScreen: View {
     coordinator.endRest()
     do {
       try coordinator.finish()
-      onFinished()
+      onFinished(.finished(coordinator.sessionID))
     } catch SessionTimelineError.alreadyFinished {
       // Genuinely closed already — a double tap, or a finish that raced a recovery. Moving on is
       // correct here because the session really is finished.
-      onFinished()
+      onFinished(.finished(coordinator.sessionID))
     } catch {
-      // Anything else and the session is STILL OPEN. Calling onFinished() here was a bug: the root
-      // view dropped the coordinator, the user started a new workout, and because openSession()
-      // returns only the newest and history shows finished sessions only, the first session's sets
-      // became unreachable from every screen. The earlier comment claimed "nothing is lost", which
-      // was wrong.
+      // Anything else and the session is STILL OPEN. Reporting it finished here was a bug: the
+      // root view dropped the coordinator, the user started a new workout, and because
+      // openSession() returns only the newest and history shows finished sessions only, the first
+      // session's sets became unreachable from every screen. The earlier comment claimed "nothing
+      // is lost", which was wrong.
       //
       // `finishedBeforeStart` is the realistic trigger: the device clock moving backwards, from a
       // timezone or NTP correction, makes `now()` precede `startedAt`. Kept, so only that case is
       // told to check the clock.
       finishError = error
+    }
+  }
+
+  /// Deletes a workout with nothing logged. The screen leaves only after the store has deleted it;
+  /// a refusal (a set the screen never saw) or a failure keeps the workout open and says why.
+  private func discard() {
+    if attempt(.discardWorkout, { coordinator.discard() }) {
+      hooks.cancel()
+      onFinished(.discarded)
     }
   }
 }

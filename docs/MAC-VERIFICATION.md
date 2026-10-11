@@ -548,3 +548,54 @@ the `Hardset` scheme for the iOS 26.4 simulator.
         `@ScaledMetric(relativeTo:)` with `Tokens.…` initial values, the `if`-inside
         `.accessibilityActions { }` builders, and `.sheet` after `.accessibilityActions` in
         `SetRowView.body`.
+- [ ] (feat(feature): wire corrections, the finish flow and Recent into the live session)
+      HardsetFeature and the app build. In the simulator:
+  - [ ] Finish is the prominent (glass) action at the top right; there is no Finish at the
+        bottom of the list.
+  - [ ] Log 1 of 3 prefilled sets, tap Finish: "2 sets weren't logged and won't be saved", with
+        Finish workout / Keep logging.
+  - [ ] Start a workout, log nothing, tap Finish: "Nothing was logged" with Discard workout;
+        discarding returns to the start screen and nothing appears in history.
+  - [ ] A failed edit shows "That change could not be saved…", not the log-set copy.
+  - [ ] The picker's Cancel closes it and clears the search.
+  - [ ] Keep logging closes either dialog and changes nothing. Its title does not blank or change
+        while it animates away. "Finish workout" in the unlogged dialog finishes: history shows
+        only the logged set.
+  - [ ] Both dialogs present. They are two `.confirmationDialog`s on one view; if only one ever
+        appears, merge them into one keyed on the decision.
+  - [ ] With a rest running and nothing logged (start it from the chip), Discard workout ends the
+        rest too.
+  - [ ] Task 14's moments are now wired: re-run that entry's trophy, haptic, Edit, Delete and Undo
+        checks here.
+  - [ ] Settings (gear) and Finish both sit at the trailing edge of the Train tab. Note their
+        order. The macOS 15 host build shows a plain Finish (no `.confirm` role).
+  - [ ] Force a finish failure (debug throw), then log a set: the finish copy goes and the screen
+        is quiet. A finish failure is retired by the next write the lifter attempts, so it never
+        stands in front of a later failure's copy.
+  - Recent stays empty until Task 19 passes `shortcuts:` from `HardsetRootView`. This task only
+    adds the input; the root's call site changed in its `onFinished` closure alone.
+  - Known limit, Undo timing: `PendingUndo` takes no expiry, so the bar counts its own 5 s from
+    when it appears (moments after the delete), and restarts after a tab switch. The
+    coordinator's `DeletedSet.expiresAt` stays the authority: an Undo after it does nothing and
+    shows no error. Passing the expiry needs a HardsetUI change (`PendingUndo(expiresAt:)`).
+  - Known limit, copy: a failed Undo reads "That set could not be put back. Tap Undo to try
+    again." If the window then closes, the copy stays with no Undo to tap, because the
+    coordinator's `lastError` is cleared only by the next write. `FailureCopy` has no wording for
+    that case yet.
+  - Written without a compiler. The non-SwiftUI parts (every `SessionView` callback, the picker
+    call, `attempt(_:_:)`, `requestFinish`, `discard`, `refreshRecent`, `SessionExit`) were
+    type-checked on Linux in a scratch target against the real HardsetCore and HardsetStore, with
+    `SessionView`/`ExercisePickerView`/`PendingUndo` signatures copied verbatim and SwiftUI
+    stand-ins using the SDK's `Binding(get:set:)` and `Button(_:role:action:)` declarations.
+    Swift 6.2 also showed `if #available(iOS 26.0, macOS 26.0, *)` raises no "unnecessary
+    check" warning at an iOS 26.1 deployment target (it does only under an enclosing
+    `@available`), which settles the Task 14 worry about `UndoBarBackground` too. If the build
+    fails anyway, look first at:
+    - `ToolbarItem(placement: .confirmationAction) { if #available(…) { Button(…, role: .confirm,
+      …) } else { … } }`.
+    - The two `.confirmationDialog(_:isPresented:titleVisibility:actions:)` calls with `String`
+      titles, which must resolve to the `StringProtocol` overloads (iOS 15).
+    - The single-expression `attempt(.x) { … }` callbacks, which return `Bool` into the
+      `Void`-typed `onLogSet`/`onDeleteSet`/`onUndoDelete`.
+  - If Finish is not visibly prominent, the `.confirm` role alone did not style it on iOS 26: add
+    `.buttonStyle(.glassProminent)` inside the `#available` branch.

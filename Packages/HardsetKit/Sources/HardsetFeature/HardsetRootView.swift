@@ -188,7 +188,7 @@ public struct HardsetRootView: View {
         catalog: environment.catalog,
         gyms: environment.gyms,
         progression: environment.progression,
-        onFinished: { self.coordinator = nil }
+        onFinished: { _ in self.coordinator = nil }
       )
       .navigationTitle("Workout")
     } else if let resumeError {
