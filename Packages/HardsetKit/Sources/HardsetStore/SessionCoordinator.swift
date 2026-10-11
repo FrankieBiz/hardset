@@ -383,6 +383,10 @@ public final class SessionCoordinator {
       )
       exercises[exerciseIndex].markLogged(slotID: slotID, setID: setID)
       lastError = nil
+      // The new set may have taken the deleted one's ordinal: ordinals count per movement in the
+      // session, every block included. Putting the deleted set back would issue it twice, so the
+      // Undo ends here.
+      if undoableDeletion?.removed.exerciseID == exercise.exerciseID { undoableDeletion = nil }
 
       // Records are announced only after a successful write, for the same reason the check mark
       // is: a celebration for a set that was not saved is worse than no celebration.
@@ -539,12 +543,181 @@ public final class SessionCoordinator {
     }
   }
 
+  // MARK: - Corrections
+
+  /// How long a deleted set can be put back (spec 2.3).
+  public static let undoWindow: Duration = .seconds(5)
+
+  /// The most recent deletion, while it can still be undone.
+  public private(set) var undoableDeletion: DeletedSet?
+
+  /// True once an empty workout has been discarded. The screen leaves the session.
+  public private(set) var isDiscarded = false
+
+  /// What Finish should do, decided from the rows (`FinishFlow`).
+  public var finishDecision: FinishDecision { FinishFlow.decision(for: exercises) }
+
+  /// Corrects a logged set: the store first, then the row.
+  ///
+  /// Never announces. An edit is a correction, not a moment, so it plays no record haptic and
+  /// adds no trophy. A trophy stays only if the database still supports it (spec 2.3).
+  @discardableResult
+  public func editSet(
+    slotID: UUID, inExercise exerciseStateID: UUID, to draft: SetEntryDraft
+  ) -> Bool {
+    guard let found = indices(slot: slotID, exercise: exerciseStateID) else {
+      return fail(SessionCoordinatorError.unknownSlot, slotID: slotID)
+    }
+    let slot = exercises[found.exercise].slots[found.slot]
+    guard let setID = slot.loggedSetID else {
+      return fail(SessionCoordinatorError.slotNotLogged, slotID: slotID)
+    }
+    do {
+      let saved = try store.updateSet(setID, to: draft)
+      // What the row shows is what the store now holds.
+      exercises[found.exercise].slots[found.slot].draft = SetEntryDraft(
+        weightKg: saved.weightKg, reps: saved.reps, suggestion: slot.draft.suggestion)
+      lastError = nil
+      lastRecords = []
+      keepOnlyRecordsStillEarned(changedSlotID: slotID)
+      return true
+    } catch {
+      return fail(error, slotID: slotID)
+    }
+  }
+
+  /// Deletes a logged set: the store first, then the row. It can be undone for `undoWindow`.
+  @discardableResult
+  public func deleteSet(slotID: UUID, inExercise exerciseStateID: UUID) -> Bool {
+    guard let found = indices(slot: slotID, exercise: exerciseStateID) else {
+      return fail(SessionCoordinatorError.unknownSlot, slotID: slotID)
+    }
+    let slot = exercises[found.exercise].slots[found.slot]
+    guard let setID = slot.loggedSetID else {
+      return fail(SessionCoordinatorError.slotNotLogged, slotID: slotID)
+    }
+    do {
+      let removed = try store.deleteSet(setID)
+      exercises[found.exercise].slots.remove(at: found.slot)
+      undoableDeletion = DeletedSet(
+        exerciseStateID: exerciseStateID,
+        slot: slot,
+        index: found.slot,
+        expiresAt: now().addingTimeInterval(Self.undoWindow.seconds),
+        removed: removed,
+        records: recordsBySlot[slotID] ?? []
+      )
+      recordsBySlot[slotID] = nil
+      lastRecords = []
+      lastError = nil
+      return true
+    } catch {
+      return fail(error, slotID: slotID)
+    }
+  }
+
+  /// Puts the most recently deleted set back, inside the window: in the database under a new id,
+  /// and on screen at its old position with its trophy. Outside the window it does nothing, so a
+  /// stale Undo button cannot resurrect a set.
+  @discardableResult
+  public func undoDelete() -> Bool {
+    guard let pending = undoableDeletion else { return false }
+    guard now() < pending.expiresAt,
+      let exerciseIndex = exercises.firstIndex(where: { $0.id == pending.exerciseStateID })
+    else {
+      undoableDeletion = nil
+      return false
+    }
+    do {
+      let newID = try store.restoreSet(pending.removed)
+      var slot = pending.slot
+      slot.loggedSetID = newID
+      exercises[exerciseIndex].slots.insert(
+        slot, at: min(pending.index, exercises[exerciseIndex].slots.count))
+      undoableDeletion = nil
+      lastError = nil
+      if !pending.records.isEmpty {
+        recordsBySlot[slot.id] = pending.records
+        // An earlier row edited while this set was gone may have raised the bar it had cleared.
+        keepOnlyRecordsStillEarned(changedSlotID: slot.id)
+      }
+      return true
+    } catch {
+      // Kept, so Undo can be tried again until the window closes.
+      return fail(error, slotID: pending.slot.id)
+    }
+  }
+
+  /// The Undo toast timed out.
+  public func expireUndo() { undoableDeletion = nil }
+
+  /// Deletes this workout when nothing was logged.
+  ///
+  /// Refused in memory when a set is logged, and refused again by the store when the database
+  /// holds one this screen never saw.
+  @discardableResult
+  public func discard() -> Bool {
+    guard loggedSetCount == 0 else { return fail(LoggerStoreError.sessionNotEmpty, slotID: nil) }
+    do {
+      try store.discardEmptySession(sessionID)
+      isDiscarded = true
+      // Nothing can be put back into, or celebrated in, a workout that no longer exists.
+      undoableDeletion = nil
+      recordsBySlot = [:]
+      lastRecords = []
+      lastError = nil
+      endRest()
+      return true
+    } catch {
+      return fail(error, slotID: nil)
+    }
+  }
+
+  /// After a correction, keeps each trophy only while the database still supports it. It never
+  /// adds one.
+  private func keepOnlyRecordsStillEarned(changedSlotID: UUID) {
+    guard !recordsBySlot.isEmpty else { return }
+    guard let fresh = try? store.recordsBySet(in: sessionID) else {
+      // Unverifiable, so the changed row's trophy goes. A trophy the data may no longer support
+      // is the worse error.
+      recordsBySlot[changedSlotID] = nil
+      return
+    }
+    var kept: [UUID: [PersonalRecord]] = [:]
+    for exercise in exercises {
+      for slot in exercise.slots {
+        guard let shown = recordsBySlot[slot.id], let setID = slot.loggedSetID else { continue }
+        let kinds = Set(shown.map(\.kind))
+        let still = (fresh[setID] ?? []).filter { kinds.contains($0.kind) }
+        if !still.isEmpty { kept[slot.id] = still }
+      }
+    }
+    recordsBySlot = kept
+  }
+
+  private func indices(slot slotID: UUID, exercise exerciseStateID: UUID) -> (exercise: Int, slot: Int)? {
+    guard let e = exercises.firstIndex(where: { $0.id == exerciseStateID }),
+      let s = exercises[e].slots.firstIndex(where: { $0.id == slotID })
+    else { return nil }
+    return (e, s)
+  }
+
+  /// Every correction fails the same way: the error, for the screen's copy, and one error haptic.
+  @discardableResult
+  private func fail(_ error: any Error, slotID: UUID?) -> Bool {
+    lastError = error
+    emit(.error, slotID: slotID)
+    return false
+  }
+
   // MARK: - Finishing
 
   /// Closes the session. Refuses to double-finish, so `finishedAt` cannot drift.
   public func finish() throws {
     try store.finishSession(sessionID, at: now())
     isFinished = true
+    // A set deleted seconds before finishing stays deleted: the workout it belonged to is closed.
+    undoableDeletion = nil
     // After the write, like every other claim here: a rest must not outlive the workout.
     endRest()
   }
@@ -591,4 +764,18 @@ public enum SessionCoordinatorError: Error, Equatable, Sendable {
   /// nowhere to be written. Only reachable through the public initialiser; `start`, `resume` and
   /// `addExercise` all record the id.
   case untrackedExercise
+  /// A correction was asked of a row that was never written. Unlogged rows are corrected by typing
+  /// into them.
+  case slotNotLogged
+}
+
+/// A set deleted from the live workout, held for `SessionCoordinator.undoWindow` so it can be put
+/// back where it was.
+public struct DeletedSet: Sendable {
+  public let exerciseStateID: UUID
+  public let slot: SetSlot
+  public let index: Int
+  public let expiresAt: Date
+  let removed: LoggedSetRecord
+  let records: [PersonalRecord]
 }
