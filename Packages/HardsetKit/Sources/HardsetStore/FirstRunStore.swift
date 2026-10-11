@@ -51,17 +51,19 @@ public nonisolated struct FirstRunStore {
     self.flag = flag
   }
 
-  /// True only for someone who has never finished the first screen and has no workout at all,
-  /// open or finished.
+  /// True only for someone who has never finished the first screen and has no data at all: no
+  /// workout, open or finished, and no gym, archived or not.
   ///
   /// Someone updating with history has the flag unset, because it is new, and must not be greeted
-  /// as a stranger. A workout left open must be offered back, not hidden behind a welcome.
+  /// as a stranger, whether they logged workouts or only set up a gym. A workout left open must be
+  /// offered back, not hidden behind a welcome.
   public func shouldShow() throws -> Bool {
     guard !flag.isComplete else { return false }
-    let anySession = try database.read { db in
-      try Session.order { $0.startedAt.desc() }.fetchOne(db)
+    return try database.read { db in
+      let noSession = try Session.limit(1).fetchOne(db) == nil
+      let noGym = try Gym.limit(1).fetchOne(db) == nil
+      return noSession && noGym
     }
-    return anySession == nil
   }
 
   /// Ends the first screen: creates the gym when a name was given, then marks it done.

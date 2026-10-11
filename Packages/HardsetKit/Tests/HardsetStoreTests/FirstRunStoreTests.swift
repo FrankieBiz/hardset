@@ -36,6 +36,14 @@ struct FirstRunStoreTests {
     #expect(try !FirstRunStore(database: db, flag: InMemoryFirstRunFlag()).shouldShow())
   }
 
+  @Test("Someone who set up a gym but never logged a workout never sees it either")
+  func existingGymSkipsFirstRun() throws {
+    let db = try database()
+    let id = try GymStore(database: db).createGym(name: "Home", now: now)
+    try GymStore(database: db).archiveGym(id)
+    #expect(try !FirstRunStore(database: db, flag: InMemoryFirstRunFlag()).shouldShow())
+  }
+
   /// Review Focus: a workout left open is offered back first; a welcome must not hide it.
   @Test("A workout left open is never hidden behind it")
   func openWorkoutSkipsFirstRun() throws {
