@@ -15,6 +15,9 @@ public struct WorkoutSummaryView: View {
   private let errorMessage: String?
   private let onRetry: (() -> Void)?
   private let onDone: () -> Void
+  /// The record whose estimate is explained. An `.ignore` row exposes no child button, so the
+  /// sheet is lifted here and opened by the row's named action as well as by the badge.
+  @State private var explainedRecord: WorkoutSummary.RecordLine?
 
   /// `summary == nil` with an `errorMessage` shows the error and a retry; with neither it shows a
   /// spinner while the summary is read.
@@ -53,6 +56,10 @@ public struct WorkoutSummaryView: View {
         if !summary.muscles.isEmpty { musclesSection(summary) }
         if !summary.machinesUsed.isEmpty { machinesSection(summary) }
       }
+      .sheet(item: $explainedRecord) { line in
+        MethodologySheet(
+          source: StrengthMath.epleySource, certainty: line.record.estimateCertainty)
+      }
     } else if let errorMessage {
       ContentUnavailableView {
         Label("Couldn't load the summary", systemImage: "exclamationmark.circle")
@@ -82,7 +89,7 @@ public struct WorkoutSummaryView: View {
         if summary.length == nil {
           // The honest statement: a span no workout could have had is withheld, not shown. Grey
           // with a glyph, so the caveat is not carried by colour.
-          Label(summary.lengthText, systemImage: "questionmark.circle")
+          Label(summary.lengthText, systemImage: CaveatMark.lengthUnknown.symbolName)
             .font(Tokens.Text.caption)
             .foregroundStyle(Tokens.Color.caveat)
         } else {
@@ -133,11 +140,22 @@ public struct WorkoutSummaryView: View {
             Text(Self.subtitle(for: line))
               .font(Tokens.Text.caption)
               .foregroundStyle(Tokens.Color.textSecondary)
+            if let certainty = line.record.estimateCertainty {
+              CertaintyBadge(certainty, source: StrengthMath.epleySource, style: .compact)
+            }
           }
         }
         .frame(minHeight: Tokens.minimumTapTarget, alignment: .leading)
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel(Self.spokenLabel(for: line, formatter: formatter))
+        .accessibilityLabel(
+          [Self.spokenLabel(for: line, formatter: formatter), line.record.estimateCertainty?.mark.word]
+            .compactMap { $0 }.joined(separator: ", ")
+        )
+        .accessibilityActions {
+          if line.record.estimateCertainty != nil {
+            Button("How this estimate is calculated") { explainedRecord = line }
+          }
+        }
       }
     }
   }
@@ -145,17 +163,17 @@ public struct WorkoutSummaryView: View {
   private func musclesSection(_ summary: WorkoutSummary) -> some View {
     Section {
       ForEach(summary.muscles) { line in
-        let name = line.muscle.displayName
         HStack {
-          Text(name)
+          Text(line.muscle.displayName)
           Spacer(minLength: Tokens.Spacing.snug)
           Text(line.setsText())
             .monospacedDigit()
             .foregroundStyle(Tokens.Color.textSecondary)
+          CertaintyBadge(line.certainty, source: SetCounting.source, style: .compact)
         }
         .frame(minHeight: Tokens.minimumTapTarget)
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel("\(name), \(line.spokenSetsText())")
+        // Combined, so the badge's word and its "open the source" action are read with the row.
+        .accessibilityElement(children: .combine)
       }
     } header: {
       Text("Muscles touched")
@@ -166,7 +184,7 @@ public struct WorkoutSummaryView: View {
             "\(CountText.sets(summary.unattributedSets)) on movements with no muscles recorded, so these are at least this much."
           )
         } icon: {
-          Image(systemName: "info.circle")
+          Image(systemName: CaveatMark.lowerBound.symbolName)
         }
         .foregroundStyle(Tokens.Color.caveat)
       }

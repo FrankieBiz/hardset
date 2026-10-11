@@ -54,9 +54,9 @@ public struct WeeklyVolumeScreen: View {
     .refreshable { load() }
     .sheet(isPresented: $isShowingMethodology) {
       // Generated from the same value the counting uses, so the disclosure cannot drift from the
-      // arithmetic. The certainty comes from the report too: a fixed "Moderate" overstated every
-      // muscle the evidence does not model, and nil (nothing credited) hides the badge.
-      MethodologySheet(source: SetCounting.source, certainty: report?.highestCertainty)
+      // arithmetic. No certainty here: it is per muscle now, on each row, because one header
+      // could only be the best case. Tapping a row's badge opens the sheet with that row's.
+      MethodologySheet(source: SetCounting.source, certainty: nil)
     }
   }
 

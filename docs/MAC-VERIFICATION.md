@@ -467,3 +467,27 @@ the `Hardset` scheme for the iOS 26.4 simulator.
       declaring it `nonisolated public enum Style`.
     - The `#if os(iOS) .navigationBarTitleDisplayMode(.inline) #endif` between
       `.navigationTitle` and `.toolbar` (the API is unavailable on macOS).
+
+- [ ] (feat(ui): every volume figure says how sure it is) HardsetUI and HardsetFeature build. In
+      the simulator:
+  - [ ] Volume tab: each muscle row has a compact badge. Chest, quads and the other modelled sites
+        read "Moderate"; forearms, abs and other counted muscles read "Low" beside "counted, not
+        modelled". A muscle over 25 sets reads "Low".
+  - [ ] "How sets are counted" opens the sheet with no certainty line at the top.
+  - [ ] Tapping a row's badge opens the sheet with that row's certainty.
+  - [ ] With a custom (unattributed) movement logged: counts read "≥ 12", the note's glyph is the
+        grey ">" circle, not an exclamation mark, and VoiceOver reads "at least 12 sets".
+  - [ ] Settings › General › Language & Region › German (or region Germany): a fractional count
+        reads "6,5", not "6.5".
+  - [ ] Summary sheet: each muscle line has its badge; an estimated-1RM record shows its
+        certainty, and VoiceOver offers "How this estimate is calculated".
+  - [ ] History, VoiceOver: a row reads "... 9400 kilograms ...", never "kg"; pounds mode reads
+        "pounds". Rows are not dimmed.
+  - [ ] Summary muscle rows (combined element): VoiceOver reads name, count and the badge's word
+        without garbling "≥"; if it does, set `.accessibilityLabel("\(line.muscle.displayName),
+        \(line.spokenSetsText())")` on the row.
+  - [ ] Volume rows: VoiceOver reads the certainty word once, not twice (the row label includes it
+        explicitly); if doubled, drop it from the label in `VolumeReportView.bar(for:)`.
+  - Written without a compiler. If the build fails, look first at the `[String, String?] array
+    .compactMap { $0 }.joined` label arrays in `VolumeReportView.bar(for:)` and
+    `WorkoutSummaryView.recordsSection`, and the `.accessibilityActions { if … { Button … } }`.

@@ -134,7 +134,7 @@ public struct HistoryView: View {
     if row.hasImplausibleDuration {
       // The honest statement. A 20-hour span means the session was left open, not that it was
       // trained through, so the number is withheld rather than displayed.
-      Label("Length unknown", systemImage: "exclamationmark.circle")
+      Label("Length unknown", systemImage: CaveatMark.lengthUnknown.symbolName)
         .font(Tokens.Text.caption)
         .foregroundStyle(Tokens.Color.caveat)
     } else if let duration = row.duration {
@@ -150,18 +150,12 @@ public struct HistoryView: View {
   }
 
   static func volumeText(_ volume: SessionVolume, unit: WeightUnit) -> String {
-    guard !volume.isEmpty else { return "No sets" }
-    var parts = [CountText.sets(volume.workingSets), CountText.reps(volume.reps)]
-    if volume.volumeKg > 0 {
-      parts.append(WeightFormatter(unit: unit).total(kilograms: volume.volumeKg))
-    }
-    if volume.warmupSets > 0 { parts.append("\(volume.warmupSets) warm-up") }
-    return parts.joined(separator: " · ")
+    SessionVolumeText.written(volume, formatter: WeightFormatter(unit: unit))
   }
 
   static func spokenLabel(_ row: HistoryRow, unit: WeightUnit) -> String {
     var parts = [row.title.isEmpty ? dateText(row.date) : "\(row.title), \(dateText(row.date))"]
-    parts.append(volumeText(row.volume, unit: unit))
+    parts.append(SessionVolumeText.spoken(row.volume, formatter: WeightFormatter(unit: unit)))
     if row.hasImplausibleDuration {
       parts.append("length unknown, this session was left open")
     } else if let duration = row.duration {

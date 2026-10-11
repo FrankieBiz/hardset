@@ -64,7 +64,7 @@ public struct VolumeReportView: View {
               + "so every count below is at least this much — not exactly this much."
           )
         } icon: {
-          Image(systemName: "exclamationmark.circle")
+          Image(systemName: CaveatMark.lowerBound.symbolName)
         }
         .font(Tokens.Text.caption)
         .foregroundStyle(Tokens.Color.caveat)
@@ -124,13 +124,16 @@ public struct VolumeReportView: View {
   }
 
   private func bar(for row: Row) -> some View {
-    VStack(alignment: .leading, spacing: Tokens.Spacing.hairline) {
+    let line = WorkoutSummary.MuscleLine(
+      muscle: MuscleKey(row.muscle), fractionalSets: row.sets, isLowerBound: report.isLowerBound)
+    let certainty = report.certainty(for: row.muscle)
+    return VStack(alignment: .leading, spacing: Tokens.Spacing.hairline) {
       HStack(alignment: .firstTextBaseline) {
         Text(row.muscle.displayName)
           .font(Tokens.Text.label)
         Spacer(minLength: Tokens.Spacing.snug)
-        // The "≥" is load-bearing, not decorative.
-        Text("\(report.isLowerBound ? "≥ " : "")\(Self.format(row.sets))")
+        // The "≥" is load-bearing, not decorative. Core writes it, through the locale.
+        Text(line.countText())
           .font(Tokens.Text.label)
           .monospacedDigit()
           .foregroundStyle(Tokens.Color.textSecondary)
@@ -146,17 +149,25 @@ public struct VolumeReportView: View {
       }
       .frame(height: 10)
       // A muscle outside the studied corpus gets a quieter claim, because the count means less.
-      if row.muscle.tier == .counted {
-        Text("counted, not modelled")
-          .font(Tokens.Text.caption)
-          .foregroundStyle(Tokens.Color.textSecondary)
+      HStack(spacing: Tokens.Spacing.snug) {
+        // Each muscle's own certainty: the one header this replaces could only be the best case.
+        if let certainty {
+          CertaintyBadge(certainty, source: SetCounting.source, style: .compact)
+        }
+        if row.muscle.tier == .counted {
+          Text("counted, not modelled")
+            .font(Tokens.Text.caption)
+            .foregroundStyle(Tokens.Color.textSecondary)
+        }
       }
     }
     .padding(.vertical, Tokens.Spacing.tight)
     .accessibilityElement(children: .combine)
+    // A label on a combined element replaces what its children say, so the badge's word is
+    // spoken here; the badge's own action (open the source) is still the row's.
     .accessibilityLabel(
-      "\(row.muscle.displayName), "
-        + "\(report.isLowerBound ? "at least " : "")\(Self.format(row.sets)) sets"
+      ["\(row.muscle.displayName), \(line.spokenSetsText())", certainty?.mark.word]
+        .compactMap { $0 }.joined(separator: ", ")
     )
   }
 
@@ -187,10 +198,6 @@ public struct VolumeReportView: View {
         }
       }
     }
-  }
-
-  static func format(_ sets: Double) -> String {
-    sets == sets.rounded() ? String(Int(sets)) : String(format: "%.1f", sets)
   }
 }
 
