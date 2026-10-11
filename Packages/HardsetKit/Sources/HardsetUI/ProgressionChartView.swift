@@ -195,7 +195,7 @@ public struct ProgressionChartView: View {
 
 /// The chart as VoiceOver's audio graph hears it. Every value comes from Core's description;
 /// this only converts types.
-private struct ProgressionAudioGraph: AXChartDescriptorRepresentable {
+private nonisolated struct ProgressionAudioGraph: AXChartDescriptorRepresentable {
   let description: ProgressionChartDescription
 
   func makeChartDescriptor() -> AXChartDescriptor {

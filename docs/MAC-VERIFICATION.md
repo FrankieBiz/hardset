@@ -511,9 +511,7 @@ the `Hardset` scheme for the iOS 26.4 simulator.
   - Written without a compiler. If it fails, look first at:
     - the `.symbol(by:)` and `.lineStyle` modifiers on `LineMark`;
     - `chartXSelection(value:)` with a `Date?` binding;
-    - the `RuleMark` inside an `if let` in the chart builder, and the `if let value` inside the
-      `ForEach` in the chart builder;
-    - the `[description]` capture list in `ProgressionAudioGraph`, and whether
-      `AXChartDescriptorRepresentable` conformance needs `nonisolated` under the target's default
-      main-actor isolation;
-    - `@ScaledMetric` on a `public struct` view with a custom `init`.
+    - Settled in review, not expected to fail: `ProgressionAudioGraph` is `nonisolated` so its
+      witness satisfies `AXChartDescriptorRepresentable` under the target's main-actor default;
+      `@ScaledMetric` has a default value; `if let` in chart builders uses
+      `ChartContentBuilder.buildIf` (iOS 16, macOS 13).
