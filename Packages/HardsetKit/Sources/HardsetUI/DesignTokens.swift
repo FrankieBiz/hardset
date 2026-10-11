@@ -35,9 +35,13 @@ public enum Tokens {
     public static let record = adaptive(Palette.swatch(.record))
     public static let caution = adaptive(Palette.swatch(.caution))
     public static let critical = adaptive(Palette.swatch(.critical))
-    /// An honest caveat ("≥", "from another machine", "length unknown") is plain secondary text
-    /// with a glyph. Orange made a lower bound read as a failure (spec §3, item 2).
-    public static let caveat = textSecondary
+    /// An honest caveat ("≥", "from another machine", "length unknown") is plain grey text with a
+    /// glyph. Orange made a lower bound read as a failure (spec §3, item 2).
+    ///
+    /// The grey is the palette's tested neutral, not the system `secondary`. Nothing here tests
+    /// `secondary`'s contrast, and it is likely under 4.5:1 on a light background. A caveat reads
+    /// as secondary through its small type, not through a fainter colour.
+    public static let caveat = adaptive(Palette.swatch(.certaintyUnevaluated))
 
     /// Certainty is communicated with colour *and* text, never colour alone -- a
     /// colour-only signal is inaccessible and, for a claim about someone's training, unclear.

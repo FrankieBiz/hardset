@@ -185,7 +185,9 @@ the `Hardset` scheme for the iOS 26.4 simulator.
   - Increase Contrast is read through the `UIColor` provider's `accessibilityContrast` trait, not
     `@Environment(\.colorSchemeContrast)`. The badge check above is what proves SwiftUI passes the
     setting into the trait collection. If the badge does not change, that assumption is wrong.
-  - [ ] Accessibility Inspector › Audit on the Volume tab with the lower-bound note showing:
-        `Tokens.Color.caveat` is the system `secondary`, which Core's palette test does not cover.
-        Note the contrast it reports for that note in light mode. Below 4.5:1 goes back to the
-        plan owner. Do not fix it here.
+  - [ ] Caveat text is legible and still reads as secondary. `Tokens.Color.caveat` is the
+        palette's tested grey (`certaintyUnevaluated`), not the system `secondary`. Check the
+        lower-bound note on the Volume tab, the no-estimate note and the machine-change rule on a
+        progression chart. Do this in light and dark mode, and with Increase Contrast on. Each one
+        should be comfortably readable, and should still sit visually below the primary text
+        around it.
