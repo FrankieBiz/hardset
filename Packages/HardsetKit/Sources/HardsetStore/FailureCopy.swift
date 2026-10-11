@@ -23,6 +23,7 @@ public nonisolated enum FailureCopy {
     case deleteSet
     case undoDelete
     case discardWorkout
+    case loadSummary
   }
 
   /// The message for `error` raised while performing `action`.
@@ -93,6 +94,9 @@ public nonisolated enum FailureCopy {
         return "This workout has logged sets, so it was not discarded. Finish it to keep them."
       }
       return "This workout could not be discarded. It is still open — try again."
+
+    case .loadSummary:
+      return "Your workout is saved, but its summary could not be read. Try again."
     }
   }
 }

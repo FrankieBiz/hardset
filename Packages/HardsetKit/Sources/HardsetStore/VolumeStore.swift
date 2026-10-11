@@ -229,7 +229,8 @@ public nonisolated struct HistoryStore {
 
   /// Reuses `SessionVolume`'s rules so the history screen and the live screen cannot disagree
   /// about what a session contained.
-  private static func volume(of sets: [LoggedSet]) -> SessionVolume {
+  /// Internal, not private: `WorkoutSummaryStore` uses the same count.
+  static func volume(of sets: [LoggedSet]) -> SessionVolume {
     var workingSets = 0
     var warmupSets = 0
     var volumeKg = 0.0

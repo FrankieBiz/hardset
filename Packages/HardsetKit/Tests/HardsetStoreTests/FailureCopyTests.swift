@@ -61,6 +61,9 @@ struct FailureCopyTests {
         error: Opaque(), action: .logSet,
         expected: "That set could not be saved. It has not been logged — tap to try again."),
       CopyRow(
+        error: Opaque(), action: .loadSummary,
+        expected: "Your workout is saved, but its summary could not be read. Try again."),
+      CopyRow(
         error: SessionTimelineError.finishedBeforeStart, action: .finishWorkout,
         expected: "This workout could not be finished, so it is still open. Your sets are saved. "
           + "Check your device's date and time, then try again."),
