@@ -298,3 +298,53 @@ The catalog is HardsetCore's only resource. If the Mac's resource build step fai
 contained: remove `resources:` and the catalog, and change the two Apple branches to
 `String(localized: text, comment: comment)` and `String(localized: key, defaultValue: text,
 comment: comment)` (the main bundle). Nothing else depends on `Bundle.module`.
+
+### 24. What went to Apple Health is a device-local table, and the export is opt-in and write-only
+
+Phase 4.4 sends a finished workout to Apple Health. Two facts must be remembered per session: that
+it was sent, so it is never sent twice, and the HealthKit object it became. They live in a new
+table, `deviceHealthExports` (`id`, `sessionID`, `healthWorkoutID`, `exportedAt`), added by an
+additive migration `v2-deviceHealthExports`. Nothing in v1 changes.
+
+- **Device-local, never synced.** A HealthKit object id means nothing on another device, and what
+  was sent to Health is health information, which guideline 5.1.3(ii) keeps out of iCloud (§5).
+  The `device` prefix puts it under `SchemaTests`' existing assertion.
+- **`sessionID` is not a foreign key**, like `deviceRestTimer.sessionID`. A sign-out wipe (§1) or a
+  deletion arriving from another device removes the session row; with `ON DELETE CASCADE` the
+  record would go with it, and the same session downloaded again under the same id would reach
+  Health a second time.
+- **Not `deviceHealthSamples`.** That table is for values read *from* HealthKit, with a different
+  shape, and Hardset reads nothing.
+
+The export itself: opt-in and off by default (a device-local `UserDefaults` flag, CA92.1);
+write-only (`read: []`); `.traditionalStrengthTraining`; start and end are the session's own
+`startedAt`/`finishedAt`; no energy burned, distance or heart rate, because nothing here measures
+them; a length the app would withhold on screen (§21) is withheld from Health; only for a workout
+finished on this device, at the moment it is finished, never by backfill and never for a session
+that arrived by sync. Shipping it needs a privacy policy URL (spec §12.1); building it does not.
+
+### 25. The widgets read a file the app writes, never the database or a shared defaults suite
+
+`SyncEngine` installs triggers on every synchronized table that call a function living in the
+app process (`HardsetDatabase.makeSyncEngine`; `DEVICE-CHECKLIST.md` §A2). A widget extension that opened
+the database would fail every write and could read mid-migration. So the app writes one JSON file,
+`widget-snapshot.json`, atomically into the App Group container `group.com.hardset.app`, after
+launch, after a workout ends and when the unit changes; the widget only reads it, and shows a calm
+empty state when it is missing, torn or from a newer build. The snapshot holds finished workouts
+only, working sets only, kilograms with the unit beside them, and instants rather than relative
+dates (spec 4.5: no "days since" counts).
+
+No `UserDefaults(suiteName:)` exists, so the privacy manifests do not declare `1C8F.1`; the widget
+extension gets its own manifest, which declares no required-reason API. `AppResourcesTests` fails
+if a shared suite appears, so the declaration cannot be forgotten.
+
+### 26. Nothing outside the app logs a set
+
+Spec §4: "No set is ever logged from outside the app UI: not from Siri, widgets, controls or the
+Action button. The lifter must see the numbers being saved." So the system surfaces can do exactly
+this: start a workout (in the app, on screen, through `StartWorkoutPolicy`, which never starts one
+over an open or unreadable workout), and start, pause, resume or end a rest (a timer, which writes
+no training data). No intent, control or widget takes a weight or a rep count, and the request type
+the app accepts from outside, `SystemRequest`, has the single case `.startWorkout`. A rest started
+from outside has the length the lifter said or configured, validated like a typed one, and never a
+default (`HANDOFF.md` §6).
