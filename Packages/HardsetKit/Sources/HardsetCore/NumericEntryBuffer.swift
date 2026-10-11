@@ -14,6 +14,14 @@ public struct NumericEntryBuffer: Hashable, Sendable {
   /// The literal characters typed so far. Never normalised behind the user's back — what they
   /// see is what is here.
   public private(set) var text: String
+
+  /// True while the text is a value the lifter did not type: a prefill, or the result of a ± step.
+  ///
+  /// The next digit or decimal point then replaces it instead of appending, the way a selected
+  /// field behaves. Typing "105" over a "100" prefill used to mean three deletes first; now it is
+  /// three keys. Deleting edits the value instead, because "fix the last digit" is the other
+  /// thing a lifter means.
+  public private(set) var replacesOnNextInput: Bool
   public let allowsDecimal: Bool
   public let maximumIntegerDigits: Int
   public let maximumFractionDigits: Int
@@ -25,6 +33,7 @@ public struct NumericEntryBuffer: Hashable, Sendable {
     maximumFractionDigits: Int = 2
   ) {
     self.text = text
+    self.replacesOnNextInput = false
     self.allowsDecimal = allowsDecimal
     self.maximumIntegerDigits = maximumIntegerDigits
     self.maximumFractionDigits = maximumFractionDigits
@@ -59,6 +68,8 @@ public struct NumericEntryBuffer: Hashable, Sendable {
       maximumIntegerDigits: maximumIntegerDigits,
       maximumFractionDigits: maximumFractionDigits
     )
+    // A prefill is shown as a value, but nobody typed it: the first key replaces it.
+    self.replacesOnNextInput = !seed.isEmpty
   }
 
   /// Formats a prefill to at most `fractionDigits`, with no trailing zeros.
@@ -90,6 +101,7 @@ public struct NumericEntryBuffer: Hashable, Sendable {
 
   public mutating func append(digit: Int) {
     guard (0...9).contains(digit) else { return }
+    takeOverSelection()
     // A single leading zero is meaningful ("0.5"); a second one is not.
     if text == "0" { text = String(digit); return }
 
@@ -103,15 +115,34 @@ public struct NumericEntryBuffer: Hashable, Sendable {
   }
 
   public mutating func appendDecimalSeparator() {
-    guard allowsDecimal, !text.contains(".") else { return }
+    // Checked before replacing: the reps pad's inert decimal key must not wipe a prefill.
+    guard allowsDecimal else { return }
+    takeOverSelection()
+    guard !text.contains(".") else { return }
     // Leading "." is ambiguous to read on a dense row; make it explicit.
     text = text.isEmpty ? "0." : text + "."
   }
 
   public mutating func deleteBackward() {
+    replacesOnNextInput = false
     guard !text.isEmpty else { return }
     text.removeLast()
   }
 
-  public mutating func clear() { text = "" }
+  public mutating func clear() {
+    text = ""
+    replacesOnNextInput = false
+  }
+
+  /// Selects the whole value, so the next key replaces it. Focusing a field calls this. An empty
+  /// field has nothing to select.
+  public mutating func selectForReplacement() {
+    replacesOnNextInput = !text.isEmpty
+  }
+
+  private mutating func takeOverSelection() {
+    guard replacesOnNextInput else { return }
+    text = ""
+    replacesOnNextInput = false
+  }
 }
