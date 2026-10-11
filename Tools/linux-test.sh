@@ -24,9 +24,13 @@ SNAPSHOT="$(mktemp)"
 cp "$RESOLVED" "$SNAPSHOT"
 trap 'cp "$SNAPSHOT" "$RESOLVED"; rm -f "$SNAPSHOT"' EXIT
 
+# The whole checkout is mounted, not only the package: `AppResourcesTests` reads the app's and
+# the widget's plists, manifests and colour sets, which live outside it. Mounted at /repo so
+# `#filePath` finds them the same way it does on the Mac.
+#
 # `.build-linux`, not `.build`: a Mac checkout of the same tree must never pick up Linux
 # artefacts from a shared cache directory.
 podman run --rm \
-  -v "$ROOT/Packages/HardsetKit:/w:Z" -w /w \
+  -v "$ROOT:/repo:Z" -w /repo/Packages/HardsetKit \
   "$IMAGE" \
-  swift test --scratch-path /w/.build-linux "$@"
+  swift test --scratch-path /repo/Packages/HardsetKit/.build-linux "$@"

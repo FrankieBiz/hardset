@@ -12,6 +12,7 @@
 		D06790A6910CE14033A7CB69 /* AppSmokeTests.swift in HardsetTests */ = {isa = PBXBuildFile; fileRef = 680B2E753A6F5EA9063B2981 /* AppSmokeTests.swift */; };
 		65342E8704866A7FA63B7D7F /* PrivacyInfo.xcprivacy in Hardset */ = {isa = PBXBuildFile; fileRef = 9DA6D3A9523128D8236A0547 /* PrivacyInfo.xcprivacy */; };
 		EB0E7800B3B9CBC55200705F /* Assets.xcassets in Hardset */ = {isa = PBXBuildFile; fileRef = 2872DB59AAC00898EC5AC167 /* Assets.xcassets */; };
+		0D0DE1B02777A86F288F3243 /* PrivacyInfo.xcprivacy in HardsetWidget */ = {isa = PBXBuildFile; fileRef = 090815D7FDBE15CF7A4662CB /* PrivacyInfo.xcprivacy */; };
 		27CF9CF3EE27D125AC53CB48 /* HardsetCore */ = {isa = PBXBuildFile; productRef = 299DED104025EEA646ADE2F4 /* HardsetCore */; };
 		5F3D50D2DE60064848672CE0 /* HardsetStore */ = {isa = PBXBuildFile; productRef = 4BD04F50D3691F17448149E4 /* HardsetStore */; };
 		54B81466C42A28C826A1B775 /* HardsetUI */ = {isa = PBXBuildFile; productRef = B8FEB24B1C5CAB855B8DA0C1 /* HardsetUI */; };
@@ -63,6 +64,7 @@
 		680B2E753A6F5EA9063B2981 /* AppSmokeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppSmokeTests.swift; sourceTree = "<group>"; };
 		9DA6D3A9523128D8236A0547 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		2872DB59AAC00898EC5AC167 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		090815D7FDBE15CF7A4662CB /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		05BDD562198C5966370152DC /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		D78D6EA50775A90846260323 /* Hardset.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Hardset.entitlements; sourceTree = "<group>"; };
 		4CF15E4702A6BA9A4DEC3A28 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
@@ -188,6 +190,7 @@
 			children = (
 				094065545B074BB3C94068BC /* HardsetWidgetBundle.swift */,
 				4CF15E4702A6BA9A4DEC3A28 /* Info.plist */,
+				090815D7FDBE15CF7A4662CB /* PrivacyInfo.xcprivacy */,
 			);
 			path = HardsetWidget;
 			sourceTree = "<group>";
@@ -342,6 +345,7 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				0D0DE1B02777A86F288F3243 /* PrivacyInfo.xcprivacy in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

@@ -24,8 +24,14 @@
 	<string>1.0</string>
 	<key>CFBundleVersion</key>
 	<string>1</string>
+	<!-- The launch screen is the app's own background, light and dark, so the first frame does
+	     not flash the system background before Tokens.Color.background (Palette.background*)
+	     replaces it. AppResourcesTests holds the colour set to the palette. -->
 	<key>UILaunchScreen</key>
-	<dict/>
+	<dict>
+		<key>UIColorName</key>
+		<string>LaunchBackground</string>
+	</dict>
 
 	<!-- Required for AlarmKit. Without this key AlarmManager cannot schedule at all: the
 	     framework fails at runtime with "Client has not provided an NSAlarmKitUsageDescription

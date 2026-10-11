@@ -26,11 +26,12 @@
 		<dict>
 			<!-- UserDefaults, for this app's own preferences only.
 			     CA92.1 is the correct reason: access limited to information written by the app
-			     itself. The app-group reason 1C8F.1 is NOT declared because nothing here reads
-			     UserDefaults(suiteName:) -- the widget receives its data through AlarmKit's
-			     AlarmAttributes, not through a shared defaults suite. If that ever changes, ADD
-			     1C8F.1 alongside CA92.1 (do not replace it) and give the widget extension its
-			     own PrivacyInfo.xcprivacy, since extensions are scanned separately. -->
+			     itself. The app-group reason 1C8F.1 is NOT declared because nothing reads
+			     UserDefaults(suiteName:): the widget receives the rest timer through AlarmKit's
+			     AlarmAttributes and everything else through a JSON file in the App Group
+			     container (DECISIONS.md §25), not through a shared defaults suite. If that ever
+			     changes, ADD 1C8F.1 alongside CA92.1 (do not replace it) here and in
+			     HardsetWidget/PrivacyInfo.xcprivacy. AppResourcesTests fails until you do. -->
 			<key>NSPrivacyAccessedAPIType</key>
 			<string>NSPrivacyAccessedAPICategoryUserDefaults</string>
 			<key>NSPrivacyAccessedAPITypeReasons</key>

@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- The widget extension's own manifest: extensions are scanned separately from the app.
+	     It tracks nothing and collects nothing; it reads one JSON file the app wrote into the App
+	     Group container (DECISIONS.md §25) and renders the rest timer AlarmKit hands it.
+
+	     No required-reason API is declared because none is called: no UserDefaults (the snapshot
+	     is a file, not a shared suite), and no file timestamps (the snapshot carries its own
+	     writtenAt, so the file's dates are never read). If either changes, declare it here:
+	     1C8F.1 for a shared suite, C617.1 for timestamps of files in the App Group container. -->
+	<key>NSPrivacyTracking</key>
+	<false/>
+	<key>NSPrivacyTrackingDomains</key>
+	<array/>
+	<key>NSPrivacyCollectedDataTypes</key>
+	<array/>
+	<key>NSPrivacyAccessedAPITypes</key>
+	<array/>
+</dict>
+</plist>

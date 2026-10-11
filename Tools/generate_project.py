@@ -36,6 +36,8 @@ SOURCES = [
 RESOURCES = [
     ("PrivacyInfo.xcprivacy", "Hardset", APP),
     ("Assets.xcassets", "Hardset", APP),
+    # Extensions are scanned separately, so the widget carries its own manifest.
+    ("PrivacyInfo.xcprivacy", "HardsetWidget", WIDGET),
 ]
 
 def build_settings(target):
@@ -211,7 +213,7 @@ w("\t\t\tsourceTree = \"<group>\";")
 w("\t\t};")
 group_children = {
     "Hardset": ["HardsetApp.swift", "Assets.xcassets", "Info.plist", "Hardset.entitlements", "PrivacyInfo.xcprivacy"],
-    "HardsetWidget": ["HardsetWidgetBundle.swift", "Info.plist"],
+    "HardsetWidget": ["HardsetWidgetBundle.swift", "Info.plist", "PrivacyInfo.xcprivacy"],
     "HardsetTests": ["AppSmokeTests.swift"],
 }
 for g, children in group_children.items():

@@ -672,3 +672,13 @@ the `Hardset` scheme for the iOS 26.4 simulator.
       `Void`-typed `onLogSet`/`onDeleteSet`/`onUndoDelete`.
   - If Finish is not visibly prominent, the `.confirm` role alone did not style it on iOS 26: add
     `.buttonStyle(.glassProminent)` inside the `#available` branch.
+
+## Phase 4
+
+- [ ] (feat(app): launch in the app's own colour; a manifest for the widget) The `Hardset` scheme
+      builds and archives. In the built `Hardset.app`, `PlugIns/HardsetWidget.appex/PrivacyInfo.xcprivacy`
+      exists, and `PrivacyInfo.xcprivacy` is at the app bundle's root (DEVICE-CHECKLIST §D).
+  - [ ] Cold-launch in light and in dark mode (kill the app first): the launch screen is the
+        same grey as the first screen, with no white or black flash before it.
+  - [ ] Xcode › Product › Archive › Generate Privacy Report: the app lists UserDefaults CA92.1
+        only; the widget lists nothing.
