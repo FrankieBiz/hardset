@@ -220,3 +220,19 @@ the `Hardset` scheme for the iOS 26.4 simulator.
         (inside `#if os(iOS)`), `.background { if !inAccessory { … } }`, and `readout`, which
         is a plain view, not a disabled Button, when `onOpen` is nil (a disabled plain Button
         dims the countdown).
+- [ ] (feat(ui): a summary at the end of a workout, and nothing to live up to) HardsetUI builds
+      (iOS, and macOS 15 via `./test.sh`); the three `#Preview`s (Summary, Loading, Error) render.
+      With Task 19 merged:
+  - [ ] Finish a workout with a record: the sheet lists the record, the muscles (with ≥ when a
+        custom movement was logged), the machines, and the length.
+  - [ ] A workout left open overnight and finished shows "Length unknown" (grey, with its glyph),
+        not 20 hours.
+  - [ ] Pounds mode: every weight in the sheet is in lb.
+  - [ ] VoiceOver reads "Chest, at least 6 sets", not "greater than or equal to"; each record is
+        one element with units spelled out.
+  - [ ] There is no goal, target or streak anywhere on it. Done is in the toolbar.
+  - [ ] Written without a compiler. If it fails, look first at `ContentUnavailableView { } description: { }
+        actions: { }` with a conditional `Button`, the `let name` inside `ForEach` in
+        `musclesSection`, the `Section { } header: { } footer: { }` with a conditional footer,
+        and `Text(_:format: .dateTime…)`. The title is a large title; if it crowds on iPhone,
+        add `.navigationBarTitleDisplayMode(.inline)` under `#if os(iOS)`.
