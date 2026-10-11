@@ -118,3 +118,9 @@ the `Hardset` scheme for the iOS 26.4 simulator.
   - [ ] The Volume tab is titled "Last 7 days". No screen says "this week".
   - [ ] Methodology badge: reads Low when only counted (non-modelled) muscles were trained,
         Moderate when a modelled muscle is credited, and is hidden when nothing is credited.
+
+## Phase 2
+
+- Task 6 (`LiveSessionScreen.errorMessage`): the exhaustive `LoggerStoreError` switch gained
+  `.setNotFound, .sessionNotEmpty, .sessionNotOpen` falling to the generic message. HardsetFeature
+  does not compile on Linux, so confirm it builds on the Mac.

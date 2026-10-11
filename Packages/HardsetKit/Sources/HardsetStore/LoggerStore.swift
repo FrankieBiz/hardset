@@ -189,6 +189,105 @@ public nonisolated struct LoggerStore {
     }
   }
 
+  // MARK: - Corrections
+
+  /// One written set, or nil if it is not (or no longer) stored.
+  public func loggedSet(_ id: SetID) throws -> LoggedSetRecord? {
+    try database.read { db in
+      try LoggedSet.where { $0.id.eq(id.rawValue) }.fetchOne(db).map(LoggedSetRecord.init(row:))
+    }
+  }
+
+  /// Corrects the weight and reps of a written set.
+  ///
+  /// Goes through `resolved()` exactly as `logSet` does, so a correction cannot write what a log
+  /// could not. Everything else about the set is a fact about the performance and is left alone:
+  /// when it was done, on which machine, its place in the exercise, whether it was a warm-up.
+  @discardableResult
+  public func updateSet(_ id: SetID, to draft: SetEntryDraft) throws -> LoggedSetRecord {
+    guard let resolved = draft.resolved() else { throw LoggerStoreError.incompleteSet }
+    return try database.write { db in
+      guard try LoggedSet.where({ $0.id.eq(id.rawValue) }).fetchOne(db) != nil else {
+        throw LoggerStoreError.setNotFound
+      }
+      try LoggedSet
+        .where { $0.id.eq(id.rawValue) }
+        .update {
+          $0.weightKg = #bind(resolved.weightKg)
+          $0.reps = #bind(resolved.reps)
+        }
+        .execute(db)
+      guard let row = try LoggedSet.where({ $0.id.eq(id.rawValue) }).fetchOne(db) else {
+        throw LoggerStoreError.setNotFound
+      }
+      return LoggedSetRecord(row: row)
+    }
+  }
+
+  /// Deletes a written set and returns it as it was, so an undo can put it back.
+  @discardableResult
+  public func deleteSet(_ id: SetID) throws -> LoggedSetRecord {
+    try database.write { db in
+      guard let row = try LoggedSet.where({ $0.id.eq(id.rawValue) }).fetchOne(db) else {
+        throw LoggerStoreError.setNotFound
+      }
+      try LoggedSet.where { $0.id.eq(id.rawValue) }.delete().execute(db)
+      return LoggedSetRecord(row: row)
+    }
+  }
+
+  /// Writes a deleted set back, exactly as it was, under a new id.
+  ///
+  /// A new id, not the old one. SQLiteData marks a deleted row's sync metadata as deleted, and
+  /// its insert trigger's upsert does not clear that flag. Re-inserting the same primary key
+  /// before the deletion reaches iCloud therefore risks the server deleting a set this device
+  /// shows (`DECISIONS.md` §22). Nothing references a set's id, so a new one costs nothing.
+  @discardableResult
+  public func restoreSet(_ deleted: LoggedSetRecord) throws -> SetID {
+    let id = SetID()
+    try database.write { db in
+      guard try Session.where({ $0.id.eq(deleted.sessionID.rawValue) }).fetchOne(db) != nil else {
+        throw LoggerStoreError.sessionNotFound
+      }
+      try LoggedSet.insert {
+        LoggedSet.Draft(
+          id: id.rawValue,
+          sessionID: deleted.sessionID.rawValue,
+          exerciseID: deleted.exerciseID.rawValue,
+          machineID: deleted.machineID?.rawValue,
+          sessionExerciseID: deleted.sessionExerciseID,
+          setOrdinal: deleted.setOrdinal,
+          weightKg: deleted.weightKg,
+          reps: deleted.reps,
+          rpe: deleted.rpe,
+          isWarmup: deleted.isWarmup,
+          completedAt: deleted.completedAt
+        )
+      }
+      .execute(db)
+    }
+    return id
+  }
+
+  /// Deletes an open workout in which nothing was logged, along with its plan rows.
+  ///
+  /// It refuses, rather than deletes, whenever there is anything to lose. A finished session is
+  /// history. A session with even one written set, a warm-up included, holds training. The check
+  /// runs inside the write and against the database, not against what a screen believes, so a set
+  /// written by a path the screen never saw still stops it. Plan rows go by
+  /// `ON DELETE CASCADE` (`Migrations.swift`, `sessionExercises.sessionID`).
+  public func discardEmptySession(_ sessionID: SessionID) throws {
+    try database.write { db in
+      guard let session = try Session.where({ $0.id.eq(sessionID.rawValue) }).fetchOne(db) else {
+        throw LoggerStoreError.sessionNotFound
+      }
+      guard session.finishedAt == nil else { throw LoggerStoreError.sessionNotOpen }
+      let written = try LoggedSet.where { $0.sessionID.eq(sessionID.rawValue) }.fetchAll(db)
+      guard written.isEmpty else { throw LoggerStoreError.sessionNotEmpty }
+      try Session.where { $0.id.eq(sessionID.rawValue) }.delete().execute(db)
+    }
+  }
+
   /// The most recently started session that is still open, if any.
   ///
   /// Used for crash recovery: the app was killed mid-workout and needs to offer to resume.
@@ -446,4 +545,10 @@ public enum LoggerStoreError: Error, Equatable, Sendable {
   /// `SetEntryDraft.isLoggable` so this is unreachable from the UI.
   case incompleteSet
   case sessionNotFound
+  /// The set is not, or is no longer, stored.
+  case setNotFound
+  /// Discard was refused: the workout holds logged sets.
+  case sessionNotEmpty
+  /// Discard was refused: the workout is already finished, which makes it history.
+  case sessionNotOpen
 }

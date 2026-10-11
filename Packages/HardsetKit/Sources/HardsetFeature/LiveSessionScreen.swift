@@ -278,6 +278,8 @@ public struct LiveSessionScreen: View {
         return "Enter a weight and reps before logging this set."
       case .sessionNotFound:
         return "This workout could not be found. Your logged sets are safe."
+      case .setNotFound, .sessionNotEmpty, .sessionNotOpen:
+        break
       }
     }
     return "That set could not be saved. It has not been logged — tap to try again."

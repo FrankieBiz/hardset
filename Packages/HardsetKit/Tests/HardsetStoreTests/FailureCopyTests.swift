@@ -34,13 +34,7 @@ struct FailureCopyTests {
         .contains("Check your device's date and time"))
   }
 
-  @Test(
-    "No action ever leaks the raw error",
-    arguments: [
-      FailureCopy.Action.logSet, .finishWorkout, .resumeWorkout, .prepareCatalogue, .saveGym,
-      .saveMachine, .loadHistory, .loadVolume, .scheduleRest,
-    ]
-  )
+  @Test("No action ever leaks the raw error", arguments: FailureCopy.Action.allCases)
   func neverLeaks(action: FailureCopy.Action) {
     let text = FailureCopy.message(for: Opaque(), during: action)
     #expect(!text.isEmpty)
@@ -95,6 +89,33 @@ struct FailureCopyTests {
       CopyRow(
         error: Opaque(), action: .scheduleRest,
         expected: "The rest alarm could not be set. The countdown on screen still runs."),
+      CopyRow(
+        error: LoggerStoreError.incompleteSet, action: .editSet,
+        expected: "Enter a weight and reps to save this change."),
+      CopyRow(
+        error: LoggerStoreError.setNotFound, action: .editSet,
+        expected: "That set is no longer in this workout."),
+      CopyRow(
+        error: Opaque(), action: .editSet,
+        expected: "That change could not be saved. The set still shows what was saved — try again."),
+      CopyRow(
+        error: LoggerStoreError.setNotFound, action: .deleteSet,
+        expected: "That set is no longer in this workout."),
+      CopyRow(
+        error: Opaque(), action: .deleteSet,
+        expected: "That set could not be deleted. It is still saved — try again."),
+      CopyRow(
+        error: Opaque(), action: .undoDelete,
+        expected: "That set could not be put back. Tap Undo to try again."),
+      CopyRow(
+        error: LoggerStoreError.sessionNotEmpty, action: .discardWorkout,
+        expected: "This workout has logged sets, so it was not discarded. Finish it to keep them."),
+      CopyRow(
+        error: Opaque(), action: .discardWorkout,
+        expected: "This workout could not be discarded. It is still open — try again."),
+      CopyRow(
+        error: LoggerStoreError.setNotFound, action: .logSet,
+        expected: "That set could not be saved. It has not been logged — tap to try again."),
     ]
   )
   func copyMatchesTable(row: CopyRow) {

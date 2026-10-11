@@ -268,3 +268,16 @@ regression, because across a switch it is neither.
 The ancestor shipped 9,749-minute workouts to its history screen as achievements. `SessionTimeline`
 already refuses to store a duration; `HistoryView` additionally renders "Length unknown" for a span
 longer than any real workout, because the honest statement is that we do not know how long it took.
+
+### 22. Undo puts a deleted set back under a new id
+
+Deleting a logged set and undoing it re-inserts the set's values: weight, reps, ordinal,
+completion time, machine and plan row. It does so under a fresh `SetID`, not the original.
+SQLiteData marks a deleted row's sync metadata `_isDeleted`, and its insert trigger upserts that
+metadata with an empty update (`onConflictDoUpdate: { _ in }`), which leaves the flag set. Read in
+`sqlite-data` `Sources/SQLiteData/CloudKit/Internal/Triggers.swift` (`afterDeleteFromUser`,
+`SyncMetadata.insert`). This cannot be exercised on Linux, where CloudKit is excluded.
+
+Re-inserting the same primary key before the deletion syncs could therefore leave iCloud deleting a
+set the device shows. Nothing references `loggedSets.id`, so a new id loses nothing, and the
+restored set is judged for records exactly as before. Verify on device when sync is tested.

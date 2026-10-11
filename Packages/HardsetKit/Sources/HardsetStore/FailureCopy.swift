@@ -19,6 +19,10 @@ public nonisolated enum FailureCopy {
     case loadHistory
     case loadVolume
     case scheduleRest
+    case editSet
+    case deleteSet
+    case undoDelete
+    case discardWorkout
   }
 
   /// The message for `error` raised while performing `action`.
@@ -33,6 +37,8 @@ public nonisolated enum FailureCopy {
           return "Enter a weight and reps before logging this set."
         case .sessionNotFound:
           return "This workout could not be found. Your logged sets are safe."
+        case .setNotFound, .sessionNotEmpty, .sessionNotOpen:
+          break
         }
       }
       return "That set could not be saved. It has not been logged — tap to try again."
@@ -65,6 +71,28 @@ public nonisolated enum FailureCopy {
 
     case .scheduleRest:
       return "The rest alarm could not be set. The countdown on screen still runs."
+
+    case .editSet:
+      if let storeError = error as? LoggerStoreError {
+        if storeError == .incompleteSet { return "Enter a weight and reps to save this change." }
+        if storeError == .setNotFound { return "That set is no longer in this workout." }
+      }
+      return "That change could not be saved. The set still shows what was saved — try again."
+
+    case .deleteSet:
+      if let storeError = error as? LoggerStoreError, storeError == .setNotFound {
+        return "That set is no longer in this workout."
+      }
+      return "That set could not be deleted. It is still saved — try again."
+
+    case .undoDelete:
+      return "That set could not be put back. Tap Undo to try again."
+
+    case .discardWorkout:
+      if let storeError = error as? LoggerStoreError, storeError == .sessionNotEmpty {
+        return "This workout has logged sets, so it was not discarded. Finish it to keep them."
+      }
+      return "This workout could not be discarded. It is still open — try again."
     }
   }
 }
