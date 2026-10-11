@@ -124,7 +124,6 @@ public struct LiveSessionScreen: View {
       // actually started this rest.
       restMetadata: coordinator.activeRest,
       errorMessage: errorMessage,
-      records: coordinator.lastRecords,
       onLogSet: { exerciseStateID, slot in
         coordinator.logSet(slotID: slot.id, inExercise: exerciseStateID)
       },

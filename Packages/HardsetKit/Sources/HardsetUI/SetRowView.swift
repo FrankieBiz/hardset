@@ -48,12 +48,28 @@ public struct SetRowView: View {
   private let priorNote: String?
   private let emphasis: SetRowEmphasis
   private let keypad: SetEntryKeypad?
+  private let records: [PersonalRecord]
+  private let recordPulse: Int
+  private let isEditingSaved: Bool
   private let onFocus: (SetRowField) -> Void
   private let onLog: () -> Void
+  private let onEdit: (() -> Void)?
+  private let onDelete: (() -> Void)?
+
+  @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
   /// - Parameter keypad: The pad editing this row, or `nil` when the row is not focused. While it
-  ///   is set the row shows what is being typed, which `SessionView` also writes into the draft.
+  ///   is set the row shows what is being typed, which `SessionView` also writes into the draft,
+  ///   except during a correction (`isEditingSaved`), which stays in the pad until Save.
+  /// - Parameter records: What this row's set earned, as the coordinator holds it. Non-empty shows
+  ///   the trophy. Only the caller decides; the row never judges a record.
+  /// - Parameter recordPulse: Changes once, on the log that earned the records, which bounces the
+  ///   trophy. It stays put afterwards, so a later log elsewhere does not bounce it again.
+  /// - Parameter isEditingSaved: The pad is correcting this saved set. What it shows is not saved
+  ///   until the store accepts it, and the row says so.
   /// - Parameter onFocus: A field was tapped. The caller opens the pad on it.
+  /// - Parameter onEdit: Corrects a logged set. `nil`, or an unlogged row, offers no Edit.
+  /// - Parameter onDelete: Deletes a logged set. `nil`, or an unlogged row, offers no Delete.
   public init(
     draft: SetEntryDraft,
     ordinal: Int,
@@ -64,8 +80,13 @@ public struct SetRowView: View {
     priorNote: String? = nil,
     emphasis: SetRowEmphasis = .upcoming,
     keypad: SetEntryKeypad? = nil,
+    records: [PersonalRecord] = [],
+    recordPulse: Int = 0,
+    isEditingSaved: Bool = false,
     onFocus: @escaping (SetRowField) -> Void,
-    onLog: @escaping () -> Void
+    onLog: @escaping () -> Void,
+    onEdit: (() -> Void)? = nil,
+    onDelete: (() -> Void)? = nil
   ) {
     self.draft = draft
     self.ordinal = ordinal
@@ -76,43 +97,65 @@ public struct SetRowView: View {
     self.priorNote = priorNote
     self.emphasis = emphasis
     self.keypad = keypad
+    self.records = records
+    self.recordPulse = recordPulse
+    self.isEditingSaved = isEditingSaved
     self.onFocus = onFocus
     self.onLog = onLog
+    self.onEdit = onEdit
+    self.onDelete = onDelete
   }
 
   public var body: some View {
-    rowContent
-      .padding(.horizontal, Tokens.Spacing.regular)
-      .padding(.vertical, emphasis == .logged ? Tokens.Spacing.tight : Tokens.Spacing.snug)
-      // Opaque. Dense numeric rows are the one surface glass is actively wrong for.
-      .background(Tokens.Color.surface)
-      // The current set is marked by size and an outline, never by dimming the others: every row
-      // keeps full-contrast text.
-      .overlay {
-        if emphasis == .active {
-          RoundedRectangle(cornerRadius: Tokens.Radius.control)
-            .strokeBorder(Tokens.Color.accent, lineWidth: 2)
+    VStack(alignment: .leading, spacing: Tokens.Spacing.hairline) {
+      rowContent
+      rowNotes
+    }
+    .padding(.horizontal, Tokens.Spacing.regular)
+    .padding(.vertical, emphasis == .logged ? Tokens.Spacing.tight : Tokens.Spacing.snug)
+    // Opaque. Dense numeric rows are the one surface glass is actively wrong for.
+    .background(Tokens.Color.surface)
+    // The current set is marked by size and an outline, never by dimming the others: every row
+    // keeps full-contrast text.
+    .overlay {
+      if emphasis == .active {
+        RoundedRectangle(cornerRadius: Tokens.Radius.control)
+          .strokeBorder(Tokens.Color.accent, lineWidth: 2)
+      }
+    }
+    // A saved set is corrected or removed from here (spec 2.3). An unlogged row has nothing to
+    // correct, since it is edited by typing into it, so its menu is empty and none is shown.
+    .contextMenu {
+      if isLogged {
+        if let onEdit { Button("Edit", systemImage: "pencil", action: onEdit) }
+        if let onDelete {
+          Button("Delete", systemImage: "trash", role: .destructive, action: onDelete)
         }
       }
-      .accessibilityElement(children: .combine)
-      .accessibilityLabel(spokenLabel)
-      // A logged row is read-only (see `valueField`), so it has no hint to give.
-      .accessibilityHint(
-        isLogged
-          ? ""
-          : (draft.isLoggable ? "Double tap to log this set." : "Enter a weight and reps to log.")
-      )
-      .accessibilityAction(named: Text("Log set")) {
-        if draft.isLoggable { onLog() }
+    }
+    .accessibilityElement(children: .combine)
+    .accessibilityLabel(spokenLabel)
+    // A logged row is read-only (see `valueField`), so it has no hint to give.
+    .accessibilityHint(
+      isLogged
+        ? ""
+        : (draft.isLoggable ? "Double tap to log this set." : "Enter a weight and reps to log.")
+    )
+    .accessibilityAction(named: Text("Log set")) {
+      if draft.isLoggable { onLog() }
+    }
+    // The row is one combined element, so `.disabled` on the field buttons does not reach these.
+    // Left in place on a logged row they would still open the pad and edit an unsaved draft.
+    .accessibilityActions {
+      if isLogged {
+        // The context menu's two actions, by name, for VoiceOver.
+        if let onEdit { Button("Edit set", action: onEdit) }
+        if let onDelete { Button("Delete set", action: onDelete) }
+      } else {
+        Button("Edit weight") { onFocus(.weight) }
+        Button("Edit reps") { onFocus(.reps) }
       }
-      // The row is one combined element, so `.disabled` on the field buttons does not reach these.
-      // Left in place on a logged row they would still open the pad and edit an unsaved draft.
-      .accessibilityActions {
-        if !isLogged {
-          Button("Edit weight") { onFocus(.weight) }
-          Button("Edit reps") { onFocus(.reps) }
-        }
-      }
+    }
   }
 
   // MARK: - Pieces
@@ -150,6 +193,52 @@ public struct SetRowView: View {
   }
 
   private static let ordinalWidth: CGFloat = 28
+
+  /// What the row earned, and whether what it shows is saved, under the values.
+  @ViewBuilder private var rowNotes: some View {
+    if !records.isEmpty {
+      // Names what was beaten, so the trophy is a checkable claim. In the record colour, which is
+      // tested as text, and never colour alone: the words say what the colour means.
+      Text(recordText)
+        .font(Tokens.Text.caption)
+        .foregroundStyle(Tokens.Color.record)
+        .lineLimit(2)
+        .padding(.leading, Self.ordinalWidth + Tokens.Spacing.regular)
+    }
+    if isEditingSaved {
+      // The pad holds a correction the store has not accepted yet. Said in words, so an unsaved
+      // value beside a check mark is never mistaken for the saved set.
+      Text("Not saved yet")
+        .font(Tokens.Text.caption)
+        .foregroundStyle(Tokens.Color.caution)
+        .padding(.leading, Self.ordinalWidth + Tokens.Spacing.regular)
+    }
+  }
+
+  /// "Heaviest weight: 105 kg, up from 100 kg", one per record.
+  private var recordText: String {
+    records.map { RecordCopy.line(for: $0, formatter: formatter) }.joined(separator: " · ")
+  }
+
+  /// The row's trophy (spec 2.5): the app's one celebration, kept on the row that earned it.
+  ///
+  /// Always in the hierarchy, at no width and invisible while the row has no record. A symbol
+  /// effect plays when its value changes, and an image inserted in the same update as the change
+  /// has no earlier value to change from, so a trophy that only appeared with its record could
+  /// never bounce.
+  private var trophy: some View {
+    Image(systemName: "trophy.fill")
+      .font(Tokens.Text.label)
+      .foregroundStyle(Tokens.Color.record)
+      // Inside the bounce on purpose. This removes the effects a view inherits, so placed after
+      // `.symbolEffect` it would leave the bounce playing under Reduce Motion.
+      .symbolEffectsRemoved(reduceMotion)
+      .symbolEffect(.bounce, value: recordPulse)  // gated by symbolEffectsRemoved(reduceMotion)
+      .padding(.trailing, records.isEmpty ? 0 : Tokens.Spacing.hairline)
+      .frame(width: records.isEmpty ? 0 : nil)
+      .opacity(records.isEmpty ? 0 : 1)
+      .accessibilityHidden(true)
+  }
 
   private var ordinalBadge: some View {
     Text(isWarmup ? "W" : String(ordinal + 1))
@@ -225,8 +314,8 @@ public struct SetRowView: View {
     .buttonStyle(.plain)
     .fixedSize(horizontal: hugsContent, vertical: false)
     // Editing a logged set changed only the in-memory draft, never the database, so the row showed
-    // a check mark beside an unsaved value. Logged rows are read-only until editing returns
-    // properly in Phase 2 (2.3).
+    // a check mark beside an unsaved value. Logged rows stay read-only here: a correction goes
+    // through Edit, which writes only on Save (spec 2.3).
     .disabled(isLogged)
     .background(
       Tokens.Color.background,
@@ -242,19 +331,26 @@ public struct SetRowView: View {
 
   private var logButton: some View {
     Button(action: onLog) {
-      Image(systemName: isLogged ? "checkmark.circle.fill" : "circle")
-        .font(.title2)
-        // The width stays fixed so the value columns line up between compact and full rows.
-        .frame(width: Tokens.loggerTapTarget, height: controlHeight)
-        .contentShape(Rectangle())
+      HStack(spacing: 0) {
+        // Beside the check, inside its fixed column, so a row with a trophy lines up with the rest.
+        trophy
+        Image(systemName: isLogged ? "checkmark.circle.fill" : "circle")
+          .font(.title2)
+          // The check swaps as a symbol, and only inside the gated animation below.
+          .contentTransition(.symbolEffect(.replace))  // animates only via quick(reduceMotion)
+          .animation(Tokens.Motion.quick(reduceMotion), value: isLogged)
+      }
+      // The width stays fixed so the value columns line up between compact and full rows.
+      .frame(width: Tokens.loggerTapTarget, height: controlHeight)
+      .contentShape(Rectangle())
     }
     .buttonStyle(.plain)
     .foregroundStyle(isLogged ? Tokens.Color.success : Tokens.Color.accent)
     // The same predicate the store enforces. There is no second definition of "complete".
     .disabled(!draft.isLoggable)
     .opacity(draft.isLoggable || isLogged ? 1 : 0.35)
-    // Haptics confirm the tap landed without the user looking at the phone.
-    .sensoryFeedback(.success, trigger: isLogged) { !$0 && $1 }
+    // No haptic here. `SessionView` plays one per log, from the coordinator's pulse, after the
+    // write: a distinct one for a record and a quiet one otherwise (spec 2.6).
   }
 
   // MARK: - Values
@@ -309,8 +405,10 @@ public struct SetRowView: View {
 
   private var spokenLabel: String {
     var parts: [String] = [isWarmup ? "Warm-up set" : "Set \(ordinal + 1)"]
-    // The draft is canonical kilograms, and while the pad is open it holds each keystroke.
-    if let weight = draft.weightKg, let reps = draft.reps {
+    // Canonical kilograms. While the pad is open its draft is what the row shows: the same value
+    // as the row's draft, except during a correction, which stays in the pad until Save.
+    let shown = keypad?.draft ?? draft
+    if let weight = shown.weightKg, let reps = shown.reps {
       parts.append("\(formatter.spoken(kilograms: weight)), \(reps) reps")
     } else {
       parts.append("no values entered")
@@ -321,6 +419,8 @@ public struct SetRowView: View {
     }
     if let priorNote { parts.append(priorNote) }
     if isLogged { parts.append("logged") }
+    if !records.isEmpty { parts.append("record: " + recordText) }
+    if isEditingSaved { parts.append("not saved yet") }
     return parts.joined(separator: ", ")
   }
 }

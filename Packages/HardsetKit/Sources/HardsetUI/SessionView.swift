@@ -1,5 +1,18 @@
+import Accessibility
 import HardsetCore
 import SwiftUI
+
+/// A deletion that can still be undone, as the screen shows it. The caller builds the label ("Set 2
+/// deleted") and decides what Undo does; the coordinator alone decides whether it is still allowed.
+public struct PendingUndo: Hashable, Sendable {
+  public let id: UUID
+  public let label: String
+
+  public init(id: UUID, label: String) {
+    self.id = id
+    self.label = label
+  }
+}
 
 /// The live workout screen.
 ///
@@ -14,13 +27,15 @@ import SwiftUI
 ///
 /// What this screen does own is the keypad: which row it is on, what it holds, and where the list
 /// scrolls. The pad is the bottom inset, so the row it edits stays in view above it.
+///
+/// It also plays what the coordinator reports, after the write it describes: one haptic per pulse,
+/// a VoiceOver announcement for a record, and the Undo bar for a deletion.
 public struct SessionView: View {
   @Binding private var exercises: [ExerciseLogState]
   private let unit: WeightUnit
   private let restState: RestTimerState
   private let restMetadata: RestMetadata?
   private let errorMessage: String?
-  private let records: [PersonalRecord]
   private let onLogSet: (UUID, SetSlot) -> Void
   private let onAdjustRest: (Duration) -> Void
   private let onPauseResumeRest: () -> Void
@@ -31,13 +46,28 @@ public struct SessionView: View {
   private let restChoices: [ExerciseID: Duration]
   private let onChooseRest: ((UUID, Duration?) -> Void)?
   private let onStartRest: ((UUID) -> Void)?
-  private let onFinish: () -> Void
+  private let recordsBySlot: [UUID: [PersonalRecord]]
+  private let feedback: FeedbackPulse?
+  private let pendingUndo: PendingUndo?
+  private let onEditSet: ((UUID, UUID, SetEntryDraft) -> Bool)?
+  private let onDeleteSet: ((UUID, UUID) -> Void)?
+  private let onUndoDelete: (() -> Void)?
+  private let onExpireUndo: (() -> Void)?
+  private let onFinish: (() -> Void)?
 
   /// The row the pad is editing. Ids, not indices: rows can be added while the pad is open.
   @State private var focus: KeypadFocus?
   @State private var keypad: SetEntryKeypad?
+  /// The pad is correcting a saved set, on a logged row. What it holds stays in the pad, and the
+  /// row is unchanged, until the store accepts the correction on Save.
+  @State private var editingSaved = false
   /// The set logged last, which decides the active set: the lifter's order, not the plan's.
   @State private var lastLoggedSlotID: UUID?
+  /// The sequence of the record pulse each row earned, by `SetSlot.id`, so its trophy bounces once.
+  ///
+  /// Kept rather than read off `feedback`: a value that fell back to zero when the next pulse named
+  /// another row would change again, and bounce the trophy a second time on an ordinary log.
+  @State private var recordPulses: [UUID: Int] = [:]
   @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
   /// - Parameter restChoices: Each exercise's chosen rest. An exercise with no entry has no rest,
@@ -45,13 +75,24 @@ public struct SessionView: View {
   /// - Parameter onChooseRest: Reports a rest chosen for an exercise (by its state id), or `nil`
   ///   for Off. Passing `nil` hides the rest chips.
   /// - Parameter onStartRest: Starts an exercise's chosen rest now.
+  /// - Parameter recordsBySlot: The records each row earned, by `SetSlot.id`, kept for the
+  ///   workout. The only source of trophies.
+  /// - Parameter feedback: The coordinator's latest pulse. Each new one plays one haptic; a record
+  ///   also bounces its row's trophy and is announced to VoiceOver.
+  /// - Parameter pendingUndo: The deletion that can still be undone. Non-nil shows the Undo bar.
+  /// - Parameter onEditSet: Writes a correction: (exercise state id, slot id, draft). Returns
+  ///   whether the store accepted it. `nil` offers no Edit.
+  /// - Parameter onDeleteSet: Deletes a logged set: (exercise state id, slot id). `nil` offers no
+  ///   Delete.
+  /// - Parameter onUndoDelete: The Undo bar's button.
+  /// - Parameter onExpireUndo: The Undo bar timed out.
+  /// - Parameter onFinish: The in-list "Finish workout" button. `nil` hides it.
   public init(
     exercises: Binding<[ExerciseLogState]>,
     unit: WeightUnit,
     restState: RestTimerState = .idle,
     restMetadata: RestMetadata? = nil,
     errorMessage: String? = nil,
-    records: [PersonalRecord] = [],
     onLogSet: @escaping (UUID, SetSlot) -> Void,
     onAdjustRest: @escaping (Duration) -> Void = { _ in },
     onPauseResumeRest: @escaping () -> Void = {},
@@ -62,14 +103,20 @@ public struct SessionView: View {
     restChoices: [ExerciseID: Duration] = [:],
     onChooseRest: ((UUID, Duration?) -> Void)? = nil,
     onStartRest: ((UUID) -> Void)? = nil,
-    onFinish: @escaping () -> Void = {}
+    recordsBySlot: [UUID: [PersonalRecord]] = [:],
+    feedback: FeedbackPulse? = nil,
+    pendingUndo: PendingUndo? = nil,
+    onEditSet: ((UUID, UUID, SetEntryDraft) -> Bool)? = nil,
+    onDeleteSet: ((UUID, UUID) -> Void)? = nil,
+    onUndoDelete: (() -> Void)? = nil,
+    onExpireUndo: (() -> Void)? = nil,
+    onFinish: (() -> Void)? = nil
   ) {
     self._exercises = exercises
     self.unit = unit
     self.restState = restState
     self.restMetadata = restMetadata
     self.errorMessage = errorMessage
-    self.records = records
     self.onLogSet = onLogSet
     self.onAdjustRest = onAdjustRest
     self.onPauseResumeRest = onPauseResumeRest
@@ -80,6 +127,13 @@ public struct SessionView: View {
     self.restChoices = restChoices
     self.onChooseRest = onChooseRest
     self.onStartRest = onStartRest
+    self.recordsBySlot = recordsBySlot
+    self.feedback = feedback
+    self.pendingUndo = pendingUndo
+    self.onEditSet = onEditSet
+    self.onDeleteSet = onDeleteSet
+    self.onUndoDelete = onUndoDelete
+    self.onExpireUndo = onExpireUndo
     self.onFinish = onFinish
   }
 
@@ -102,31 +156,8 @@ public struct SessionView: View {
               .padding(.horizontal, Tokens.Spacing.regular)
           }
 
-          if !records.isEmpty {
-            // Each record names what it beat, so the claim is checkable rather than a bare "PR!".
-            VStack(alignment: .leading, spacing: Tokens.Spacing.tight) {
-              ForEach(records) { record in
-                Label {
-                  VStack(alignment: .leading, spacing: 0) {
-                    Text(record.kind.label)
-                      .font(Tokens.Text.label.weight(.semibold))
-                    Text(Self.describe(record, unit: unit))
-                      .font(Tokens.Text.caption)
-                      .foregroundStyle(Tokens.Color.textSecondary)
-                  }
-                } icon: {
-                  Image(systemName: "trophy")
-                }
-                .foregroundStyle(Tokens.Color.certainty(.high))
-              }
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(Tokens.Spacing.regular)
-            .background(Tokens.Color.surface, in: RoundedRectangle(cornerRadius: Tokens.Radius.card))
-            .padding(.horizontal, Tokens.Spacing.regular)
-            .accessibilityElement(children: .combine)
-          }
-
+          // No records banner: the trophy on the row that earned it is the only celebration
+          // (spec §3, item 5).
           ForEach($exercises) { $exercise in
             ExerciseSectionView(
               state: $exercise,
@@ -150,7 +181,12 @@ public struct SessionView: View {
               keypad: keypadState(in: exercise.id),
               onFocus: { slot, field in
                 focusRow(exerciseID: exercise.id, slotID: slot.id, field: field, proxy: proxy)
-              }
+              },
+              recordsBySlot: recordsBySlot,
+              recordPulses: recordPulses,
+              editingSlotID: editingSlotID(in: exercise.id),
+              onEdit: editAction(in: exercise.id, proxy: proxy),
+              onDelete: deleteAction(in: exercise.id)
             )
             .background(Tokens.Color.surface.opacity(0.4), in: RoundedRectangle(cornerRadius: Tokens.Radius.card))
             .padding(.horizontal, Tokens.Spacing.snug)
@@ -194,12 +230,15 @@ public struct SessionView: View {
         #endif
       }
       .background(Tokens.Color.background)
+      // Above the pad inset, which this is applied inside of, so a deletion's Undo is never under
+      // the pad.
+      .overlay(alignment: .bottom) { undoOverlay }
       // The pad is an inset, not a sheet, so the scroll view shrinks above it and the row being
       // edited can be scrolled into view instead of sitting under the pad.
       .safeAreaInset(edge: .bottom, spacing: 0) {
         if let binding = keypadBinding {
           NumericPad(
-            keypad: binding, commit: keypad?.field == .weight ? .next : .done,
+            keypad: binding, commit: commitLabel,
             onCommit: { commitKey() }, onDismiss: { closeKeypad() }
           )
           .transition(Tokens.Motion.edgeTransition(reduceMotion))
@@ -220,12 +259,22 @@ public struct SessionView: View {
     .onChange(of: focusedDraft) { reseedKeypad() }
     .onChange(of: focusedMachineIncrementKg) { reseedKeypad() }
     .onChange(of: unit) { reseedKeypad() }
-    // A logged row is read-only, so the pad never stays on one, whichever path logged it.
-    // Task 14's correction of a saved set focuses a logged row on purpose, and must exempt itself
-    // here.
+    // A logged row is read-only, so the pad never stays on one, whichever path logged it. The one
+    // exception is correcting a saved set, which opens the pad on a logged row on purpose and
+    // writes only through Save.
     .onChange(of: focusedSlotIsLogged) {
-      if focusedSlotIsLogged { closeKeypad() }
+      if focusedSlotIsLogged && !editingSaved { closeKeypad() }
     }
+    // A record is announced, and its trophy bounced, only from the coordinator's pulse, which it
+    // emits after the write. Resume and corrections emit none, so neither celebrates.
+    .onChange(of: feedback) { _, pulse in
+      guard let pulse, pulse.event == .record, let slotID = pulse.slotID else { return }
+      recordPulses[slotID] = pulse.sequence
+      announceRecord(onSlot: slotID)
+    }
+    // One haptic per pulse (spec 2.6): a record plays only the record haptic, an ordinary log a
+    // quiet impact, and a failure an error. Keys and corrections play nothing of their own.
+    .sensoryFeedback(trigger: feedback) { feedback.map { Tokens.Haptic.feedback(for: $0.event) } }
   }
 
   // MARK: - Keypad
@@ -244,6 +293,29 @@ public struct SessionView: View {
 
   private func keypadState(in exerciseID: UUID) -> SetEntryKeypad? {
     focus?.exercise == exerciseID ? keypad : nil
+  }
+
+  /// The logged row being corrected, if it is in this exercise.
+  private func editingSlotID(in exerciseID: UUID) -> UUID? {
+    editingSaved ? focusedSlotID(in: exerciseID) : nil
+  }
+
+  /// Edit opens the pad on the saved set. Offered only when the caller can write a correction.
+  private func editAction(in exerciseID: UUID, proxy: ScrollViewProxy) -> ((SetSlot) -> Void)? {
+    guard onEditSet != nil else { return nil }
+    return { slot in editSavedSet(exerciseID: exerciseID, slotID: slot.id, proxy: proxy) }
+  }
+
+  /// Delete goes straight to the caller, which writes first and then removes the row.
+  private func deleteAction(in exerciseID: UUID) -> ((SetSlot) -> Void)? {
+    onDeleteSet.map { delete in { slot in delete(exerciseID, slot.id) } }
+  }
+
+  /// Next on weight. On reps, Save when correcting a saved set, because that key writes, and Done
+  /// otherwise, because it only closes the pad.
+  private var commitLabel: NumericPad.Commit {
+    if keypad?.field == .weight { return .next }
+    return editingSaved ? .save : .done
   }
 
   /// The focused row's position, looked up fresh, or `nil` when the pad is closed or its row is
@@ -271,6 +343,9 @@ public struct SessionView: View {
 
   /// Every keystroke goes straight into the focused row's draft, as the row's own buffers used to,
   /// so the row, the pad and what Log writes are one value. `nil` while the pad is closed.
+  ///
+  /// A correction is the exception: its keystrokes stay in the pad, and the saved set changes only
+  /// when the store accepts the correction on Save.
   private var keypadBinding: Binding<SetEntryKeypad>? {
     guard let current = keypad else { return nil }
     return Binding(
@@ -278,7 +353,7 @@ public struct SessionView: View {
       get: { keypad ?? current },
       set: { newValue in
         keypad = newValue
-        guard let index = focusedIndices else { return }
+        guard !editingSaved, let index = focusedIndices else { return }
         // A logged row is read-only: only the store changes a saved set.
         guard !exercises[index.exercise].slots[index.slot].isLogged else { return }
         exercises[index.exercise].slots[index.slot].draft = newValue.draft
@@ -290,9 +365,22 @@ public struct SessionView: View {
   private func focusRow(
     exerciseID: UUID, slotID: UUID, field: SetRowField, proxy: ScrollViewProxy
   ) {
+    openPad(exerciseID: exerciseID, slotID: slotID, field: field, correcting: false, proxy: proxy)
+  }
+
+  /// Opens the pad on a saved set, on its weight, to correct it (spec 2.3).
+  private func editSavedSet(exerciseID: UUID, slotID: UUID, proxy: ScrollViewProxy) {
+    openPad(exerciseID: exerciseID, slotID: slotID, field: .weight, correcting: true, proxy: proxy)
+  }
+
+  /// An unlogged row is typed into. A logged row opens only to be corrected, and is never written
+  /// by a keystroke.
+  private func openPad(
+    exerciseID: UUID, slotID: UUID, field: SetRowField, correcting: Bool, proxy: ScrollViewProxy
+  ) {
     guard let e = exercises.firstIndex(where: { $0.id == exerciseID }),
       let slot = exercises[e].slots.first(where: { $0.id == slotID }),
-      !slot.isLogged
+      slot.isLogged == correcting
     else { return }
     // `SetRowField` is the UI's name for a field; the keypad has its own.
     let keypadField: SetEntryKeypad.Field = field == .weight ? .weight : .reps
@@ -303,25 +391,38 @@ public struct SessionView: View {
     withAnimation(Tokens.Motion.quick(reduceMotion)) {
       keypad = pad
       focus = KeypadFocus(exercise: exerciseID, slot: slotID)
+      editingSaved = correcting
       // Centred in the space above the pad, so the row being edited is never under it.
       proxy.scrollTo(slotID, anchor: .center)
     }
   }
 
-  /// Next moves weight → reps; on reps the key closes the pad.
+  /// Next moves weight → reps. On reps the key closes the pad, or, for a correction, saves it.
   private func commitKey() {
     guard let current = keypad else { return }
     if current.field == .weight {
       _ = keypad?.advance()
+    } else if editingSaved {
+      saveCorrection()
     } else {
       closeKeypad()
     }
   }
 
+  /// Writes the correction, the store first. Accepted, and the coordinator has already updated the
+  /// row, so the pad closes. Refused, and nothing changes: the pad keeps what was typed, and the
+  /// error shows above. A correction never celebrates: the coordinator emits no pulse for one.
+  private func saveCorrection() {
+    guard let focus, let pad = keypad, let onEditSet else { return }
+    if onEditSet(focus.exercise, focus.slot, pad.draft) { closeKeypad() }
+  }
+
+  /// Closing the pad any way but Save discards a correction: it was only ever in the pad.
   private func closeKeypad() {
     withAnimation(Tokens.Motion.quick(reduceMotion)) {
       keypad = nil
       focus = nil
+      editingSaved = false
     }
   }
 
@@ -335,7 +436,9 @@ public struct SessionView: View {
       return
     }
     let exercise = exercises[index.exercise]
-    let draft = exercise.slots[index.slot].draft
+    // A correction's typing is in the pad alone, so the pad is rebuilt from its own draft and
+    // keeps it. Rebuilding from the saved set would silently drop what the lifter typed.
+    let draft = editingSaved ? current.draft : exercise.slots[index.slot].draft
     let step = LoadStep(machineIncrementKg: exercise.machineIncrementKg, unit: unit)
     guard draft != current.draft || step != current.loadStep || unit != current.unit
     else { return }
@@ -364,6 +467,7 @@ public struct SessionView: View {
       if focus?.slot == slot.id {
         keypad = nil
         focus = nil
+        editingSaved = false
       }
       guard let next else { return }
       // The next set may sit in a section the lazy stack has not built, whose rows cannot be
@@ -382,56 +486,94 @@ public struct SessionView: View {
     }
   }
 
-  /// Spells out the comparison. An estimated-1RM record says it is an estimate, and states the new
-  /// estimate as well as the old one, because guideline 1.4.1 is about not presenting an estimate
-  /// as a measurement and "up from about 80 kg" alone never said what it was up to.
-  static func describe(_ record: PersonalRecord, unit: WeightUnit) -> String {
-    let f = WeightFormatter(unit: unit)
-    switch record.kind {
-    case .heaviestLoad:
-      if let previous = record.previousWeightKg {
-        return "\(f.load(kilograms: record.weightKg)), up from \(f.load(kilograms: previous))"
-      }
-      return f.load(kilograms: record.weightKg)
-    case .repsAtLoad:
-      let reps = CountText.reps(record.reps)
-      if let previousReps = record.previousReps {
-        return "\(reps) at \(f.load(kilograms: record.weightKg)), up from \(previousReps)"
-      }
-      return "\(reps) at \(f.load(kilograms: record.weightKg))"
-    case .estimatedOneRepMax:
-      // The record carries the set that earned it. For this kind `previousWeightKg` is the
-      // previous best estimate rather than a lifted weight, so the new estimate is derived here
-      // from the same function the detector used.
-      let estimate = StrengthMath.estimatedOneRepMax(weightKg: record.weightKg, reps: record.reps)
-      guard let newEstimate = estimate.value else { return "estimated" }
-      if let previous = record.previousWeightKg {
-        return "\(f.estimate(kilograms: newEstimate)), up from \(f.estimate(kilograms: previous))"
-      }
-      return f.estimate(kilograms: newEstimate)
-    }
-  }
-
   private var summary: some View {
     VStack(spacing: Tokens.Spacing.snug) {
       Text(volumeDescription)
         .font(Tokens.Text.caption)
         .foregroundStyle(Tokens.Color.textSecondary)
         .monospacedDigit()
-      Button(action: onFinish) {
-        Text("Finish workout")
-          .font(Tokens.Text.label.weight(.semibold))
-          .frame(maxWidth: .infinity, minHeight: Tokens.loggerTapTarget)
+        // The totals roll to their new values; under Reduce Motion they simply change.
+        .contentTransition(.numericText())
+        .animation(Tokens.Motion.quick(reduceMotion), value: volumeDescription)
+      // Hidden when the caller puts Finish elsewhere (the toolbar).
+      if let onFinish {
+        Button(action: onFinish) {
+          Text("Finish workout")
+            .font(Tokens.Text.label.weight(.semibold))
+            .frame(maxWidth: .infinity, minHeight: Tokens.loggerTapTarget)
+        }
+        .buttonStyle(.plain)
+        .foregroundStyle(Tokens.Color.accent)
+        .background(
+          Tokens.Color.surface,
+          in: RoundedRectangle(cornerRadius: Tokens.Radius.control)
+        )
       }
-      .buttonStyle(.plain)
-      .foregroundStyle(Tokens.Color.accent)
-      .background(
-        Tokens.Color.surface,
-        in: RoundedRectangle(cornerRadius: Tokens.Radius.control)
-      )
     }
     .padding(.horizontal, Tokens.Spacing.regular)
     .padding(.top, Tokens.Spacing.snug)
+  }
+
+  // MARK: - Moments
+
+  /// Tells VoiceOver what the record was, with units in full. Posted with
+  /// `AccessibilityNotification.Announcement(_:).post()` (iOS 17, macOS 14).
+  private func announceRecord(onSlot slotID: UUID) {
+    guard let exercise = exercises.first(where: { $0.slots.contains { $0.id == slotID } }),
+      let records = recordsBySlot[slotID],
+      let text = RecordCopy.announcement(
+        for: records, exerciseName: exercise.exerciseName, formatter: WeightFormatter(unit: unit))
+    else { return }
+    AccessibilityNotification.Announcement(text).post()
+  }
+
+  /// The Undo bar's container. It stays in place so the bar's arrival and departure animate.
+  private var undoOverlay: some View {
+    ZStack {
+      if let pendingUndo {
+        undoBar(pendingUndo)
+      }
+    }
+    .animation(Tokens.Motion.quick(reduceMotion), value: pendingUndo?.id)
+  }
+
+  /// A deletion, and the way back from it, for five seconds (spec 2.3). The coordinator holds the
+  /// real window, so a tap after it, or after Finish, does nothing.
+  private func undoBar(_ undo: PendingUndo) -> some View {
+    HStack(spacing: Tokens.Spacing.regular) {
+      Text(undo.label)
+        .font(Tokens.Text.label)
+        .foregroundStyle(Tokens.Color.textPrimary)
+      Spacer(minLength: 0)
+      Button {
+        onUndoDelete?()
+      } label: {
+        Text("Undo")
+          .font(Tokens.Text.label.weight(.semibold))
+          .frame(minWidth: Tokens.minimumTapTarget, minHeight: Tokens.minimumTapTarget)
+          .contentShape(Rectangle())
+      }
+      .buttonStyle(.plain)
+      .foregroundStyle(Tokens.Color.accent)
+    }
+    .padding(.horizontal, Tokens.Spacing.loose)
+    .padding(.vertical, Tokens.Spacing.tight)
+    .modifier(UndoBarBackground())
+    .padding(.horizontal, Tokens.Spacing.regular)
+    .padding(.bottom, Tokens.Spacing.snug)
+    // Restarted for each deletion. A newer one cancels this wait, so the newer one is not expired.
+    .task(id: undo.id) {
+      let text = "\(undo.label). Undo is available."
+      AccessibilityNotification.Announcement(text).post()
+      do {
+        // The coordinator's `undoWindow`.
+        try await Task.sleep(for: .seconds(5))
+        onExpireUndo?()
+      } catch {
+        // Cancelled because a newer deletion replaced this one, or the bar went: do not expire.
+      }
+    }
+    .transition(Tokens.Motion.edgeTransition(reduceMotion))
   }
 
   /// Counted by `SessionVolume`, which is tested. The rules that matter — unlogged rows and
@@ -446,6 +588,18 @@ public struct SessionView: View {
     }
     if volume.warmupSets > 0 { parts.append("\(volume.warmupSets) warm-up") }
     return parts.joined(separator: " · ")
+  }
+}
+
+/// The Undo bar is the functional layer, so it may be glass. Glass is iOS 26 and macOS 26, and the
+/// package also builds for macOS 15, which gets an opaque capsule.
+private struct UndoBarBackground: ViewModifier {
+  @ViewBuilder func body(content: Content) -> some View {
+    if #available(iOS 26.0, macOS 26.0, *) {
+      content.glassEffect(.regular, in: .capsule)
+    } else {
+      content.background(Tokens.Color.surface, in: Capsule())
+    }
   }
 }
 

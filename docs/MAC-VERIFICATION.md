@@ -343,3 +343,70 @@ the `Hardset` scheme for the iOS 26.4 simulator.
     - [ ] On a 375 pt phone the active row's weight gets about 140 pt, against about 90 for
           "102.5" in the hero size. At large Dynamic Type sizes it can still shrink, by up to
           0.6. Note the first size at which it truncates.
+- [ ] (feat(ui): row moments …) HardsetUI and HardsetFeature build (iOS 26.4 simulator, and macOS
+      15 via `./test.sh`). In the simulator, with history so a record is possible, and on device
+      for haptics. Until Task 18 wires `recordsBySlot`, `feedback`, `pendingUndo` and the
+      edit/delete/undo callbacks, only the build, the missing banner and the check-mark swap can be
+      seen; the rest is checked once Task 18 is merged.
+  - [ ] Log a set that beats last week: a trophy appears on that row and bounces once; one
+        success haptic, no impact haptic with it. Log the next set: the trophy stays, and does
+        not bounce again.
+  - [ ] An ordinary log: one crisp impact haptic; the check mark swaps with a symbol transition.
+  - [ ] VoiceOver on: a record announces "New record on <movement>. Heaviest weight: …
+        kilograms, up from …". No "kg" is spoken.
+  - [ ] Long-press a logged row: Edit and Delete. Edit opens the pad with "Not saved yet"; Save
+        writes (history shows the new value). Close without saving: the row shows the old value.
+  - [ ] Edit a record set down to below last week: its trophy disappears; no haptic.
+  - [ ] Delete: the row disappears, the Undo bar slides up (glass), Undo within 5 s restores it
+        in place with its trophy. Wait 5 s: the bar goes and Undo is gone.
+  - [ ] Reduce Motion on: no bounce, no slide, no number roll; everything still updates.
+  - [ ] There is no records banner above the exercises any more.
+  - [ ] Long-press an unlogged row: no menu and no lift. The menu's content is empty there, and
+        SwiftUI is expected to show nothing for an empty `contextMenu`; if it lifts an empty
+        menu, apply the menu only to logged rows without changing the row's identity.
+  - [ ] Long-press on a logged row's weight or reps (disabled buttons) opens the menu too, not
+        only on the gaps.
+  - [ ] Edit: the pad opens on weight with it selected; Next moves to reps; the key on reps
+        reads "Save". On weight it reads "Next". On an unlogged row the reps key still reads
+        "Done".
+  - [ ] Edit, clear the reps, Save: the store refuses, the pad stays open with what was typed,
+        the error shows above, and the saved row is unchanged.
+  - [ ] Edit, type a new weight, then change the unit in Settings and come back: if the pad is
+        still open, it keeps the typed correction (in the new unit) and still says "Not saved
+        yet".
+  - [ ] VoiceOver: a logged row offers the actions "Edit set" and "Delete set" (and no "Edit
+        weight" / "Edit reps"). If SwiftUI also exposes the context menu's own items, there are
+        two of each; note it, and drop one pair.
+  - [ ] VoiceOver: a trophy row reads "…, logged, record: Heaviest weight: 105 kg, up from
+        100 kg". If "kg" is read as letters here, Core needs a public spoken line (RecordCopy's
+        `spokenDetail` is internal), which is a follow-up.
+  - [ ] VoiceOver: deleting announces "<label>. Undo is available." 5 s is short to swipe to the
+        button; note whether it is reachable in time.
+  - [ ] Delete, then switch tabs and come back within 5 s: the bar may reappear for a fresh 5 s
+        (its wait restarts with the view). Undo after the coordinator's window does nothing.
+  - [ ] With the pad open, delete another row: the Undo bar sits above the pad, not under it.
+  - [ ] Pounds mode: the record line under the row reads lb.
+  - Written without a compiler. If it fails, look first at:
+    - `UndoBarBackground`'s `if #available(iOS 26.0, macOS 26.0, *)` inside a `@ViewBuilder`
+      `body(content:)`, and `glassEffect(.regular, in: .capsule)`.
+    - `import Accessibility` in `SessionView.swift` (for `AccessibilityNotification`; Apple's
+      sample imports only SwiftUI, so it can be dropped if it clashes).
+    - `.sensoryFeedback(trigger: feedback) { feedback.map { … } }`, which must resolve to the
+      `() -> SensoryFeedback?` overload, not the `(old, new)` one.
+    - `.task(id: undo.id) { … try await Task.sleep(for: .seconds(5)) … }` calling
+      `onExpireUndo` (same pattern as `LiveSessionScreen`'s `.task(id:)`).
+  - Behaviour that could not be reasoned out without running it:
+    - [ ] The trophy is always in the row, at zero width and invisible until the row has a
+          record, so the bounce has a value change to play on. The bounce is triggered one update
+          after the trophy appears (from `SessionView`'s `onChange(of: feedback)`). If it does not
+          bounce, note it; if a zero-width trophy leaves a gap before the check, note it.
+    - [ ] `symbolEffectsRemoved(reduceMotion)` sits inside `.symbolEffect(.bounce …)` because it
+          removes inherited effects (Apple's example). Under Reduce Motion the trophy must not
+          bounce; if it does, the order is wrong.
+    - [ ] With a trophy, the check is no longer centred in its 56 pt column. At the largest
+          Dynamic Type sizes the trophy and the check may overflow the column; note the size.
+    - [ ] The lifted context-menu preview may have square corners (the row is clipped outside
+          the menu). If so, add `.contentShape(.contextMenuPreview, RoundedRectangle(…))`.
+    - [ ] A record announcement made while the screen scrolls to the next set is not cut off by
+          VoiceOver's focus change. If it is, post it with a high
+          `accessibilitySpeechAnnouncementPriority` (Apple's example on the Announcement page).

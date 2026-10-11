@@ -23,8 +23,14 @@ public struct ExerciseSectionView: View {
   private let focusedSlotID: UUID?
   private let keypad: SetEntryKeypad?
   private let onFocus: ((SetSlot, SetRowField) -> Void)?
+  private let recordsBySlot: [UUID: [PersonalRecord]]
+  private let recordPulses: [UUID: Int]
+  private let editingSlotID: UUID?
+  private let onEdit: ((SetSlot) -> Void)?
+  private let onDelete: ((SetSlot) -> Void)?
 
   @State private var isChoosingCustomRest = false
+  @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
   /// - Parameter onSelectMachine: Opens the machine picker. Passing `nil` hides the chip, which is
   ///   correct when no gym is known — an affordance that opens an empty list is worse than none.
@@ -39,6 +45,13 @@ public struct ExerciseSectionView: View {
   /// - Parameter focusedSlotID: The row the pad is editing, if it is in this exercise.
   /// - Parameter keypad: The pad's state, handed to the focused row only.
   /// - Parameter onFocus: A row's field was tapped. `nil` makes the fields inert.
+  /// - Parameter recordsBySlot: The records each row earned, by `SetSlot.id`, as the coordinator
+  ///   holds them. A row shows a trophy only when it has an entry here.
+  /// - Parameter recordPulses: The feedback sequence of the record log each row earned, by
+  ///   `SetSlot.id`. A row's trophy bounces when its entry changes, and only then.
+  /// - Parameter editingSlotID: The logged row the pad is correcting, if it is in this exercise.
+  /// - Parameter onEdit: Corrects a logged row. `nil` offers no Edit.
+  /// - Parameter onDelete: Deletes a logged row. `nil` offers no Delete.
   public init(
     state: Binding<ExerciseLogState>,
     unit: WeightUnit,
@@ -51,7 +64,12 @@ public struct ExerciseSectionView: View {
     activeSlotID: UUID? = nil,
     focusedSlotID: UUID? = nil,
     keypad: SetEntryKeypad? = nil,
-    onFocus: ((SetSlot, SetRowField) -> Void)? = nil
+    onFocus: ((SetSlot, SetRowField) -> Void)? = nil,
+    recordsBySlot: [UUID: [PersonalRecord]] = [:],
+    recordPulses: [UUID: Int] = [:],
+    editingSlotID: UUID? = nil,
+    onEdit: ((SetSlot) -> Void)? = nil,
+    onDelete: ((SetSlot) -> Void)? = nil
   ) {
     self._state = state
     self.unit = unit
@@ -65,6 +83,11 @@ public struct ExerciseSectionView: View {
     self.focusedSlotID = focusedSlotID
     self.keypad = keypad
     self.onFocus = onFocus
+    self.recordsBySlot = recordsBySlot
+    self.recordPulses = recordPulses
+    self.editingSlotID = editingSlotID
+    self.onEdit = onEdit
+    self.onDelete = onDelete
   }
 
   public var body: some View {
@@ -87,8 +110,14 @@ public struct ExerciseSectionView: View {
             priorNote: nil,
             emphasis: emphasis(of: slot),
             keypad: slot.id == focusedSlotID ? keypad : nil,
+            // Only what the coordinator holds for this row. The view never judges a record.
+            records: recordsBySlot[slot.id] ?? [],
+            recordPulse: recordPulses[slot.id] ?? 0,
+            isEditingSaved: slot.id == editingSlotID,
             onFocus: { field in onFocus?(slot, field) },
-            onLog: { onLogSet(slot) }
+            onLog: { onLogSet(slot) },
+            onEdit: editAction(for: slot),
+            onDelete: deleteAction(for: slot)
           )
           .clipShape(RoundedRectangle(cornerRadius: Tokens.Radius.control))
           // What `SessionView` scrolls to, on focus and after a log.
@@ -133,6 +162,9 @@ public struct ExerciseSectionView: View {
           .font(Tokens.Text.caption)
           .foregroundStyle(Tokens.Color.textSecondary)
           .monospacedDigit()
+          // The count rolls to its new value; under Reduce Motion it simply changes.
+          .contentTransition(.numericText(value: Double(state.loggedCount)))
+          .animation(Tokens.Motion.quick(reduceMotion), value: state.loggedCount)
       }
       if onSelectMachine != nil || onChooseRest != nil {
         chipRow
@@ -276,6 +308,15 @@ public struct ExerciseSectionView: View {
       .foregroundStyle(Tokens.Color.textSecondary)
     }
     .padding(.horizontal, Tokens.Spacing.regular)
+  }
+
+  // Helpers rather than inline `map`s, to keep the row's initialiser cheap to type-check.
+  private func editAction(for slot: SetSlot) -> (() -> Void)? {
+    onEdit.map { edit in { edit(slot) } }
+  }
+
+  private func deleteAction(for slot: SetSlot) -> (() -> Void)? {
+    onDelete.map { delete in { delete(slot) } }
   }
 
   /// A logged row is compact whatever else is true; otherwise the active set leads.
