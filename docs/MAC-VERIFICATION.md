@@ -118,6 +118,60 @@ the `Hardset` scheme for the iOS 26.4 simulator.
   - [ ] The Volume tab is titled "Last 7 days". No screen says "this week".
   - [ ] Methodology badge: reads Low when only counted (non-modelled) muscles were trained,
         Moderate when a modelled muscle is credited, and is hidden when nothing is credited.
+- [ ] (feat(feature): wire rest choices, alarm state and failure copy into the live workout)
+      Build the `Hardset` scheme for the iOS 26.4 simulator, and HardsetFeature for macOS (the
+      Settings button is behind `#if canImport(UIKit)`), with no new warnings. None of the three
+      Swift files has been compiled. On Linux they passed `swiftc -parse`, and the app's wiring
+      type-checked, with `-warnings-as-errors`, against stub modules that copy the real
+      signatures. Confirm:
+  - [ ] `extension RestTimerStore: @retroactive RestTimerPersistence {}` (end of `HardsetApp.swift`)
+        compiles with no warning and no isolation diagnostic. The protocol is `@MainActor`, and the
+        store's methods are `nonisolated`.
+  - [ ] `HardsetApp.init()` now takes the opened database back from `prepareDependencies` and
+        builds `RestTimerController(persistence: RestTimerStore(database:))` from it. If the
+        database fails to open, the controller gets no store, so the timer still runs but is not
+        written down.
+  - [ ] `HardsetTests` builds and passes. It now imports `HardsetFeature`, `HardsetStore` and
+        `SQLiteData` (for `DatabaseQueue`), but the target declares only the `HardsetCore` product
+        in `project.pbxproj`. That works only if the host app's build leaves those modules where
+        the test can find them and `BUNDLE_LOADER` provides the symbols, which is how the app
+        target already imports `SQLiteData`. If you get "no such module" or undefined symbols, add
+        `HardsetFeature` and `HardsetStore` to the HardsetTests target's package products, then
+        check that the test run does not print "Class … is implemented in both" warnings.
+  Then in the simulator, and on device for the alarm items:
+  - [ ] Choose 2:00 on an exercise and log a working set. The rest bar starts at 2:00 and its
+        caption reads "Exercise · Set N of M". "Start rest now" on the chip starts the chosen rest
+        with a caption too. A warm-up starts nothing.
+  - [ ] Skip clears the bar and its caption. The next rest's caption names the new set, not the
+        old one.
+  - [ ] Relaunch: the chip still reads 2:00 (`UserDefaultsRestPreferences`). Force-quit during a
+        rest, relaunch: the same countdown is back (launch `.task` runs `reconcile()`).
+  - [ ] Deny alarm permission, then start a rest. The line "Alarms are off for Hardset, so rest
+        won't sound when the phone is locked." and a "Settings" button appear in one panel with the
+        rest bar, on the same background. The line sits directly BELOW the bar, not above it as the
+        brief said: `SessionView` owns the bar's inset, and an inset added by `LiveSessionScreen`
+        is laid out beneath it. If it must go above, that is a `SessionView` input (HardsetUI),
+        outside this task. "Settings" is at least 44 pt tall and opens Hardset's page in the
+        Settings app. The panel goes when the rest ends or is skipped. With alarms allowed it never
+        appears.
+  - [ ] An alarm failure (forced throw in a debug build) shows "The rest alarm could not be set.
+        The countdown on screen still runs." in that panel, only while the rest runs. With alarms
+        denied and a failure at once, both lines show. No error text ever appears.
+  - [ ] Alarms denied, notifications allowed, app in front at the deadline: the rest notification
+        shows as a banner with sound. That proves `RestNotificationPresenter` is installed in
+        time. Apple's `delegate` page asks for it before launch finishes
+        (`application(_:willFinishLaunchingWithOptions:)` or `…didFinishLaunching…`), and does not
+        say when `App.init()` runs relative to those. If no banner shows, move the assignment into
+        an `@UIApplicationDelegateAdaptor` delegate's `application(_:willFinishLaunchingWithOptions:)`.
+  - [ ] Force a machine save failure (debug throw in `GymStore.createMachine`). The picker stays
+        open and its footer reads "That machine could not be saved. Try again." Closing and
+        reopening the picker clears it, and so does a successful add.
+  - [ ] Set the clock to before the workout started and tap Finish: "…Check your device's date
+        and time, then try again." Any other finish failure (forced) reads "…Your sets are saved.
+        Try again." with no clock advice. A failed set reads "That set could not be saved. It has
+        not been logged — tap to try again." `LiveSessionScreen` no longer has its own
+        `LoggerStoreError` switch (see the Phase 2 Task 6 note below), so all of this copy comes
+        from `FailureCopy`.
 
 ## Phase 2
 

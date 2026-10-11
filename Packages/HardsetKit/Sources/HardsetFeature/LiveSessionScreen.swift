@@ -3,6 +3,10 @@ import HardsetStore
 import HardsetUI
 import SwiftUI
 
+#if canImport(UIKit)
+  import UIKit
+#endif
+
 /// Identifies which exercise's machine picker is open.
 private struct MachineTarget: Identifiable, Hashable {
   let id: UUID
@@ -24,19 +28,29 @@ public struct RestTimerHooks {
   public var adjust: (Duration) -> Void
   public var pauseOrResume: () -> Void
   public var cancel: () -> Void
+  /// Whether the lifter has turned alarms off for Hardset. A choice, not a failure: the countdown
+  /// still runs, so the screen says what it means rather than reporting an error.
+  public var authorizationDenied: () -> Bool
+  /// The timer's latest failure, already in the lifter's words. The app maps the error, so this
+  /// target never sees AlarmKit's error types.
+  public var lastErrorMessage: () -> String?
 
   public init(
     state: @escaping () -> RestTimerState = { .idle },
     start: @escaping (Duration, RestMetadata) -> Void = { _, _ in },
     adjust: @escaping (Duration) -> Void = { _ in },
     pauseOrResume: @escaping () -> Void = {},
-    cancel: @escaping () -> Void = {}
+    cancel: @escaping () -> Void = {},
+    authorizationDenied: @escaping () -> Bool = { false },
+    lastErrorMessage: @escaping () -> String? = { nil }
   ) {
     self.state = state
     self.start = start
     self.adjust = adjust
     self.pauseOrResume = pauseOrResume
     self.cancel = cancel
+    self.authorizationDenied = authorizationDenied
+    self.lastErrorMessage = lastErrorMessage
   }
 
   public static var inert: RestTimerHooks { RestTimerHooks() }
@@ -51,11 +65,11 @@ public struct RestTimerHooks {
 @MainActor
 public struct LiveSessionScreen: View {
   @State private var coordinator: SessionCoordinator
-  @State private var restMetadata: RestMetadata?
   @State private var isPickerPresented = false
-  /// Set when finishing failed and the session is still open, so the user is told rather than
-  /// silently returned to a start screen while their workout is stranded.
-  @State private var finishFailed = false
+  /// Why finishing failed, set while the session is still open, so the user is told rather than
+  /// silently returned to a start screen while their workout is stranded. The error rather than a
+  /// flag, so only a clock problem is told to check the clock.
+  @State private var finishError: (any Error)?
   @State private var pickerQuery = ""
   @State private var pickerEntries: [CatalogEntry] = []
   /// The exercise whose machine is being chosen. Non-nil presents the picker.
@@ -65,6 +79,10 @@ public struct LiveSessionScreen: View {
   @State private var machineTarget: MachineTarget?
   @State private var machineOptions: (recent: [MachineOption], others: [MachineOption]) = ([], [])
   @State private var isAddingMachine = false
+  /// Why the last machine could not be added, in the user's words. Shown in the picker, which is
+  /// where the lifter is looking when it fails.
+  @State private var machineError: String?
+  @Environment(\.openURL) private var openURL
   private let unit: WeightUnit
   private let hooks: RestTimerHooks
   @State private var historyTarget: MachineTarget?
@@ -102,7 +120,9 @@ public struct LiveSessionScreen: View {
       exercises: $bindable.exercises,
       unit: unit,
       restState: hooks.state(),
-      restMetadata: restMetadata,
+      // The coordinator's record of what was asked of the timer, so the bar names the set that
+      // actually started this rest.
+      restMetadata: coordinator.activeRest,
       errorMessage: errorMessage,
       records: coordinator.lastRecords,
       onLogSet: { exerciseStateID, slot in
@@ -112,15 +132,24 @@ public struct LiveSessionScreen: View {
       onPauseResumeRest: hooks.pauseOrResume,
       onSkipRest: {
         hooks.cancel()
-        restMetadata = nil
+        coordinator.endRest()
       },
       onAddExercise: catalog == nil ? nil : { isPickerPresented = true },
       // Offered only when there is a gym to attach equipment to. Machines belong to a gym, so
       // without one there is nothing honest to put in the list.
       onSelectMachine: canPickMachines ? { machineTarget = MachineTarget(id: $0) } : nil,
       onShowHistory: progression == nil ? nil : { historyTarget = MachineTarget(id: $0) },
+      restChoices: coordinator.restChoices,
+      // The view reports (state id, rest); the coordinator takes them the other way round.
+      onChooseRest: { stateID, rest in coordinator.setRestChoice(rest, forExercise: stateID) },
+      // No choice means nothing to start, which the chip already reflects by not offering it.
+      onStartRest: { stateID in _ = coordinator.startRest(forExercise: stateID) },
       onFinish: finish
     )
+    // Under the rest bar rather than above it: `SessionView` owns the bar's inset, and an inset
+    // added out here is laid out beneath that one. It shares the bar's background, so the two read
+    // as one panel.
+    .safeAreaInset(edge: .bottom, spacing: 0) { restNotice }
     .sheet(isPresented: $isPickerPresented) {
       NavigationStack {
         ExercisePickerView(query: $pickerQuery, entries: pickerEntries) { entry in
@@ -135,7 +164,8 @@ public struct LiveSessionScreen: View {
       // user-created movement shows up without reopening the sheet.
       .task(id: pickerQuery) { refreshPicker() }
     }
-    .sheet(item: $machineTarget) { wrapped in
+    // A failure belongs to the attempt the lifter just made, so it goes when the picker does.
+    .sheet(item: $machineTarget, onDismiss: { machineError = nil }) { wrapped in
       let target = wrapped.id
       NavigationStack {
         MachinePickerView(
@@ -149,6 +179,7 @@ public struct LiveSessionScreen: View {
           },
           onAddMachine: { isAddingMachine = true }
         )
+        .safeAreaInset(edge: .bottom, spacing: 0) { machineErrorFooter }
         .navigationTitle("Machine")
         .toolbar {
           ToolbarItem(placement: .cancellationAction) {
@@ -195,6 +226,74 @@ public struct LiveSessionScreen: View {
   }
 
   private var canPickMachines: Bool { gyms != nil && coordinator.gymID != nil }
+
+  /// Why the rest may not sound, shown only while a rest is running or paused. The timer is the
+  /// truth here, not `activeRest`, which outlives a rest that ended on its own.
+  ///
+  /// A refusal and a failure can both be true (alarms off, and the stand-in notification failed),
+  /// so each gets its own line rather than one hiding the other.
+  @ViewBuilder private var restNotice: some View {
+    if hooks.state() != .idle {
+      let alarmsOff = hooks.authorizationDenied()
+      let failure = hooks.lastErrorMessage()
+      if alarmsOff || failure != nil {
+        VStack(alignment: .leading, spacing: Tokens.Spacing.tight) {
+          if alarmsOff {
+            HStack(spacing: Tokens.Spacing.snug) {
+              Text("Alarms are off for Hardset, so rest won't sound when the phone is locked.")
+                .font(Tokens.Text.caption)
+                .foregroundStyle(Tokens.Color.textSecondary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+              settingsButton
+            }
+          }
+          if let failure {
+            Text(failure)
+              .font(Tokens.Text.caption)
+              .foregroundStyle(Tokens.Color.certainty(.low))
+              .frame(maxWidth: .infinity, alignment: .leading)
+          }
+        }
+        .padding(.horizontal, Tokens.Spacing.regular)
+        .padding(.vertical, Tokens.Spacing.snug)
+        .background(Tokens.Color.surface)
+      }
+    }
+  }
+
+  /// Opens Hardset's page in the Settings app, where alarms can be turned back on. UIKit only:
+  /// this target also builds for macOS, which has no such URL.
+  @ViewBuilder private var settingsButton: some View {
+    #if canImport(UIKit)
+      if let url = URL(string: UIApplication.openSettingsURLString) {
+        Button {
+          openURL(url)
+        } label: {
+          Text("Settings")
+            .font(Tokens.Text.caption.weight(.semibold))
+            .foregroundStyle(Tokens.Color.accent)
+            .frame(minHeight: Tokens.minimumTapTarget)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+      }
+    #else
+      EmptyView()
+    #endif
+  }
+
+  /// The machine picker's footer. Empty unless adding a machine just failed.
+  @ViewBuilder private var machineErrorFooter: some View {
+    if let machineError {
+      Text(machineError)
+        .font(Tokens.Text.caption)
+        .foregroundStyle(Tokens.Color.certainty(.low))
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, Tokens.Spacing.section)
+        .padding(.vertical, Tokens.Spacing.snug)
+        .background(Tokens.Color.background)
+    }
+  }
 
   /// Loads the picker's two lists, recency first.
   ///
@@ -244,12 +343,15 @@ public struct LiveSessionScreen: View {
       // would licence progression suggestions the equipment cannot honour.
       refreshMachines(forExercise: target)
       _ = coordinator.changeMachine(to: machineID, machineName: name, inExercise: target)
+      machineError = nil
       // Dismissed, like choosing an existing machine does. Leaving the picker open after the
       // decision has been made asks the lifter to confirm something twice.
       machineTarget = nil
     } catch {
-      // Nothing was created, so nothing is selected and the list is unchanged. Silent because the
-      // user's next tap is the retry, and a modal error over a modal picker is worse than none.
+      // Nothing was created, so nothing is selected and the list is unchanged. Stated in the
+      // picker's footer rather than in a modal over a modal, and never as the error itself, which
+      // can carry database internals. The picker stays open, so "Add a machine" is the retry.
+      machineError = FailureCopy.message(for: error, during: .saveMachine)
     }
   }
 
@@ -264,30 +366,21 @@ public struct LiveSessionScreen: View {
     }
   }
 
-  /// A failed write is stated in the user's words, not as an error dump. The row stays
-  /// unlogged, so the correct instruction is to try again.
+  /// A failed write is stated in the user's words, not as an error dump. The wording lives in
+  /// `FailureCopy`, where it is tested; this only says which action failed.
   private var errorMessage: String? {
-    if finishFailed {
-      return "This workout could not be finished, so it is still open. Your sets are saved. "
-        + "Check your device's date and time, then try again."
+    if let finishError {
+      return FailureCopy.message(for: finishError, during: .finishWorkout)
     }
     guard let error = coordinator.lastError else { return nil }
-    if let storeError = error as? LoggerStoreError {
-      switch storeError {
-      case .incompleteSet:
-        return "Enter a weight and reps before logging this set."
-      case .sessionNotFound:
-        return "This workout could not be found. Your logged sets are safe."
-      case .setNotFound, .sessionNotEmpty, .sessionNotOpen:
-        break
-      }
-    }
-    return "That set could not be saved. It has not been logged — tap to try again."
+    return FailureCopy.message(for: error, during: .logSet)
   }
 
   private func finish() {
     hooks.cancel()
-    restMetadata = nil
+    // Ended together with the timer. `coordinator.finish()` also ends it, but only once its write
+    // succeeds, and the timer is already gone either way.
+    coordinator.endRest()
     do {
       try coordinator.finish()
       onFinished()
@@ -303,8 +396,9 @@ public struct LiveSessionScreen: View {
       // was wrong.
       //
       // `finishedBeforeStart` is the realistic trigger: the device clock moving backwards, from a
-      // timezone or NTP correction, makes `now()` precede `startedAt`.
-      finishFailed = true
+      // timezone or NTP correction, makes `now()` precede `startedAt`. Kept, so only that case is
+      // told to check the clock.
+      finishError = error
     }
   }
 }
