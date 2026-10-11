@@ -91,9 +91,7 @@ public struct SetEntryKeypad: Hashable, Sendable {
   /// The value being composed, for the pad's header: "102.5 kg × 8". An empty field shows "—",
   /// never "0". The stored text always uses ".", so the locale's separator is substituted here.
   public func composedText(locale: Locale = .current) -> String {
-    let separator = locale.decimalSeparator ?? "."
-    let weightText =
-      weight.isEmpty ? "—" : weight.displayText.replacingOccurrences(of: ".", with: separator)
+    let weightText = weight.isEmpty ? "—" : weight.displayText(locale: locale)
     let repsText = reps.isEmpty ? "—" : reps.displayText
     return "\(weightText) \(unit.abbreviation) × \(repsText)"
   }

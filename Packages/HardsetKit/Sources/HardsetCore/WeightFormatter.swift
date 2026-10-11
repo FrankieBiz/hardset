@@ -38,6 +38,12 @@ public struct WeightFormatter: Hashable, Sendable {
     return "about \(Self.text(rounded, fractionDigits: 1, locale: locale)) \(unit.abbreviation)"
   }
 
+  /// A total for VoiceOver: "20723 pounds". Whole, as `total(kilograms:)` is.
+  public func spokenTotal(kilograms: Double) -> String {
+    let rounded = unit.fromKilograms(kilograms).rounded()
+    return spoken(kilograms: unit.toKilograms(rounded))
+  }
+
   /// For VoiceOver: "62.5 kilograms".
   public func spoken(kilograms: Double) -> String {
     let value = unit.fromKilograms(kilograms)
