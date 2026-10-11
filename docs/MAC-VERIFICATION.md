@@ -515,3 +515,32 @@ the `Hardset` scheme for the iOS 26.4 simulator.
       witness satisfies `AXChartDescriptorRepresentable` under the target's main-actor default;
       `@ScaledMetric` has a default value; `if let` in chart builders uses
       `ChartContentBuilder.buildIf` (iOS 16, macOS 13).
+
+- [ ] (feat(ui): the logger with VoiceOver and large text) HardsetUI builds (iOS, and macOS 15). In
+      the simulator, VoiceOver on:
+  - [ ] A prefilled row reads "Set 2, 100 kilograms, 8 reps, Last time …, button. Double tap to
+        log this set." Double tap logs it, and VoiceOver then says "Set 2 logged, 100 kilograms, 8
+        reps." once. A record set says the log and the record in one announcement.
+  - [ ] A logged row reads "…, logged, selected" with no hint; double tap does nothing.
+  - [ ] A half-typed row reads "60 kilograms, reps not entered".
+  - [ ] On the reps pad, swiping never lands on an invisible decimal key. Typing on the weight pad
+        speaks "Weight, 62.5 kilograms"; the step keys say "Add 2.5 kilograms" / "One more rep".
+  - [ ] Scroll so the tab bar collapses during a rest: the accessory's countdown offers the
+        actions "Subtract 15 seconds", "Add 15 seconds", "Skip rest".
+  - [ ] Pounds mode: every weight is spoken "pounds", including a row's record ("New record on
+        Leg Press. Heaviest weight: 231 pounds, up from …"), never "lb".
+  - [ ] Settings › Accessibility › Display & Text Size › Larger Text, the largest size: set rows
+        stack (number and "Last time" above, fields and check below), nothing truncates the weight,
+        and every control is at least 44 pt (Accessibility Inspector). The keypad's keys grow but
+        stop growing at 88 pt, and the row being edited stays visible above the pad.
+  - [ ] An estimated-1RM record on a row shows its certainty glyph and word, and the action "How
+        this estimate is calculated" opens the Epley sheet.
+  - [ ] Loads borrowed from another machine show the "From another machine" chip; tapping it opens
+        the machine picker.
+  - [ ] The correction mode (Edit on a logged row) still keeps the pad open on the logged row, and
+        its row reads "…, logged, not saved yet" until Save.
+  - [ ] Written without a compiler. If it fails, look first at `.accessibilityAction { }` (the
+        default-action overload), `.accessibilityAddTraits` with a ternary of `AccessibilityTraits`,
+        `@ScaledMetric(relativeTo:)` with `Tokens.…` initial values, the `if`-inside
+        `.accessibilityActions { }` builders, and `.sheet` after `.accessibilityActions` in
+        `SetRowView.body`.

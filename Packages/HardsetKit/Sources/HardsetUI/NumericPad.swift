@@ -30,6 +30,13 @@ public struct NumericPad: View {
   private let onCommit: () -> Void
   private let onDismiss: () -> Void
 
+  // Key height and the close target scale with the type, capped so the four rows of keys never
+  // cover the row being edited at the largest sizes. Both stay at or above 44 pt.
+  @ScaledMetric(relativeTo: .title3) private var scaledKeyHeight: CGFloat = Tokens.loggerTapTarget
+  @ScaledMetric(relativeTo: .body) private var closeTarget: CGFloat = Tokens.minimumTapTarget
+
+  private var keyHeight: CGFloat { min(scaledKeyHeight, 88) }
+
   public init(
     keypad: Binding<SetEntryKeypad>,
     commit: Commit,
@@ -91,12 +98,17 @@ public struct NumericPad: View {
       .frame(maxWidth: .infinity, alignment: .leading)
       .accessibilityElement(children: .combine)
       // "kg" and "×" read badly aloud; the spoken form names the unit and the reps.
-      .accessibilityLabel(spokenValue)
+      .accessibilityLabel(keypad.spokenValue())
+      // Typing is silent otherwise: VoiceOver says the value as it is composed. The pad's
+      // `focused.text` changes on every key and on the step keys, never on a no-op.
+      .onChange(of: keypad.focused.text) {
+        AccessibilityNotification.Announcement(keypad.spokenValue()).post()
+      }
 
       Button(action: onDismiss) {
         Image(systemName: "chevron.down")
           .font(Tokens.Text.label.weight(.semibold))
-          .frame(width: Tokens.loggerTapTarget, height: Tokens.minimumTapTarget)
+          .frame(width: max(keyHeight, Tokens.loggerTapTarget), height: closeTarget)
           .contentShape(Rectangle())
       }
       .buttonStyle(.plain)
@@ -107,14 +119,6 @@ public struct NumericPad: View {
 
   private var fieldName: String {
     keypad.field == .weight ? "Weight" : "Reps"
-  }
-
-  private var spokenValue: String {
-    let draft = keypad.draft
-    let formatter = WeightFormatter(unit: keypad.unit)
-    let weight = draft.weightKg.map { formatter.spoken(kilograms: $0) } ?? "no weight"
-    let reps = draft.reps.map { CountText.reps($0) } ?? "no reps"
-    return "\(fieldName). \(weight), \(reps)"
   }
 
   // MARK: - Keys
@@ -128,7 +132,7 @@ public struct NumericPad: View {
         .lineLimit(1)
         // "−11.02" on a quarter-width key in pounds: shrink rather than wrap.
         .minimumScaleFactor(0.6)
-        .frame(maxWidth: .infinity, minHeight: Tokens.loggerTapTarget)
+        .frame(maxWidth: .infinity, minHeight: keyHeight)
         .contentShape(Rectangle())
     }
     .buttonStyle(.plain)
@@ -136,6 +140,8 @@ public struct NumericPad: View {
     .foregroundStyle(isEnabled(key) ? Tokens.Color.textPrimary : Tokens.Color.textSecondary)
     .disabled(!isEnabled(key))
     .opacity(key == .disabledDecimal ? 0 : 1)
+    // Invisible and inert, so VoiceOver must not land on a "Decimal point" that is not there.
+    .accessibilityHidden(key == .disabledDecimal)
     .background(
       key == .commit ? Tokens.Color.accent.opacity(0.15) : Tokens.Color.background,
       in: RoundedRectangle(cornerRadius: Tokens.Radius.control)
@@ -206,16 +212,10 @@ public struct NumericPad: View {
     case .delete: "Delete"
     case .clear: "Clear"
     case .commit: commitTitle
-    case .stepDown: keypad.field == .weight ? "Subtract \(spokenStep)" : "One fewer rep"
-    case .stepUp: keypad.field == .weight ? "Add \(spokenStep)" : "One more rep"
+    // "Add 2.5 kilograms", "One more rep": Core's sentences, units in full.
+    case .stepDown: keypad.spokenStep(.down)
+    case .stepUp: keypad.spokenStep(.up)
     }
-  }
-
-  /// "2.5 kilograms", "11.02 pounds", "1 kilogram". The step is held in display units, and the
-  /// formatter speaks canonical kilograms, so it goes back through the unit first.
-  private var spokenStep: String {
-    WeightFormatter(unit: keypad.unit).spoken(
-      kilograms: keypad.unit.toKilograms(keypad.loadStep.amount))
   }
 
   private func apply(_ key: Key) {

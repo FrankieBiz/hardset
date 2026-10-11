@@ -114,6 +114,7 @@ public struct ExerciseSectionView: View {
             records: recordsBySlot[slot.id] ?? [],
             recordPulse: recordPulses[slot.id] ?? 0,
             isEditingSaved: slot.id == editingSlotID,
+            exerciseName: state.exerciseName,
             onFocus: { field in onFocus?(slot, field) },
             onLog: { onLogSet(slot) },
             onEdit: editAction(for: slot),
@@ -169,12 +170,18 @@ public struct ExerciseSectionView: View {
       if onSelectMachine != nil || onChooseRest != nil {
         chipRow
       }
-      if let note = state.priorNote {
-        // Stated as a caveat about where the numbers came from, in words, once.
-        Label(note, systemImage: "arrow.triangle.branch")
-          .font(Tokens.Text.caption)
-          .foregroundStyle(Tokens.Color.caveat)
-          .accessibilityLabel("Suggested loads came from another machine.")
+      if state.priorNote != nil {
+        // The borrowed loads are an assumption, said once, with its correction (spec 3.1).
+        let assumption = Assumption.borrowedFromOtherMachine
+        if let onSelectMachine {
+          AssumptionChip(
+            label: assumption.label, correctionPrompt: assumption.correctionPrompt,
+            onCorrect: onSelectMachine)
+        } else {
+          Label(assumption.label, systemImage: CaveatMark.otherMachine.symbolName)
+            .font(Tokens.Text.caption)
+            .foregroundStyle(Tokens.Color.caveat)
+        }
       }
     }
     .padding(.horizontal, Tokens.Spacing.regular)

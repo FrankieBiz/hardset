@@ -51,12 +51,22 @@ public struct SetRowView: View {
   private let records: [PersonalRecord]
   private let recordPulse: Int
   private let isEditingSaved: Bool
+  private let exerciseName: String
   private let onFocus: (SetRowField) -> Void
   private let onLog: () -> Void
   private let onEdit: (() -> Void)?
   private let onDelete: (() -> Void)?
 
   @Environment(\.accessibilityReduceMotion) private var reduceMotion
+  @Environment(\.dynamicTypeSize) private var typeSize
+  // Widths that hold text scale with it: a fixed 28 pt column clips "12" at the largest sizes.
+  // `ScaledMetric` is iOS 14 / macOS 11.
+  @ScaledMetric(relativeTo: .subheadline) private var ordinalWidth: CGFloat = 28
+  @ScaledMetric(relativeTo: .caption) private var lastTimeWidth: CGFloat = 78
+  // The tap targets grow with the type as well, and never fall below the 44 pt and 56 pt floors.
+  @ScaledMetric(relativeTo: .body) private var loggerTarget: CGFloat = Tokens.loggerTapTarget
+  @ScaledMetric(relativeTo: .body) private var minimumTarget: CGFloat = Tokens.minimumTapTarget
+  @State private var isExplainingEstimate = false
 
   /// - Parameter keypad: The pad editing this row, or `nil` when the row is not focused. While it
   ///   is set the row shows what is being typed, which `SessionView` also writes into the draft,
@@ -67,6 +77,8 @@ public struct SetRowView: View {
   ///   trophy. It stays put afterwards, so a later log elsewhere does not bounce it again.
   /// - Parameter isEditingSaved: The pad is correcting this saved set. What it shows is not saved
   ///   until the store accepts it, and the row says so.
+  /// - Parameter exerciseName: Only for what VoiceOver says about a record ("New record on Leg
+  ///   Press"). Empty reads as "this set".
   /// - Parameter onFocus: A field was tapped. The caller opens the pad on it.
   /// - Parameter onEdit: Corrects a logged set. `nil`, or an unlogged row, offers no Edit.
   /// - Parameter onDelete: Deletes a logged set. `nil`, or an unlogged row, offers no Delete.
@@ -83,6 +95,7 @@ public struct SetRowView: View {
     records: [PersonalRecord] = [],
     recordPulse: Int = 0,
     isEditingSaved: Bool = false,
+    exerciseName: String = "",
     onFocus: @escaping (SetRowField) -> Void,
     onLog: @escaping () -> Void,
     onEdit: (() -> Void)? = nil,
@@ -100,6 +113,7 @@ public struct SetRowView: View {
     self.records = records
     self.recordPulse = recordPulse
     self.isEditingSaved = isEditingSaved
+    self.exerciseName = exerciseName
     self.onFocus = onFocus
     self.onLog = onLog
     self.onEdit = onEdit
@@ -134,13 +148,16 @@ public struct SetRowView: View {
       }
     }
     .accessibilityElement(children: .combine)
-    .accessibilityLabel(spokenLabel)
-    // A logged row is read-only (see `valueField`), so it has no hint to give.
-    .accessibilityHint(
-      isLogged
-        ? ""
-        : (draft.isLoggable ? "Double tap to log this set." : "Enter a weight and reps to log.")
-    )
+    .accessibilityLabel(SetRowSpeech.label(number: ordinal + 1, isWarmup: isWarmup))
+    .accessibilityValue(spokenValue)
+    // A logged row is read-only (see `valueField`), so Core gives it no hint.
+    .accessibilityHint(SetRowSpeech.hint(isLoggable: draft.isLoggable, isLogged: isLogged) ?? "")
+    .accessibilityAddTraits(isLogged ? .isSelected : .isButton)
+    // The default action: a double tap anywhere on the row logs what the row shows, through the
+    // same `onLog` as the check mark. Nothing is logged that the lifter cannot see.
+    .accessibilityAction {
+      if !isLogged && draft.isLoggable { onLog() }
+    }
     .accessibilityAction(named: Text("Log set")) {
       if draft.isLoggable { onLog() }
     }
@@ -155,6 +172,14 @@ public struct SetRowView: View {
         Button("Edit weight") { onFocus(.weight) }
         Button("Edit reps") { onFocus(.reps) }
       }
+      if estimateCertainty != nil {
+        Button("How this estimate is calculated") { isExplainingEstimate = true }
+      }
+    }
+    .sheet(isPresented: $isExplainingEstimate) {
+      if let certainty = estimateCertainty {
+        MethodologySheet(source: StrengthMath.epleySource, certainty: certainty)
+      }
     }
   }
 
@@ -168,7 +193,21 @@ public struct SetRowView: View {
   /// would save. The active row's weight now gets about 140 pt (worked through in the Task 13
   /// report). Other rows keep the columns, where the smaller `setEntry` type fits.
   @ViewBuilder private var rowContent: some View {
-    if emphasis == .active {
+    if typeSize.isAccessibilitySize {
+      // At accessibility sizes five columns cannot hold the numbers. Stacked, the weight gets the
+      // whole width of its own line, for every emphasis.
+      VStack(alignment: .leading, spacing: Tokens.Spacing.snug) {
+        HStack(alignment: .firstTextBaseline, spacing: Tokens.Spacing.regular) {
+          ordinalBadge
+          lastTimeColumn
+        }
+        HStack(spacing: Tokens.Spacing.regular) {
+          valueField(.weight, suffix: unit.abbreviation)
+          valueField(.reps, suffix: "reps")
+          logButton
+        }
+      }
+    } else if emphasis == .active {
       VStack(alignment: .leading, spacing: Tokens.Spacing.tight) {
         HStack(spacing: Tokens.Spacing.regular) {
           ordinalBadge
@@ -178,13 +217,13 @@ public struct SetRowView: View {
         }
         lastTimeLine
           // Under the weight, past the ordinal badge.
-          .padding(.leading, Self.ordinalWidth + Tokens.Spacing.regular)
+          .padding(.leading, ordinalWidth + Tokens.Spacing.regular)
       }
     } else {
       HStack(spacing: Tokens.Spacing.regular) {
         ordinalBadge
         lastTimeColumn
-          .frame(minWidth: 78, alignment: .leading)
+          .frame(minWidth: lastTimeWidth, alignment: .leading)
         valueField(.weight, suffix: unit.abbreviation)
         valueField(.reps, suffix: "reps")
         logButton
@@ -192,18 +231,28 @@ public struct SetRowView: View {
     }
   }
 
-  private static let ordinalWidth: CGFloat = 28
-
   /// What the row earned, and whether what it shows is saved, under the values.
   @ViewBuilder private var rowNotes: some View {
     if !records.isEmpty {
       // Names what was beaten, so the trophy is a checkable claim. In the record colour, which is
       // tested as text, and never colour alone: the words say what the colour means.
-      Text(recordText)
-        .font(Tokens.Text.caption)
-        .foregroundStyle(Tokens.Color.record)
-        .lineLimit(2)
-        .padding(.leading, Self.ordinalWidth + Tokens.Spacing.regular)
+      VStack(alignment: .leading, spacing: Tokens.Spacing.hairline) {
+        Text(recordText)
+          .font(Tokens.Text.caption)
+          .foregroundStyle(Tokens.Color.record)
+          .lineLimit(2)
+        if let certainty = estimateCertainty {
+          // How sure the estimated record is, in a glyph and a word. Not a button: the row's taps
+          // belong to logging, so the explanation is the row's named action instead.
+          HStack(spacing: Tokens.Spacing.tight) {
+            Image(systemName: certainty.mark.symbolName)
+            Text(certainty.mark.shortWord)
+          }
+          .font(Tokens.Text.caption)
+          .foregroundStyle(Tokens.Color.certainty(certainty))
+        }
+      }
+      .padding(.leading, ordinalWidth + Tokens.Spacing.regular)
     }
     if isEditingSaved {
       // The pad holds a correction the store has not accepted yet. Said in words, so an unsaved
@@ -211,7 +260,7 @@ public struct SetRowView: View {
       Text("Not saved yet")
         .font(Tokens.Text.caption)
         .foregroundStyle(Tokens.Color.caution)
-        .padding(.leading, Self.ordinalWidth + Tokens.Spacing.regular)
+        .padding(.leading, ordinalWidth + Tokens.Spacing.regular)
     }
   }
 
@@ -245,7 +294,7 @@ public struct SetRowView: View {
       .font(Tokens.Text.label.weight(.semibold))
       .monospacedDigit()
       .foregroundStyle(isWarmup ? Tokens.Color.textSecondary : Tokens.Color.textPrimary)
-      .frame(width: Self.ordinalWidth)
+      .frame(width: ordinalWidth)
   }
 
   /// "Last time" as a column beside the fields.
@@ -305,7 +354,7 @@ public struct SetRowView: View {
           .foregroundStyle(Tokens.Color.textSecondary)
       }
       .frame(
-        minWidth: hugsContent ? Tokens.loggerTapTarget : nil,
+        minWidth: hugsContent ? loggerTarget : nil,
         maxWidth: .infinity,
         minHeight: controlHeight
       )
@@ -341,7 +390,7 @@ public struct SetRowView: View {
           .animation(Tokens.Motion.quick(reduceMotion), value: isLogged)
       }
       // The width stays fixed so the value columns line up between compact and full rows.
-      .frame(width: Tokens.loggerTapTarget, height: controlHeight)
+      .frame(width: loggerTarget, height: controlHeight)
       .contentShape(Rectangle())
     }
     .buttonStyle(.plain)
@@ -364,7 +413,7 @@ public struct SetRowView: View {
     if let keypad {
       let buffer = field == .weight ? keypad.weight : keypad.reps
       guard !buffer.isEmpty else { return nil }
-      return buffer.displayText.replacingOccurrences(of: ".", with: decimalSeparator)
+      return buffer.displayText(locale: .current)
     }
     switch field {
     case .weight: return draft.weightKg.map { formatter.number(kilograms: $0) }
@@ -388,12 +437,7 @@ public struct SetRowView: View {
   /// A logged row is compact: its fields are read-only, so they keep only the system's 44 pt
   /// floor instead of the logger's 56.
   private var controlHeight: CGFloat {
-    emphasis == .logged ? Tokens.minimumTapTarget : Tokens.loggerTapTarget
-  }
-
-  /// The user's locale decides how a decimal point looks; the keypad's text always uses a period.
-  private var decimalSeparator: String {
-    Locale.current.decimalSeparator ?? "."
+    emphasis == .logged ? minimumTarget : loggerTarget
   }
 
   private var formatter: WeightFormatter { WeightFormatter(unit: unit) }
@@ -403,23 +447,32 @@ public struct SetRowView: View {
     return "\(formatter.load(kilograms: previous.weightKg)) × \(previous.reps)"
   }
 
-  private var spokenLabel: String {
-    var parts: [String] = [isWarmup ? "Warm-up set" : "Set \(ordinal + 1)"]
-    // Canonical kilograms. While the pad is open its draft is what the row shows: the same value
-    // as the row's draft, except during a correction, which stays in the pad until Save.
+  /// The weakest certainty among this row's estimated records, or `nil` when none is estimated.
+  private var estimateCertainty: Certainty? {
+    records.compactMap(\.estimateCertainty).min()
+  }
+
+  /// What VoiceOver reads after the label, in Core's words, with units in full.
+  private var spokenValue: String {
+    // While the pad is open its draft is what the row shows: the same value as the row's draft,
+    // except during a correction, which stays in the pad until Save.
     let shown = keypad?.draft ?? draft
-    if let weight = shown.weightKg, let reps = shown.reps {
-      parts.append("\(formatter.spoken(kilograms: weight)), \(reps) reps")
-    } else {
-      parts.append("no values entered")
-    }
-    if let previous {
-      let lastLoad = formatter.spoken(kilograms: previous.weightKg)
-      parts.append("last time \(lastLoad) for \(previous.reps)")
+    var parts = [
+      SetRowSpeech.value(
+        weightKg: shown.weightKg, reps: shown.reps, isLogged: isLogged, formatter: formatter)
+    ]
+    if let lastTime = SetRowSpeech.previous(previous, formatter: formatter) {
+      parts.append(lastTime)
     }
     if let priorNote { parts.append(priorNote) }
-    if isLogged { parts.append("logged") }
-    if !records.isEmpty { parts.append("record: " + recordText) }
+    // The record in spoken units ("105 kilograms"), not the caption's "105 kg".
+    if let record = RecordCopy.announcement(
+      for: records, exerciseName: exerciseName.isEmpty ? "this set" : exerciseName,
+      formatter: formatter)
+    {
+      parts.append(record)
+    }
+    if let certainty = estimateCertainty { parts.append(certainty.mark.word) }
     if isEditingSaved { parts.append("not saved yet") }
     return parts.joined(separator: ", ")
   }

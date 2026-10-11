@@ -69,6 +69,8 @@ public struct SessionView: View {
   /// another row would change again, and bounce the trophy a second time on an ordinary log.
   @State private var recordPulses: [UUID: Int] = [:]
   @Environment(\.accessibilityReduceMotion) private var reduceMotion
+  /// Room for the macOS rest bar, which grows with the type (`ScaledMetric`, iOS 14 / macOS 11).
+  @ScaledMetric(relativeTo: .body) private var restBarInset: CGFloat = 72
 
   /// - Parameter restChoices: Each exercise's chosen rest. An exercise with no entry has no rest,
   ///   and its chip reads "Off" — there is no default.
@@ -226,7 +228,7 @@ public struct SessionView: View {
         #if !os(iOS)
           // Room for the rest bar so the last row is never trapped underneath it. On iOS the rest
           // cluster is in the tab bar's accessory (Task 19), and the tab view makes room for it.
-          .safeAreaPadding(.bottom, restState == .idle ? 0 : 72)
+          .safeAreaPadding(.bottom, restState == .idle ? 0 : restBarInset)
         #endif
       }
       .background(Tokens.Color.background)
@@ -265,12 +267,14 @@ public struct SessionView: View {
     .onChange(of: focusedSlotIsLogged) {
       if focusedSlotIsLogged && !editingSaved { closeKeypad() }
     }
-    // A record is announced, and its trophy bounced, only from the coordinator's pulse, which it
-    // emits after the write. Resume and corrections emit none, so neither celebrates.
+    // A log, and a record with it, is announced and its trophy bounced only from the coordinator's
+    // pulse, which it emits after the write. Resume and corrections emit none, so neither
+    // celebrates or speaks. One announcement per pulse: a record is part of the log's sentence.
     .onChange(of: feedback) { _, pulse in
-      guard let pulse, pulse.event == .record, let slotID = pulse.slotID else { return }
-      recordPulses[slotID] = pulse.sequence
-      announceRecord(onSlot: slotID)
+      guard let pulse, pulse.event == .log || pulse.event == .record, let slotID = pulse.slotID
+      else { return }
+      if pulse.event == .record { recordPulses[slotID] = pulse.sequence }
+      announceLog(onSlot: slotID)
     }
     // One haptic per pulse (spec 2.6): a record plays only the record haptic, an ordinary log a
     // quiet impact, and a failure an error. Keys and corrections play nothing of their own.
@@ -516,14 +520,22 @@ public struct SessionView: View {
 
   // MARK: - Moments
 
-  /// Tells VoiceOver what the record was, with units in full. Posted with
-  /// `AccessibilityNotification.Announcement(_:).post()` (iOS 17, macOS 14).
-  private func announceRecord(onSlot slotID: UUID) {
+  /// Tells VoiceOver what was logged, and the record it earned, once, in units spoken in full.
+  /// Posted with `AccessibilityNotification.Announcement(_:).post()` (iOS 17, macOS 14).
+  ///
+  /// The values are the draft's `resolved()` pair, which is what `LoggerStore.logSet` wrote, so
+  /// the announcement states what was saved. The number is the working-set count the row shows.
+  private func announceLog(onSlot slotID: UUID) {
     guard let exercise = exercises.first(where: { $0.slots.contains { $0.id == slotID } }),
-      let records = recordsBySlot[slotID],
-      let text = RecordCopy.announcement(
-        for: records, exerciseName: exercise.exerciseName, formatter: WeightFormatter(unit: unit))
+      let index = exercise.slots.firstIndex(where: { $0.id == slotID }),
+      let resolved = exercise.slots[index].draft.resolved()
     else { return }
+    let slot = exercise.slots[index]
+    let number = exercise.slots[..<index].count { !$0.isWarmup } + 1
+    let text = SetRowSpeech.logAnnouncement(
+      number: number, isWarmup: slot.isWarmup, weightKg: resolved.weightKg, reps: resolved.reps,
+      exerciseName: exercise.exerciseName, records: recordsBySlot[slotID] ?? [],
+      formatter: WeightFormatter(unit: unit))
     AccessibilityNotification.Announcement(text).post()
   }
 

@@ -31,6 +31,9 @@ public struct RestBarView: View {
   #endif
   @Environment(\.accessibilityReduceMotion) private var reduceMotion
   @State private var adjustCount = 0
+  // The buttons grow with the type; the floors are 44 pt (accessory) and 56 pt (the logger).
+  @ScaledMetric(relativeTo: .body) private var accessoryTarget: CGFloat = Tokens.minimumTapTarget
+  @ScaledMetric(relativeTo: .body) private var loggerTarget: CGFloat = Tokens.loggerTapTarget
 
   public init(
     state: RestTimerState,
@@ -69,7 +72,7 @@ public struct RestBarView: View {
   }
 
   private var tapTarget: CGFloat {
-    inAccessory ? Tokens.minimumTapTarget : Tokens.loggerTapTarget
+    inAccessory ? accessoryTarget : loggerTarget
   }
 
   public var body: some View {
@@ -78,6 +81,21 @@ public struct RestBarView: View {
     } else {
       HStack(spacing: Tokens.Spacing.regular) {
         readout
+          // Collapsed, the accessory draws only the countdown and pause, so -15, +15 and skip
+          // would be unreachable by VoiceOver. They are offered as actions on the countdown.
+          .accessibilityActions {
+            if isInline {
+              Button("Subtract 15 seconds") {
+                adjustCount += 1
+                onAdjust(.seconds(-15))
+              }
+              Button("Add 15 seconds") {
+                adjustCount += 1
+                onAdjust(.seconds(15))
+              }
+              Button("Skip rest", action: onSkip)
+            }
+          }
 
         Spacer(minLength: 0)
 
