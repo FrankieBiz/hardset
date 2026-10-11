@@ -62,6 +62,60 @@ struct RecordCopyTests {
     #expect(!inPounds.contains("kg"))
   }
 
+  @Test("Estimates that display the same are not a movement, in kilograms")
+  func equalDisplayedEstimateKilograms() throws {
+    // 9.05 kg for 5 reps estimates about 10.56 kg; the previous best was 10.3 kg. Both display
+    // as 10.5 kg, so the new value must stand alone rather than read "up from" itself.
+    let newKg = try #require(StrengthMath.estimatedOneRepMax(weightKg: 9.05, reps: 5).value)
+    let previousKg = 10.3
+    #expect(
+      StrengthMath.displayRounded(newKg, in: .kilograms)
+        == StrengthMath.displayRounded(previousKg, in: .kilograms))
+    let record = PersonalRecord(
+      kind: .estimatedOneRepMax, weightKg: 9.05, reps: 5, previousWeightKg: previousKg)
+    #expect(RecordCopy.detail(for: record, formatter: kilograms) == "about 10.5 kg")
+    #expect(
+      RecordCopy.line(for: record, formatter: kilograms) == "Best estimated 1RM: about 10.5 kg")
+  }
+
+  @Test("Estimates that display the same are not a movement, in pounds")
+  func equalDisplayedEstimatePounds() throws {
+    // 14 lb for 5 reps estimates about 16.33 lb; the previous best was 15.6 lb. Both display
+    // as a whole 16 lb.
+    let newKg = try #require(
+      StrengthMath.estimatedOneRepMax(weightKg: WeightUnit.pounds.toKilograms(14), reps: 5).value)
+    let previousKg = WeightUnit.pounds.toKilograms(15.6)
+    #expect(
+      StrengthMath.displayRounded(newKg, in: .pounds)
+        == StrengthMath.displayRounded(previousKg, in: .pounds))
+    let record = PersonalRecord(
+      kind: .estimatedOneRepMax, weightKg: WeightUnit.pounds.toKilograms(14), reps: 5,
+      previousWeightKg: previousKg)
+    let detail = RecordCopy.detail(for: record, formatter: pounds)
+    #expect(detail == "about 16 lb")
+    #expect(!detail.contains("kg"))
+  }
+
+  @Test("Spoken estimates that display the same are not a movement")
+  func equalDisplayedEstimateSpoken() throws {
+    let previousKg = 10.3
+    let record = PersonalRecord(
+      kind: .estimatedOneRepMax, weightKg: 9.05, reps: 5, previousWeightKg: previousKg)
+    let spoken = RecordCopy.spokenDetail(for: record, formatter: kilograms)
+    #expect(spoken == "about 10.5 kilograms")
+    #expect(!spoken.contains("up from"))
+  }
+
+  @Test("An estimate that displays differently still says up from")
+  func differentDisplayedEstimateKeepsMovement() {
+    // 100 kg for 5 reps estimates about 116.67 kg (displays 116.5); the previous best was 100 kg.
+    let record = PersonalRecord(
+      kind: .estimatedOneRepMax, weightKg: 100, reps: 5, previousWeightKg: 100)
+    #expect(
+      RecordCopy.detail(for: record, formatter: kilograms)
+        == "about 116.5 kg, up from about 100 kg")
+  }
+
   @Test("VoiceOver hears the movement and the units in full")
   func announcement() {
     #expect(

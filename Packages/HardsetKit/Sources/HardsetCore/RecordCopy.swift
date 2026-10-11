@@ -20,7 +20,10 @@ public enum RecordCopy {
     case .estimatedOneRepMax:
       let new = newEstimate(of: record).map { f.estimate(kilograms: $0) } ?? "estimated"
       guard let previous = record.previousWeightKg else { return new }
-      return "\(new), up from \(f.estimate(kilograms: previous))"
+      let previousText = f.estimate(kilograms: previous)
+      // Both are rounded for display, so two different estimates can read the same. Saying
+      // "up from" the same figure contradicts itself, so the movement is left unstated.
+      return new == previousText ? new : "\(new), up from \(previousText)"
     }
   }
 
@@ -53,7 +56,9 @@ public enum RecordCopy {
     case .estimatedOneRepMax:
       let new = newEstimate(of: record).map { spokenEstimate($0, f) } ?? "estimated"
       guard let previous = record.previousWeightKg else { return new }
-      return "\(new), up from \(spokenEstimate(previous, f))"
+      let previousText = spokenEstimate(previous, f)
+      // As in `detail`: an unchanged display is not a movement.
+      return new == previousText ? new : "\(new), up from \(previousText)"
     }
   }
 
