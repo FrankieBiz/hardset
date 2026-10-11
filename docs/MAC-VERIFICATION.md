@@ -291,3 +291,52 @@ the `Hardset` scheme for the iOS 26.4 simulator.
       notes; `Tokens.Color.textSecondary`, now the palette's `secondaryText`) is legible in
       light, dark and with Increase Contrast on, and still reads as secondary, visibly quieter
       than the primary text beside it.
+- [ ] (feat(ui): keypad v2 and the active set) HardsetUI builds (iOS 26.4 simulator, and macOS
+      via `./test.sh`). In the simulator, kilograms, a prefilled 100 kg row, no machine:
+  - [ ] Tap the weight, then +2.5: the row and the pad header read 102.5. Log it; history shows
+        102.5 kg. (Two taps.)
+  - [ ] Tap the weight, type 1 0 2 . 5: 102.5, with no deletes first. (Five keys after focus.)
+  - [ ] On a machine with a 5 kg stack, ± moves 5. In pounds mode it moves 11.02 lb.
+  - [ ] On an empty row, ± does nothing and the keys look disabled.
+  - [ ] Next moves to reps with reps selected; typing replaces it; Done closes the pad.
+  - [ ] Clear empties the field and the log button disables.
+  - [ ] The active row's weight is the largest text on screen; logged rows are compact;
+        upcoming rows are not dimmed.
+  - [ ] After logging, the screen scrolls to the next set, which becomes active.
+  - [ ] With the pad up, the active row is fully visible on iPhone SE (3rd gen) and 17 Pro Max,
+        and at the largest Dynamic Type size.
+  - [ ] Pounds mode, 60 kg prefill: change only the reps, log; the chart and history show 60 kg,
+        not 60.0013.
+  - [ ] Change machine with the pad open: the pad and row both show the new machine's prefill
+        (Phase 1 residual closed).
+  - [ ] Reduce Motion on: the pad appears without sliding; scrolling to the next set jumps.
+  - [ ] Change the unit in Settings with the pad open, then come back: the pad and the row both
+        read the new unit's number (the pad is rebuilt on a unit change, as the row's buffers
+        used to be reseeded).
+  - [ ] In a locale with a decimal comma (e.g. German): the step keys read "+2,5", the row and
+        the pad header read "102,5", and VoiceOver reads the step key as "Add 2,5 kilograms",
+        with the unit in words.
+  - Known gap until Task 19 merges: on iOS the Train tab has no rest controls (±15 s, pause,
+    skip). This task stops `SessionView` drawing the rest bar on iOS; Task 19 puts the cluster in
+    the tab accessory. The macOS host build still draws the inline bar.
+  - Written without a compiler. If the build fails, look first at:
+    - `SessionView.keypadBinding`: `Binding(get:set:)` takes `@isolated(any) @Sendable` closures.
+      They read `@State` and `@Binding` from the main actor, as `SetRowView`'s old buffer bindings
+      did. A capture diagnostic there is the likeliest error.
+    - `.transition(Tokens.Motion.edgeTransition(reduceMotion))` needs the iOS 13
+      `transition(_: AnyTransition)` overload. Apple's doc JSON renders only the iOS 17
+      `Transition` overload under that title.
+    - The bottom inset's `else { #if !os(iOS) RestBarView(…) #endif }` is an empty branch on iOS.
+  - Behaviour that could not be reasoned out without running it:
+    - [ ] Focus scrolls with `scrollTo(_:anchor: .center)` in the same animated transaction that
+          inserts the pad. If the row lands under the pad (the scroll used the viewport from
+          before the pad), move the scroll to after the pad is laid out, e.g. into
+          `.onChange(of: focus)`, and note which fix held.
+    - [ ] Rows are nested inside the `LazyVStack`'s exercise sections. Log the last set of an
+          exercise when the next exercise is far off screen: if the screen does not move, the lazy
+          section was not built yet, and the scroll has to target the exercise first.
+    - [ ] At the largest Dynamic Type size the pad's `title2` keys grow. If the pad leaves no room
+          for the active row on iPhone SE, cap the pad's Dynamic Type (not done here).
+    - [ ] The hero weight shares the row with "Last time", the reps and the log button, and can
+          shrink to 0.6 of its size. If it then reads smaller than the pad header's readout,
+          give the active row's weight field more of the row.

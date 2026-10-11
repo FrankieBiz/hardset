@@ -11,6 +11,9 @@ import SwiftUI
 /// The app target owns the wiring: it holds the `SessionCoordinator`, passes
 /// `$coordinator.exercises` in, and forwards `onLogSet` to `coordinator.logSet`, which is the
 /// only thing allowed to mark a row logged.
+///
+/// What this screen does own is the keypad: which row it is on, what it holds, and where the list
+/// scrolls. The pad is the bottom inset, so the row it edits stays in view above it.
 public struct SessionView: View {
   @Binding private var exercises: [ExerciseLogState]
   private let unit: WeightUnit
@@ -29,6 +32,13 @@ public struct SessionView: View {
   private let onChooseRest: ((UUID, Duration?) -> Void)?
   private let onStartRest: ((UUID) -> Void)?
   private let onFinish: () -> Void
+
+  /// The row the pad is editing. Ids, not indices: rows can be added while the pad is open.
+  @State private var focus: KeypadFocus?
+  @State private var keypad: SetEntryKeypad?
+  /// The set logged last, which decides the active set: the lifter's order, not the plan's.
+  @State private var lastLoggedSlotID: UUID?
+  @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
   /// - Parameter restChoices: Each exercise's chosen rest. An exercise with no entry has no rest,
   ///   and its chip reads "Off" — there is no default.
@@ -74,108 +84,281 @@ public struct SessionView: View {
   }
 
   public var body: some View {
-    ScrollView {
-      LazyVStack(spacing: Tokens.Spacing.regular) {
-        if let errorMessage {
-          // A failed write is stated, not swallowed. The row it belongs to is still unlogged,
-          // so the user can retry rather than discovering the gap days later.
-          Label(errorMessage, systemImage: "exclamationmark.triangle.fill")
-            .font(Tokens.Text.label)
-            .foregroundStyle(Tokens.Color.certainty(.low))
+    // Pure: the next unlogged row after the last one logged. No storage is read to draw this.
+    let active = ActiveSet.next(in: exercises, after: lastLoggedSlotID)
+
+    ScrollViewReader { proxy in
+      ScrollView {
+        LazyVStack(spacing: Tokens.Spacing.regular) {
+          if let errorMessage {
+            // A failed write is stated, not swallowed. The row it belongs to is still unlogged,
+            // so the user can retry rather than discovering the gap days later.
+            Label(errorMessage, systemImage: "exclamationmark.triangle.fill")
+              .font(Tokens.Text.label)
+              .foregroundStyle(Tokens.Color.critical)
+              .frame(maxWidth: .infinity, alignment: .leading)
+              .padding(Tokens.Spacing.regular)
+              .background(Tokens.Color.surface, in: RoundedRectangle(cornerRadius: Tokens.Radius.card))
+              .padding(.horizontal, Tokens.Spacing.regular)
+          }
+
+          if !records.isEmpty {
+            // Each record names what it beat, so the claim is checkable rather than a bare "PR!".
+            VStack(alignment: .leading, spacing: Tokens.Spacing.tight) {
+              ForEach(records) { record in
+                Label {
+                  VStack(alignment: .leading, spacing: 0) {
+                    Text(record.kind.label)
+                      .font(Tokens.Text.label.weight(.semibold))
+                    Text(Self.describe(record, unit: unit))
+                      .font(Tokens.Text.caption)
+                      .foregroundStyle(Tokens.Color.textSecondary)
+                  }
+                } icon: {
+                  Image(systemName: "trophy")
+                }
+                .foregroundStyle(Tokens.Color.certainty(.high))
+              }
+            }
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(Tokens.Spacing.regular)
             .background(Tokens.Color.surface, in: RoundedRectangle(cornerRadius: Tokens.Radius.card))
             .padding(.horizontal, Tokens.Spacing.regular)
-        }
+            .accessibilityElement(children: .combine)
+          }
 
-        if !records.isEmpty {
-          // Each record names what it beat, so the claim is checkable rather than a bare "PR!".
-          VStack(alignment: .leading, spacing: Tokens.Spacing.tight) {
-            ForEach(records) { record in
-              Label {
-                VStack(alignment: .leading, spacing: 0) {
-                  Text(record.kind.label)
-                    .font(Tokens.Text.label.weight(.semibold))
-                  Text(Self.describe(record, unit: unit))
-                    .font(Tokens.Text.caption)
-                    .foregroundStyle(Tokens.Color.textSecondary)
-                }
-              } icon: {
-                Image(systemName: "trophy")
+          ForEach($exercises) { $exercise in
+            ExerciseSectionView(
+              state: $exercise,
+              unit: unit,
+              onLogSet: { slot in logSet(exerciseID: exercise.id, slot: slot, proxy: proxy) },
+              onSelectMachine: onSelectMachine.map { select in
+                { select(exercise.id) }
+              },
+              onShowHistory: onShowHistory.map { show in
+                { show(exercise.id) }
+              },
+              restChoice: restChoices[exercise.exerciseID],
+              onChooseRest: onChooseRest.map { choose in
+                { choice in choose(exercise.id, choice) }
+              },
+              onStartRest: onStartRest.map { start in
+                { start(exercise.id) }
+              },
+              activeSlotID: active?.slotID,
+              focusedSlotID: focusedSlotID(in: exercise.id),
+              keypad: keypadState(in: exercise.id),
+              onFocus: { slot, field in
+                focusRow(exerciseID: exercise.id, slotID: slot.id, field: field, proxy: proxy)
               }
-              .foregroundStyle(Tokens.Color.certainty(.high))
+            )
+            .background(Tokens.Color.surface.opacity(0.4), in: RoundedRectangle(cornerRadius: Tokens.Radius.card))
+            .padding(.horizontal, Tokens.Spacing.snug)
+          }
+
+          if let onAddExercise {
+            Button(action: onAddExercise) {
+              Label("Add movement", systemImage: "plus")
+                .font(Tokens.Text.label)
+                .frame(maxWidth: .infinity, minHeight: Tokens.loggerTapTarget)
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(Tokens.Color.accent)
+            .background(
+              Tokens.Color.surface,
+              in: RoundedRectangle(cornerRadius: Tokens.Radius.control)
+            )
+            .padding(.horizontal, Tokens.Spacing.regular)
+          }
+
+          // An empty workout says so, and says what to do about it, rather than rendering a bare
+          // "Finish" button under nothing.
+          if exercises.isEmpty {
+            ContentUnavailableView {
+              Label("Nothing added yet", systemImage: "dumbbell")
+            } description: {
+              Text("Add a movement to start logging sets.")
             }
           }
-          .frame(maxWidth: .infinity, alignment: .leading)
-          .padding(Tokens.Spacing.regular)
-          .background(Tokens.Color.surface, in: RoundedRectangle(cornerRadius: Tokens.Radius.card))
-          .padding(.horizontal, Tokens.Spacing.regular)
-          .accessibilityElement(children: .combine)
-        }
 
-        ForEach($exercises) { $exercise in
-          ExerciseSectionView(
-            state: $exercise,
-            unit: unit,
-            onLogSet: { slot in onLogSet(exercise.id, slot) },
-            onSelectMachine: onSelectMachine.map { select in
-              { select(exercise.id) }
-            },
-            onShowHistory: onShowHistory.map { show in
-              { show(exercise.id) }
-            },
-            restChoice: restChoices[exercise.exerciseID],
-            onChooseRest: onChooseRest.map { choose in
-              { choice in choose(exercise.id, choice) }
-            },
-            onStartRest: onStartRest.map { start in
-              { start(exercise.id) }
-            }
-          )
-          .background(Tokens.Color.surface.opacity(0.4), in: RoundedRectangle(cornerRadius: Tokens.Radius.card))
-          .padding(.horizontal, Tokens.Spacing.snug)
+          summary
         }
-
-        if let onAddExercise {
-          Button(action: onAddExercise) {
-            Label("Add movement", systemImage: "plus")
-              .font(Tokens.Text.label)
-              .frame(maxWidth: .infinity, minHeight: Tokens.loggerTapTarget)
-          }
-          .buttonStyle(.plain)
-          .foregroundStyle(Tokens.Color.accent)
-          .background(
-            Tokens.Color.surface,
-            in: RoundedRectangle(cornerRadius: Tokens.Radius.control)
-          )
-          .padding(.horizontal, Tokens.Spacing.regular)
-        }
-
-        // An empty workout says so, and says what to do about it, rather than rendering a bare
-        // "Finish" button under nothing.
-        if exercises.isEmpty {
-          ContentUnavailableView {
-            Label("Nothing added yet", systemImage: "dumbbell")
-          } description: {
-            Text("Add a movement to start logging sets.")
-          }
-        }
-
-        summary
+        .padding(.vertical, Tokens.Spacing.regular)
+        #if !os(iOS)
+          // Room for the rest bar so the last row is never trapped underneath it. On iOS the rest
+          // cluster is in the tab bar's accessory (Task 19), and the tab view makes room for it.
+          .safeAreaPadding(.bottom, restState == .idle ? 0 : 72)
+        #endif
       }
-      .padding(.vertical, Tokens.Spacing.regular)
-      // Room for the rest bar so the last row is never trapped underneath it.
-      .safeAreaPadding(.bottom, restState == .idle ? 0 : 72)
+      .background(Tokens.Color.background)
+      // The pad is an inset, not a sheet, so the scroll view shrinks above it and the row being
+      // edited can be scrolled into view instead of sitting under the pad.
+      .safeAreaInset(edge: .bottom, spacing: 0) {
+        if let binding = keypadBinding {
+          NumericPad(
+            keypad: binding, commit: keypad?.field == .weight ? .next : .done,
+            onCommit: { commitKey() }, onDismiss: { closeKeypad() }
+          )
+          .transition(Tokens.Motion.edgeTransition(reduceMotion))
+        } else {
+          #if !os(iOS)
+            // On iOS the rest cluster lives in the tab bar's accessory (Task 19), so the countdown
+            // is drawn once. The host build keeps the inline bar for previews.
+            RestBarView(
+              state: restState, metadata: restMetadata, onAdjust: onAdjustRest,
+              onPauseResume: onPauseResumeRest, onSkip: onSkipRest)
+          #endif
+        }
+      }
     }
-    .background(Tokens.Color.background)
-    .safeAreaInset(edge: .bottom) {
-      RestBarView(
-        state: restState,
-        metadata: restMetadata,
-        onAdjust: onAdjustRest,
-        onPauseResume: onPauseResumeRest,
-        onSkip: onSkipRest
-      )
+    // A draft changed by something other than the pad: a machine change re-prefills the unlogged
+    // rows and brings its own step, and a unit change rewrites how both fields read. The pad is
+    // rebuilt from the row each time, or it would show one value while the row saved another.
+    .onChange(of: focusedDraft) { reseedKeypad() }
+    .onChange(of: focusedMachineIncrementKg) { reseedKeypad() }
+    .onChange(of: unit) { reseedKeypad() }
+  }
+
+  // MARK: - Keypad
+
+  /// Which row the pad is on, by id.
+  private struct KeypadFocus: Hashable {
+    let exercise: UUID
+    let slot: UUID
+  }
+
+  // Only the focused exercise sees the pad, so a keystroke redraws one section. Helpers rather
+  // than inline ternaries, to keep the section's initialiser cheap to type-check.
+  private func focusedSlotID(in exerciseID: UUID) -> UUID? {
+    focus?.exercise == exerciseID ? focus?.slot : nil
+  }
+
+  private func keypadState(in exerciseID: UUID) -> SetEntryKeypad? {
+    focus?.exercise == exerciseID ? keypad : nil
+  }
+
+  /// The focused row's position, looked up fresh, or `nil` when the pad is closed or its row is
+  /// gone.
+  private var focusedIndices: (exercise: Int, slot: Int)? {
+    guard let focus,
+      let e = exercises.firstIndex(where: { $0.id == focus.exercise }),
+      let s = exercises[e].slots.firstIndex(where: { $0.id == focus.slot })
+    else { return nil }
+    return (e, s)
+  }
+
+  private var focusedDraft: SetEntryDraft? {
+    focusedIndices.map { exercises[$0.exercise].slots[$0.slot].draft }
+  }
+
+  /// Watched only so a machine change rebuilds the pad's step even when the prefill is unchanged.
+  private var focusedMachineIncrementKg: Double? {
+    focusedIndices.flatMap { exercises[$0.exercise].machineIncrementKg }
+  }
+
+  /// Every keystroke goes straight into the focused row's draft, as the row's own buffers used to,
+  /// so the row, the pad and what Log writes are one value. `nil` while the pad is closed.
+  private var keypadBinding: Binding<SetEntryKeypad>? {
+    guard let current = keypad else { return nil }
+    return Binding(
+      // The snapshot only covers the frames in which the pad is animating away after closing.
+      get: { keypad ?? current },
+      set: { newValue in
+        keypad = newValue
+        guard let index = focusedIndices else { return }
+        // A logged row is read-only: only the store changes a saved set.
+        guard !exercises[index.exercise].slots[index.slot].isLogged else { return }
+        exercises[index.exercise].slots[index.slot].draft = newValue.draft
+      }
+    )
+  }
+
+  /// Opens the pad on a field, with that field selected so the first key replaces the prefill.
+  private func focusRow(
+    exerciseID: UUID, slotID: UUID, field: SetRowField, proxy: ScrollViewProxy
+  ) {
+    guard let e = exercises.firstIndex(where: { $0.id == exerciseID }),
+      let slot = exercises[e].slots.first(where: { $0.id == slotID }),
+      !slot.isLogged
+    else { return }
+    // `SetRowField` is the UI's name for a field; the keypad has its own.
+    let keypadField: SetEntryKeypad.Field = field == .weight ? .weight : .reps
+    var pad = SetEntryKeypad(
+      draft: slot.draft, unit: unit,
+      machineIncrementKg: exercises[e].machineIncrementKg, field: keypadField)
+    pad.focus(keypadField)
+    withAnimation(Tokens.Motion.quick(reduceMotion)) {
+      keypad = pad
+      focus = KeypadFocus(exercise: exerciseID, slot: slotID)
+      // Centred in the space above the pad, so the row being edited is never under it.
+      proxy.scrollTo(slotID, anchor: .center)
+    }
+  }
+
+  /// Next moves weight → reps; on reps the key closes the pad.
+  private func commitKey() {
+    guard let current = keypad else { return }
+    if current.field == .weight {
+      _ = keypad?.advance()
+    } else {
+      closeKeypad()
+    }
+  }
+
+  private func closeKeypad() {
+    withAnimation(Tokens.Motion.quick(reduceMotion)) {
+      keypad = nil
+      focus = nil
+    }
+  }
+
+  /// Rebuilds the open pad from its row when the row changed from outside. The pad's own
+  /// keystrokes land here too, and are recognised because the draft then already matches.
+  private func reseedKeypad() {
+    guard let current = keypad else { return }
+    guard let index = focusedIndices else {
+      // The row went away under the pad. There is nothing left to edit.
+      closeKeypad()
+      return
+    }
+    let exercise = exercises[index.exercise]
+    let draft = exercise.slots[index.slot].draft
+    let step = LoadStep(machineIncrementKg: exercise.machineIncrementKg, unit: unit)
+    guard draft != current.draft || step != current.loadStep || unit != current.unit
+    else { return }
+    var pad = SetEntryKeypad(
+      draft: draft, unit: unit, machineIncrementKg: exercise.machineIncrementKg,
+      field: current.field)
+    pad.focus(current.field)
+    keypad = pad
+  }
+
+  // MARK: - Logging
+
+  /// Logs through the caller, then follows the lifter to the next set.
+  ///
+  /// `onLogSet` is synchronous on the main actor (`SessionCoordinator.logSet`), so the bound rows
+  /// already say whether the write succeeded. Only a row that has just become logged moves the
+  /// screen: a failed write leaves the lifter where they are, with the error above.
+  private func logSet(exerciseID: UUID, slot: SetSlot, proxy: ScrollViewProxy) {
+    let wasLogged = isLogged(slot.id)
+    onLogSet(exerciseID, slot)
+    guard !wasLogged, isLogged(slot.id) else { return }
+    lastLoggedSlotID = slot.id
+    let next = ActiveSet.next(in: exercises, after: slot.id)
+    withAnimation(Tokens.Motion.quick(reduceMotion)) {
+      // A logged row is read-only, so a pad left on it would be editing nothing.
+      if focus?.slot == slot.id {
+        keypad = nil
+        focus = nil
+      }
+      if let next { proxy.scrollTo(next.slotID, anchor: .center) }
+    }
+  }
+
+  private func isLogged(_ slotID: UUID) -> Bool {
+    exercises.contains { exercise in
+      exercise.slots.contains { $0.id == slotID && $0.isLogged }
     }
   }
 

@@ -19,6 +19,10 @@ public struct ExerciseSectionView: View {
   private let restChoice: Duration?
   private let onChooseRest: ((Duration?) -> Void)?
   private let onStartRest: (() -> Void)?
+  private let activeSlotID: UUID?
+  private let focusedSlotID: UUID?
+  private let keypad: SetEntryKeypad?
+  private let onFocus: ((SetSlot, SetRowField) -> Void)?
 
   @State private var isChoosingCustomRest = false
 
@@ -30,6 +34,11 @@ public struct ExerciseSectionView: View {
   /// - Parameter onChooseRest: Reports a rest chosen from the menu, or `nil` for Off. Passing `nil`
   ///   hides the rest chip, as `onSelectMachine` does for the machine chip.
   /// - Parameter onStartRest: Starts the chosen rest now. `nil` leaves "Start rest now" out.
+  /// - Parameter activeSlotID: The set the lifter is about to do, drawn as the hero. `nil` when it
+  ///   is in another exercise.
+  /// - Parameter focusedSlotID: The row the pad is editing, if it is in this exercise.
+  /// - Parameter keypad: The pad's state, handed to the focused row only.
+  /// - Parameter onFocus: A row's field was tapped. `nil` makes the fields inert.
   public init(
     state: Binding<ExerciseLogState>,
     unit: WeightUnit,
@@ -38,7 +47,11 @@ public struct ExerciseSectionView: View {
     onShowHistory: (() -> Void)? = nil,
     restChoice: Duration? = nil,
     onChooseRest: ((Duration?) -> Void)? = nil,
-    onStartRest: (() -> Void)? = nil
+    onStartRest: (() -> Void)? = nil,
+    activeSlotID: UUID? = nil,
+    focusedSlotID: UUID? = nil,
+    keypad: SetEntryKeypad? = nil,
+    onFocus: ((SetSlot, SetRowField) -> Void)? = nil
   ) {
     self._state = state
     self.unit = unit
@@ -48,6 +61,10 @@ public struct ExerciseSectionView: View {
     self.restChoice = restChoice
     self.onChooseRest = onChooseRest
     self.onStartRest = onStartRest
+    self.activeSlotID = activeSlotID
+    self.focusedSlotID = focusedSlotID
+    self.keypad = keypad
+    self.onFocus = onFocus
   }
 
   public var body: some View {
@@ -55,9 +72,11 @@ public struct ExerciseSectionView: View {
       header
 
       VStack(spacing: Tokens.Spacing.hairline) {
-        ForEach($state.slots) { $slot in
+        // Values, not bindings: a row never writes its draft. The pad's keystrokes reach the draft
+        // through `SessionView`, which owns the pad.
+        ForEach(state.slots) { slot in
           SetRowView(
-            draft: $slot.draft,
+            draft: slot.draft,
             ordinal: ordinal(of: slot),
             isWarmup: slot.isWarmup,
             isLogged: slot.isLogged,
@@ -66,9 +85,14 @@ public struct ExerciseSectionView: View {
             // The borrowed-history note is shown once in the header, not repeated on every
             // row — an honest caveat that appears five times reads as noise and gets ignored.
             priorNote: nil,
+            emphasis: emphasis(of: slot),
+            keypad: slot.id == focusedSlotID ? keypad : nil,
+            onFocus: { field in onFocus?(slot, field) },
             onLog: { onLogSet(slot) }
           )
           .clipShape(RoundedRectangle(cornerRadius: Tokens.Radius.control))
+          // What `SessionView` scrolls to, on focus and after a log.
+          .id(slot.id)
         }
       }
 
@@ -117,7 +141,7 @@ public struct ExerciseSectionView: View {
         // Stated as a caveat about where the numbers came from, in words, once.
         Label(note, systemImage: "arrow.triangle.branch")
           .font(Tokens.Text.caption)
-          .foregroundStyle(Tokens.Color.certainty(.low))
+          .foregroundStyle(Tokens.Color.caveat)
           .accessibilityLabel("Suggested loads came from another machine.")
       }
     }
@@ -252,6 +276,12 @@ public struct ExerciseSectionView: View {
       .foregroundStyle(Tokens.Color.textSecondary)
     }
     .padding(.horizontal, Tokens.Spacing.regular)
+  }
+
+  /// A logged row is compact whatever else is true; otherwise the active set leads.
+  private func emphasis(of slot: SetSlot) -> SetRowEmphasis {
+    if slot.isLogged { return .logged }
+    return slot.id == activeSlotID ? .active : .upcoming
   }
 
   /// Warm-ups do not consume a working-set number, so the badge on row three still reads "3"
@@ -394,7 +424,8 @@ private struct RestCustomSheet: View {
             },
             restChoice: rest,
             onChooseRest: { rest = $0 },
-            onStartRest: {}
+            onStartRest: {},
+            activeSlotID: state.nextUnloggedSlotID
           )
         }
         .background(Tokens.Color.background)
