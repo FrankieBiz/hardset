@@ -1,0 +1,10 @@
+{
+  "sourceLanguage" : "en",
+  "strings" : {
+    "Not evaluated" : {
+      "comment" : "Certainty word: the app has no basis for a value.",
+      "extractionState" : "manual"
+    }
+  },
+  "version" : "1.0"
+}

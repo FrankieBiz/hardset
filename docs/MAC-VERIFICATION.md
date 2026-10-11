@@ -419,3 +419,20 @@ the `Hardset` scheme for the iOS 26.4 simulator.
       metric picker still shows "Heaviest load" and "Est. 1RM". With two machines named alike
       (create two unbranded "Leg Press" machines and log on both), the exercise's chart shows two
       lines in the legend, "Leg Press" and "Leg Press (2)".
+
+- [ ] **GATE for Task 11** (feat(core): one door for Core's words, and a String Catalog behind it)
+      Core now has a resource bundle, the step that once broke the app build.
+  - [ ] `./test.sh` passes on the Mac. `LocalizedTests` there exercise the Apple branch,
+        `String(localized:bundle: .module)`, and must return the same English as on Linux.
+  - [ ] The `Hardset` scheme builds for the iOS 26.4 simulator **and** archives (Product ›
+        Archive), from the checkout's real path. If the checkout is normally opened through a
+        symlink, build from that path too: the old actool failure was a write denied under a
+        symlinked path.
+  - [ ] The widget extension builds (it links HardsetCore).
+  - [ ] In the built `Hardset.app`, `HardsetKit_HardsetCore.bundle` exists and contains a compiled
+        `en.lproj/Localizable.strings` (or `.stringsdict`) with the "Not evaluated" entry.
+  - [ ] Optional: with "Use Compiler to Extract Swift Strings" on, note whether Xcode extracts the
+        `localized("…")` literals into the catalog. Record yes or no here; Task 11 adds manual
+        entries only for keyed lookups either way.
+  - [ ] If any of these fails: apply the fallback in `DECISIONS.md` §23, record the failure and
+        the fallback here, and only then unblock Task 11.

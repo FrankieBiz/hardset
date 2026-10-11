@@ -25,8 +25,13 @@ var products: [Product] = [
 
 var targets: [Target] = [
   // Foundation-only, nonisolated, no platform frameworks. Builds and tests on
-  // macOS, which is what keeps the unit suite fast and device-independent.
-  .target(name: "HardsetCore", swiftSettings: strictConcurrency),
+  // macOS, which is what keeps the unit suite fast and device-independent. Its one resource is
+  // the String Catalog for Core's copy (`DECISIONS.md` §23).
+  .target(
+    name: "HardsetCore",
+    resources: [.process("Resources")],
+    swiftSettings: strictConcurrency
+  ),
 
   .target(
     name: "HardsetStore",
@@ -101,6 +106,7 @@ targets += [
 
 let package = Package(
   name: "HardsetKit",
+  defaultLocalization: "en",
   // macOS is listed so the HardsetCore and HardsetStore suites can run on the host with
   // `swift test`, no simulator involved. That is only possible because AlarmKit -- which
   // exists solely in the iPhoneOS SDK -- is isolated in HardsetAlarm behind

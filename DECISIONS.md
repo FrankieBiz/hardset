@@ -281,3 +281,20 @@ metadata with an empty update (`onConflictDoUpdate: { _ in }`), which leaves the
 Re-inserting the same primary key before the deletion syncs could therefore leave iCloud deleting a
 set the device shows. Nothing references `loggedSets.id`, so a new id loses nothing, and the
 restored set is judged for records exactly as before. Verify on device when sync is tested.
+
+### 23. Core's copy goes through one seam, because Linux has no `String(localized:)`
+
+Core's tests run on Linux (swift:6.2), whose Foundation has neither `String(localized:)` nor
+`LocalizedStringResource` (checked 2026-10-11, every overload). So Core never calls them directly.
+`localized(_:comment:)` in `HardsetCore/Localized.swift` takes a `String.LocalizationValue` on
+Apple platforms and looks it up in Core's String Catalog (`bundle: .module`); on Linux it takes a
+`String` and returns it. The English is the catalog's source language and its key, so both
+platforms return the same English and the same copy tests pin both.
+
+Only `String` and `Int` are interpolated into a `localized` literal. A `Double` would become `%lf`
+on Apple platforms and print six decimals there, while printing "2.5" on Linux.
+
+The catalog is HardsetCore's only resource. If the Mac's resource build step fails, the fallback is
+contained: remove `resources:` and the catalog, and change the two Apple branches to
+`String(localized: text, comment: comment)` and `String(localized: key, defaultValue: text,
+comment: comment)` (the main bundle). Nothing else depends on `Bundle.module`.
