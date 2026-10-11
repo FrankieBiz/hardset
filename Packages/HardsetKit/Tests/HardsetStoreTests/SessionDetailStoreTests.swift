@@ -120,4 +120,32 @@ struct SessionDetailStoreTests {
     let f = try fixture()
     #expect(throws: LoggerStoreError.sessionNotFound) { try f.details.detail(for: SessionID()) }
   }
+
+  @Test("A session never finished has no length, and reading it does not throw")
+  func openSessionHasNoLength() throws {
+    let f = try fixture()
+    let session = try f.logger.startSession(at: now)
+    _ = try log(f, session, nil, 100, at: 1)
+
+    let detail = try f.details.detail(for: session)
+    #expect(detail.summary.length == nil)
+    #expect(detail.summary.lengthText == "Length unknown")
+    #expect(detail.blocks.count == 1)
+  }
+
+  @Test("Two machines with identical names are still two blocks")
+  func identicalNamesStayApart() throws {
+    let f = try fixture()
+    let first = try f.gyms.createMachine(at: f.gym, name: "Leg Press", brand: "Cybex", now: now)
+    let second = try f.gyms.createMachine(at: f.gym, name: "Leg Press", brand: "Cybex", now: now)
+    let session = try f.logger.startSession(gymID: f.gym, at: now)
+    _ = try log(f, session, first, 100, at: 1)
+    _ = try log(f, session, second, 100, at: 4)
+    try f.logger.finishSession(session, at: now.addingTimeInterval(1_800))
+
+    let blocks = try f.details.detail(for: session).blocks
+    #expect(blocks.count == 2)
+    #expect(blocks.map(\.machineID) == [first, second])
+    #expect(blocks.map(\.machineName) == ["Cybex Leg Press", "Cybex Leg Press"])
+  }
 }
