@@ -1109,3 +1109,13 @@ the `Hardset` scheme for the iOS 26.4 simulator.
   - [ ] Settings → Gyms and machines → Archive a gym, then a machine: the dialog's title reads
         "Archive “Name”?" with the name, as before.
   - [ ] After a build, the String Catalog (if one is added) lists "Archive “%@”?" and "Archive?".
+- [ ] (fix(ui): History says "Length unknown" for a workout with no length) HardsetUI builds for
+      iOS and macOS 15. `HistoryView.durationLabel` shows the clock only for a plausible
+      duration and otherwise `CaveatMark.lengthUnknown`'s word and glyph, in the caveat grey;
+      the `if let …, !…` condition list inside the `@ViewBuilder` is the thing to compile.
+  - [ ] The History preview's third row ("Pull", no duration) shows "Length unknown" with the
+        clock-and-question-mark glyph, in the same grey as the second ("Legs", left open).
+        Before, it showed nothing there.
+  - [ ] VoiceOver on that row ends "length unknown"; on "Legs", "length unknown, this session
+        was left open"; on "Push", its clock time.
+  - [ ] AX5: the label wraps beside the title rather than truncating it.

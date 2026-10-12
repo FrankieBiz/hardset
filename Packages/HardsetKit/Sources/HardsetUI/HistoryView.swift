@@ -131,17 +131,19 @@ public struct HistoryView: View {
   }
 
   @ViewBuilder private func durationLabel(_ row: HistoryRow) -> some View {
-    if row.hasImplausibleDuration {
-      // The honest statement. A 20-hour span means the session was left open, not that it was
-      // trained through, so the number is withheld rather than displayed.
-      Label("Length unknown", systemImage: CaveatMark.lengthUnknown.symbolName)
-        .font(Tokens.Text.caption)
-        .foregroundStyle(Tokens.Color.caveat)
-    } else if let duration = row.duration {
+    if let duration = row.duration, !row.hasImplausibleDuration {
       Text(duration.clockString)
         .font(Tokens.Text.caption)
         .foregroundStyle(Tokens.Color.textSecondary)
         .monospacedDigit()
+    } else {
+      // The honest statement. A 20-hour span means the session was left open, not that it was
+      // trained through, so the number is withheld rather than displayed. A finish stamped before
+      // the start (the clock moved) has no length at all, and used to show nothing, which read
+      // as if the length had been left off rather than unknown.
+      Label(CaveatMark.lengthUnknown.word, systemImage: CaveatMark.lengthUnknown.symbolName)
+        .font(Tokens.Text.caption)
+        .foregroundStyle(Tokens.Color.caveat)
     }
   }
 
@@ -160,6 +162,8 @@ public struct HistoryView: View {
       parts.append("length unknown, this session was left open")
     } else if let duration = row.duration {
       parts.append(duration.clockString)
+    } else {
+      parts.append("length unknown")
     }
     return parts.joined(separator: ", ")
   }
@@ -186,6 +190,14 @@ public struct HistoryView: View {
             exerciseNames: ["Barbell Back Squat", "Romanian Deadlift"],
             volume: SessionVolume(workingSets: 8, warmupSets: 3, volumeKg: 11_200, reps: 64),
             hasImplausibleDuration: true
+          ),
+          // Finished before it started, by the clock: no length at all, and said so.
+          HistoryRow(
+            id: SessionID(), title: "Pull", date: day.addingTimeInterval(-345_600),
+            duration: nil,
+            exerciseNames: ["Lat Pulldown"],
+            volume: SessionVolume(workingSets: 4, warmupSets: 0, volumeKg: 2_400, reps: 40),
+            hasImplausibleDuration: false
           ),
         ],
         unit: .kilograms,
