@@ -67,8 +67,8 @@ public enum HealthExportPolicy {
     guard !alreadyExported else { return .skip(.alreadyExported) }
     guard let end = timeline.finishedAt else { return .skip(.stillOpen) }
     guard loggedSets > 0 else { return .skip(.nothingLogged) }
-    guard let length = timeline.duration, length > .zero else { return .skip(.lengthUnknown) }
     guard !timeline.isImplausible else { return .skip(.implausiblyLong) }
+    guard timeline.knownLength != nil else { return .skip(.lengthUnknown) }
     guard end <= now else { return .skip(.endsInFuture) }
     return .export(
       HealthWorkoutPlan(
@@ -102,8 +102,10 @@ public enum HealthExportCopy {
     case .skipped(let reason):
       switch reason {
       case .notEnabled, .alreadyExported, .stillOpen, .nothingLogged: return nil
-      case .lengthUnknown, .implausiblyLong, .endsInFuture:
+      case .lengthUnknown, .implausiblyLong:
         return "Not sent to Apple Health, because its length is unknown."
+      case .endsInFuture:
+        return "Not sent to Apple Health, because the device clock changed during it."
       }
     }
   }

@@ -75,5 +75,10 @@ struct HealthExportTests {
     #expect(HealthExportCopy.summaryLine(for: .skipped(.notEnabled)) == nil)
     #expect(HealthExportCopy.summaryLine(for: .skipped(.alreadyExported)) == nil)
     #expect(HealthExportCopy.summaryLine(for: .skipped(.implausiblyLong))?.contains("length is unknown") == true)
+    #expect(HealthExportCopy.summaryLine(for: .skipped(.lengthUnknown))?.contains("length is unknown") == true)
+    // A workout that ends after now has a length; the clock is what cannot be trusted.
+    let future = HealthExportCopy.summaryLine(for: .skipped(.endsInFuture))
+    #expect(future?.contains("clock") == true)
+    #expect(future?.contains("unknown") == false)
   }
 }

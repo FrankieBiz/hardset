@@ -93,9 +93,9 @@ public struct WorkoutSummary: Hashable, Sendable {
   }
 
   /// The workout's length, or nil when it cannot be known. That covers a session still open, one
-  /// whose clock ran backwards, and one longer than any real workout (`DECISIONS.md` §21).
+  /// that took no time, one whose clock ran backwards, and one longer than any real workout (`DECISIONS.md` §21).
   public var length: Duration? {
-    timeline.isImplausible ? nil : timeline.duration
+    timeline.knownLength
   }
 
   public var lengthText: String { length?.clockString ?? "Length unknown" }

@@ -16,6 +16,24 @@ struct SessionTimelineTests {
     #expect(timeline.isOpen)
   }
 
+  @Test(
+    "knownLength is the one honest length: open, zero, backwards and implausible have none",
+    arguments: [nil, 0, -60, 6 * 3_600 + 1] as [Double?]
+  )
+  func knownLengthWithheld(seconds: Double?) {
+    let timeline = SessionTimeline(
+      startedAt: start, finishedAt: seconds.map { start.addingTimeInterval($0) })
+    #expect(timeline.knownLength == nil)
+  }
+
+  @Test("knownLength is the duration for a normal workout, up to the plausible limit")
+  func knownLengthNormal() {
+    let normal = SessionTimeline(startedAt: start, finishedAt: start.addingTimeInterval(2_700))
+    #expect(normal.knownLength == .seconds(2_700))
+    let limit = SessionTimeline(startedAt: start, finishedAt: start.addingTimeInterval(6 * 3_600))
+    #expect(limit.knownLength == .seconds(6 * 3_600))
+  }
+
   /// The regression that produced 9,749-minute workouts: elapsed time was read against
   /// `Date()` while rendering, so an abandoned session grew forever. Here the value cannot
   /// depend on when it is asked, because there is nothing to ask.

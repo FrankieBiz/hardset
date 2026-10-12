@@ -20,10 +20,9 @@ public nonisolated struct WidgetSnapshotStore {
     let last = try HistoryStore(database: database).recentSessions(limit: 1).first
     let lastWorkout = last.flatMap { summary -> WidgetSnapshot.LastWorkout? in
       guard let finishedAt = summary.timeline.finishedAt else { return nil }
-      let length = summary.timeline.isImplausible ? nil : summary.timeline.duration
       return WidgetSnapshot.LastWorkout(
         startedAt: summary.timeline.startedAt, finishedAt: finishedAt,
-        lengthSeconds: length.flatMap { $0 > .zero ? $0.seconds : nil },
+        lengthSeconds: summary.timeline.knownLength?.seconds,
         workingSets: summary.volume.workingSets, volumeKg: summary.volume.volumeKg,
         movementCount: summary.exerciseNames.count)
     }

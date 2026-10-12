@@ -39,6 +39,14 @@ public struct SessionTimeline: Hashable, Sendable, Codable {
     return duration > Self.plausibleLimit
   }
 
+  /// The one length the app will show: `duration`, unless the session is open, the length is zero
+  /// or less, or it is implausible (`DECISIONS.md` §21). Every surface that prints or sends a
+  /// length (the summary, the widget, Apple Health) asks this, so they cannot disagree.
+  public var knownLength: Duration? {
+    guard let duration, duration > .zero, !isImplausible else { return nil }
+    return duration
+  }
+
   /// Close the session at `date`. Refuses to finish before it started, and refuses to
   /// re-finish an already-closed session, so `finishedAt` can never drift.
   public mutating func finish(at date: Date) throws {

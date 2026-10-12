@@ -25,8 +25,8 @@ struct WorkoutSummaryTests {
   }
 
   @Test(
-    "Open, backwards or implausibly long: the length is unknown, not a number",
-    arguments: [nil, -60, 7 * 3_600] as [Double?]
+    "Open, zero, backwards or implausibly long: the length is unknown, not a number",
+    arguments: [nil, 0, -60, 7 * 3_600] as [Double?]
   )
   func unknownLength(seconds: Double?) {
     let result = summary(finishedAfter: seconds)
