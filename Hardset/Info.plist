@@ -20,10 +20,13 @@
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>
 	<string>Hardset</string>
+	<!-- From build settings too: Tools/generate_project.py sets MARKETING_VERSION and
+	     CURRENT_PROJECT_VERSION on every target, so the widget extension's version always equals
+	     the app's, which App Store Connect checks at upload. -->
 	<key>CFBundleShortVersionString</key>
-	<string>1.0</string>
+	<string>$(MARKETING_VERSION)</string>
 	<key>CFBundleVersion</key>
-	<string>1</string>
+	<string>$(CURRENT_PROJECT_VERSION)</string>
 	<!-- The launch screen is the app's own background, light and dark, so the first frame does
 	     not flash the system background before Tokens.Color.background (Palette.background*)
 	     replaces it. AppResourcesTests holds the colour set to the palette. -->

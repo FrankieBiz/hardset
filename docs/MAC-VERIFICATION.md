@@ -1162,3 +1162,8 @@ the `Hardset` scheme for the iOS 26.4 simulator.
         read alarms while denied, so a surviving alarm is not cancelled; if it still sounds,
         cancel the previous `alarmID` in `reconcile`'s not-authorized branch.
   - [ ] DEVICE-CHECKLIST §B "Alarms turned back on" and "Alarms turned off mid-rest".
+- [ ] (fix(app,widget): the bundle versions come from build settings) After a build, the built
+      `Hardset.app/Info.plist` and `Hardset.app/PlugIns/HardsetWidget.appex/Info.plist` both read
+      `CFBundleShortVersionString` 1.0 and `CFBundleVersion` 1, never a literal `$(…)`
+      (`INFOPLIST_EXPAND_BUILD_SETTINGS` is on by default). An archive uploaded to App Store
+      Connect raises no ITMS-90473 version mismatch for the extension.
