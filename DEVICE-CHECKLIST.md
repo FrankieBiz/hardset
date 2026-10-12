@@ -155,12 +155,12 @@ merge semantics. Use the iPhone plus a simulator signed into the same iCloud acc
       says "No rest is running."
 - [ ] **Action button.** Assign Start workout; press it: as the first check.
 - [ ] **Start workout control.** Add it to Control Center. Tap it with no workout open: Hardset
-      opens with an empty workout. Tap it again: the same workout.
+      opens on Train with an empty workout. Tap it again: the same workout.
 - [ ] **Rest control, configured.** Add Rest; the system asks for a length; choose 2 minutes. The
       control reads "Rest · 2:00". Tap it from the Lock Screen's Control Center: a 2:00 rest starts
       without opening the app, and its Lock Screen activity is titled "Rest".
 - [ ] **Rest control, not configured.** Add Rest and dismiss the length prompt. The control reads
-      "Rest · Choose"; tapping it opens Hardset and starts nothing.
+      "Rest · Choose"; tapping it starts nothing.
 - [ ] **Rest control after a force-quit.** Force-quit Hardset, tap the configured control: the
       rest starts, and opening Hardset shows the same countdown.
 

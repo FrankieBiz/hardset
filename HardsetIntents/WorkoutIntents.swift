@@ -23,12 +23,53 @@ struct StartWorkoutIntent: AppIntent {
 
   @MainActor
   func perform() async throws -> some IntentResult {
-    systemRequests.post(.startWorkout)
+    postStartWorkout(to: systemRequests)
     return .result()
   }
 }
 
-/// Opens Hardset and does nothing else: the Rest control's action until a length is chosen.
+/// Asks the app to start a workout (or show the open one). Shared by both start-workout intents.
+@MainActor
+func postStartWorkout(to inbox: SystemRequestInbox) {
+  inbox.post(.startWorkout)
+}
+
+/// The one place the Start workout control can open. `OpenIntent` needs a `target` of an app
+/// value type, so this is a single-case enum.
+enum HardsetScreen: String, AppEnum {
+  case train
+
+  static let typeDisplayRepresentation: TypeDisplayRepresentation = "Screen"
+  static let caseDisplayRepresentations: [HardsetScreen: DisplayRepresentation] = [
+    .train: "Train"
+  ]
+}
+
+/// The Start workout control's action. Apple's controls article opens an app from a control with
+/// an `OpenIntent`, which the system brings forward on its own. The Siri, Spotlight and Action
+/// button path stays `StartWorkoutIntent`. Like it, this only posts the request.
+struct StartWorkoutControlIntent: OpenIntent {
+  static let title: LocalizedStringResource = "Start a workout"
+  static let isDiscoverable = false
+
+  @Parameter(title: "Screen")
+  var target: HardsetScreen
+
+  @AppDependency private var systemRequests: SystemRequestInbox
+
+  init() {
+    target = .train
+  }
+
+  @MainActor
+  func perform() async throws -> some IntentResult {
+    postStartWorkout(to: systemRequests)
+    return .result()
+  }
+}
+
+/// Opens Hardset and does nothing else. No surface uses it now: the Rest control starts nothing
+/// until a length is chosen, and the Start workout control uses `StartWorkoutControlIntent`.
 struct OpenHardsetIntent: AppIntent {
   static let title: LocalizedStringResource = "Open Hardset"
   static let isDiscoverable = false

@@ -19,7 +19,19 @@ func restReply(_ command: RestCommand, on timer: RestTimerController) async -> I
   }
 }
 
-/// "Start a rest" from Siri, Shortcuts, the Action button or the Rest control. The length is
+/// Validates a length and starts the rest, saying what happened. Shared by `StartRestIntent` and
+/// the Rest control.
+@MainActor
+func startRestReply(seconds: Double, on timer: RestTimerController) async -> IntentDialog {
+  switch RestRequest.duration(seconds: seconds) {
+  case .failure:
+    IntentDialog(LocalizedStringResource(stringLiteral: RestRequest.refusal))
+  case .success(let rest):
+    await restReply(.start(rest), on: timer)
+  }
+}
+
+/// "Start a rest" from Siri, Shortcuts or the Action button. The length is
 /// required and has no default: Siri asks for it.
 struct StartRestIntent: LiveActivityIntent {
   static let title: LocalizedStringResource = "Start a rest"
@@ -35,20 +47,43 @@ struct StartRestIntent: LiveActivityIntent {
 
   init() {}
 
-  /// For the Rest control, which already knows its configured length.
+  /// For a caller that already knows the length.
   init(seconds: Double) {
     self.length = Measurement(value: seconds, unit: .seconds)
   }
 
   @MainActor
   func perform() async throws -> some IntentResult & ProvidesDialog {
-    switch RestRequest.duration(seconds: length.converted(to: .seconds).value) {
-    case .failure:
-      return .result(
-        dialog: IntentDialog(LocalizedStringResource(stringLiteral: RestRequest.refusal)))
-    case .success(let rest):
-      return .result(dialog: await restReply(.start(rest), on: restTimer))
+    let seconds = length.converted(to: .seconds).value
+    return .result(dialog: await startRestReply(seconds: seconds, on: restTimer))
+  }
+}
+
+/// The Rest control's action. A control's button takes one action type, so this one covers both
+/// states: with a length (the lifter chose one) it starts that rest exactly as `StartRestIntent`
+/// does; with none it does nothing and starts nothing -- there is no default rest
+/// (`RestControlState`). It stays in the background, so a configured tap never opens the app.
+struct RestControlIntent: LiveActivityIntent {
+  static let title: LocalizedStringResource = "Start a rest"
+  static let isDiscoverable = false
+
+  @Parameter(title: "Seconds")
+  var seconds: Double?
+
+  @AppDependency private var restTimer: RestTimerController
+
+  init() {}
+
+  init(seconds: Double?) {
+    self.seconds = seconds
+  }
+
+  @MainActor
+  func perform() async throws -> some IntentResult {
+    if let seconds {
+      _ = await startRestReply(seconds: seconds, on: restTimer)
     }
+    return .result()
   }
 }
 

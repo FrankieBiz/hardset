@@ -861,15 +861,20 @@ the `Hardset` scheme for the iOS 26.4 simulator.
 
 - [ ] (feat(widget): Start workout and Rest in Control Center) The widget extension builds.
       Written without a compiler; look first at `promptsForUserConfiguration()` (name and
-      placement), `if case … else` inside the control template builder (if the builder rejects
-      it, move the two branches into a `@ControlWidgetTemplateBuilder` helper `button(for:)` and
-      record which form built), and `StaticControlConfiguration(kind:)`.
+      placement) and `StaticControlConfiguration(kind:)`. Each control is a single
+      `ControlWidgetButton` over one intent type, because `ControlWidgetTemplateBuilder` has no
+      `buildEither` or `buildOptional`.
+  - [ ] `@Parameter(title: "Length", defaultUnit: .minutes, supportsNegativeNumbers: false) var
+        length: Measurement<UnitDuration>?` on `RestControlConfiguration` resolves to an
+        `IntentParameter` initialiser. If not, make it a non-optional `Measurement` with a
+        sentinel of 0 seconds, mapped to `needsChoice` by `RestControlState`, never to a default
+        rest.
+  - [ ] `RestControlIntent` (`@Parameter var seconds: Double?`, built with `init(seconds:)`)
+        builds, and a tap with a configured length starts the rest without opening the app. With
+        no length a tap does nothing; Apple documents `supportedModes = [.background,
+        .foreground(.dynamic)]` plus `continueInForeground(_:alwaysConfirm:)` for opening
+        conditionally, not used because it can throw and ask for confirmation.
+  - [ ] `StartWorkoutControlIntent: OpenIntent` (`target: HardsetScreen`, a one-case `AppEnum`)
+        builds, and the Start workout control opens Hardset on Train and starts the workout.
   - [ ] Every check added to DEVICE-CHECKLIST §E for controls.
-  - [ ] Tapping Start workout in Control Center brings Hardset forward. Apple's "Creating controls
-        to perform actions across the system" says to open the app from a control with an
-        `OpenIntent`; `StartWorkoutIntent` and `OpenHardsetIntent` are plain `AppIntent`s with
-        `supportedModes = .foreground`, which the docs describe only generically ("bring the app
-        to the foreground before the action runs"). If the tap does nothing visible, make both
-        conform to `OpenIntent` (a `target` parameter over a one-case `AppEnum`, `perform()`
-        returning `.result()` after posting) and keep the policy in `perform()`.
   - SF Symbols: none new (`figure.strengthtraining.traditional`, `timer` are already used).

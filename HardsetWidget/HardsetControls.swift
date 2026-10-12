@@ -10,7 +10,7 @@ struct StartWorkoutControl: ControlWidget {
 
   var body: some ControlWidgetConfiguration {
     StaticControlConfiguration(kind: Self.kind) {
-      ControlWidgetButton(action: StartWorkoutIntent()) {
+      ControlWidgetButton(action: StartWorkoutControlIntent()) {
         Label("Start workout", systemImage: "figure.strengthtraining.traditional")
       }
     }
@@ -31,7 +31,8 @@ struct RestControlConfiguration: ControlConfigurationIntent {
 }
 
 /// A rest of the configured length, started without opening the app. Until a valid length is
-/// chosen it reads "Rest · Choose" and opens Hardset instead (`RestControlState`).
+/// chosen it reads "Rest · Choose" and a tap starts nothing (`RestControlState`). It is always one
+/// button over one intent: the control template builder has no `if`/`else`.
 struct RestControl: ControlWidget {
   static let kind = "com.hardset.app.control.rest"
 
@@ -40,14 +41,13 @@ struct RestControl: ControlWidget {
       configuration in
       let state = RestControlState.make(
         configuredSeconds: configuration.length?.converted(to: .seconds).value)
-      if case .ready(let rest) = state {
-        ControlWidgetButton(action: StartRestIntent(seconds: rest.seconds)) {
-          Label(state.title, systemImage: "timer")
+      let seconds: Double? =
+        switch state {
+        case .ready(let rest): rest.seconds
+        case .needsChoice: nil
         }
-      } else {
-        ControlWidgetButton(action: OpenHardsetIntent()) {
-          Label(state.title, systemImage: "timer")
-        }
+      ControlWidgetButton(action: RestControlIntent(seconds: seconds)) {
+        Label(state.title, systemImage: "timer")
       }
     }
     .displayName("Rest")
