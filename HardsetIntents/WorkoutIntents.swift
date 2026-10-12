@@ -67,15 +67,3 @@ struct StartWorkoutControlIntent: OpenIntent {
     return .result()
   }
 }
-
-/// Opens Hardset and does nothing else. No surface uses it now: the Rest control starts nothing
-/// until a length is chosen, and the Start workout control uses `StartWorkoutControlIntent`.
-struct OpenHardsetIntent: AppIntent {
-  static let title: LocalizedStringResource = "Open Hardset"
-  static let isDiscoverable = false
-  static let supportedModes: IntentModes = .foreground
-
-  init() {}
-
-  func perform() async throws -> some IntentResult { .result() }
-}
