@@ -92,8 +92,13 @@ public final class RestTimerController {
   }
 
   /// The +/-15 s controls. Updates the visible deadline at once; AlarmKit catches up.
+  ///
+  /// A running rest only. A paused rest's alarm is paused in AlarmKit, which has no way to change
+  /// its remainder, and `commit()` replaces an alarm only while the rest runs: the screen would
+  /// show one remainder while the Lock Screen and the alarm kept the old one. So a paused rest is
+  /// left as it is, and resuming it is what schedules its next alarm.
   public func adjust(by delta: Duration, now: Date = .now) {
-    guard state.isRunning || state.remaining(at: now) != nil else { return }
+    guard state.isRunning else { return }
     state = state.adjusted(by: delta, at: now)
     scheduleCommit()
     persist()

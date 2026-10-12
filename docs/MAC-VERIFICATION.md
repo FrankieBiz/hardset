@@ -1137,3 +1137,8 @@ the `Hardset` scheme for the iOS 26.4 simulator.
         default and xxxLarge text. Default: two sets, "+2 more sets" and the date, nothing cut.
         xxxLarge: the name and the date whole. If the date is still cut there, the last
         `ViewThatFits` child is too tall: drop the machine row from it and record it here.
+- [ ] (fix(alarm): a paused rest is not adjusted) HardsetAlarm builds for iOS. `adjust(by:now:)` now
+      returns unless the rest is running. Pause a rest, then try −15/+15 (the rest bar should not
+      offer them while paused; if a build still does, tap them): the paused remainder on screen and
+      on the Lock Screen card stay the same, and Resume continues from that remainder with the
+      alarm sounding at the matching deadline.
