@@ -1197,3 +1197,11 @@ the `Hardset` scheme for the iOS 26.4 simulator.
         "Settings › Health › Data Access & Devices › Hardset". On iOS 18 and later this may be
         under Settings › Apps › Health. Follow it on the device; if it differs, correct the copy
         in Core (and its test) and the checklist line.
+- [ ] (fix(alarm): retire the old alarm when alarms are turned off mid-rest) Look first:
+      `RestAlarmService.authorizationUpdates()` maps an opaque
+      `some AsyncSequence<AlarmManager.AuthorizationState, Never>` with `.map`; if the opaque
+      return does not carry `Failure == Never`, wrap it in an `AsyncStream` instead. Device: start a
+      rest with alarms on, turn alarms off for Hardset in Settings, return: the rest keeps counting,
+      the old alarm does not ring at the deadline (`cancelUnlessAlerting` on the stale id), and the
+      notification does. A Lock Screen command that changes nothing may take ~0.4 s longer
+      (`perform` settles a re-armed commit) — expected.

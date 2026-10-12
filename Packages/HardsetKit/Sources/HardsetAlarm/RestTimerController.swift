@@ -223,6 +223,9 @@ public final class RestTimerController {
     // scheduled before the app died leaves nothing behind to show.
     let hasNoAlarm = authorization == .denied || (state != .idle && alarmID == nil)
     if hasNoAlarm, let persisted {
+      // Alarms turned off mid-rest may leave the old alarm scheduled, and once its id is dropped
+      // neither Skip nor cancel() can reach it. It goes now, best effort, unless already ringing.
+      if let stale = persisted.alarmID { try? RestAlarmService.cancelUnlessAlerting(id: stale) }
       adopt(persisted.state.hasElapsed(at: now) ? .idle : persisted.state, alarmID: nil)
       endAtDeadlineIfNoAlarm()
       // Without alarms, only the notification can sound this rest, and alarms turned off
