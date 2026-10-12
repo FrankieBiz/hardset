@@ -607,7 +607,7 @@ public struct SessionView: View {
 /// package also builds for macOS 15, which gets an opaque capsule.
 private struct UndoBarBackground: ViewModifier {
   @ViewBuilder func body(content: Content) -> some View {
-    if #available(iOS 26.0, macOS 26.0, *) {
+    if #available(macOS 26.0, *) {
       content.glassEffect(.regular, in: .capsule)
     } else {
       content.background(Tokens.Color.surface, in: Capsule())

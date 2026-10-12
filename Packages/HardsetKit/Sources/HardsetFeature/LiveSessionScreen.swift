@@ -161,11 +161,9 @@ public struct LiveSessionScreen: View {
         hooks.cancel()
         coordinator.endRest()
       },
-      onAddExercise: catalog == nil ? nil : { isPickerPresented = true },
-      // Offered only when there is a gym to attach equipment to. Machines belong to a gym, so
-      // without one there is nothing honest to put in the list.
-      onSelectMachine: canPickMachines ? { machineTarget = MachineTarget(id: $0) } : nil,
-      onShowHistory: progression == nil ? nil : { historyTarget = MachineTarget(id: $0) },
+      onAddExercise: addExerciseAction,
+      onSelectMachine: selectMachineAction,
+      onShowHistory: showHistoryAction,
       restChoices: coordinator.restChoices,
       // The view reports (state id, rest); the coordinator takes them the other way round.
       onChooseRest: { stateID, rest in coordinator.setRestChoice(rest, forExercise: stateID) },
@@ -174,11 +172,7 @@ public struct LiveSessionScreen: View {
       // Trophies and pulses are the coordinator's, set only after the write they describe.
       recordsBySlot: coordinator.recordsBySlot,
       feedback: coordinator.feedback,
-      // Keyed by the deleted row's id, which is stable for that deletion: an id made here would be
-      // new on every render, restarting the bar's timer so it never closed.
-      pendingUndo: coordinator.undoableDeletion.map {
-        PendingUndo(id: $0.slot.id, label: "Set deleted")
-      },
+      pendingUndo: pendingUndo,
       onEditSet: { exerciseStateID, slotID, draft in
         attempt(.editSet) {
           coordinator.editSet(slotID: slotID, inExercise: exerciseStateID, to: draft)
@@ -199,14 +193,14 @@ public struct LiveSessionScreen: View {
       onExpireUndo: { coordinator.expireUndo() }
       // Finish is the toolbar's prominent action, so the list is given no Finish of its own.
     )
-    // Under the rest bar rather than above it: `SessionView` owns the bar's inset, and an inset
-    // added out here is laid out beneath that one. It shares the bar's background, so the two read
-    // as one panel.
+    // At the bottom edge, beneath anything `SessionView` insets there itself. On iOS the rest bar
+    // is the tab accessory, so this sits directly above it (and under the keypad when the keypad is
+    // open); on macOS, where `SessionView` draws the bar, it sits under the bar.
     .safeAreaInset(edge: .bottom, spacing: 0) { restNotice }
     .toolbar {
       ToolbarItem(placement: .confirmationAction) {
         // `ButtonRole.confirm` is iOS 26 and macOS 26, and this target also builds for macOS 15.
-        if #available(iOS 26.0, macOS 26.0, *) {
+        if #available(macOS 26.0, *) {
           Button("Finish", role: .confirm, action: requestFinish)
         } else {
           Button("Finish", action: requestFinish)
@@ -319,6 +313,34 @@ public struct LiveSessionScreen: View {
   }
 
   private var canPickMachines: Bool { gyms != nil && coordinator.gymID != nil }
+
+  // The optional actions and the Undo are named here rather than written inline: `SessionView`
+  // takes twenty-two arguments, and conditional closures inside that call are what makes the type
+  // checker give up on `body`.
+
+  private var addExerciseAction: (() -> Void)? {
+    guard catalog != nil else { return nil }
+    return { isPickerPresented = true }
+  }
+
+  /// Offered only when there is a gym to attach equipment to. Machines belong to a gym, so without
+  /// one there is nothing honest to put in the list.
+  private var selectMachineAction: ((UUID) -> Void)? {
+    guard canPickMachines else { return nil }
+    return { machineTarget = MachineTarget(id: $0) }
+  }
+
+  private var showHistoryAction: ((UUID) -> Void)? {
+    guard progression != nil else { return nil }
+    return { historyTarget = MachineTarget(id: $0) }
+  }
+
+  /// Keyed by the deleted row's id, which is stable for that deletion: an id made here would be new
+  /// on every render, restarting the bar's timer so it never closed.
+  private var pendingUndo: PendingUndo? {
+    guard let deletion = coordinator.undoableDeletion else { return nil }
+    return PendingUndo(id: deletion.slot.id, label: "Set deleted")
+  }
 
   /// Why the rest may not sound, shown only while a rest is running or paused. The timer is the
   /// truth here, not `activeRest`, which outlives a rest that ended on its own.

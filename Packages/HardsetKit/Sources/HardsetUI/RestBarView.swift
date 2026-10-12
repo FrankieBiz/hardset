@@ -212,10 +212,19 @@ public struct RestBarView: View {
     .accessibilityLabel("Skip rest")
   }
 
+  /// A running rest is spoken by its end time, not its remaining time: this label is built with the
+  /// view, and the accessory rebuilds it only when the timer's state changes, so a remaining time
+  /// would still say "2:00" a minute later. The end time stays true whenever it is read.
   private var spokenLabel: String {
-    guard let remaining = state.remaining(at: referenceDate) else { return "Not resting" }
-    let status = state.isRunning ? "Resting" : "Rest paused"
-    var parts = ["\(status), \(remaining.clockString) remaining"]
+    var parts: [String]
+    switch state {
+    case .idle:
+      return "Not resting"
+    case .running(let endsAt):
+      parts = ["Resting until \(endsAt.formatted(date: .omitted, time: .shortened))"]
+    case .paused(let remaining):
+      parts = ["Rest paused, \(remaining.clockString) remaining"]
+    }
     if let metadata { parts.append("after \(metadata.exerciseName), \(metadata.setLabel)") }
     return parts.joined(separator: ", ")
   }

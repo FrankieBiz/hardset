@@ -185,7 +185,8 @@ public enum Tokens {
   /// Core decides what happened; this only says how it feels. One crisp impact per log, and a
   /// distinct success for a record, which is the app's one earned moment (spec §3, items 4–5).
   public enum Haptic {
-    public static func feedback(for event: FeedbackEvent) -> SensoryFeedback {
+    // Pure, so callable from `sensoryFeedback`'s closure whatever isolation SwiftUI gives it.
+    public nonisolated static func feedback(for event: FeedbackEvent) -> SensoryFeedback {
       switch event {
       case .log: .impact(weight: .medium)
       case .record: .success

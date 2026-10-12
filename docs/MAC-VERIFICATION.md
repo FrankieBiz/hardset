@@ -143,11 +143,12 @@ the `Hardset` scheme for the iOS 26.4 simulator.
   - [ ] Relaunch: the chip still reads 2:00 (`UserDefaultsRestPreferences`). Force-quit during a
         rest, relaunch: the same countdown is back (launch `.task` runs `reconcile()`).
   - [ ] Deny alarm permission, then start a rest. The line "Alarms are off for Hardset, so rest
-        won't sound when the phone is locked." and a "Settings" button appear in one panel with the
-        rest bar, on the same background. The line sits directly BELOW the bar, not above it as the
-        brief said: `SessionView` owns the bar's inset, and an inset added by `LiveSessionScreen`
-        is laid out beneath it. If it must go above, that is a `SessionView` input (HardsetUI),
-        outside this task. "Settings" is at least 44 pt tall and opens Hardset's page in the
+        won't sound when the phone is locked." and a "Settings" button appear. On iOS (after Phase
+        2 Task 19 moved the bar into the tab accessory) the line sits at the bottom of the workout,
+        directly above the accessory's rest bar, and under the keypad when the keypad is open; on
+        macOS it sits directly below `SessionView`'s rest bar. Check it reads as belonging to the
+        rest on iOS; if not, move it into `LiveSessionAccessory` (Phase 3 Task 16) only if the
+        accessory has the height. "Settings" is at least 44 pt tall and opens Hardset's page in the
         Settings app. The panel goes when the rest ends or is skipped. With alarms allowed it never
         appears.
   - [ ] An alarm failure (forced throw in a debug build) shows "The rest alarm could not be set.
@@ -692,3 +693,29 @@ the `Hardset` scheme for the iOS 26.4 simulator.
         its file-type switch that extension, add the file to `group_children["Hardset"]`, keep
         `ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon`, remove `AppIcon.appiconset`, regenerate
         twice, and build. Never hand-edit the pbxproj.
+- [ ] (fix(ui,feature): what a cross-file review of the never-compiled code found) Build the
+      `Hardset` scheme and `./test.sh` (macOS 15 host build) with **no new warnings**:
+  - [ ] No "unnecessary check for 'iOS'" warnings: the three `#available` checks
+        (`LiveSessionScreen` Finish, `SessionView` Undo bar, `HardsetRootView` Start) now name
+        macOS 26 only, because the iOS floor (26.1) already guarantees the iOS 26.0 APIs.
+  - [ ] `LiveSessionScreen.body` type-checks in reasonable time: the `SessionView` call no longer
+        holds conditional closures (they are the named `addExerciseAction`, `selectMachineAction`,
+        `showHistoryAction` and `pendingUndo`). If "unable to type-check" still appears, move
+        `attempt` closures into named methods the same way.
+  - [ ] VoiceOver on the rest bar (accessory, during a rest): it says "Resting until <time>"
+        (the rest's end, in the device's time format), then "after <movement>, <set>". Paused:
+        "Rest paused, 1:20 remaining". Wait a minute and re-focus: the end time is still right.
+  - [ ] `NumericPad` builds with its new `import Accessibility`; its spoken-value announcement still
+        speaks. `Tokens.Haptic.feedback(for:)` is `nonisolated`; the log haptic still plays.
+  - [ ] **Test bundle linking.** `HardsetTests` links HardsetCore, HardsetStore and HardsetFeature
+        statically while its host app links them too. If Xcode reports "Swift package product …
+        is linked as a static library by 'HardsetTests' and 'Hardset'" as an **error**, or the
+        smoke tests misbehave because two copies of a package global exist (for example
+        `prepareDependencies` not reaching the app's code), set `TESTS` to `[]` in
+        `Tools/generate_project.py` (`BUNDLE_LOADER` resolves the symbols from the host), regenerate
+        twice, and rebuild. If that instead gives "No such module", restore the list and accept the
+        warning. Record which one held here.
+  - [ ] `HardsetKit_HardsetCore.bundle` (Phase 3 Task 10's String Catalog) is embedded in the app,
+        the widget extension and the test bundle, and builds from the symlinked package path. If it
+        breaks the build, Phase 3 Task 11 is blocked on it; nothing calls `localized(_:)` yet, so
+        removing `resources:` from HardsetCore unblocks the build until it is fixed.

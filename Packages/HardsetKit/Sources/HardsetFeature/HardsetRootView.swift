@@ -313,7 +313,7 @@ public struct HardsetRootView: View {
   /// never a set row or a card. `.glassProminent` is iOS 26 and macOS 26, and this target also
   /// builds for macOS 15, which keeps the plain button.
   @ViewBuilder private var startButton: some View {
-    if #available(iOS 26.0, macOS 26.0, *) {
+    if #available(macOS 26.0, *) {
       Button(action: startEmptyWorkout) {
         Text("Start workout")
           .font(Tokens.Text.label.weight(.semibold))
