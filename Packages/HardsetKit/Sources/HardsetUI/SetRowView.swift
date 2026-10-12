@@ -165,9 +165,6 @@ public struct SetRowView: View {
     .accessibilityAction {
       if !isLogged && draft.isLoggable { onLog() }
     }
-    .accessibilityAction(named: Text("Log set")) {
-      if draft.isLoggable { onLog() }
-    }
     // The row is one combined element, so `.disabled` on the field buttons does not reach these.
     // Left in place on a logged row they would still open the pad and edit an unsaved draft.
     .accessibilityActions {
@@ -176,6 +173,8 @@ public struct SetRowView: View {
         if let onEdit { Button("Edit set", action: onEdit) }
         if let onDelete { Button("Delete set", action: onDelete) }
       } else {
+        // Offered only where it can do something: a logged row has nothing left to log.
+        Button("Log set") { if draft.isLoggable { onLog() } }
         Button("Edit weight") { onFocus(.weight) }
         Button("Edit reps") { onFocus(.reps) }
       }

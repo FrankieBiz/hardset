@@ -819,3 +819,7 @@ the `Hardset` scheme for the iOS 26.4 simulator.
     or Siri changes nothing and says "The rest timer could not be checked. Open Hardset and try
     again." rather than "No rest is running." while an alarm may still count down. Opening the
     app reconciles. Record it if it is ever seen.
+- [ ] (fix(ui): VoiceOver offers "Log set" only on a row that can still be logged) With VoiceOver
+      on, swipe up/down on an unlogged row's actions: "Log set", "Edit weight", "Edit reps". On a
+      logged row: "Edit set", "Delete set" and no "Log set". Double-tap on an unlogged, complete
+      row still logs it.
