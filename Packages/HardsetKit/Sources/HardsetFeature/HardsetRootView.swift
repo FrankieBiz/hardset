@@ -257,6 +257,8 @@ public struct HardsetRootView: View {
     guard wanted else {
       environment.healthSetting.setEnabled(false)
       healthEnabled = environment.healthSetting.isEnabled
+      // Turned off on purpose: an earlier refusal no longer needs explaining.
+      healthDenied = false
       return
     }
     Task {
