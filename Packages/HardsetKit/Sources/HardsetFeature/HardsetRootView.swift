@@ -157,6 +157,8 @@ public struct HardsetRootView: View {
         NavigationStack {
           HistoryScreen(
             store: environment.history,
+            details: environment.sessionDetails,
+            progression: environment.progression,
             unit: unit,
             // Hidden, not swapped for a confirmation, while a workout is open or may be open
             // unread: repeating then would start a second workout on top of the first.

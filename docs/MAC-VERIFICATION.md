@@ -680,6 +680,20 @@ the `Hardset` scheme for the iOS 26.4 simulator.
       "Add a gym" inside it), glass Start, the accessory during a workout and a rest, Finish →
       summary, Repeat from history.
 
+- [ ] (feat(ui): a past workout opens from history) HardsetUI and HardsetFeature build (iOS, and
+      macOS 15 via `./test.sh`). New SF Symbol names: `chart.xyaxis.line` (section header),
+      `trophy` (a set's record; already used in the summary). In the simulator:
+  - [ ] Tap a History row: the session opens, with its date and length ("Length unknown", grey with
+        its glyph, for one left open overnight), its totals, and one section per movement and
+        machine. A leg press done on two machines shows two sections.
+  - [ ] Records sit on the sets that earned them; an estimated 1RM shows its badge.
+  - [ ] Tap a section's header: that movement's load history opens, outside any workout.
+  - [ ] Back returns to History with its scroll position; Repeat (context menu) still works.
+  - [ ] VoiceOver: a History row is a button, not dimmed; a set reads "Set 2, 100 kilograms, 8
+        reps, logged". A set with an estimated 1RM offers "How this estimate is calculated".
+  - Compiler watch: `navigationDestination(item:)` twice (History, and inside the detail screen);
+    the `#if os(iOS)` inside the modifier chain in `HistoryScreen.detailScreen`.
+
 ## Phase 4
 
 - [ ] (feat(app): launch in the app's own colour; a manifest for the widget) The `Hardset` scheme

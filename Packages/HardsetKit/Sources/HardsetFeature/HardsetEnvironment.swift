@@ -18,6 +18,8 @@ public struct HardsetEnvironment {
   public let summaries: WorkoutSummaryStore
   /// The picker's Recent movements, and "Repeat this workout".
   public let shortcuts: WorkoutShortcutsStore
+  /// Reads a past workout back, by movement and machine, with its records.
+  public let sessionDetails: SessionDetailStore
 
   public init(database: any DatabaseWriter) {
     self.logger = LoggerStore(database: database)
@@ -28,5 +30,6 @@ public struct HardsetEnvironment {
     self.gyms = GymStore(database: database)
     self.summaries = WorkoutSummaryStore(database: database)
     self.shortcuts = WorkoutShortcutsStore(database: database)
+    self.sessionDetails = SessionDetailStore(database: database)
   }
 }
