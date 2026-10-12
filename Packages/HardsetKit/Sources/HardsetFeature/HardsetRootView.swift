@@ -448,6 +448,10 @@ public struct HardsetRootView: View {
           refreshWidgets()
         }
       )
+      // One screen per workout. `LiveSessionScreen` keeps its coordinator in `@State`, which an
+      // initialiser cannot replace, so a different workout arriving in this slot without a pass
+      // through the start screen would be drawn and written through the old one.
+      .id(coordinator.sessionID)
       .navigationTitle("Workout")
     } else if let resumeError {
       resumeFailedView(message: resumeError)

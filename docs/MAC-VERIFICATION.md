@@ -1096,3 +1096,10 @@ the `Hardset` scheme for the iOS 26.4 simulator.
   - [ ] VoiceOver reads the alert and its OK button. A rest running on B stops either way.
   - [ ] An ordinary discard (one device) still leaves with no summary; a discard refused for a
         logged set still keeps the workout and says why.
+- [ ] (fix(feature): a different workout always gets a fresh live screen) HardsetFeature builds
+      for iOS and macOS 15. `LiveSessionScreen(...)` in `HardsetRootView.trainTab` carries
+      `.id(coordinator.sessionID)` (`SessionID` is `Hashable`).
+  - [ ] Start, log a set, finish; start again: the new workout shows no rows, error, sheet or
+        Undo bar from the last one. Repeat a workout from History: the same.
+  - [ ] Mid-workout, the live screen keeps its state (an open keypad, a scroll position) across
+        logs, rest starts and tab switches: the id changes only with the workout.
