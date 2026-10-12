@@ -39,6 +39,12 @@
 	<key>NSAlarmKitUsageDescription</key>
 	<string>Hardset uses alarms so your rest timer still alerts you when the app is closed, silenced, or in Focus.</string>
 
+	<!-- Apple Health, opt-in and write-only (spec 4.4, DECISIONS.md §24). Only the save
+	     description: Hardset asks to read nothing, so NSHealthShareUsageDescription is absent.
+	     AppResourcesTests holds it to that. -->
+	<key>NSHealthUpdateUsageDescription</key>
+	<string>Hardset adds each workout you finish to Health as strength training, with its start and end time. It sends nothing else.</string>
+
 	<!-- Remote notifications: CKSyncEngine needs them to learn about changes from other
 	     devices. Declared here and enabled as a capability on the target. -->
 	<key>UIBackgroundModes</key>

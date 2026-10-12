@@ -107,7 +107,8 @@ def fmt_settings(d, indent):
 
 # Package products each target links.
 PRODUCTS = {
-    APP: ["HardsetCore", "HardsetStore", "HardsetUI", "HardsetAlarm", "HardsetFeature"],
+    # HardsetHealth is the app's alone: the widget never touches Apple Health.
+    APP: ["HardsetCore", "HardsetStore", "HardsetUI", "HardsetAlarm", "HardsetHealth", "HardsetFeature"],
     WIDGET: ["HardsetCore", "HardsetUI", "HardsetAlarm"],
     # What AppSmokeTests imports. SQLiteData stays implicit, as for the app target: it arrives with
     # HardsetStore, and declaring it would need a package reference to sqlite-data itself.

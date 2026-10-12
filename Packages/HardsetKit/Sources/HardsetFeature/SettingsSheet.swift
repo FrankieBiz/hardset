@@ -3,6 +3,19 @@ import HardsetStore
 import HardsetUI
 import SwiftUI
 
+/// The Apple Health row's inputs. Nil hides the row: a device without Health offers nothing.
+public struct HealthSettingInput {
+  /// On only once the setting is stored on, which needs Health to have allowed saving.
+  public var isEnabled: Binding<Bool>
+  /// The last request was refused, so the row says where to turn it on.
+  public var accessDenied: Bool
+
+  public init(isEnabled: Binding<Bool>, accessDenied: Bool) {
+    self.isEnabled = isEnabled
+    self.accessDenied = accessDenied
+  }
+}
+
 /// The app's settings, currently one decision that genuinely cannot be inferred reliably.
 ///
 /// Kept deliberately small. Anything the app can work out from behaviour — which gym, which
@@ -13,14 +26,18 @@ import SwiftUI
 public struct SettingsSheet: View {
   @Binding private var useImperial: Bool
   private let gyms: GymStore?
+  private let health: HealthSettingInput?
   private let onDone: () -> Void
 
-  /// `gyms` is nil where there is no store to show (a preview); the row is then hidden.
+  /// `gyms` is nil where there is no store to show (a preview); the row is then hidden. `health`
+  /// is nil where there is no Apple Health (a preview, a host build, a device without it).
   public init(
-    useImperial: Binding<Bool>, gyms: GymStore? = nil, onDone: @escaping () -> Void
+    useImperial: Binding<Bool>, gyms: GymStore? = nil, health: HealthSettingInput? = nil,
+    onDone: @escaping () -> Void
   ) {
     self._useImperial = useImperial
     self.gyms = gyms
+    self.health = health
     self.onDone = onDone
   }
 
@@ -52,6 +69,21 @@ public struct SettingsSheet: View {
             Text(
               "Rename a gym or machine, or archive one you no longer use. History keeps every set."
             )
+          }
+        }
+
+        if let health {
+          Section {
+            Toggle(HealthExportCopy.settingTitle, isOn: health.isEnabled)
+            if health.accessDenied {
+              // A refusal is the lifter's choice, not an error: grey, with a glyph, and where to
+              // change it.
+              Label(HealthExportCopy.accessDenied, systemImage: "info.circle")
+                .font(Tokens.Text.caption)
+                .foregroundStyle(Tokens.Color.textSecondary)
+            }
+          } footer: {
+            Text(HealthExportCopy.settingFooter)
           }
         }
       }

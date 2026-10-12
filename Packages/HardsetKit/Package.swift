@@ -65,6 +65,7 @@ var targets: [Target] = [
 #if !os(Linux)
 products += [
   .library(name: "HardsetAlarm", targets: ["HardsetAlarm"]),
+  .library(name: "HardsetHealth", targets: ["HardsetHealth"]),
   .library(name: "HardsetUI", targets: ["HardsetUI"]),
   .library(name: "HardsetFeature", targets: ["HardsetFeature"]),
 ]
@@ -76,6 +77,12 @@ targets += [
   // on macOS. `AlarmMetadata` has no requirements beyond Codable/Hashable/Sendable,
   // so a retroactive empty conformance here costs nothing.
   .target(name: "HardsetAlarm", dependencies: ["HardsetCore"], swiftSettings: mainActorByDefault),
+
+  // iOS-only seam for HealthKit's workout builder, which macOS does not have (`#if os(iOS)` in
+  // source, so the macOS build sees an empty module). Write-only: it saves one workout and reads
+  // nothing (DECISIONS.md §24). Depends on Core alone, like HardsetAlarm, so the feature layer
+  // takes it as closures and still builds for macOS.
+  .target(name: "HardsetHealth", dependencies: ["HardsetCore"], swiftSettings: mainActorByDefault),
 
   .target(
     name: "HardsetUI",

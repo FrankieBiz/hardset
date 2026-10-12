@@ -14,6 +14,9 @@ public struct WorkoutSummaryView: View {
   private let unit: WeightUnit
   private let errorMessage: String?
   private let onRetry: (() -> Void)?
+  /// What became of the workout and Apple Health, in Core's words (`HealthExportCopy`), or nil
+  /// when there is nothing to say, or nothing yet.
+  private let healthLine: String?
   private let onDone: () -> Void
   /// The record whose estimate is explained. An `.ignore` row exposes no child button, so the
   /// sheet is lifted here and opened by the row's named action as well as by the badge.
@@ -26,12 +29,14 @@ public struct WorkoutSummaryView: View {
     unit: WeightUnit,
     errorMessage: String? = nil,
     onRetry: (() -> Void)? = nil,
+    healthLine: String? = nil,
     onDone: @escaping () -> Void
   ) {
     self.summary = summary
     self.unit = unit
     self.errorMessage = errorMessage
     self.onRetry = onRetry
+    self.healthLine = healthLine
     self.onDone = onDone
   }
 
@@ -101,6 +106,13 @@ public struct WorkoutSummaryView: View {
       }
       .frame(minHeight: Tokens.minimumTapTarget)
       .accessibilityElement(children: .combine)
+      // Grey, with a glyph: saved, not sent or not saved, it is a statement, not an alarm.
+      if let healthLine {
+        Label(healthLine, systemImage: "heart.text.square")
+          .font(Tokens.Text.caption)
+          .foregroundStyle(Tokens.Color.textSecondary)
+          .frame(minHeight: Tokens.minimumTapTarget, alignment: .leading)
+      }
     }
   }
 

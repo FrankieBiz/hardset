@@ -1,6 +1,7 @@
 import HardsetAlarm
 import HardsetCore
 import HardsetFeature
+import HardsetHealth
 import HardsetStore
 import SQLiteData
 import SwiftUI
@@ -115,7 +116,16 @@ private struct RootView: View {
       ),
       // Device-local and keyed by exercise. Without it every choice was forgotten on relaunch.
       restPreferences: UserDefaultsRestPreferences(),
-      systemRequests: systemRequests
+      systemRequests: systemRequests,
+      // Apple Health, opt-in and write-only. HealthKit's workout builder is iOS-only, so the
+      // feature layer takes it as closures. `try?` is the one deliberate exception: a request
+      // Health refused even to show is, to the lifter, a refusal, and the row then says how to
+      // turn it on.
+      healthHooks: HealthExportHooks(
+        isAvailable: { HealthWorkoutWriter.isAvailable() },
+        requestAccess: { (try? await HealthWorkoutWriter.requestAccess()) ?? false },
+        save: { try await HealthWorkoutWriter.save($0) }
+      )
     )
     .task {
       // Launch first: a force-quit relaunches the app idle while its alarm still counts down.

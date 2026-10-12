@@ -71,6 +71,16 @@ public struct HardsetRootView: View {
   /// not worth interrupting a lifter over, and it still shows its last file or "nothing yet". The
   /// next write that succeeds clears it. Each failure is also logged, and a debug build stops on it.
   @State private var widgetSnapshotError: (any Error)?
+  /// The summary's Apple Health line, for the workout whose summary shows. Nil until Health has
+  /// answered, and when there is nothing worth saying.
+  @State private var healthLine: String?
+  /// What the Settings toggle shows: what is stored, which is on only once Health allowed saving.
+  @State private var healthEnabled = false
+  /// The last request was refused, so the row says where to turn it on.
+  @State private var healthDenied = false
+  /// The workouts whose export began in this launch. A finish reported twice must not start a
+  /// second save while the first is still waiting on Health, before it is recorded.
+  @State private var healthExportsStarted: Set<SessionID> = []
   private let environment: HardsetEnvironment
   /// Overrides the stored preference. Exists for previews and tests; the app passes `nil` so the
   /// user's own choice wins.
@@ -80,19 +90,24 @@ public struct HardsetRootView: View {
   /// Where Siri, Spotlight, the Action button and Control Center leave a Start workout request.
   /// The app passes the one its intents were given; the default is an inbox nothing posts to.
   private let systemRequests: SystemRequestInbox
+  /// Apple Health, which the app supplies because HealthKit's workout builder is iOS-only. The
+  /// default is unavailable, which offers no setting and sends nothing.
+  private let healthHooks: HealthExportHooks
 
   public init(
     environment: HardsetEnvironment,
     unit: WeightUnit? = nil,
     hooks: RestTimerHooks = .inert,
     restPreferences: any RestPreferenceStore = InMemoryRestPreferences(),
-    systemRequests: SystemRequestInbox = SystemRequestInbox()
+    systemRequests: SystemRequestInbox = SystemRequestInbox(),
+    healthHooks: HealthExportHooks = .unavailable
   ) {
     self.environment = environment
     self.unitOverride = unit
     self.hooks = hooks
     self.restPreferences = restPreferences
     self.systemRequests = systemRequests
+    self.healthHooks = healthHooks
   }
 
   /// What every screen displays in. One derivation, so no screen can disagree with another.
@@ -117,7 +132,9 @@ public struct HardsetRootView: View {
       // On the TabView, not inside Train: `LiveSessionScreen` is torn down the moment its session
       // ends, so a sheet it presented would go with it.
       .sheet(item: $summaryTarget) { target in
-        SummarySheet(sessionID: target.id, store: environment.summaries, unit: unit) {
+        SummarySheet(
+          sessionID: target.id, store: environment.summaries, unit: unit, healthLine: healthLine
+        ) {
           summaryTarget = nil
         }
       }
@@ -142,6 +159,7 @@ public struct HardsetRootView: View {
           }
         }
         refreshGyms()
+        healthEnabled = environment.healthSetting.isEnabled
         // Last, so a request that arrived before this read is acted on knowing whether a workout
         // is open, and an empty workout it starts is at the gym just preselected.
         launchReadDone = true
@@ -165,6 +183,86 @@ public struct HardsetRootView: View {
       widgetSnapshotError = error
       WidgetSnapshotWriter.log(error)
       assertionFailure("The widget snapshot was not written: \(error)")
+    }
+  }
+
+  // MARK: - Apple Health
+
+  /// Sends the workout just finished here to Apple Health, if the lifter asked, once. The finish
+  /// is already written: this runs after it, and whatever Health says, the workout stays finished
+  /// and saved. The summary shows the outcome in `HealthExportCopy`'s words when it arrives.
+  private func startHealthExport(_ id: SessionID) {
+    guard healthExportsStarted.insert(id).inserted else { return }
+    healthLine = nil
+    Task {
+      let line = await exportToHealth(id)
+      // Only onto the summary it belongs to: a later workout's sheet is not this one's.
+      if summaryTarget?.id == id { healthLine = line }
+    }
+  }
+
+  /// After the workout is closed and saved, and only for one finished here, now: Health is told
+  /// about a workout that exists, once (`HealthExportStore`, `DECISIONS.md` §24).
+  ///
+  /// Whether it was sent already, and how many sets it holds, are read from the database by
+  /// `HealthExportStore.decision`, never taken from the screen. "Saved" is said only once Health
+  /// returned the workout and the export is recorded: persist before claiming.
+  private func exportToHealth(_ id: SessionID) async -> String? {
+    let decision: HealthExportDecision
+    do {
+      // A device without Health counts as off, so nothing is attempted and nothing is said.
+      decision = try environment.healthExports.decision(
+        for: id, isEnabled: environment.healthSetting.isEnabled && healthHooks.isAvailable())
+    } catch {
+      return HealthExportCopy.summaryLine(for: .failed)
+    }
+    switch decision {
+    case .skip(let reason):
+      return HealthExportCopy.summaryLine(for: .skipped(reason))
+    case .export(let plan):
+      let healthID: UUID?
+      do {
+        healthID = try await healthHooks.save(plan)
+      } catch {
+        return HealthExportCopy.summaryLine(for: .failed)
+      }
+      // Health saved it but did not hand it back, because the phone locked as it finished. There
+      // is no id to record, so "saved" is not claimed; nor did it fail. Nothing is said.
+      guard let healthID else { return nil }
+      do {
+        try environment.healthExports.recordExport(of: id, healthWorkoutID: healthID)
+      } catch {
+        // Health has the workout, which is what the lifter asked for, but it is not recorded, so
+        // "saved" is not claimed; nor did the save fail. An export runs only at a finish, and
+        // this one has passed, so nothing sends it again. A debug build stops on it.
+        assertionFailure("Saved to Health but not recorded: \(error)")
+        return nil
+      }
+      return HealthExportCopy.summaryLine(for: .saved)
+    }
+  }
+
+  /// The Apple Health row, or nil on a device without Health, which hides it.
+  private var healthSettingInput: HealthSettingInput? {
+    guard healthHooks.isAvailable() else { return nil }
+    return HealthSettingInput(
+      isEnabled: Binding(get: { healthEnabled }, set: { setHealthExport($0) }),
+      accessDenied: healthDenied)
+  }
+
+  /// The toggle shows on only once Health allows saving and the setting is stored: persist before
+  /// claiming. Turning it off asks nothing of Health, and deletes nothing from it.
+  private func setHealthExport(_ wanted: Bool) {
+    guard wanted else {
+      environment.healthSetting.setEnabled(false)
+      healthEnabled = environment.healthSetting.isEnabled
+      return
+    }
+    Task {
+      let allowed = await healthHooks.requestAccess()
+      environment.healthSetting.setEnabled(allowed)
+      healthEnabled = environment.healthSetting.isEnabled
+      healthDenied = !allowed
     }
   }
 
@@ -260,7 +358,9 @@ public struct HardsetRootView: View {
               }
             }
             .sheet(isPresented: $isShowingSettings, onDismiss: refreshGyms) {
-              SettingsSheet(useImperial: $useImperial, gyms: environment.gyms) {
+              SettingsSheet(
+                useImperial: $useImperial, gyms: environment.gyms, health: healthSettingInput
+              ) {
                 isShowingSettings = false
               }
             }
@@ -328,7 +428,11 @@ public struct HardsetRootView: View {
         // the start screen.
         onFinished: { exit in
           self.coordinator = nil
-          if case .finished(let id) = exit { summaryTarget = SummaryTarget(id: id) }
+          if case .finished(let id) = exit {
+            summaryTarget = SummaryTarget(id: id)
+            // After the finish was written, never before it and never in its way.
+            startHealthExport(id)
+          }
           // Finished or discarded, the workout is no longer open, so the widgets are rewritten.
           refreshWidgets()
         }
@@ -489,6 +593,8 @@ private struct SummarySheet: View {
   private let sessionID: SessionID
   private let store: WorkoutSummaryStore
   private let unit: WeightUnit
+  /// What became of the workout and Apple Health, passed through to the view.
+  private let healthLine: String?
   private let onDone: () -> Void
   @State private var summary: WorkoutSummary?
   /// Why the read failed, in the lifter's words.
@@ -500,11 +606,13 @@ private struct SummarySheet: View {
     sessionID: SessionID,
     store: WorkoutSummaryStore,
     unit: WeightUnit,
+    healthLine: String?,
     onDone: @escaping () -> Void
   ) {
     self.sessionID = sessionID
     self.store = store
     self.unit = unit
+    self.healthLine = healthLine
     self.onDone = onDone
   }
 
@@ -514,6 +622,7 @@ private struct SummarySheet: View {
       unit: unit,
       errorMessage: loadError,
       onRetry: { load() },
+      healthLine: healthLine,
       onDone: onDone
     )
     .task { load() }

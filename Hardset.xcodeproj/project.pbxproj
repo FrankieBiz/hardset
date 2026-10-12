@@ -25,6 +25,7 @@
 		5F3D50D2DE60064848672CE0 /* HardsetStore */ = {isa = PBXBuildFile; productRef = 4BD04F50D3691F17448149E4 /* HardsetStore */; };
 		54B81466C42A28C826A1B775 /* HardsetUI */ = {isa = PBXBuildFile; productRef = B8FEB24B1C5CAB855B8DA0C1 /* HardsetUI */; };
 		5F3D50D2DE6006470B5A43E0 /* HardsetAlarm */ = {isa = PBXBuildFile; productRef = 4BD04F50D3691F16077460E4 /* HardsetAlarm */; };
+		BC605BE7CB23369934ED4155 /* HardsetHealth */ = {isa = PBXBuildFile; productRef = CB98965C2ECAE884364A1A61 /* HardsetHealth */; };
 		654F079CF304E734AD15EC31 /* HardsetFeature */ = {isa = PBXBuildFile; productRef = 2F14F12BF1D4F2765F98FD55 /* HardsetFeature */; };
 		E55D922B8225D435833BCE8C /* HardsetCore */ = {isa = PBXBuildFile; productRef = 9C6FD605DC391D164B870358 /* HardsetCore */; };
 		29707BD6CCDEC7E47EC31D99 /* HardsetUI */ = {isa = PBXBuildFile; productRef = 69B7000331548A82D7D4E305 /* HardsetUI */; };
@@ -112,6 +113,10 @@
 			isa = XCSwiftPackageProductDependency;
 			productName = HardsetAlarm;
 		};
+		CB98965C2ECAE884364A1A61 /* HardsetHealth */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = HardsetHealth;
+		};
 		2F14F12BF1D4F2765F98FD55 /* HardsetFeature */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = HardsetFeature;
@@ -151,6 +156,7 @@
 				5F3D50D2DE60064848672CE0 /* HardsetStore */,
 				54B81466C42A28C826A1B775 /* HardsetUI */,
 				5F3D50D2DE6006470B5A43E0 /* HardsetAlarm */,
+				BC605BE7CB23369934ED4155 /* HardsetHealth */,
 				654F079CF304E734AD15EC31 /* HardsetFeature */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -266,6 +272,7 @@
 				4BD04F50D3691F17448149E4 /* HardsetStore */,
 				B8FEB24B1C5CAB855B8DA0C1 /* HardsetUI */,
 				4BD04F50D3691F16077460E4 /* HardsetAlarm */,
+				CB98965C2ECAE884364A1A61 /* HardsetHealth */,
 				2F14F12BF1D4F2765F98FD55 /* HardsetFeature */,
 			);
 			productName = Hardset;

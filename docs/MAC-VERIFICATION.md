@@ -937,3 +937,55 @@ the `Hardset` scheme for the iOS 26.4 simulator.
     After fix round 1, the same again with `WidgetSnapshotWriter.log(_:)`, against a mock of the
     documented `Logger`/`OSLogMessage` String interpolation. The SwiftUI layouts cannot be
     checked here.
+
+- [ ] (feat(health): a finished workout can go to Apple Health, opt-in and write-only)
+      **Do not ship without the privacy policy URL** (spec §12.1, DEVICE-CHECKLIST §D): that is a
+      decision the user still owes. The `Hardset` scheme builds; `./test.sh` builds HardsetHealth
+      for macOS as an empty module (`#if os(iOS)` throughout; `HKWorkoutBuilder` is "macOS –").
+      Written without a compiler; look first at the async `HKWorkoutBuilder` calls inside one
+      `nonisolated static` function (no "sending … risks causing data races"), `device: .local()`
+      (`HKDevice.local()` through an `HKDevice?` parameter), the async closure properties of
+      `HealthExportHooks`, and the `Binding(get:set:)` built in `HardsetRootView` (the same shape
+      as `SetRowView`'s at e5aff33, which built).
+  - [ ] Signing with `com.apple.developer.healthkit` needs the HealthKit capability on the App ID,
+        so the paid Apple Developer Program membership, **a decision the user still owes**
+        (`HANDOFF.md` §11.2). If Xcode's Signing & Capabilities editor is used to add it, it may
+        add `healthkit` to `UIRequiredDeviceCapabilities` in `Hardset/Info.plist`: remove it
+        (Health is optional here, and that key hides the app from devices without it; Apple:
+        "If HealthKit isn't required for the correct operation of your app, delete the healthkit
+        entry"). An empty `com.apple.developer.healthkit.access` array it may add is harmless.
+  - [ ] Requesting access with `read: []` and only `NSHealthUpdateUsageDescription` does not raise
+        "NSHealthShareUsageDescription must be set". The docs make the share key "required if
+        your app uses APIs that access the someone's health data", which Hardset does not; if
+        HealthKit refuses anyway, add that key with "Hardset does not read your Health data." and
+        record it here and in `AppResourcesTests`. A thrown request reads, to the lifter, as a
+        refusal (`try?` in `HardsetApp.swift`), so the symptom would be the toggle snapping off
+        with the "Turn it on in Settings" line.
+  - [ ] Health's permission sheet appears over the Settings sheet when the toggle is turned on, and
+        the toggle reads on only after Allow (it stays off while the sheet is up).
+  - [ ] The finish is never held up or failed by Health: the summary sheet opens at once, and the
+        Health line appears under the date when Health answers. "Saved to Apple Health as strength
+        training." only after `finishWorkout()` returned a workout and
+        `HealthExportStore.recordExport` succeeded. A nil workout (saved while locked) or a
+        recording failure says nothing (a debug build stops on the latter: record it here).
+  - [ ] SF Symbols exist: `heart.text.square`, `info.circle`.
+  - [ ] Every check in DEVICE-CHECKLIST §F.
+  - Residual: `LiveSessionScreen.finish()` reports `.finished` for `SessionTimelineError
+    .alreadyFinished` too. If another device finished the same open workout and it synced before
+    the tap here, this device would send it as well (once; the record stops a second). Telling
+    the two apart needs a `SessionExit` change, outside this task.
+  - Already checked on Linux (swift:6.2, `-swift-version 6 -default-isolation MainActor`,
+    `NonisolatedNonsendingByDefault`, `-warnings-as-errors`, `-c -wmo`):
+    `HealthWorkoutWriter.swift` (its `#if` stripped) against a mock of the documented HealthKit
+    declarations, three ways: as documented (store and builder `Sendable`), with neither
+    `Sendable`, and with the mock itself in `NonisolatedNonsendingByDefault`. All compiled. A
+    control that builds the configuration in a main-actor helper is refused ("non-Sendable
+    'HKWorkoutConfiguration'-typed result can not be returned from main actor-isolated …",
+    "sending 'builder' risks causing data races"), as `DECISIONS.md` §3 describes. Also
+    `HealthExportHooks.swift`, `HardsetEnvironment.swift`, `HealthSettingInput` and the root's
+    Health functions pasted verbatim into a `View`-conforming stand-in, against the real
+    HardsetStore and a SwiftUI mock (`State`, `Binding(get:set:)`), and `HardsetApp.swift`'s
+    three closures against the probe HardsetHealth: compiled. The mock `Binding` needs
+    `@_inheritActorContext`, which the doc JSON cannot show; without it the same mock also refuses
+    `SetRowView`'s Binding that built at e5aff33. That rules out Swift-level isolation and
+    Core/Store API mismatches, not SDK differences or the SwiftUI layouts.

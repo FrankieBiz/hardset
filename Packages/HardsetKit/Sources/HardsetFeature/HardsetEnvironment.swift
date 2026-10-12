@@ -26,12 +26,18 @@ public struct HardsetEnvironment {
   /// The widgets' snapshot, from finished workouts only. The app writes it; the widget only
   /// reads the file (`DECISIONS.md` §25).
   public let widgetSnapshots: WidgetSnapshotStore
+  /// Which finished workouts went to Apple Health, so none goes twice, and whether one may
+  /// (`DECISIONS.md` §24). Device-local.
+  public let healthExports: HealthExportStore
+  /// Whether the lifter has asked for workouts to go to Apple Health. Off until they turn it on.
+  public let healthSetting: any HealthExportSetting
 
-  /// `firstRunFlag` defaults to the real one, so the app's `HardsetEnvironment(database:)` persists
-  /// the flag without passing anything.
+  /// `firstRunFlag` and `healthSetting` default to the real ones, so the app's
+  /// `HardsetEnvironment(database:)` persists both without passing anything.
   public init(
     database: any DatabaseWriter,
-    firstRunFlag: any FirstRunFlag = UserDefaultsFirstRunFlag()
+    firstRunFlag: any FirstRunFlag = UserDefaultsFirstRunFlag(),
+    healthSetting: any HealthExportSetting = UserDefaultsHealthExportSetting()
   ) {
     self.logger = LoggerStore(database: database)
     self.catalog = CatalogSeeder(database: database)
@@ -44,5 +50,7 @@ public struct HardsetEnvironment {
     self.sessionDetails = SessionDetailStore(database: database)
     self.firstRun = FirstRunStore(database: database, flag: firstRunFlag)
     self.widgetSnapshots = WidgetSnapshotStore(database: database)
+    self.healthExports = HealthExportStore(database: database)
+    self.healthSetting = healthSetting
   }
 }

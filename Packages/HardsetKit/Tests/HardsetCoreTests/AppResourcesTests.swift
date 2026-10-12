@@ -104,4 +104,15 @@ struct AppResourcesTests {
       #expect(groups == [WidgetSnapshotFile.appGroupIdentifier], "\(path)")
     }
   }
+
+  /// Task 13. Write-only means a reason to save and no reason to read.
+  @Test("Apple Health is write-only: a reason to save, none to read, and the entitlement")
+  func healthKitWriteOnly() throws {
+    let info = try plist("Hardset/Info.plist")
+    let reason = info["NSHealthUpdateUsageDescription"] as? String
+    #expect(reason?.contains("strength training") == true)
+    #expect(info["NSHealthShareUsageDescription"] == nil)
+    let entitlements = try plist("Hardset/Hardset.entitlements")
+    #expect(entitlements["com.apple.developer.healthkit"] as? Bool == true)
+  }
 }

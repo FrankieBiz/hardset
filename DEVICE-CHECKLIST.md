@@ -134,6 +134,8 @@ merge semantics. Use the iPhone plus a simulator signed into the same iCloud acc
 - [ ] Confirm `PrivacyInfo.xcprivacy` is present in the built app bundle **root**, not just in the
       source tree. A manifest that is not copied is functionally missing.
 - [ ] Privacy policy URL live and reachable both in App Store Connect and from inside the app.
+- [ ] The HealthKit entitlement ships only with the privacy policy URL live (App Review requires
+      one for HealthKit). Until then, keep it out of any external TestFlight build.
 - [ ] Paid Applications Agreement signed; Small Business Program enrolment done; EU DSA trader
       details submitted and verified.
 
@@ -179,6 +181,36 @@ merge semantics. Use the iPhone plus a simulator signed into the same iCloud acc
       Repeat at the largest Dynamic Type size: lines may be cut, but the date stays whole.
 - [ ] **VoiceOver.** The small and Lock Screen widgets are each read as one element, and the
       medium Last time as one element per movement, units in full ("100 kilograms for 8 reps").
+
+## F. Apple Health — opt-in, write-only (blocked for shipping on the privacy policy URL)
+
+Needs the HealthKit capability on the App ID, so the paid Developer Program membership the user
+has not yet decided on (`HANDOFF.md` §11.2). Until then this section cannot be run.
+
+- [ ] **Off by default.** Fresh install: Settings shows "Save workouts to Apple Health", off.
+      Finish a workout: Health has nothing from Hardset.
+- [ ] **Turning it on.** Toggle on: Health's sheet lists only "Workouts" under "Allow Hardset to
+      write" and nothing to read. Allow: the toggle stays on. Deny: it turns back off and the line
+      says how to turn it on in Settings.
+- [ ] **One workout.** Finish a 50-minute workout: the summary says "Saved to Apple Health as
+      strength training." Health › Workouts shows one Traditional Strength Training workout with
+      the session's start and end, and **no Active Energy or calories**.
+- [ ] **Never twice.** Sign out of iCloud and back in so the session re-downloads, then relaunch:
+      Health still has one workout for it.
+- [ ] **Overnight.** Leave a workout open past six hours, then finish it: the summary says "Not
+      sent to Apple Health, because its length is unknown.", and Health has nothing new.
+- [ ] **Another device's workout.** A workout finished on a second device and synced here is not
+      sent from this one.
+- [ ] **Turning it off.** Off, then finish a workout: nothing new in Health; earlier workouts stay
+      (Hardset never deletes from Health).
+- [ ] **Health refuses the save.** With the toggle on, turn off Hardset's Workouts permission in
+      Settings › Health › Data Access & Devices, then finish a workout: the summary is titled
+      "Workout saved", lists the workout, and says "Couldn't save this workout to Apple Health. It
+      is still saved here."; History has the workout. The finish itself never fails over Health.
+- [ ] **Locked as it finishes.** Tap Finish and lock the phone at once. Unlock: the summary says
+      "Saved to Apple Health as strength training." or nothing about Health, never "Couldn't
+      save"; Health has exactly one workout for it. (A nil from `finishWorkout()` means saved
+      while locked; nothing is claimed then, because no id could be recorded.)
 
 ---
 
