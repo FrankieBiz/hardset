@@ -687,7 +687,9 @@ the `Hardset` scheme for the iOS 26.4 simulator.
         its glyph, for one left open overnight), its totals, and one section per movement and
         machine. A leg press done on two machines shows two sections.
   - [ ] Records sit on the sets that earned them; an estimated 1RM shows its badge.
-  - [ ] Tap a section's header: that movement's load history opens, outside any workout.
+  - [ ] Tap a section's header: that movement's load history opens, outside any workout. Its
+        header keeps the caption style (grey, not uppercase) and VoiceOver finds it as a heading.
+        Coming back from the load history keeps the detail's scroll position.
   - [ ] Back returns to History with its scroll position; Repeat (context menu) still works.
   - [ ] VoiceOver: a History row is a button, not dimmed; a set reads "Set 2, 100 kilograms, 8
         reps, logged". A set with an estimated 1RM offers "How this estimate is calculated".

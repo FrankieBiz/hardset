@@ -100,13 +100,22 @@ public struct SessionDetailView: View {
           Spacer(minLength: Tokens.Spacing.snug)
           Image(systemName: "chart.xyaxis.line")
         }
+        // A plain button does not inherit a section header's styling, so it is stated, and the
+        // plain-text branch matches it.
+        .font(Tokens.Text.caption)
+        .foregroundStyle(Tokens.Color.textSecondary)
+        .textCase(nil)
         .frame(minHeight: Tokens.minimumTapTarget)
         .contentShape(Rectangle())
       }
       .buttonStyle(.plain)
       .accessibilityLabel("\(title). Show load history.")
+      .accessibilityAddTraits(.isHeader)
     } else {
       Text(title)
+        .font(Tokens.Text.caption)
+        .foregroundStyle(Tokens.Color.textSecondary)
+        .textCase(nil)
     }
   }
 

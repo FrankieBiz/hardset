@@ -14,6 +14,8 @@ public struct HistoryScreen: View {
   @State private var openedSession: SessionID?
   @State private var detail: SessionDetail?
   @State private var detailError: String?
+  /// The session `detailError` belongs to, so another session never shows it for a frame.
+  @State private var detailErrorSession: SessionID?
   @State private var progressTarget: ProgressTarget?
 
   private struct ProgressTarget: Hashable {
@@ -81,13 +83,13 @@ public struct HistoryScreen: View {
             progressTarget = ProgressTarget(id: exerciseID, name: name)
           }
         )
-      } else if let detailError {
+      } else if let detailError, detailErrorSession == id {
         ContentUnavailableView {
           Label("Couldn't open this workout", systemImage: "exclamationmark.circle")
         } description: {
           Text(detailError)
         } actions: {
-          Button("Try again") { loadDetail(id) }
+          Button("Try again") { loadDetail(id, retry: true) }
         }
       } else {
         ProgressView()
@@ -106,13 +108,20 @@ public struct HistoryScreen: View {
     }
   }
 
-  private func loadDetail(_ id: SessionID) {
+  /// Reads the session unless it is already loaded. Popping the load-history screen re-fires the
+  /// task; reloading then would swap the list for a spinner and lose its scroll position.
+  /// `retry` is "Try again": it clears the failure and reads again.
+  private func loadDetail(_ id: SessionID, retry: Bool = false) {
+    if !retry, detail?.summary.sessionID == id { return }
+    // A different session, or a retry: nothing of the previous one may show while this loads.
     detail = nil
     detailError = nil
+    detailErrorSession = nil
     do {
       detail = try details.detail(for: id)
     } catch {
       detailError = FailureCopy.message(for: error, during: .loadHistory)
+      detailErrorSession = id
     }
   }
 
