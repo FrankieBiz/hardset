@@ -674,6 +674,12 @@ the `Hardset` scheme for the iOS 26.4 simulator.
   - If Finish is not visibly prominent, the `.confirm` role alone did not style it on iOS 26: add
     `.buttonStyle(.glassProminent)` inside the `#available` branch.
 
+- [ ] (refactor(feature): the root composes three views instead of drawing them) HardsetFeature
+      and the app build (iOS, and macOS 15 via `./test.sh`); `AppSmokeTests` passes. In the
+      simulator, nothing looks or behaves differently: start screen, gym row and sheet (including
+      "Add a gym" inside it), glass Start, the accessory during a workout and a rest, Finish →
+      summary, Repeat from history.
+
 ## Phase 4
 
 - [ ] (feat(app): launch in the app's own colour; a manifest for the widget) The `Hardset` scheme

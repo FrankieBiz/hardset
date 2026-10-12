@@ -1,38 +1,7 @@
 import HardsetCore
 import HardsetStore
 import HardsetUI
-import SQLiteData
 import SwiftUI
-
-/// Everything the app needs, constructed once.
-///
-/// Assembled here rather than in the app target because the app target cannot be compiled from a
-/// sandboxed command line, so anything that lives there is unverifiable. This builds and previews
-/// on the host.
-@MainActor
-public struct HardsetEnvironment {
-  public let logger: LoggerStore
-  public let catalog: CatalogSeeder
-  public let volume: VolumeStore
-  public let history: HistoryStore
-  public let progression: ProgressionStore
-  public let gyms: GymStore
-  /// Reads a finished workout's summary back from the database.
-  public let summaries: WorkoutSummaryStore
-  /// The picker's Recent movements, and "Repeat this workout".
-  public let shortcuts: WorkoutShortcutsStore
-
-  public init(database: any DatabaseWriter) {
-    self.logger = LoggerStore(database: database)
-    self.catalog = CatalogSeeder(database: database)
-    self.volume = VolumeStore(database: database)
-    self.history = HistoryStore(database: database)
-    self.progression = ProgressionStore(database: database)
-    self.gyms = GymStore(database: database)
-    self.summaries = WorkoutSummaryStore(database: database)
-    self.shortcuts = WorkoutShortcutsStore(database: database)
-  }
-}
 
 /// The root's tabs, as a selection value, so the accessory and "Repeat this workout" can bring
 /// the lifter back to Train. `nonisolated` like the Store's value types: it is a plain value, and
@@ -206,7 +175,12 @@ public struct HardsetRootView: View {
       // bar on the start screen — the slot is reserved by the modifier, not by its content.
       // `isEnabled:` is the documented way to show and hide it.
       content
-        .tabViewBottomAccessory(isEnabled: coordinator != nil) { liveSessionAccessory }
+        .tabViewBottomAccessory(isEnabled: coordinator != nil) {
+          if let coordinator {
+            LiveSessionAccessory(
+              coordinator: coordinator, hooks: hooks, onOpen: { selectedTab = .train })
+          }
+        }
         .tabBarMinimizeBehavior(.onScrollDown)
     #else
       content
@@ -286,161 +260,25 @@ public struct HardsetRootView: View {
   }
 
   private var startView: some View {
-    VStack(spacing: Tokens.Spacing.loose) {
-      ContentUnavailableView {
-        Label("No workout in progress", systemImage: "figure.strengthtraining.traditional")
-      } description: {
-        Text("Start an empty workout and add movements as you go.")
-      }
-      gymRow
-
-      startButton
-        .padding(.horizontal, Tokens.Spacing.section)
-
-      if startFailed {
-        Text("Could not start a workout. Nothing has been lost — try again.")
-          .font(Tokens.Text.caption)
-          .foregroundStyle(Tokens.Color.critical)
-      }
-    }
-    .frame(maxWidth: .infinity, maxHeight: .infinity)
-    .background(Tokens.Color.background)
-    .sheet(isPresented: $isChoosingGym) { gymSheet }
-  }
-
-  /// The start screen's prominent action, and one of the four places glass is allowed: it is for
-  /// the functional layer (Start, the Finish toolbar action, the rest accessory and the Undo bar),
-  /// never a set row or a card. `.glassProminent` is iOS 26 and macOS 26, and this target also
-  /// builds for macOS 15, which keeps the plain button.
-  @ViewBuilder private var startButton: some View {
-    if #available(macOS 26.0, *) {
-      Button(action: startEmptyWorkout) {
-        Text("Start workout")
-          .font(Tokens.Text.label.weight(.semibold))
-          .frame(maxWidth: .infinity, minHeight: Tokens.loggerTapTarget)
-      }
-      .buttonStyle(.glassProminent)
-    } else {
-      Button(action: startEmptyWorkout) {
-        Text("Start workout")
-          .font(Tokens.Text.label.weight(.semibold))
-          .frame(maxWidth: .infinity, minHeight: Tokens.loggerTapTarget)
-      }
-      .buttonStyle(.plain)
-      .foregroundStyle(Tokens.Color.accent)
-      .background(Tokens.Color.surface, in: RoundedRectangle(cornerRadius: Tokens.Radius.control))
-    }
-  }
-
-  /// Sets where this workout is, which is what makes per-machine tracking reachable at all: a
-  /// machine belongs to a gym, so a session with no gym can only ever log `machineID == nil`.
-  ///
-  /// Stated as one line rather than a required step. It is preselected from the last gym used, so
-  /// the common case — training at the same place — costs nothing.
-  private var gymRow: some View {
-    Button {
-      isChoosingGym = true
-    } label: {
-      HStack(spacing: Tokens.Spacing.snug) {
-        Image(systemName: "mappin.and.ellipse")
-        Text(selectedGymName ?? "Add a gym to track machines")
-        Spacer(minLength: 0)
-        Image(systemName: "chevron.right")
-          .font(Tokens.Text.caption)
-      }
-      .font(Tokens.Text.caption)
-      .foregroundStyle(
-        selectedGymName == nil ? Tokens.Color.textSecondary : Tokens.Color.textPrimary
+    StartWorkoutView(
+      gymName: selectedGymName,
+      startFailed: startFailed,
+      onChooseGym: { isChoosingGym = true },
+      onStart: startEmptyWorkout
+    )
+    .sheet(isPresented: $isChoosingGym) {
+      GymPickerSheet(
+        gyms: gymOptions,
+        selected: $selectedGym,
+        error: gymError,
+        onAddGym: { addGym(named: $0) },
+        onDone: { isChoosingGym = false }
       )
-      .frame(minHeight: Tokens.minimumTapTarget)
-      .padding(.horizontal, Tokens.Spacing.regular)
-      .contentShape(Rectangle())
     }
-    .buttonStyle(.plain)
-    .padding(.horizontal, Tokens.Spacing.section)
   }
 
   private var selectedGymName: String? {
     selectedGym.flatMap { id in gymOptions.first { $0.id == id }?.name }
-  }
-
-  private var gymSheet: some View {
-    NavigationStack {
-      List {
-        Section {
-          ForEach(gymOptions) { gym in
-            Button {
-              selectedGym = gym.id
-              isChoosingGym = false
-            } label: {
-              HStack {
-                Text(gym.name).foregroundStyle(Tokens.Color.textPrimary)
-                Spacer()
-                if selectedGym == gym.id {
-                  Image(systemName: "checkmark").foregroundStyle(Tokens.Color.accent)
-                }
-              }
-              .frame(minHeight: Tokens.minimumTapTarget)
-              .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-          }
-        } footer: {
-          if let gymError {
-            Text(gymError).foregroundStyle(Tokens.Color.critical)
-          } else {
-            Text("Loads are tracked per machine, and machines belong to a gym.")
-          }
-        }
-
-        Section {
-          Button {
-            // Not recorded stays available: someone training at home or travelling should not be
-            // made to invent a gym to log a set.
-            selectedGym = nil
-            isChoosingGym = false
-          } label: {
-            HStack {
-              Text("Not recorded").foregroundStyle(Tokens.Color.textSecondary)
-              Spacer()
-              if selectedGym == nil {
-                Image(systemName: "checkmark").foregroundStyle(Tokens.Color.accent)
-              }
-            }
-            .frame(minHeight: Tokens.minimumTapTarget)
-            .contentShape(Rectangle())
-          }
-          .buttonStyle(.plain)
-
-          Button { isAddingGym = true } label: {
-            Label("Add a gym", systemImage: "plus")
-              .frame(minHeight: Tokens.minimumTapTarget)
-          }
-          .buttonStyle(.plain)
-          .foregroundStyle(Tokens.Color.accent)
-        }
-      }
-      .navigationTitle("Where are you training?")
-      .toolbar {
-        ToolbarItem(placement: .confirmationAction) {
-          Button("Done") { isChoosingGym = false }
-        }
-      }
-      // Attached INSIDE the gym sheet on purpose. Two `.sheet` modifiers on the same anchor means
-      // the second one silently never presents: "Add a gym" was a button that did nothing.
-      .sheet(isPresented: $isAddingGym) {
-        NameEntrySheet(
-          title: "Add a gym",
-          prompt: "Name",
-          footnote: "Machines are recorded per gym, so this is what groups them.",
-          onConfirm: { name in
-            isAddingGym = false
-            addGym(named: name)
-          },
-          onCancel: { isAddingGym = false }
-        )
-      }
-    }
   }
 
   private func refreshGyms() {
@@ -516,54 +354,6 @@ public struct HardsetRootView: View {
       // Nothing was started. Train's start screen says so, so the lifter is taken there.
       startFailed = true
       selectedTab = .train
-    }
-  }
-
-  // MARK: - Accessory
-
-  /// While a rest runs, the one rest cluster: `SessionView` no longer draws a rest bar on iOS, so
-  /// the countdown and its controls are drawn here, once. Otherwise, the workout's status. Either
-  /// way a tap brings the lifter back to Train, where the workout is.
-  @ViewBuilder private var liveSessionAccessory: some View {
-    if let coordinator {
-      let restState = hooks.state()
-      if restState != .idle {
-        RestBarView(
-          state: restState,
-          // The coordinator's record of what was asked of the timer, so the bar names the set that
-          // actually started this rest.
-          metadata: coordinator.activeRest,
-          onAdjust: hooks.adjust,
-          onPauseResume: hooks.pauseOrResume,
-          onSkip: {
-            hooks.cancel()
-            coordinator.endRest()
-          },
-          onOpen: { selectedTab = .train }
-        )
-      } else {
-        Button {
-          selectedTab = .train
-        } label: {
-          HStack(spacing: Tokens.Spacing.snug) {
-            Image(systemName: "figure.strengthtraining.traditional")
-            // Inflected rather than concatenated, so one set does not read "1 sets".
-            Text("^[\(coordinator.loggedSetCount) set](inflect: true) logged")
-              .font(Tokens.Text.caption)
-              .monospacedDigit()
-            Spacer(minLength: 0)
-          }
-          .padding(.horizontal, Tokens.Spacing.regular)
-          .frame(minHeight: Tokens.minimumTapTarget)
-          // The whole pill opens the workout, not only the glyph and the words.
-          .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel(
-          Text("Workout in progress, ^[\(coordinator.loggedSetCount) set](inflect: true) logged")
-        )
-        .accessibilityHint("Opens the workout")
-      }
     }
   }
 }
