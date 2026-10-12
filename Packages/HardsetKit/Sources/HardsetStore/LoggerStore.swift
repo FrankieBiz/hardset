@@ -388,7 +388,7 @@ public nonisolated struct LoggerStore {
           // A missing name means a deleted exercise row, which the foreign key should prevent.
           // Shown as unknown rather than crashing a recovery path.
           exerciseName: names[row.exerciseID] ?? "Unknown movement",
-          machineName: row.machineID.flatMap { machines[$0]?.name },
+          machineName: row.machineID.flatMap { machines[$0].map { MachineRecord(row: $0).displayName } },
           position: row.position,
           plannedSets: row.plannedSets,
           machineIncrementKg: row.machineID.flatMap { machines[$0]?.stackIncrementKg }

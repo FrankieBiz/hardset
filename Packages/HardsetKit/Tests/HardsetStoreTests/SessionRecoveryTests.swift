@@ -218,4 +218,27 @@ struct SessionRecoveryTests {
     #expect(live.exercises.count == 1)
     #expect(live.lastError != nil)
   }
+
+  @Test("A resumed workout names a branded machine in full, as every other path does")
+  func resumedMachineKeepsBrand() throws {
+    let database = try migratedDatabase()
+    let store = LoggerStore(database: database)
+    let gyms = GymStore(database: database)
+    let press = try seedExercise(database, "Leg Press")
+    let gym = try gyms.createGym(name: "Home", now: start)
+    let machine = try gyms.createMachine(
+      at: gym, name: "Leg Press", brand: "Hammer Strength", now: start)
+    _ = try SessionCoordinator.start(
+      store: store, gymID: gym,
+      plan: [
+        PlannedExercise(
+          exerciseID: press, machineID: machine, exerciseName: "Leg Press",
+          machineName: "Hammer Strength Leg Press", plannedSets: 2)
+      ],
+      now: { self.start }
+    )
+
+    let resumed = try #require(try SessionCoordinator.resume(store: store, now: { self.start }))
+    #expect(resumed.exercises[0].machineName == "Hammer Strength Leg Press")
+  }
 }
