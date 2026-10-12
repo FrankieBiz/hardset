@@ -122,6 +122,18 @@ struct EvidenceSummaryTests {
     #expect(version.doiURL == nil)
   }
 
+  @Test("Only a DOI makes a link: not a number that merely contains 10.")
+  func doiNeedsTheDOIShape() {
+    func url(_ citation: String) -> String? {
+      EvidenceSource(id: "t", title: "t", methodology: "t", citation: citation).doiURL?.absoluteString
+    }
+    #expect(url("Smith 2025, DOI 10.1007/s40279-025-02344-w") == "https://doi.org/10.1007/s40279-025-02344-w")
+    #expect(url("https://doi.org/10.1234/ab.cd") == "https://doi.org/10.1234/ab.cd")
+    #expect(url("Smith 2010.5/6") == nil)
+    #expect(url("see pp. 10.5/7") == nil)
+    #expect(url("Registrant too short 10.123/abc") == nil)
+  }
+
   @Test("The credit picture reads its numbers from the counting itself")
   func creditScheme() {
     let posix = Locale(identifier: "en_US_POSIX")

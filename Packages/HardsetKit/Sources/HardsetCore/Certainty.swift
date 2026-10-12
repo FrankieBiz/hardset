@@ -76,14 +76,23 @@ public struct EvidenceSource: Hashable, Sendable, Codable, Identifiable {
   public var doiURL: URL? {
     guard let citation else { return nil }
     for word in citation.split(whereSeparator: \.isWhitespace) {
-      guard let start = word.range(of: "10.") else { continue }
-      var doi = word[start.lowerBound...]
-      while let last = doi.last, ".,;:)]".contains(last) { doi = doi.dropLast() }
-      let parts = doi.split(separator: "/", maxSplits: 1)
-      guard parts.count == 2, parts[0].count > 3, parts[0].dropFirst(3).allSatisfy(\.isNumber),
-        !parts[1].isEmpty
-      else { continue }
-      return URL(string: "https://doi.org/\(doi)")
+      var from = word.startIndex
+      while let start = word[from...].range(of: "10.") {
+        from = start.upperBound
+        // A DOI starts at a boundary: the word's start, or after "(", "doi:" or "doi.org/", never
+        // inside a longer number such as "2010.5/6".
+        if let before = word[..<start.lowerBound].last, before.isLetter || before.isNumber || before == "." {
+          continue
+        }
+        var doi = word[start.lowerBound...]
+        while let last = doi.last, ".,;:)]".contains(last) { doi = doi.dropLast() }
+        let parts = doi.split(separator: "/", maxSplits: 1)
+        guard parts.count == 2, (4...9).contains(parts[0].dropFirst(3).count),
+          parts[0].dropFirst(3).allSatisfy(\.isASCII), parts[0].dropFirst(3).allSatisfy(\.isNumber),
+          !parts[1].isEmpty
+        else { continue }
+        return URL(string: "https://doi.org/\(doi)")
+      }
     }
     return nil
   }
