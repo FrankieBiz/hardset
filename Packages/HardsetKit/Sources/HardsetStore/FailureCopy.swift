@@ -96,8 +96,15 @@ public nonisolated enum FailureCopy {
       return "That set could not be put back. Tap Undo to try again."
 
     case .discardWorkout:
-      if let storeError = error as? LoggerStoreError, storeError == .sessionNotEmpty {
-        return "This workout has logged sets, so it was not discarded. Finish it to keep them."
+      if let storeError = error as? LoggerStoreError {
+        if storeError == .sessionNotEmpty {
+          return "This workout has logged sets, so it was not discarded. Finish it to keep them."
+        }
+        // Deleted on another device first. "Still open — try again" would be untrue, and a retry
+        // could only fail the same way.
+        if storeError == .sessionNotFound {
+          return "This workout has already been deleted, so there is nothing left to discard."
+        }
       }
       return "This workout could not be discarded. It is still open — try again."
 

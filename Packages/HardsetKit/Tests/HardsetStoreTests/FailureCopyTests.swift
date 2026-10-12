@@ -113,6 +113,11 @@ struct FailureCopyTests {
       CopyRow(
         error: LoggerStoreError.sessionNotEmpty, action: .discardWorkout,
         expected: "This workout has logged sets, so it was not discarded. Finish it to keep them."),
+      // Deleted on another device first. "Still open — try again" was untrue, and a retry could
+      // only fail the same way.
+      CopyRow(
+        error: LoggerStoreError.sessionNotFound, action: .discardWorkout,
+        expected: "This workout has already been deleted, so there is nothing left to discard."),
       CopyRow(
         error: Opaque(), action: .discardWorkout,
         expected: "This workout could not be discarded. It is still open — try again."),

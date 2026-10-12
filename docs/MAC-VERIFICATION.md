@@ -1079,3 +1079,20 @@ the `Hardset` scheme for the iOS 26.4 simulator.
   - [ ] A gym with two machines both named "Cable station"; log a set on each, finish. The
         summary's Machines section lists "Cable station" twice, and the console shows no
         "the ID … occurs multiple times" warning from `ForEach`.
+- [ ] (fix(feature): Discard leaves a workout another device finished or deleted) HardsetFeature
+      builds for iOS and macOS 15. Written without a compiler; look first at
+      `switch coordinator.lastError as? LoggerStoreError` with `case .sessionNotOpen?:`, the
+      `MainActor` `static let workoutGoneMessage`, and `.alert(_:isPresented:actions:)` with a
+      `String` title. The new `FailureCopy` sentence is tested on Linux (exact-copy table).
+  - [ ] Two devices, one empty workout synced to both. Finish it on A (with a set logged there),
+        let it sync, then on B tap Finish → Discard workout. B leaves the workout and shows that
+        workout's summary; nothing is sent to Health from B. Before, B said "It is still open —
+        try again" forever.
+  - [ ] Same, but discard it on A. On B, Finish → Discard workout: an alert says "This workout has
+        already been deleted, so there is nothing left to discard."; OK returns to the start
+        screen with no summary. Check the alert actually appears straight after the
+        confirmation dialog closes (an alert presented from a dialog's action); if it is
+        swallowed, B stays on the workout and says the same sentence in its error banner.
+  - [ ] VoiceOver reads the alert and its OK button. A rest running on B stops either way.
+  - [ ] An ordinary discard (one device) still leaves with no summary; a discard refused for a
+        logged set still keeps the workout and says why.

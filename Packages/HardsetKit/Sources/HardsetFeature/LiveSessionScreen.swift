@@ -73,6 +73,8 @@ public enum SessionExit: Hashable, Sendable {
   /// or by this one a tap earlier. It has a summary like any finished workout, but this finish
   /// closed nothing, so it sends nothing to Health.
   case finishedElsewhere(SessionID)
+  /// Gone: discarded here, or found already deleted by another device when Discard was tapped.
+  /// Either way there is no workout left to show a summary of.
   case discarded
 }
 
@@ -101,6 +103,9 @@ public struct LiveSessionScreen: View {
   @State private var isConfirmingUnlogged = false
   @State private var unloggedCount = 0
   @State private var isConfirmingDiscard = false
+  /// Discard found the workout already deleted, on another device. The alert says so, and its one
+  /// button leaves the screen: there is nothing left to keep open.
+  @State private var isWorkoutGone = false
   /// The action the coordinator's `lastError` belongs to, so a failed edit is not described as a
   /// failed log. Set by `attempt(_:_:)`, around every coordinator write.
   @State private var lastAction: FailureCopy.Action = .logSet
@@ -237,6 +242,9 @@ public struct LiveSessionScreen: View {
       Button("Keep logging", role: .cancel) {}
     } message: {
       Text(FinishFlow.discardMessage)
+    }
+    .alert(Self.workoutGoneMessage, isPresented: $isWorkoutGone) {
+      Button("OK", action: leaveDeletedWorkout)
     }
     .sheet(isPresented: $isPickerPresented) {
       NavigationStack {
@@ -585,13 +593,43 @@ public struct LiveSessionScreen: View {
     }
   }
 
-  /// Deletes a workout with nothing logged. The screen leaves only after the store has deleted it;
-  /// a refusal (a set the screen never saw) or a failure keeps the workout open and says why.
+  /// Deletes a workout with nothing logged. The screen leaves only after the store has deleted it,
+  /// or once the store says another device got there first. A refusal (a set the screen never saw)
+  /// or a failure keeps the workout open and says why.
+  ///
+  /// The two "got there first" refusals used to read "It is still open — try again", which was
+  /// untrue, and every retry was refused the same way, so the screen never left.
   private func discard() {
     if attempt(.discardWorkout, { coordinator.discard() }) {
       hooks.cancel()
       onFinished(.discarded)
+      return
     }
+    switch coordinator.lastError as? LoggerStoreError {
+    case .sessionNotOpen?:
+      // Finished on another device, and synced here: history now, not an empty workout. It leaves
+      // like any workout finished elsewhere, with its summary and nothing sent to Health.
+      hooks.cancel()
+      coordinator.endRest()
+      onFinished(.finishedElsewhere(coordinator.sessionID))
+    case .sessionNotFound?:
+      // Deleted on another device. Said first, then left (`leaveDeletedWorkout`).
+      isWorkoutGone = true
+    default:
+      break
+    }
+  }
+
+  /// The alert's text, in `FailureCopy`'s words, where it is tested.
+  private static let workoutGoneMessage = FailureCopy.message(
+    for: LoggerStoreError.sessionNotFound, during: .discardWorkout)
+
+  /// Leaves a workout another device deleted. `.discarded` is exactly that exit: the root drops
+  /// the session and shows no summary, since there is no workout left to read one from.
+  private func leaveDeletedWorkout() {
+    hooks.cancel()
+    coordinator.endRest()
+    onFinished(.discarded)
   }
 }
 
