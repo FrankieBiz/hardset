@@ -23,8 +23,6 @@ the `Hardset` scheme for the iOS 26.4 simulator.
 - [ ] (feat(core): one weight formatter, so pounds mode stops reading kilograms) HardsetUI builds
       with ProgressionChartView calling `explanation(in:)`.
 
-## Phase 1
-
 - [ ] (feat(store): remember each exercise's rest…) HardsetFeature and the app build after the
       restAfterSet → restPreferences rename.
 - [ ] (fix(ui): a set row shows what it saves, and a logged row stays locked) HardsetUI builds with
@@ -507,8 +505,6 @@ the `Hardset` scheme for the iOS 26.4 simulator.
         entries only for keyed lookups either way.
   - [ ] If any of these fails: apply the fallback in `DECISIONS.md` §23, record the failure and
         the fallback here, and only then unblock Task 11.
-
-## Phase 3
 
 - [ ] (feat(ui): a badge says how sure, and opens where from) HardsetUI and HardsetFeature build
       (iOS, and macOS 15 via `./test.sh`) with `CertaintyLevel` and
