@@ -45,7 +45,6 @@ public struct HardsetRootView: View {
   @State private var selectedGym: GymID?
   @State private var gymOptions: [GymRecord] = []
   @State private var isChoosingGym = false
-  @State private var isAddingGym = false
   @State private var isShowingSettings = false
   /// Inferred from the device's locale on first launch rather than asked, and stored the moment the
   /// user disagrees. Kilograms remain the canonical storage unit either way — this only decides
