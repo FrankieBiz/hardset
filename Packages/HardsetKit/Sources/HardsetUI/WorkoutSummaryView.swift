@@ -116,23 +116,15 @@ public struct WorkoutSummaryView: View {
     }
   }
 
+  /// Core's one totals line, as History and the session detail show it, so the three cannot
+  /// disagree. VoiceOver hears it with units in full ("9840 kilograms", never "kg").
   private func totalsSection(_ summary: WorkoutSummary) -> some View {
-    let volume = summary.volume
     let formatter = WeightFormatter(unit: unit)
     return Section("Totals") {
-      Text("\(CountText.sets(volume.workingSets)), \(CountText.reps(volume.reps))")
-        .font(Tokens.Text.readout)
+      Text(SessionVolumeText.written(summary.volume, formatter: formatter))
+        .monospacedDigit()
         .frame(minHeight: Tokens.minimumTapTarget, alignment: .leading)
-      if volume.volumeKg > 0 {
-        Text("\(formatter.total(kilograms: volume.volumeKg)) volume")
-          .monospacedDigit()
-          .frame(minHeight: Tokens.minimumTapTarget, alignment: .leading)
-      }
-      if volume.warmupSets > 0 {
-        Text("\(volume.warmupSets) warm-up")
-          .foregroundStyle(Tokens.Color.textSecondary)
-          .frame(minHeight: Tokens.minimumTapTarget, alignment: .leading)
-      }
+        .accessibilityLabel(SessionVolumeText.spoken(summary.volume, formatter: formatter))
     }
   }
 
@@ -184,8 +176,12 @@ public struct WorkoutSummaryView: View {
           CertaintyBadge(line.certainty, source: SetCounting.source, style: .compact)
         }
         .frame(minHeight: Tokens.minimumTapTarget)
-        // Combined, so the badge's word and its "open the source" action are read with the row.
+        // Combined, so the badge's "open the source" action is the row's. A label on a combined
+        // element replaces what its children say, so the badge's word is spoken here, and the
+        // count in Core's spoken form: "at least 6 sets", where the screen shows "≥ 6 sets".
         .accessibilityElement(children: .combine)
+        .accessibilityLabel(
+          "\(line.muscle.displayName), \(line.spokenSetsText()), \(line.certainty.mark.word)")
       }
     } header: {
       Text("Muscles touched")

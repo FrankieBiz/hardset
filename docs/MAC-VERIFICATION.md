@@ -1047,3 +1047,14 @@ the `Hardset` scheme for the iOS 26.4 simulator.
         running, they offer Subtract 15 seconds, Add 15 seconds and Skip rest.
   - [ ] Together with the timer's own refusal of a paused adjust (the other final-review branch):
         no path left adjusts a paused rest, so the bar and the Lock Screen never disagree.
+- [ ] (fix(ui): the summary sheet speaks its totals and muscle counts in full) HardsetUI builds
+      for iOS and macOS 15. `WorkoutSummaryView`'s totals are `SessionVolumeText.written` with
+      `.spoken` as the label; each muscle row's combined element is labelled with
+      `MuscleLine.spokenSetsText()` and the certainty word.
+  - [ ] Finish a workout with warm-ups and a lower-bound muscle count. Totals read one line, the
+        same text as that workout's History row ("14 sets · 118 reps · 9840 kg · 3 warm-up").
+  - [ ] VoiceOver on the totals: "14 sets, 118 reps, 9840 kilograms, 3 warm-up sets".
+  - [ ] VoiceOver on a muscle row: "Chest, at least 6 sets, Moderate confidence" (or the row's
+        level), never "greater than or equal to 6 sets"; the row's actions still open the
+        source.
+  - [ ] xSmall, Large and AX5: the totals line wraps rather than truncating.
