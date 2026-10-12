@@ -89,31 +89,3 @@ struct CountTextTests {
   @Test("Reps", arguments: [(1, "1 rep"), (8, "8 reps")])
   func reps(count: Int, expected: String) { #expect(CountText.reps(count) == expected) }
 }
-
-@Suite("A report states the most any of its figures can claim")
-struct HighestCertaintyTests {
-  @Test("An empty report claims nothing")
-  func emptyClaimsNothing() {
-    let report = MuscleVolumeReport(
-      fractionalSets: [:], hardSets: 0, unattributedHardSets: 0, setsTouchingGroup: [:])
-    #expect(report.highestCertainty == nil)
-  }
-
-  @Test("Only counted muscles: low, never the old hardcoded moderate")
-  func countedIsLow() {
-    let counted = Muscle.allCases.first { $0.tier != .modelled }!
-    let report = MuscleVolumeReport(
-      fractionalSets: [MuscleKey(counted): 6], hardSets: 6, unattributedHardSets: 0,
-      setsTouchingGroup: [:])
-    #expect(report.highestCertainty == .low)
-  }
-
-  @Test("A modelled muscle in range lifts the ceiling to moderate, never high")
-  func modelledIsModerate() {
-    let modelled = Muscle.allCases.first { $0.tier == .modelled }!
-    let report = MuscleVolumeReport(
-      fractionalSets: [MuscleKey(modelled): 10], hardSets: 10, unattributedHardSets: 0,
-      setsTouchingGroup: [:])
-    #expect(report.highestCertainty == .moderate)
-  }
-}

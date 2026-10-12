@@ -91,7 +91,7 @@ public struct WidgetSnapshot: Codable, Hashable, Sendable {
       }
       let hidden = sets.count - shown.count
       guard hidden > 0 else { return shown }
-      return shown + ["+\(hidden) more \(hidden == 1 ? "set" : "sets")"]
+      return shown + ["+\(hidden) more \(CountText.setNoun(hidden))"]
     }
 
     /// For VoiceOver: "Leg Press on Hammer Strength Leg Press: 100 kilograms for 8 reps, …".

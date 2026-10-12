@@ -21,8 +21,6 @@ struct DerivedCertaintyTests {
     #expect(weekly.certainty(for: .forearms) == .low)
     // Past the studied range even a modelled site is low.
     #expect(weekly.certainty(for: .quadriceps) == .low)
-    // The old single header would have said moderate for all three.
-    #expect(weekly.highestCertainty == .moderate)
   }
 
   @Test("A muscle credited nothing has no figure, so no certainty")

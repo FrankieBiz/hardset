@@ -28,7 +28,10 @@ func localized(_ text: CopyText, comment: StaticString) -> String {
   #endif
 }
 
-/// The same, for copy that already has a stable key, such as `Muscle.displayNameKey`.
+/// The same, for copy that already has a stable key, such as a literal `"muscle.chest"`.
+///
+/// Literals only: the key is a `StaticString`, so a non-literal (`Muscle.displayNameKey`, a runtime
+/// `String`) compiles on Linux but not on Darwin.
 func localized(key: StaticString, default text: CopyText, comment: StaticString) -> String {
   #if canImport(Darwin)
     String(localized: key, defaultValue: text, bundle: .module, comment: comment)

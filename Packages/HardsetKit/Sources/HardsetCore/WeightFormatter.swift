@@ -68,6 +68,8 @@ public struct WeightFormatter: Hashable, Sendable {
 
 /// Counts with the noun agreeing. "1 sets" reached the history screen.
 public enum CountText {
-  public static func sets(_ count: Int) -> String { count == 1 ? "1 set" : "\(count) sets" }
+  /// The noun alone, for copy that puts a word between the number and it ("+2 more sets").
+  public static func setNoun(_ count: Int) -> String { count == 1 ? "set" : "sets" }
+  public static func sets(_ count: Int) -> String { "\(count) \(setNoun(count))" }
   public static func reps(_ count: Int) -> String { count == 1 ? "1 rep" : "\(count) reps" }
 }

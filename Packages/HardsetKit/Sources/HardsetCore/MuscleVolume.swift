@@ -89,15 +89,6 @@ public struct MuscleVolumeReport: Hashable, Sendable {
     Muscle.allCases.filter { !excluded.contains($0) && sets(for: $0) == 0 }
   }
 
-  /// The most certainty any per-muscle figure in this report can claim, or nil when nothing was
-  /// credited. The methodology sheet used to hard-code "Moderate", which overstated every counted
-  /// muscle — 16 of the 22 cap at low.
-  public var highestCertainty: Certainty? {
-    fractionalSets.compactMap { key, sets in
-      key.muscle.map { SetCounting.certaintyCeiling(for: $0, fractionalSets: sets) }
-    }.max()
-  }
-
   /// How sure the app is of one muscle's figure, shown beside that figure (spec 3.1). Nil when the
   /// muscle was credited nothing, because there is then no figure to qualify.
   ///

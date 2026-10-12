@@ -100,8 +100,8 @@ public nonisolated struct WidgetSnapshotStore {
   }
 
   /// Machine names, numbered when two in the snapshot share one, so the widget never shows two
-  /// machines as if they were one (`DECISIONS.md` §20). Numbered by machine id, as the chart is,
-  /// so a label does not change with habits.
+  /// machines as if they were one (`DECISIONS.md` §20). Numbered by machine id within the snapshot's
+  /// window (the movements it carries), not per movement, so a label does not change with habits.
   static func distinctLabels(
     for keys: [ProgressionKey], names: [MachineID: String]
   ) -> [ProgressionKey: String] {

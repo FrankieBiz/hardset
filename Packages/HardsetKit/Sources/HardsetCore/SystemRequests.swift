@@ -178,8 +178,8 @@ public final class SystemRequestInbox {
 /// The Rest control in Control Center, from the duration the lifter configured when adding it.
 public enum RestControlState: Hashable, Sendable {
   case ready(Duration)
-  /// Not configured, or configured with a duration that is no longer allowed. Tapping it opens the
-  /// app; it never starts a rest of a length nobody chose.
+  /// Not configured, or configured with a duration that is no longer allowed. Tapping it starts
+  /// nothing: it never starts a rest of a length nobody chose.
   case needsChoice
 
   public static func make(configuredSeconds: Double?) -> RestControlState {
