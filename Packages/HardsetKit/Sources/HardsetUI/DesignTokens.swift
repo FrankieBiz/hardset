@@ -205,4 +205,17 @@ public enum Tokens {
   /// heavy sets. 44 pt is the accessibility floor for a calm user sitting still; the set row
   /// and the keypad get 56 because a missed tap there costs a set.
   public static let loggerTapTarget: CGFloat = 56
+
+  /// The most a tap target grows with the type. Uncapped, 56 pt reaches about 170 pt at the
+  /// largest size, and a set row's reps field and check mark would leave the hero weight no room.
+  public static let maximumTapTarget: CGFloat = 88
+
+  /// A tap target that scales with the type (`@ScaledMetric`), held between `floor` and
+  /// `maximumTapTarget`.
+  ///
+  /// The clamp goes both ways because `@ScaledMetric` also scales *down*: at the three text sizes
+  /// below Large, 44 pt becomes about 36 and 56 about 46. A floor holds at every size.
+  public static func tapTarget(_ scaled: CGFloat, floor: CGFloat) -> CGFloat {
+    min(max(scaled, floor), maximumTapTarget)
+  }
 }

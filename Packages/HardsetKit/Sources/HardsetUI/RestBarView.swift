@@ -31,9 +31,12 @@ public struct RestBarView: View {
   #endif
   @Environment(\.accessibilityReduceMotion) private var reduceMotion
   @State private var adjustCount = 0
-  // The buttons grow with the type; the floors are 44 pt (accessory) and 56 pt (the logger).
-  @ScaledMetric(relativeTo: .body) private var accessoryTarget: CGFloat = Tokens.minimumTapTarget
-  @ScaledMetric(relativeTo: .body) private var loggerTarget: CGFloat = Tokens.loggerTapTarget
+  // The buttons grow with the type, up to 88 pt, and never fall below their floors: 44 pt in the
+  // accessory and 56 pt in the logger. `@ScaledMetric` also scales down below Large, so the
+  // floors are applied, not assumed (`Tokens.tapTarget`).
+  @ScaledMetric(relativeTo: .body) private var scaledAccessoryTarget: CGFloat =
+    Tokens.minimumTapTarget
+  @ScaledMetric(relativeTo: .body) private var scaledLoggerTarget: CGFloat = Tokens.loggerTapTarget
 
   public init(
     state: RestTimerState,
@@ -72,7 +75,9 @@ public struct RestBarView: View {
   }
 
   private var tapTarget: CGFloat {
-    inAccessory ? accessoryTarget : loggerTarget
+    inAccessory
+      ? Tokens.tapTarget(scaledAccessoryTarget, floor: Tokens.minimumTapTarget)
+      : Tokens.tapTarget(scaledLoggerTarget, floor: Tokens.loggerTapTarget)
   }
 
   public var body: some View {

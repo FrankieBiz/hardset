@@ -63,16 +63,20 @@ public struct SetRowView: View {
   // `ScaledMetric` is iOS 14 / macOS 11.
   @ScaledMetric(relativeTo: .subheadline) private var ordinalWidth: CGFloat = 28
   @ScaledMetric(relativeTo: .caption) private var lastTimeWidth: CGFloat = 78
-  // The tap targets grow with the type as well, and never fall below the 44 pt and 56 pt floors.
-  // Capped at 88 pt (the pad's key cap): uncapped, 56 pt reaches about 170 pt at the largest size,
-  // and the reps field plus the check mark would leave the hero weight no room (it would shrink
-  // to its 0.6 floor or truncate). The floors stay 56 and 44.
+  // The tap targets grow with the type as well, between the 56 pt and 44 pt floors and the 88 pt
+  // cap (the pad's key cap). Uncapped, 56 pt reaches about 170 pt at the largest size, and the
+  // reps field plus the check mark would leave the hero weight no room (it would shrink to its 0.6
+  // floor or truncate). The floor is applied as well because `@ScaledMetric` also scales down:
+  // below Large, 56 pt fell to about 46 (`Tokens.tapTarget`).
   @ScaledMetric(relativeTo: .body) private var scaledLoggerTarget: CGFloat = Tokens.loggerTapTarget
   @ScaledMetric(relativeTo: .body) private var scaledMinimumTarget: CGFloat =
     Tokens.minimumTapTarget
-  private var loggerTarget: CGFloat { min(scaledLoggerTarget, Self.targetCap) }
-  private var minimumTarget: CGFloat { min(scaledMinimumTarget, Self.targetCap) }
-  private static let targetCap: CGFloat = 88
+  private var loggerTarget: CGFloat {
+    Tokens.tapTarget(scaledLoggerTarget, floor: Tokens.loggerTapTarget)
+  }
+  private var minimumTarget: CGFloat {
+    Tokens.tapTarget(scaledMinimumTarget, floor: Tokens.minimumTapTarget)
+  }
   @State private var isExplainingEstimate = false
 
   /// - Parameter keypad: The pad editing this row, or `nil` when the row is not focused. While it

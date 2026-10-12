@@ -31,12 +31,18 @@ public struct NumericPad: View {
   private let onCommit: () -> Void
   private let onDismiss: () -> Void
 
-  // Key height and the close target scale with the type, capped so the four rows of keys never
-  // cover the row being edited at the largest sizes. Both stay at or above 44 pt.
+  // Key height and the close target scale with the type, capped at 88 pt so the four rows of keys
+  // never cover the row being edited at the largest sizes. `@ScaledMetric` also scales down, below
+  // Large, so each is held at its floor too: 56 pt for a key, 44 pt for close (`Tokens.tapTarget`).
   @ScaledMetric(relativeTo: .title3) private var scaledKeyHeight: CGFloat = Tokens.loggerTapTarget
-  @ScaledMetric(relativeTo: .body) private var closeTarget: CGFloat = Tokens.minimumTapTarget
+  @ScaledMetric(relativeTo: .body) private var scaledCloseTarget: CGFloat = Tokens.minimumTapTarget
 
-  private var keyHeight: CGFloat { min(scaledKeyHeight, 88) }
+  private var keyHeight: CGFloat {
+    Tokens.tapTarget(scaledKeyHeight, floor: Tokens.loggerTapTarget)
+  }
+  private var closeTarget: CGFloat {
+    Tokens.tapTarget(scaledCloseTarget, floor: Tokens.minimumTapTarget)
+  }
 
   public init(
     keypad: Binding<SetEntryKeypad>,
@@ -109,7 +115,8 @@ public struct NumericPad: View {
       Button(action: onDismiss) {
         Image(systemName: "chevron.down")
           .font(Tokens.Text.label.weight(.semibold))
-          .frame(width: max(keyHeight, Tokens.loggerTapTarget), height: closeTarget)
+          // As wide as a key is tall, which is never under the logger's 56 pt.
+          .frame(width: keyHeight, height: closeTarget)
           .contentShape(Rectangle())
       }
       .buttonStyle(.plain)
