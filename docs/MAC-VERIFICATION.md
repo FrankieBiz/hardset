@@ -1027,3 +1027,14 @@ the `Hardset` scheme for the iOS 26.4 simulator.
   - [ ] xSmall and Large: the accessory buttons are 44 pt; macOS's inline rest bar keeps 56–88 pt.
   - [ ] Tab bar collapsed (inline): VoiceOver's actions on the countdown still offer Subtract 15
         seconds, Add 15 seconds and Skip rest.
+- [ ] (fix(ui): the assumption chip is tappable across its whole 44 pt) HardsetUI builds for iOS
+      and macOS 15. `AssumptionChip`'s frame and `contentShape` moved inside the plain button's
+      label; `UnevaluatedReadout` reads `Certainty.unevaluated.mark.word`.
+  - [ ] First run, the unit chip ("Weights in kilograms, from your region"): a tap just above or
+        below the grey capsule, inside the 44 pt row, still toggles the unit. Before, only the
+        roughly 24 pt capsule responded.
+  - [ ] Logger, a movement with borrowed history and a gym: the "From another machine" chip
+        opens the machine picker from anywhere in its 44 pt row.
+  - [ ] Accessibility Inspector: the chip's frame is at least 44 pt high at xSmall, Large and AX5.
+  - [ ] Progress screen, Estimated 1RM with only high-rep sets: the readout still says "Not
+        evaluated".

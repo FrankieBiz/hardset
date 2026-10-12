@@ -71,9 +71,12 @@ public struct AssumptionChip: View {
       .padding(.vertical, Tokens.Spacing.tight)
       .background(Tokens.Color.surface, in: Capsule())
       .foregroundStyle(Tokens.Color.textSecondary)
+      // Inside the label, as in `CertaintyBadge`: a plain-style button hit-tests only its label,
+      // so a frame outside it made the 44 pt tall but left only the capsule tappable.
+      .frame(minHeight: Tokens.minimumTapTarget)
+      .contentShape(Rectangle())
     }
     .buttonStyle(.plain)
-    .frame(minHeight: Tokens.minimumTapTarget)
     .accessibilityLabel("\(label). \(correctionPrompt).")
   }
 }
@@ -92,7 +95,8 @@ public struct UnevaluatedReadout: View {
 
   public var body: some View {
     VStack(alignment: .leading, spacing: Tokens.Spacing.tight) {
-      Text("Not evaluated")
+      // Core's word for the level, the one every badge uses, so the two cannot drift apart.
+      Text(Certainty.unevaluated.mark.word)
         .font(Tokens.Text.readout)
         .foregroundStyle(Tokens.Color.textSecondary)
       Text(explanation)
