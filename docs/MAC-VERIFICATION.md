@@ -1103,3 +1103,9 @@ the `Hardset` scheme for the iOS 26.4 simulator.
         Undo bar from the last one. Repeat a workout from History: the same.
   - [ ] Mid-workout, the live screen keeps its state (an open keypad, a scroll position) across
         logs, rest starts and tab switches: the id changes only with the workout.
+- [ ] (fix(feature): the archive dialog's title can be localised) HardsetFeature builds for iOS and
+      macOS 15. `GymsScreen.archiveTitle` is a `Text` from a string literal, passed to
+      `confirmationDialog(_: Text, isPresented:titleVisibility:actions:message:)`.
+  - [ ] Settings → Gyms and machines → Archive a gym, then a machine: the dialog's title reads
+        "Archive “Name”?" with the name, as before.
+  - [ ] After a build, the String Catalog (if one is added) lists "Archive “%@”?" and "Archive?".

@@ -78,7 +78,7 @@ struct GymsScreen: View {
       }
     }
     .confirmationDialog(
-      archiving.map { "Archive “\($0.name)”?" } ?? "Archive?",
+      archiveTitle,
       isPresented: isConfirmingArchive,
       titleVisibility: .visible
     ) {
@@ -89,6 +89,13 @@ struct GymsScreen: View {
     } message: {
       Text("It leaves your pickers. Every set logged on it stays in your history.")
     }
+  }
+
+  /// A `Text` built from a string literal, so the title is a localisation key ("Archive “%@”?").
+  /// The `String` it replaced went through the verbatim overload and could never be translated.
+  private var archiveTitle: Text {
+    guard let archiving else { return Text("Archive?") }
+    return Text("Archive “\(archiving.name)”?")
   }
 
   private var isConfirmingArchive: Binding<Bool> {
