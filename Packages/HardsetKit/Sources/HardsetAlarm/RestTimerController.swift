@@ -41,7 +41,9 @@ public protocol RestTimerPersistence {
 /// A refusal is the lifter's choice, not a failure. The countdown stays on screen, the UI says
 /// alarms are off, `lastError` stays clear, and the rest ends with a plain local notification
 /// (`RestNotificationFallback`) instead. With no alert to report back, the on-screen rest ends
-/// itself at its deadline (`endAtDeadlineIfNoAlarm`).
+/// itself at its deadline (`endAtDeadlineIfNoAlarm`). The answer can change in Settings at any
+/// time, so `observeAlarms()` follows it too: alarms turned off mid-rest hand that rest to the
+/// notification, and alarms turned back on clear the refusal from the screen at once.
 @MainActor
 @Observable
 public final class RestTimerController {
@@ -141,17 +143,20 @@ public final class RestTimerController {
   /// Reconciles first: an intent can launch the app in the background, where no view has run
   /// `reconcile()` and this controller still reads idle. Then waits for AlarmKit to catch up,
   /// because the system may suspend the app as soon as `perform()` returns, and a debounced
-  /// commit left pending would leave a rest written down with no alarm behind it.
+  /// commit left pending would leave a rest written down with no alarm behind it. It waits even
+  /// when the command changed nothing, since reconciling can itself leave a commit pending: the
+  /// notification for a rest whose alarms were turned off.
   public func perform(_ command: RestCommand, now: Date = .now) async -> RestCommandOutcome {
     await reconcile(now: now)
     let outcome = RestCommandPlan.outcome(
       for: command, state: state, now: now, alarmsUnreadable: alarmsUnreadable)
-    guard case .perform(let action) = outcome else { return outcome }
-    switch action {
-    case .start(let duration): start(duration: duration, metadata: nil, now: now)
-    case .pause: pause(now: now)
-    case .resume: resume(now: now)
-    case .stop: cancel()
+    if case .perform(let action) = outcome {
+      switch action {
+      case .start(let duration): start(duration: duration, metadata: nil, now: now)
+      case .pause: pause(now: now)
+      case .resume: resume(now: now)
+      case .stop: cancel()
+      }
     }
     await settle()
     return outcome
@@ -166,8 +171,9 @@ public final class RestTimerController {
     }
   }
 
-  /// Brings the on-screen timer back in line with AlarmKit. Run at launch and on every update:
-  /// a force-quit relaunched the app idle while its alarm still counted down.
+  /// Brings the on-screen timer back in line with AlarmKit. Run at launch, on every update to the
+  /// alarms and on every change to the lifter's permission: a force-quit relaunched the app idle
+  /// while its alarm still counted down.
   public func reconcile(now: Date = .now) async {
     // Held while a commit is pending or its alarm is still being scheduled (see "Why
     // reconciliation waits"). The record already says what the lifter did; the alarms do not
@@ -219,14 +225,40 @@ public final class RestTimerController {
     if hasNoAlarm, let persisted {
       adopt(persisted.state.hasElapsed(at: now) ? .idle : persisted.state, alarmID: nil)
       endAtDeadlineIfNoAlarm()
+      // Without alarms, only the notification can sound this rest, and alarms turned off
+      // mid-rest leave it with neither: the alarm is gone and nothing armed the notification.
+      // The commit arms it, through the same branch that serves a rest started with alarms off.
+      // Arming twice is harmless: the request's fixed identifier replaces the pending one, and
+      // the deadline is the rest's own. An elapsed rest was adopted as idle above, so a
+      // notification already delivered is never added again.
+      if authorization != .authorized, state.isRunning { scheduleCommit() }
     } else {
       adopt(result.state, alarmID: result.alarmID)
     }
   }
 
-  /// Follows AlarmKit for the life of the app.
+  /// Follows AlarmKit for the life of the app: its alarms, and the lifter's permission for them.
+  /// Neither sequence ends, so this does not return.
   public func observeAlarms() async {
+    async let alarms: Void = followAlarmUpdates()
+    async let permission: Void = followAuthorizationUpdates()
+    await alarms
+    await permission
+  }
+
+  private func followAlarmUpdates() async {
     for await _ in RestAlarmService.alarmUpdates() { await reconcile() }
+  }
+
+  /// A change made in Settings arrives here. Without it, alarms turned back on left "alarms are
+  /// off" on screen until the next rest, and alarms turned off mid-rest were noticed only by a
+  /// later reconciliation. `authorization` is set before reconciling, because a reconciliation
+  /// held back by a pending commit does not read it until that commit finishes.
+  private func followAuthorizationUpdates() async {
+    for await answer in RestAlarmService.authorizationUpdates() {
+      authorization = answer
+      await reconcile()
+    }
   }
 
   /// What the reconciler is told was last written down.

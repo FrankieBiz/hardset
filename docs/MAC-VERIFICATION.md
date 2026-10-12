@@ -1142,3 +1142,23 @@ the `Hardset` scheme for the iOS 26.4 simulator.
       offer them while paused; if a build still does, tap them): the paused remainder on screen and
       on the Lock Screen card stay the same, and Resume continues from that remainder with the
       alarm sounding at the matching deadline.
+- [ ] (fix(alarm): follow alarm permission, and keep a rest's alert when it is revoked)
+      HardsetAlarm builds for iOS with no new warnings. Written without a compiler,
+      but `HardsetAlarm`'s four files were compiled on Linux (swift 6.2.4, `-swift-version 6
+      -default-isolation MainActor -enable-upcoming-feature NonisolatedNonsendingByDefault
+      -warnings-as-errors -c -wmo`, `import Observation` added for the probe) against a mock of
+      the documented AlarmKit surface, with `authorizationUpdates`' sequence deliberately
+      non-`Sendable`; the same probe reproduces `DECISIONS.md` §3's error for a control. Look first
+      at:
+  - [ ] `AlarmManager.shared.authorizationUpdates.map { mapped($0) }` returned as
+        `some AsyncSequence<RestTimerController.Authorization, Never>` (needs `AsyncMapSequence`'s
+        `Failure == Base.Failure`, Swift 6 stdlib).
+  - [ ] `observeAlarms()`'s two `async let` children calling main-actor methods.
+  - [ ] Whether `authorizationUpdates` emits the current answer when iteration starts (one extra
+        reconcile at launch, harmless) and whether it emits while the app is in the background or
+        only on return. Either way the line must clear on return (DEVICE-CHECKLIST §B "Alarms
+        turned back on").
+  - [ ] Whether AlarmKit removes an app's alarms when permission is revoked. Reconcile does not
+        read alarms while denied, so a surviving alarm is not cancelled; if it still sounds,
+        cancel the previous `alarmID` in `reconcile`'s not-authorized branch.
+  - [ ] DEVICE-CHECKLIST §B "Alarms turned back on" and "Alarms turned off mid-rest".

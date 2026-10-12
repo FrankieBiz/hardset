@@ -53,6 +53,14 @@ on avoiding.
 - [ ] **Denied path.** Reinstall, deny permission, schedule a rest timer. The app degrades to a
       local notification and tells the user plainly — it does not crash and does not silently
       no-op.
+- [ ] **Alarms turned back on.** With alarms denied, start a rest: "Alarms are off for Hardset…"
+      shows under the rest bar. Without ending the rest, turn Alarms on for Hardset in Settings and
+      return to the app: the line is gone at once, with no new rest started. The rest still ends
+      with the notification at its deadline.
+- [ ] **Alarms turned off mid-rest.** With alarms allowed, start a 2:00 rest. In Settings, turn
+      Alarms off for Hardset, return to the app (the "Alarms are off" line appears), then lock the
+      phone: the "Rest complete" notification sounds at the rest's deadline. Note whether the
+      original alarm also sounds; if it does, both arrive, and the reconcile should cancel it.
 - [ ] **Locked screen.** Start a 30 s rest, lock the phone. The countdown renders on the Lock
       Screen and the alert fires.
 - [ ] **Focus breakthrough.** Start a rest, enable Do Not Disturb, wait. The alert still fires

@@ -116,6 +116,14 @@ public enum RestAlarmService {
     mapped(AlarmManager.shared.authorizationState)
   }
 
+  /// Emits the lifter's answer whenever it changes, including a change made in Settings while
+  /// the app was away.
+  public nonisolated static func authorizationUpdates()
+    -> some AsyncSequence<RestTimerController.Authorization, Never>
+  {
+    AlarmManager.shared.authorizationUpdates.map { mapped($0) }
+  }
+
   private nonisolated static func mapped(
     _ state: AlarmManager.AuthorizationState
   ) -> RestTimerController.Authorization {
