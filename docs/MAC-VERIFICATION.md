@@ -696,6 +696,31 @@ the `Hardset` scheme for the iOS 26.4 simulator.
   - Compiler watch: `navigationDestination(item:)` twice (History, and inside the detail screen);
     the `#if os(iOS)` inside the modifier chain in `HistoryScreen.detailScreen`.
 
+- [ ] (feat(ui): one honest first screen; a new lifter is told three promises and the privacy
+      line and asked for nothing, and an existing lifter never sees it) HardsetUI and
+      HardsetFeature build; `AppSmokeTests` passes. New SF Symbols: `lock`,
+      `exclamationmark.circle` (the three promise symbols come from `FirstRunCopy`). In the
+      simulator:
+  - [ ] Erase the simulator, install, launch: one screen with three promises, the unit, an
+        optional gym field, "No account. Your data stays on your devices and in your iCloud.", and
+        Start. Nothing asks for a goal, a target, a program or experience.
+  - [ ] Region United States: the unit reads lb with the chip "Weights in pounds, from your
+        region"; tapping the chip switches to kg and the chip disappears. Region UK: kg.
+  - [ ] A unit chosen earlier wins: set kg in Settings under a US region, delete only
+        `hardset.firstRunComplete`, relaunch: the first screen opens on kg with no region chip.
+  - [ ] Start with the gym field empty: the Train tab, no gym selected. Relaunch: the first screen
+        does not return.
+  - [ ] Erase, type "  Iron   Temple ", Start: the start screen's gym row reads "Iron Temple".
+  - [ ] Install over a build that has history (or log a workout, then delete the
+        `hardset.firstRunComplete` default): the first screen never appears.
+  - [ ] Leave a workout open, delete the default, relaunch: the workout is offered back; no first
+        screen.
+  - [ ] No alarm permission prompt appears until the first rest.
+  - [ ] VoiceOver reads each promise as one element, then the unit, the chip, the field, the
+        privacy line and Start. Largest text size: everything scrolls, nothing truncates.
+  - Compiler watch: `Group { if … FirstRunView else tabs }` carrying `.sheet`/`.task`;
+    `#if os(iOS)` inside the TextField modifier chain; `useImperial` self-write via a local.
+
 ## Phase 4
 
 - [ ] (feat(app): launch in the app's own colour; a manifest for the widget) The `Hardset` scheme

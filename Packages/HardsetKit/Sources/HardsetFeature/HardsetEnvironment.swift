@@ -21,7 +21,15 @@ public struct HardsetEnvironment {
   /// Reads a past workout back, by movement and machine, with its records.
   public let sessionDetails: SessionDetailStore
 
-  public init(database: any DatabaseWriter) {
+  /// Whether the first screen shows, and ends it.
+  public let firstRun: FirstRunStore
+
+  /// `firstRunFlag` defaults to the real one, so the app's `HardsetEnvironment(database:)` persists
+  /// the flag without passing anything.
+  public init(
+    database: any DatabaseWriter,
+    firstRunFlag: any FirstRunFlag = UserDefaultsFirstRunFlag()
+  ) {
     self.logger = LoggerStore(database: database)
     self.catalog = CatalogSeeder(database: database)
     self.volume = VolumeStore(database: database)
@@ -31,5 +39,6 @@ public struct HardsetEnvironment {
     self.summaries = WorkoutSummaryStore(database: database)
     self.shortcuts = WorkoutShortcutsStore(database: database)
     self.sessionDetails = SessionDetailStore(database: database)
+    self.firstRun = FirstRunStore(database: database, flag: firstRunFlag)
   }
 }

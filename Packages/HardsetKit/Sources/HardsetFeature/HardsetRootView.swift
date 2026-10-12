@@ -50,7 +50,15 @@ public struct HardsetRootView: View {
   /// user disagrees. Kilograms remain the canonical storage unit either way — this only decides
   /// what is displayed and what typed numbers are read as.
   @AppStorage("hardset.useImperial") private var useImperial =
-    Locale.current.measurementSystem == .us
+    WeightUnit.inferred(from: .current) == .pounds
+  /// Whether the first screen shows. Decided once, in `.task`.
+  @State private var showsFirstRun = false
+  @State private var firstRunGymName = ""
+  @State private var firstRunError: String?
+  /// The unit the first screen calls the region's guess. Fixed when the screen is decided, from the
+  /// stored choice if there is one: a unit the lifter already chose wins over the guess, so the
+  /// chip never says "from your region" about a choice, and toggling it later cannot move it.
+  @State private var firstRunInferredUnit: WeightUnit = .inferred(from: .current)
   /// Why the last gym write failed, in the user's words. A `try?` here hid a real failure behind a
   /// button that appeared to do nothing, which is precisely what this app is not allowed to do.
   @State private var gymError: String?
@@ -79,7 +87,19 @@ public struct HardsetRootView: View {
   }
 
   public var body: some View {
-    tabs
+    Group {
+      if showsFirstRun {
+        FirstRunView(
+          useImperial: $useImperial,
+          inferredUnit: firstRunInferredUnit,
+          gymName: $firstRunGymName,
+          errorMessage: firstRunError,
+          onStart: finishFirstRun
+        )
+      } else {
+        tabs
+      }
+    }
       // On the TabView, not inside Train: `LiveSessionScreen` is torn down the moment its session
       // ends, so a sheet it presented would go with it.
       .sheet(item: $summaryTarget) { target in
@@ -92,8 +112,40 @@ public struct HardsetRootView: View {
         // A workout left open is offered back before anything else. Nothing is closed on the
         // app's initiative.
         resumeOpenWorkout()
+        // Only when no workout is open and none failed to reopen: a workout left open is offered
+        // first, and a database that cannot be read is reported by the resume path, not hidden
+        // behind a welcome.
+        if coordinator == nil && resumeError == nil {
+          do {
+            showsFirstRun = try environment.firstRun.shouldShow()
+          } catch {
+            showsFirstRun = false
+          }
+          if showsFirstRun {
+            let stored = UserDefaults.standard.object(forKey: "hardset.useImperial") as? Bool
+            let storedUnit: WeightUnit? = stored.map { $0 ? WeightUnit.pounds : WeightUnit.kilograms }
+            firstRunInferredUnit = WeightUnit.resolved(stored: storedUnit, locale: .current)
+          }
+        }
         refreshGyms()
       }
+  }
+
+  /// Ends the first screen. The flag is set only after the optional gym is written, so a failed
+  /// write keeps the screen, and the typed name, with the reason.
+  private func finishFirstRun() {
+    do {
+      // Writing the shown unit keeps it, even if the region later changes.
+      let shown = useImperial
+      useImperial = shown
+      let gym = try environment.firstRun.complete(gymName: firstRunGymName)
+      refreshGyms()
+      if let gym { selectedGym = gym }
+      firstRunError = nil
+      showsFirstRun = false
+    } catch {
+      firstRunError = FailureCopy.message(for: error, during: .saveGym)
+    }
   }
 
   /// Seeding is idempotent and non-destructive, so running it every launch is the intended usage

@@ -45,4 +45,11 @@ extension WeightUnit {
   public static func inferred(from locale: Locale) -> WeightUnit {
     locale.measurementSystem == .us ? .pounds : .kilograms
   }
+
+  /// The unit to show: the one the lifter already chose, if any, and only otherwise the region's
+  /// guess. A stored choice is never replaced by the guess, so an existing install, or a lifter who
+  /// picked a unit before, keeps theirs.
+  public static func resolved(stored: WeightUnit?, locale: Locale) -> WeightUnit {
+    stored ?? inferred(from: locale)
+  }
 }

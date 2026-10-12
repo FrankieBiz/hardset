@@ -50,4 +50,15 @@ struct FirstRunTests {
     #expect(WeightUnit.inferred(from: Locale(identifier: "de_DE")) == .kilograms)
     #expect(WeightUnit.inferred(from: Locale(identifier: "en_CA")) == .kilograms)
   }
+
+  @Test("A unit the lifter already chose always wins over the region's guess")
+  func storedUnitWinsOverInferred() {
+    let us = Locale(identifier: "en_US")
+    let uk = Locale(identifier: "en_GB")
+    #expect(WeightUnit.resolved(stored: .kilograms, locale: us) == .kilograms)
+    #expect(WeightUnit.resolved(stored: .pounds, locale: uk) == .pounds)
+    #expect(WeightUnit.resolved(stored: .pounds, locale: us) == .pounds)
+    #expect(WeightUnit.resolved(stored: nil, locale: us) == .pounds)
+    #expect(WeightUnit.resolved(stored: nil, locale: uk) == .kilograms)
+  }
 }
