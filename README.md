@@ -8,8 +8,8 @@ machines you train on, and fast to log a set.
 **Status: the logger and the analysis layer work, in the package.** Sessions, sets, prefill from
 history, the rest bar, recovery of an interrupted workout, personal records, a 50-movement seed
 catalogue and a picker; plus the permanent muscle vocabulary, fractional sets-per-muscle-per-week
-with coverage, per-machine load history, and a session history screen. 256 tests across 32 suites
-run on the host in about two tenths of a second.
+with coverage, per-machine load history, and a session history screen. The tests run on the host in
+well under a second.
 
 The app builds and runs in the simulator (see `DEVICE-CHECKLIST.md` §A), and has never run on a
 physical device.
@@ -38,7 +38,7 @@ Packages/HardsetKit/
 ./test.sh
 ```
 
-54 tests, ~0.1 s. The script runs the engine-dependent tests in separate processes: SQLiteData's
+Well under a second. The script runs the engine-dependent tests in separate processes: SQLiteData's
 non-live `SyncEngine` attaches an in-memory metadatabase at a fixed shared-cache path, and the task
 local that resets it between constructions is `package`-scoped, so two engines in one process
 contend for the same SQLite file.
