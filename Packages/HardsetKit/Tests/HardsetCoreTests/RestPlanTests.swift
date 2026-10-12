@@ -40,6 +40,12 @@ struct RestPlanTests {
     #expect(RestPlan.validated(.seconds(seconds)) == .seconds(seconds))
   }
 
+  @Test("A rest is whole seconds: a fraction is refused, never rounded")
+  func wholeSecondsOnly() {
+    #expect(RestPlan.validated(.seconds(90.4)) == nil)
+    #expect(RestPlan.validated(.seconds(90.0)) == .seconds(90))
+  }
+
   @Test("The chip reads Off or a clock time")
   func labels() {
     #expect(RestPlan.label(for: nil) == "Off")

@@ -14,9 +14,11 @@ public enum RestPlan {
   /// typo never becomes a silently different rest.
   public static let allowedRange: ClosedRange<Duration> = .seconds(15) ... .seconds(1800)
 
-  /// `duration` if it lies in `allowedRange`, otherwise nil.
+  /// `duration` if it is a whole number of seconds in `allowedRange`, otherwise nil. Every
+  /// surface offers whole seconds, so a fraction is refused, never rounded.
   public static func validated(_ duration: Duration) -> Duration? {
-    allowedRange.contains(duration) ? duration : nil
+    guard duration.components.attoseconds == 0 else { return nil }
+    return allowedRange.contains(duration) ? duration : nil
   }
 
   /// The rest to request after a set is logged, or nil to start nothing.
