@@ -33,7 +33,7 @@ trap 'cp "$SNAPSHOT" "$RESOLVED"; rm -f "$SNAPSHOT"' EXIT
 # SwiftPM's module cache stores absolute paths, so a cache built under another mount path breaks.
 MOUNT="/repo"
 CACHE="$ROOT/Packages/HardsetKit/.build-linux"
-if [ -f "$CACHE/.mount" ] && [ "$(cat "$CACHE/.mount")" != "$MOUNT" ]; then
+if [ -d "$CACHE" ] && [ "$(cat "$CACHE/.mount" 2>/dev/null)" != "$MOUNT" ]; then
   rm -rf "$CACHE"
 fi
 mkdir -p "$CACHE"
