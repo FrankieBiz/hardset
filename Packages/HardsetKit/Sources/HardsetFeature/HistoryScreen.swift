@@ -132,7 +132,7 @@ public struct HistoryScreen: View {
           id: summary.id,
           title: summary.title,
           date: summary.timeline.startedAt,
-          duration: summary.timeline.duration,
+          duration: summary.timeline.knownLength,
           exerciseNames: summary.exerciseNames,
           volume: summary.volume,
           hasImplausibleDuration: summary.hasImplausibleDuration

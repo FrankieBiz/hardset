@@ -1008,7 +1008,7 @@ the `Hardset` scheme for the iOS 26.4 simulator.
 - [ ] (fix(ui): tap targets keep their floors at the small text sizes) HardsetUI builds for iOS
       and macOS 15. Written without a compiler; look first at `Tokens.tapTarget(_:floor:)` (a
       MainActor static func, called only from view computed properties) and the renamed
-      `@ScaledMetric` stores (`scaledCloseTarget`, `scaledAccessoryTarget`, `scaledLoggerTarget`).
+      `@ScaledMetric` stores (`scaledCloseTarget`, `scaledLoggerTarget`).
   - [ ] xSmall: a set row's fields and check mark are 56 pt high (a logged row's 44), the keypad's
         keys 56 pt, its close button 44 pt high and 56 pt wide, the macOS rest bar's buttons
         56 pt. Before, `@ScaledMetric` scaled them down to about 46 and 36.
