@@ -282,10 +282,17 @@ Re-inserting the same primary key before the deletion syncs could therefore leav
 set the device shows. Nothing references `loggedSets.id`, so a new id loses nothing, and the
 restored set is judged for records exactly as before. Verify on device when sync is tested.
 
-### 23. Core's copy goes through one seam, because Linux has no `String(localized:)`
+### 23. Core's copy will go through one seam, because Linux has no `String(localized:)`
 
 Core's tests run on Linux (swift:6.2), whose Foundation has neither `String(localized:)` nor
 `LocalizedStringResource` (checked 2026-10-11, every overload). So Core never calls them directly.
+
+Status: the seam exists but nothing calls it yet; routing the copy through it is blocked on the Mac
+gate (the String Catalog resource build). The Core copy files in scope are the Phase 3 ones plus
+the Phase 4 ones: `RestCommandPlan`/`RestActivityContent`, `WidgetCopy`, `HealthExportCopy`,
+`RestControlState` and `FeatureTip`, all for Phase 3 Task 11 / Phase 4 Task 16. Until then,
+`LocalizedStringResource(stringLiteral:)` around a Core string in the intents does not localize it.
+
 `localized(_:comment:)` in `HardsetCore/Localized.swift` takes a `String.LocalizationValue` on
 Apple platforms and looks it up in Core's String Catalog (`bundle: .module`); on Linux it takes a
 `String` and returns it. The English is the catalog's source language and its key, so both
