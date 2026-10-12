@@ -81,9 +81,10 @@ public nonisolated struct ProgressionStore {
       try LoggedSet
         .where { $0.exerciseID.eq(exerciseID.rawValue) }
         .where { !$0.isWarmup }
-        .order { $0.completedAt.desc() }
+        .order { ($0.completedAt.desc(), $0.id.desc()) }
         .limit(limit)
         .fetchAll(db)
+        // Ascending again, ties by id both ways, so equal timestamps never reorder between reads.
         .reversed()
         .map {
           ProgressionSample(

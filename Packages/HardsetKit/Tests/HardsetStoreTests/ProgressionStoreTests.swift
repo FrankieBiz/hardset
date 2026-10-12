@@ -179,4 +179,26 @@ struct ProgressionStoreTests {
     #expect(samples.first?.completedAt == now.addingTimeInterval(1))
     #expect(samples.map(\.completedAt) == samples.map(\.completedAt).sorted())
   }
+
+  @Test("Equal timestamps keep a deterministic order, and the cut falls on the same sets")
+  func equalTimestampsAreDeterministic() throws {
+    let (database, store, progression, exercise, _) = try fixture()
+    let id = try store.startSession(at: now)
+    let ids = (0..<5).map { _ in UUID() }
+    try database.write { db in
+      try LoggedSet.insert {
+        for (index, setID) in ids.enumerated() {
+          LoggedSet.Draft(
+            id: setID, sessionID: id.rawValue, exerciseID: exercise.rawValue, setOrdinal: index,
+            weightKg: 100, reps: 8 + index, completedAt: now)
+        }
+      }
+      .execute(db)
+    }
+    let expected = ids.sorted { $0.uuidString < $1.uuidString }.suffix(3)
+    let samples = try progression.samples(for: exercise, limit: 3)
+    #expect(samples.count == 3)
+    let repsByID = Dictionary(uniqueKeysWithValues: ids.enumerated().map { ($1, 8 + $0) })
+    #expect(samples.map(\.reps) == expected.map { repsByID[$0]! })
+  }
 }
