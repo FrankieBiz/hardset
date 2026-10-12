@@ -823,3 +823,10 @@ the `Hardset` scheme for the iOS 26.4 simulator.
       on, swipe up/down on an unlogged row's actions: "Log set", "Edit weight", "Edit reps". On a
       logged row: "Edit set", "Delete set" and no "Log set". Double-tap on an unlogged, complete
       row still logs it.
+- [ ] (fix(alarm): a rest that would not pause does not ring under a paused screen) HardsetAlarm
+      builds. Normal pause/resume is unchanged: pause shows the paused card on the Lock Screen,
+      resume replaces the alarm. Failure path (hard to force; read the code if it cannot be
+      forced): when `RestAlarmService.pause` throws, the alarm is cancelled (`pauseFailed`), the
+      rest stays paused in the app with the error shown, no alarm rings at the old deadline, and
+      Resume schedules a fresh one. Two quick adjusts in a row (±15 twice within the debounce)
+      still end with exactly one alarm (`schedulingID` is now cleared only by its own commit).

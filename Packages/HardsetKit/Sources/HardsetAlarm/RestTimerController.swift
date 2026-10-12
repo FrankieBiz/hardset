@@ -106,7 +106,7 @@ public final class RestTimerController {
     RestNotificationFallback.cancel()
     // An alarm still being scheduled cannot be paused yet; the commit pauses it once it exists.
     if let alarmID, alarmID != schedulingID {
-      do { try RestAlarmService.pause(id: alarmID) } catch { lastError = error }
+      do { try RestAlarmService.pause(id: alarmID) } catch { pauseFailed(error) }
     }
     persist()
   }
@@ -339,7 +339,8 @@ public final class RestTimerController {
     } catch {
       failure = error
     }
-    schedulingID = nil
+    // Only this commit's marker: a newer commit may have set its own while this one awaited.
+    if schedulingID == id { schedulingID = nil }
 
     if let failure {
       await scheduleFailed(id, failure)
@@ -358,8 +359,19 @@ public final class RestTimerController {
       do { try RestAlarmService.cancelUnlessAlerting(id: id) } catch { lastError = error }
     } else if case .paused = state {
       // Paused while scheduling: `pause()` left this alarm to be paused once it existed.
-      do { try RestAlarmService.pause(id: id) } catch { lastError = error }
+      do { try RestAlarmService.pause(id: id) } catch {
+        pauseFailed(error)
+        persist()
+      }
     }
+  }
+
+  /// An alarm that would not pause still counts, and would ring at the old deadline under a rest
+  /// the screen calls paused. It goes instead: resuming schedules a fresh alarm either way, so
+  /// nothing is lost but the Lock Screen's paused card. The failure is kept, not swallowed.
+  private func pauseFailed(_ error: any Error) {
+    lastError = error
+    retireAlarm()
   }
 
   /// Nothing was scheduled, so the record must not name the alarm. The countdown stays.
