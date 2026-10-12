@@ -1,5 +1,6 @@
 import ActivityKit
 import AlarmKit
+import AppIntents
 import HardsetAlarm
 import HardsetCore
 import HardsetUI
@@ -20,69 +21,159 @@ struct HardsetWidgetBundle: WidgetBundle {
   }
 }
 
+extension RestActivityContent {
+  /// AlarmKit's state into Core's mirror. A mode a future SDK adds is shown as finished, which
+  /// offers no button that could act on a rest this build does not understand.
+  static func make(_ state: AlarmPresentationState, metadata: RestMetadata?)
+    -> RestActivityContent
+  {
+    let mode: Mode
+    switch state.mode {
+    case .countdown(let countdown):
+      mode = .countdown(
+        total: countdown.totalCountdownDuration,
+        previouslyElapsed: countdown.previouslyElapsedDuration,
+        startDate: countdown.startDate, fireDate: countdown.fireDate)
+    case .paused(let paused):
+      mode = .paused(
+        total: paused.totalCountdownDuration, previouslyElapsed: paused.previouslyElapsedDuration)
+    case .alert:
+      mode = .alerting
+    @unknown default:
+      mode = .alerting
+    }
+    return make(mode: mode, metadata: metadata)
+  }
+}
+
 struct RestTimerLiveActivity: Widget {
   var body: some WidgetConfiguration {
     ActivityConfiguration(for: AlarmAttributes<RestMetadata>.self) { context in
-      // Lock Screen / banner presentation.
-      HStack {
-        VStack(alignment: .leading, spacing: Tokens.Spacing.tight) {
-          Text(context.attributes.metadata?.exerciseName ?? "Rest")
-            .font(.headline)
-          if let label = context.attributes.metadata?.setLabel {
-            Text(label)
-              .font(Tokens.Text.caption)
-              .foregroundStyle(.secondary)
-          }
-        }
-        Spacer()
-        countdown(for: context.state)
-          .font(Tokens.Text.readout)
-      }
-      .padding(Tokens.Spacing.loose)
+      RestLockScreenView(
+        content: .make(context.state, metadata: context.attributes.metadata)
+      )
       .activityBackgroundTint(nil)
     } dynamicIsland: { context in
-      DynamicIsland {
+      let content = RestActivityContent.make(context.state, metadata: context.attributes.metadata)
+      return DynamicIsland {
         DynamicIslandExpandedRegion(.leading) {
-          Text(context.attributes.metadata?.exerciseName ?? "Rest")
-            .font(Tokens.Text.label)
+          RestRing(phase: content.phase).frame(width: 44, height: 44)
+        }
+        DynamicIslandExpandedRegion(.center) {
+          RestTitle(content: content)
         }
         DynamicIslandExpandedRegion(.trailing) {
-          countdown(for: context.state)
-            .font(Tokens.Text.readout)
+          RestClock(phase: content.phase).font(Tokens.Text.readout)
+        }
+        DynamicIslandExpandedRegion(.bottom) {
+          RestControls(controls: content.controls)
         }
       } compactLeading: {
-        Image(systemName: "timer")
+        RestRing(phase: content.phase).frame(width: 20, height: 20)
       } compactTrailing: {
-        countdown(for: context.state)
-          .monospacedDigit()
+        RestClock(phase: content.phase).monospacedDigit().frame(maxWidth: 52)
       } minimal: {
-        Image(systemName: "timer")
+        RestRing(phase: content.phase)
+      }
+    }
+  }
+}
+
+/// The ring. System-animated from the range, so nothing here ticks.
+struct RestRing: View {
+  let phase: RestActivityContent.Phase
+
+  var body: some View {
+    Group {
+      switch phase {
+      case .counting(let range):
+        ProgressView(timerInterval: range, countsDown: true) {
+          EmptyView()
+        } currentValueLabel: {
+          EmptyView()
+        }
+      case .paused(_, let fractionRemaining):
+        ProgressView(value: fractionRemaining)
+      case .finished:
+        Image(systemName: "checkmark.circle.fill")
+      }
+    }
+    .progressViewStyle(.circular)
+    .tint(Tokens.Color.accent)
+    .accessibilityHidden(true)
+  }
+}
+
+/// The countdown. `Text(timerInterval:)` is system-rendered from the same range as the ring.
+struct RestClock: View {
+  let phase: RestActivityContent.Phase
+
+  var body: some View {
+    switch phase {
+    case .counting(let range): Text(timerInterval: range, countsDown: true)
+    case .paused(let remaining, _): Text(remaining.clockString)
+    case .finished: Text("Done")
+    }
+  }
+}
+
+struct RestTitle: View {
+  let content: RestActivityContent
+
+  var body: some View {
+    VStack(alignment: .leading, spacing: Tokens.Spacing.tight) {
+      Text(content.title).font(.headline).lineLimit(1)
+      if let detail = content.detail {
+        Text(detail).font(Tokens.Text.caption).foregroundStyle(.secondary).lineLimit(1)
+      }
+      if let status = content.statusText {
+        Text(status).font(Tokens.Text.caption)
+      }
+    }
+  }
+}
+
+/// Pause, Resume and Skip, each a `LiveActivityIntent` performed in the app.
+struct RestControls: View {
+  let controls: [RestActivityContent.Control]
+
+  var body: some View {
+    HStack(spacing: Tokens.Spacing.regular) {
+      ForEach(controls, id: \.self) { control in
+        button(for: control)
+          .buttonStyle(.bordered)
+          .tint(Tokens.Color.accent)
+          .accessibilityLabel(control.spokenLabel)
       }
     }
   }
 
-  /// Renders the countdown from the dates AlarmKit provides.
-  ///
-  /// `Text(timerInterval:)` is updated by the system, so nothing here ticks and nothing
-  /// recomputes from `Date()` on a timer -- which is the same invariant the app's logger
-  /// follows.
-  ///
-  /// Note the asymmetry: `Mode.Countdown` carries `startDate`/`fireDate`, but `Mode.Paused`
-  /// carries only durations and no dates at all. A paused timer therefore has no deadline to
-  /// render, which is exactly why the app owns `RestTimerState` rather than deriving state
-  /// from AlarmKit.
-  @ViewBuilder
-  private func countdown(for state: AlarmPresentationState) -> some View {
-    switch state.mode {
-    case .countdown(let countdown):
-      Text(timerInterval: Date.now...countdown.fireDate, countsDown: true)
-    case .paused(let paused):
-      let left = paused.totalCountdownDuration - paused.previouslyElapsedDuration
-      Text(Duration.seconds(max(0, left)), format: .time(pattern: .minuteSecond))
-    case .alert:
-      Text("Done")
-    @unknown default:
-      Text("--:--")
+  @ViewBuilder private func button(for control: RestActivityContent.Control) -> some View {
+    let label = Label(control.title, systemImage: control.symbolName)
+      .frame(minWidth: Tokens.minimumTapTarget, minHeight: Tokens.minimumTapTarget)
+    switch control {
+    case .pause: Button(intent: PauseRestIntent()) { label }
+    case .resume: Button(intent: ResumeRestIntent()) { label }
+    case .stop: Button(intent: StopRestIntent()) { label }
     }
+  }
+}
+
+struct RestLockScreenView: View {
+  let content: RestActivityContent
+
+  var body: some View {
+    VStack(alignment: .leading, spacing: Tokens.Spacing.snug) {
+      HStack(spacing: Tokens.Spacing.regular) {
+        RestRing(phase: content.phase).frame(width: 44, height: 44)
+        RestTitle(content: content)
+        Spacer(minLength: 0)
+        RestClock(phase: content.phase).font(Tokens.Text.readout).monospacedDigit()
+      }
+      if !content.controls.isEmpty {
+        RestControls(controls: content.controls)
+      }
+    }
+    .padding(Tokens.Spacing.loose)
   }
 }

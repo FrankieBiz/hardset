@@ -32,6 +32,11 @@ SOURCES = [
     ("HardsetApp.swift", "Hardset", APP),
     ("HardsetWidgetBundle.swift", "HardsetWidget", WIDGET),
     ("AppSmokeTests.swift", "HardsetTests", TESTS),
+    # App Intents the widget's buttons and controls name. Each is compiled into both targets;
+    # `LiveActivityIntent` and foreground intents still run in the app's process.
+    ("RestIntents.swift", "HardsetIntents", APP),
+    ("RestIntents.swift", "HardsetIntents", WIDGET),
+    ("IntentDependencies.swift", "HardsetIntents", APP),
 ]
 RESOURCES = [
     ("PrivacyInfo.xcprivacy", "Hardset", APP),
@@ -205,7 +210,7 @@ w("/* Begin PBXGroup section */")
 w(f"\t\t{oid('grp_root')} = {{")
 w("\t\t\tisa = PBXGroup;")
 w("\t\t\tchildren = (")
-for g in ("Hardset", "HardsetWidget", "HardsetTests"):
+for g in ("Hardset", "HardsetWidget", "HardsetIntents", "HardsetTests"):
     w(f"\t\t\t\t{oid('grp_'+g)} /* {g} */,")
 w(f"\t\t\t\t{oid('grp_products')} /* Products */,")
 w("\t\t\t);")
@@ -214,6 +219,7 @@ w("\t\t};")
 group_children = {
     "Hardset": ["HardsetApp.swift", "Assets.xcassets", "Info.plist", "Hardset.entitlements", "PrivacyInfo.xcprivacy"],
     "HardsetWidget": ["HardsetWidgetBundle.swift", "Info.plist", "PrivacyInfo.xcprivacy"],
+    "HardsetIntents": ["RestIntents.swift", "IntentDependencies.swift"],
     "HardsetTests": ["AppSmokeTests.swift"],
 }
 for g, children in group_children.items():

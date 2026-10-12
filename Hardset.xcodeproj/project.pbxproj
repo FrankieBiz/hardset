@@ -10,6 +10,9 @@
 		ECC880F3E50363C05E57399D /* HardsetApp.swift in Hardset */ = {isa = PBXBuildFile; fileRef = 5727577A4D3484085A8EB0B5 /* HardsetApp.swift */; };
 		0ED5E055D9820A02EEE15DB4 /* HardsetWidgetBundle.swift in HardsetWidget */ = {isa = PBXBuildFile; fileRef = 094065545B074BB3C94068BC /* HardsetWidgetBundle.swift */; };
 		D06790A6910CE14033A7CB69 /* AppSmokeTests.swift in HardsetTests */ = {isa = PBXBuildFile; fileRef = 680B2E753A6F5EA9063B2981 /* AppSmokeTests.swift */; };
+		6DCDB5A744ADC53FFA2682EE /* RestIntents.swift in Hardset */ = {isa = PBXBuildFile; fileRef = 36B1313F69B407F7490A1993 /* RestIntents.swift */; };
+		CFEDA85F252E298534E94672 /* RestIntents.swift in HardsetWidget */ = {isa = PBXBuildFile; fileRef = 36B1313F69B407F7490A1993 /* RestIntents.swift */; };
+		6D59B859E8E77BC8CE27D91C /* IntentDependencies.swift in Hardset */ = {isa = PBXBuildFile; fileRef = 15D3196E0274F0D905041233 /* IntentDependencies.swift */; };
 		65342E8704866A7FA63B7D7F /* PrivacyInfo.xcprivacy in Hardset */ = {isa = PBXBuildFile; fileRef = 9DA6D3A9523128D8236A0547 /* PrivacyInfo.xcprivacy */; };
 		EB0E7800B3B9CBC55200705F /* Assets.xcassets in Hardset */ = {isa = PBXBuildFile; fileRef = 2872DB59AAC00898EC5AC167 /* Assets.xcassets */; };
 		0D0DE1B02777A86F288F3243 /* PrivacyInfo.xcprivacy in HardsetWidget */ = {isa = PBXBuildFile; fileRef = 090815D7FDBE15CF7A4662CB /* PrivacyInfo.xcprivacy */; };
@@ -62,6 +65,8 @@
 		5727577A4D3484085A8EB0B5 /* HardsetApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HardsetApp.swift; sourceTree = "<group>"; };
 		094065545B074BB3C94068BC /* HardsetWidgetBundle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HardsetWidgetBundle.swift; sourceTree = "<group>"; };
 		680B2E753A6F5EA9063B2981 /* AppSmokeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppSmokeTests.swift; sourceTree = "<group>"; };
+		36B1313F69B407F7490A1993 /* RestIntents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RestIntents.swift; sourceTree = "<group>"; };
+		15D3196E0274F0D905041233 /* IntentDependencies.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IntentDependencies.swift; sourceTree = "<group>"; };
 		9DA6D3A9523128D8236A0547 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		2872DB59AAC00898EC5AC167 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		090815D7FDBE15CF7A4662CB /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
@@ -168,6 +173,7 @@
 			children = (
 				20BD487F122225EBCA606B0B /* Hardset */,
 				69503542DF122851D0C74DEF /* HardsetWidget */,
+				E40B4138264A61B1F666FA4C /* HardsetIntents */,
 				B2A2CF8D3677583EF37F1886 /* HardsetTests */,
 				C0DC190647D7CB6444D05500 /* Products */,
 			);
@@ -193,6 +199,15 @@
 				090815D7FDBE15CF7A4662CB /* PrivacyInfo.xcprivacy */,
 			);
 			path = HardsetWidget;
+			sourceTree = "<group>";
+		};
+		E40B4138264A61B1F666FA4C /* HardsetIntents */ = {
+			isa = PBXGroup;
+			children = (
+				36B1313F69B407F7490A1993 /* RestIntents.swift */,
+				15D3196E0274F0D905041233 /* IntentDependencies.swift */,
+			);
+			path = HardsetIntents;
 			sourceTree = "<group>";
 		};
 		B2A2CF8D3677583EF37F1886 /* HardsetTests */ = {
@@ -364,6 +379,8 @@
 			buildActionMask = 2147483647;
 			files = (
 				ECC880F3E50363C05E57399D /* HardsetApp.swift in Sources */,
+				6DCDB5A744ADC53FFA2682EE /* RestIntents.swift in Sources */,
+				6D59B859E8E77BC8CE27D91C /* IntentDependencies.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -372,6 +389,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				0ED5E055D9820A02EEE15DB4 /* HardsetWidgetBundle.swift in Sources */,
+				CFEDA85F252E298534E94672 /* RestIntents.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

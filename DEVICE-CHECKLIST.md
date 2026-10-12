@@ -71,6 +71,22 @@ on avoiding.
 - [ ] **Pause / resume.** Pause mid-rest. The paused UI shows a static remaining time — AlarmKit's
       paused presentation carries no dates, so this value must come from our own
       `pausedRemaining`. Resume; the new deadline is correct.
+- [ ] **Lock Screen controls.** Start a 2:00 rest, lock. The Lock Screen shows the ring, the
+      movement, "Set N of M · <machine>", the countdown, and Pause and Skip. Tap Pause: the
+      countdown freezes, the button becomes Resume, and unlocking shows the app paused with the
+      same remainder. Tap Resume: the countdown continues from it, and the alarm still sounds at
+      the end. Tap Skip: the activity ends, no alarm sounds, and the app shows no rest.
+- [ ] **Controls after a force-quit.** Start a rest, force-quit, then Pause from the Lock Screen.
+      The app was launched in the background to do it: reopening shows the same paused remainder.
+      Repeat with Skip.
+- [ ] **After the deadline.** Let a rest alert, dismiss it, and leave the Lock Screen up for a
+      minute: no crash report in Settings › Privacy › Analytics for HardsetWidget.
+- [ ] **Dynamic Island.** On a Dynamic Island iPhone: compact shows the ring and the countdown;
+      long-press shows the movement, the machine, the ring and the buttons; each button works.
+- [ ] **No button that does nothing.** The paused Lock Screen view shows our Resume only. If the
+      system still draws AlarmKit's own Resume beside it (the `Paused(resumeButton:)` it requires),
+      note where; tapping it must not leave the app showing a different state after the next
+      reconcile.
 - [ ] **Live Activity fidelity.** The Dynamic Island and Lock Screen countdowns do not drift over
       two minutes. They are system-rendered from `fireDate`, so drift means we are pushing updates
       we should not be.

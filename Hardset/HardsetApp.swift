@@ -13,7 +13,8 @@ import UserNotifications
 /// Swift macro plugin server does not survive it — so it is kept to wiring that has no logic to
 /// get wrong: open the database, install the account-change delegate, hand `RestTimerController`'s
 /// methods to the feature layer, install the foreground notification presenter, and show the root
-/// view.
+/// view. It also registers the rest timer for App Intents, so the Lock Screen's buttons and Siri
+/// act on this same controller.
 ///
 /// Anything added here that a test could cover belongs in the package instead.
 @main
@@ -46,8 +47,11 @@ struct HardsetApp: App {
     }
     // Without a database there is nowhere to write the rest down, so the timer still runs but a
     // relaunch cannot find its alarm.
-    _restTimer = State(
-      initialValue: RestTimerController(persistence: database.map { RestTimerStore(database: $0) }))
+    let timer = RestTimerController(persistence: database.map { RestTimerStore(database: $0) })
+    _restTimer = State(initialValue: timer)
+    // Before any intent can run: a Lock Screen button can launch the app in the background, and
+    // its intent asks for this controller.
+    IntentDependencies.register(restTimer: timer)
 
     // Here, not in a view: Apple asks for the delegate to be set before the app finishes
     // launching, and `init()` runs before any scene exists.

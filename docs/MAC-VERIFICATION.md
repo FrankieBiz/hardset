@@ -741,3 +741,39 @@ the `Hardset` scheme for the iOS 26.4 simulator.
         the widget extension and the test bundle, and builds from the symlinked package path. If it
         breaks the build, Phase 3 Task 11 is blocked on it; nothing calls `localized(_:)` yet, so
         removing `resources:` from HardsetCore unblocks the build until it is fixed.
+- [ ] (feat(widget): the rest on the Lock Screen, with pause, resume and skip that run in the app)
+      The `Hardset` scheme builds (app and widget) with no new warnings, and HardsetAlarm builds
+      for iOS. Written without a compiler; look first at:
+  - [ ] `@AppDependency private var restTimer: RestTimerController` resolves. If not, use the
+        spelling in Apple's samples, `@Dependency`; neither file imports SQLiteData, so there is
+        no clash there.
+  - [ ] `AppDependencyManager.shared.add(dependency: restTimer)` resolves to the autoclosure
+        overload with `key` defaulted; if `key:` has no default, pass `key: nil`.
+  - [ ] `@Parameter(title:defaultUnit:supportsNegativeNumbers:requestValueDialog:)` on
+        `Measurement<UnitDuration>` resolves; if not, drop `supportsNegativeNumbers:` (Core refuses
+        negatives anyway) and note the overload that did.
+  - [ ] `@MainActor func perform()` satisfies `AppIntent` in a target whose default isolation is
+        MainActor, in both the app and the widget, with no isolated-conformance diagnostic.
+  - [ ] `RestControls.button(for:)`: three `Button(intent:)` branches in a `switch` inside
+        `@ViewBuilder` build. `ProgressView(timerInterval:…)` with `.progressViewStyle(.circular)`
+        animates in a Live Activity; if it is drawn static or linear, drop the circular style.
+  - [ ] SF Symbols exist: `pause.fill`, `play.fill`, `forward.end.fill`, `checkmark.circle.fill`.
+  - [ ] Shortcuts shows the descriptions of "Start a rest" and "Skip the rest", and lists neither
+        "Pause the rest" nor "Resume the rest". (`static let description = IntentDescription(…)`
+        is Apple's documented form, but a non-optional `static let` does not witness the
+        `IntentDescription?` requirement at runtime, so the text reaches Shortcuts only through
+        the build's App Intents metadata. If it is missing, type it `IntentDescription?`.)
+  - [ ] "Start a rest" from Shortcuts before any rest has been started in the app, so alarm
+        permission was never asked: record whether the prompt appears over Shortcuts, or the
+        rest falls back to the notification. Either way the shortcut finishes with a sentence
+        and does not hang.
+  - Already checked on Linux (swift:6.2, `-default-isolation MainActor`, `-warnings-as-errors`):
+    `RestTimerController.swift` as changed, against stubs of `RestAlarmService` and
+    `RestNotificationFallback`; and `RestIntents.swift` and `IntentDependencies.swift` against a
+    mock of the documented AppIntents signatures. That rules out Swift-level isolation errors,
+    not SDK differences. The mock showed an intent struct is inferred nonisolated (AppIntent
+    inherits `Sendable`), so only `perform()` is main-actor.
+  Then on device (DEVICE-CHECKLIST §B):
+  - [ ] Every Lock Screen and Dynamic Island check added to §B there.
+  - Known residual: after ±15 s or a resume the ring starts again from the new alarm's length
+    (reading 3). Record whether it reads as wrong in use.

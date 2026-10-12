@@ -58,8 +58,11 @@ public final class RestTimerController {
   public private(set) var lastError: (any Error)?
   public private(set) var authorization: Authorization = .unknown
 
+  /// What the running rest is for, as whoever started it said. Nil for a rest started from Siri
+  /// or a control, which no set started, and for one adopted from AlarmKit after a relaunch.
+  public private(set) var metadata: RestMetadata?
+
   private var alarmID: UUID?
-  private var metadata: RestMetadata?
   private var commitTask: Task<Void, Never>?
   private var reconcileAfterCommit = false
   private var expiryTask: Task<Void, Never>?
@@ -75,7 +78,7 @@ public final class RestTimerController {
     authorization = RestAlarmService.authorization
   }
 
-  public func start(duration: Duration, metadata: RestMetadata, now: Date = .now) {
+  public func start(duration: Duration, metadata: RestMetadata?, now: Date = .now) {
     self.metadata = metadata
     state = .running(endsAt: now.addingTimeInterval(duration.seconds))
     // The previous rest's alarm goes now, and this rest's alarm arrives with the commit. Until
@@ -123,6 +126,35 @@ public final class RestTimerController {
     RestNotificationFallback.cancel()
     metadata = nil
     persist()
+  }
+
+  /// Carries out a rest command from outside the app: the Lock Screen, Siri, a control.
+  ///
+  /// Reconciles first: an intent can launch the app in the background, where no view has run
+  /// `reconcile()` and this controller still reads idle. Then waits for AlarmKit to catch up,
+  /// because the system may suspend the app as soon as `perform()` returns, and a debounced
+  /// commit left pending would leave a rest written down with no alarm behind it.
+  public func perform(_ command: RestCommand, now: Date = .now) async -> RestCommandOutcome {
+    await reconcile(now: now)
+    let outcome = RestCommandPlan.outcome(for: command, state: state, now: now)
+    guard case .perform(let action) = outcome else { return outcome }
+    switch action {
+    case .start(let duration): start(duration: duration, metadata: nil, now: now)
+    case .pause: pause(now: now)
+    case .resume: resume(now: now)
+    case .stop: cancel()
+    }
+    await settle()
+    return outcome
+  }
+
+  /// Returns once no AlarmKit commit is pending. Bounded: each round waits out the commit that
+  /// was current when it began, and a commit only replaces itself when the lifter acts again.
+  public func settle() async {
+    for _ in 0..<4 {
+      guard let task = commitTask else { return }
+      await task.value
+    }
   }
 
   /// Brings the on-screen timer back in line with AlarmKit. Run at launch and on every update:
