@@ -156,4 +156,27 @@ struct ProgressionStoreTests {
     // Still named: archiving the machine does not un-perform the sets.
     #expect(history.label(for: history.series[0].key) == "Hammer Strength")
   }
+
+  @Test("Past the limit the chart keeps the newest sets and drops the oldest")
+  func limitDropsTheOldest() throws {
+    let (database, store, progression, exercise, _) = try fixture()
+    let id = try store.startSession(at: now)
+    try database.write { db in
+      try LoggedSet.insert {
+        for index in 0..<2_001 {
+          LoggedSet.Draft(
+            sessionID: id.rawValue, exerciseID: exercise.rawValue, setOrdinal: index,
+            weightKg: 100, reps: 8, completedAt: now.addingTimeInterval(Double(index)))
+        }
+      }
+      .execute(db)
+    }
+
+    let samples = try progression.samples(for: exercise)
+
+    #expect(samples.count == 2_000)
+    #expect(samples.last?.completedAt == now.addingTimeInterval(2_000))
+    #expect(samples.first?.completedAt == now.addingTimeInterval(1))
+    #expect(samples.map(\.completedAt) == samples.map(\.completedAt).sorted())
+  }
 }

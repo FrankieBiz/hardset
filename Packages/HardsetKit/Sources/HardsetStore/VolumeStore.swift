@@ -69,7 +69,8 @@ public nonisolated struct ProgressionStore {
     self.database = database
   }
 
-  /// Completed working sets for one exercise, across every machine, oldest first.
+  /// Completed working sets for one exercise, across every machine, oldest first. Past `limit`
+  /// it is the newest sets that are kept, so the chart always reaches the latest workout.
   ///
   /// Warm-ups are excluded in SQL. A warm-up reaching the analyser would be a bug, so it is not
   /// filtered defensively there — that would hide it.
@@ -80,9 +81,10 @@ public nonisolated struct ProgressionStore {
       try LoggedSet
         .where { $0.exerciseID.eq(exerciseID.rawValue) }
         .where { !$0.isWarmup }
-        .order { $0.completedAt }
+        .order { $0.completedAt.desc() }
         .limit(limit)
         .fetchAll(db)
+        .reversed()
         .map {
           ProgressionSample(
             sessionID: SessionID(rawValue: $0.sessionID),
