@@ -95,6 +95,9 @@ public nonisolated struct GymStore {
   /// would either orphan them or cascade away real training history.
   public func archiveGym(_ id: GymID) throws {
     try database.write { db in
+      guard try Gym.where({ $0.id.eq(id.rawValue) }).fetchOne(db) != nil else {
+        throw GymStoreError.gymNotFound
+      }
       try Gym.where { $0.id.eq(id.rawValue) }.update { $0.isArchived = #bind(true) }.execute(db)
     }
   }
@@ -157,6 +160,9 @@ public nonisolated struct GymStore {
 
   public func archiveMachine(_ id: MachineID) throws {
     try database.write { db in
+      guard try Machine.where({ $0.id.eq(id.rawValue) }).fetchOne(db) != nil else {
+        throw GymStoreError.machineNotFound
+      }
       try Machine.where { $0.id.eq(id.rawValue) }.update { $0.isArchived = #bind(true) }.execute(db)
     }
   }

@@ -65,6 +65,13 @@ struct GymRenameTests {
     }
   }
 
+  @Test("Archiving something that is not there says so, as renaming does")
+  func archiveNotFound() throws {
+    let (_, gyms) = try fixture()
+    #expect(throws: GymStoreError.gymNotFound) { try gyms.archiveGym(GymID()) }
+    #expect(throws: GymStoreError.machineNotFound) { try gyms.archiveMachine(MachineID()) }
+  }
+
   @Test("History follows the machine, so past sessions read the new name")
   func historyReadsNewName() throws {
     let (database, gyms) = try fixture()
