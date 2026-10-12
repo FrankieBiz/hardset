@@ -87,6 +87,9 @@ public enum PersonalRecordDetector {
     }
   }
 
+  /// The smaller standard plate, 5 lb, in kilograms (about 2.268).
+  private static let onePlateKg = WeightUnit.pounds.toKilograms(WeightUnit.pounds.plateIncrement)
+
   /// Records set by `candidate`, given everything previously logged for that lift.
   ///
   /// - Parameters:
@@ -104,12 +107,21 @@ public enum PersonalRecordDetector {
     guard !history.isEmpty else { return [] }
 
     var records: [PersonalRecord] = []
-    let step = increment ?? WeightUnit.kilograms.plateIncrement
+    // "One plate" when the machine's step is unknown is the smaller standard plate, 5 lb, in
+    // either unit, so the live check and the replay never depend on the lifter's current unit.
+    // A supplied step counts only if it is finite and positive, as `LoadStep` requires.
+    let step: Double
+    if let increment, increment.isFinite, increment > 0 {
+      step = increment
+    } else {
+      step = onePlateKg
+    }
 
     // Heaviest load ever lifted for at least one rep.
     if let heaviest = history.map(\.weightKg).max() {
       let margin = max(heaviest * relativeThreshold, step)
-      if candidate.weightKg >= heaviest + margin {
+      // The tolerance absorbs binary noise from pounds converted to kilograms.
+      if candidate.weightKg >= heaviest + margin - 1e-9 {
         records.append(
           PersonalRecord(
             kind: .heaviestLoad,

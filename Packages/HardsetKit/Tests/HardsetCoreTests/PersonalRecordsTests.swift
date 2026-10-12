@@ -55,6 +55,27 @@ struct PersonalRecordsTests {
     #expect(records(110, 5, history: [(100, 8)], increment: 10).contains(.heaviestLoad))
   }
 
+  /// HANDOFF section 5: one plate is the smaller standard plate, 5 lb, whichever unit the lifter reads.
+  @Test("One plate is 5 lb when the machine's step is unknown, so a pound lifter's jump counts")
+  func onePlateIsFivePounds() {
+    let lb = WeightUnit.pounds
+    let before = [(lb.toKilograms(135), 8)]
+    #expect(records(lb.toKilograms(140), 5, history: before).contains(.heaviestLoad))
+    #expect(!records(lb.toKilograms(139), 5, history: before).contains(.heaviestLoad))
+    // A kilogram lifter's +2.5 kg is still a plate.
+    #expect(records(102.5, 5, history: [(100, 8)]).contains(.heaviestLoad))
+  }
+
+  @Test("An unusable machine increment falls back to one plate")
+  func unusableIncrementFallsBack() {
+    let lb = WeightUnit.pounds
+    let before = [(lb.toKilograms(135), 8)]
+    for bad in [0.0, -5.0, Double.nan, Double.infinity] {
+      #expect(records(lb.toKilograms(140), 5, history: before, increment: bad).contains(.heaviestLoad))
+      #expect(!records(lb.toKilograms(139), 5, history: before, increment: bad).contains(.heaviestLoad))
+    }
+  }
+
   @Test("More reps at the same load is its own record")
   func repsAtLoadIsSeparate() {
     let all = PersonalRecordDetector.records(

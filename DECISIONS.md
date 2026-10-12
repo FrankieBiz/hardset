@@ -348,3 +348,15 @@ no training data). No intent, control or widget takes a weight or a rep count, a
 the app accepts from outside, `SystemRequest`, has the single case `.startWorkout`. A rest started
 from outside has the length the lifter said or configured, validated like a typed one, and never a
 default (`HANDOFF.md` §6).
+
+### 27. One plate when the machine's step is unknown
+
+A heaviest-load record must beat the old best by the greater of 2.5% and one plate (`HANDOFF.md`
+§5). When the machine's increment is unknown, "one plate" is the smaller standard plate, 5 lb
+(`WeightUnit.pounds.toKilograms(5)`, about 2.268 kg), in either unit. The detector used to fall
+back to 2.5 kg, so a pound lifter's 135 to 140 lb jump (+2.27 kg) never earned the record. Taking
+the same plate in both units also means the live check and `SessionRecordReplay` never depend on
+the lifter's current unit. A supplied increment counts only if it is finite and above zero, as
+`LoadStep` requires; anything else takes the fallback.
+
+Cost if wrong: a pound lifter's record on a +5 lb jump; nothing is announced falsely.
