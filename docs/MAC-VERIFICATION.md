@@ -1066,3 +1066,10 @@ the `Hardset` scheme for the iOS 26.4 simulator.
   - [ ] VoiceOver on it: "2 sets, 16 reps, 1600 kilograms, 1 warm-up set"; with nothing logged,
         "No sets logged yet". Pounds: "… pounds".
   - [ ] The numeric roll still animates on a log, and is instant under Reduce Motion.
+- [ ] (fix(ui): the unit segments say kilograms and pounds to VoiceOver) HardsetUI and
+      HardsetFeature build for iOS and macOS 15. Each segment is
+      `Text("kg").accessibilityLabel("Kilograms").tag(false)` (and "lb"/"Pounds"/`true`).
+  - [ ] Settings and the first-run screen still show "kg" and "lb", and tapping each still
+        switches the unit (the tag is outermost, after the label).
+  - [ ] VoiceOver on each segment: "Kilograms" / "Pounds", with the selected state; not "k g"
+        or "l b". If iOS's segmented picker ignores the label, say so here.

@@ -90,8 +90,10 @@ public struct FirstRunView: View {
           onCorrect: { useImperial.toggle() })
       }
       Picker("Weight", selection: $useImperial) {
-        Text(WeightUnit.kilograms.abbreviation).tag(false)
-        Text(WeightUnit.pounds.abbreviation).tag(true)
+        // "kg" and "lb" on screen; VoiceOver reads those as letters, so each says its unit.
+        // The tag stays outermost, where the picker looks for it.
+        Text(WeightUnit.kilograms.abbreviation).accessibilityLabel("Kilograms").tag(false)
+        Text(WeightUnit.pounds.abbreviation).accessibilityLabel("Pounds").tag(true)
       }
       .pickerStyle(.segmented)
     }
