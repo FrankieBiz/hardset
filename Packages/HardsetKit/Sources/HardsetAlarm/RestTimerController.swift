@@ -65,6 +65,9 @@ public final class RestTimerController {
   private var alarmID: UUID?
   private var commitTask: Task<Void, Never>?
   private var reconcileAfterCommit = false
+  /// The last look at AlarmKit failed, so an idle state may be wrong: a cold launch reads idle
+  /// until it has looked. `perform(_:)` then says it could not check rather than "no rest".
+  private var alarmsUnreadable = false
   private var expiryTask: Task<Void, Never>?
   /// The alarm whose `schedule` call is in flight, if any.
   private var schedulingID: UUID?
@@ -136,7 +139,8 @@ public final class RestTimerController {
   /// commit left pending would leave a rest written down with no alarm behind it.
   public func perform(_ command: RestCommand, now: Date = .now) async -> RestCommandOutcome {
     await reconcile(now: now)
-    let outcome = RestCommandPlan.outcome(for: command, state: state, now: now)
+    let outcome = RestCommandPlan.outcome(
+      for: command, state: state, now: now, alarmsUnreadable: alarmsUnreadable)
     guard case .perform(let action) = outcome else { return outcome }
     switch action {
     case .start(let duration): start(duration: duration, metadata: nil, now: now)
@@ -186,9 +190,12 @@ public final class RestTimerController {
         // the next pass, rather than reconcile against an empty list (a guess that there are
         // none) and end a live rest. The failure is kept, not swallowed.
         lastError = error
+        alarmsUnreadable = true
         return
       }
     }
+    // Read, or known to be empty because alarms are not authorized.
+    alarmsUnreadable = false
 
     let result = RestReconciler.reconcile(persisted: persisted, alarms: alarms, now: now)
     for stale in result.staleAlarmIDs {

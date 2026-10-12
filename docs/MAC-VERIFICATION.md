@@ -777,3 +777,7 @@ the `Hardset` scheme for the iOS 26.4 simulator.
   - [ ] Every Lock Screen and Dynamic Island check added to §B there.
   - Known residual: after ±15 s or a resume the ring starts again from the new alarm's length
     (reading 3). Record whether it reads as wrong in use.
+  - Known residual: if a background launch cannot read AlarmKit's alarms, a Lock Screen button
+    or Siri changes nothing and says "The rest timer could not be checked. Open Hardset and try
+    again." rather than "No rest is running." while an alarm may still count down. Opening the
+    app reconciles. Record it if it is ever seen.

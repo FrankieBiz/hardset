@@ -77,6 +77,28 @@ struct SystemRequestsTests {
     #expect(RestCommandPlan.outcome(for: .stop, state: .idle, now: now) == .nothing("No rest is running."))
   }
 
+  /// A cold launch reads idle until AlarmKit has been read. If that read failed, an alarm may
+  /// still be counting: "No rest is running" would be a guess, and a Skip that answered it would
+  /// look done while the alarm still rang.
+  @Test("A timer whose alarms could not be read is not called idle")
+  func unreadableAlarmsAreNotIdle() {
+    let commands: [RestCommand] = [.start(.seconds(120)), .pause, .resume, .stop]
+    for command in commands {
+      #expect(
+        RestCommandPlan.outcome(for: command, state: .idle, now: now, alarmsUnreadable: true)
+          == .nothing("The rest timer could not be checked. Open Hardset and try again."))
+    }
+    // A rest the app already holds is still the truth while it runs.
+    #expect(
+      RestCommandPlan.outcome(
+        for: .pause, state: .running(endsAt: now + 60), now: now, alarmsUnreadable: true)
+        == .perform(.pause))
+    #expect(
+      RestCommandPlan.outcome(
+        for: .stop, state: .paused(remaining: .seconds(5)), now: now, alarmsUnreadable: true)
+        == .perform(.stop))
+  }
+
   @Test("Siri confirms in plain words")
   func confirmations() {
     #expect(RestCommandPlan.confirmation(for: .start(.seconds(150))) == "Resting for 2:30.")

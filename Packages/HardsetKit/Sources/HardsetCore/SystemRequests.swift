@@ -61,10 +61,17 @@ public enum RestCommandOutcome: Hashable, Sendable {
 /// background, where the controller reads idle until it has looked at AlarmKit.
 public enum RestCommandPlan {
   public static let noRest = "No rest is running."
+  /// Said instead of `noRest` when AlarmKit could not be read, so "idle" may be wrong.
+  public static let couldNotCheck =
+    "The rest timer could not be checked. Open Hardset and try again."
 
+  /// - Parameter alarmsUnreadable: The timer's last look at AlarmKit failed. An idle state is
+  ///   then not known to be idle (a cold launch reads idle until it has looked), so nothing is
+  ///   done and the sentence says so. A rest the timer already holds is still planned against.
   public static func outcome(
-    for command: RestCommand, state: RestTimerState, now: Date
+    for command: RestCommand, state: RestTimerState, now: Date, alarmsUnreadable: Bool = false
   ) -> RestCommandOutcome {
+    if alarmsUnreadable, state == .idle { return .nothing(couldNotCheck) }
     switch command {
     case .start(let duration):
       // A new rest replaces the current one: the lifter asked for it by name.
