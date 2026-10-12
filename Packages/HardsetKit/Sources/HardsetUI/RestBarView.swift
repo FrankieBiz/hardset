@@ -31,11 +31,9 @@ public struct RestBarView: View {
   #endif
   @Environment(\.accessibilityReduceMotion) private var reduceMotion
   @State private var adjustCount = 0
-  // The buttons grow with the type, up to 88 pt, and never fall below their floors: 44 pt in the
-  // accessory and 56 pt in the logger. `@ScaledMetric` also scales down below Large, so the
-  // floors are applied, not assumed (`Tokens.tapTarget`).
-  @ScaledMetric(relativeTo: .body) private var scaledAccessoryTarget: CGFloat =
-    Tokens.minimumTapTarget
+  // In the logger the buttons grow with the type, between the 56 pt floor and the 88 pt cap.
+  // `@ScaledMetric` also scales down below Large, so the floor is applied, not assumed
+  // (`Tokens.tapTarget`). The accessory's are a fixed 44 pt: see `tapTarget`.
   @ScaledMetric(relativeTo: .body) private var scaledLoggerTarget: CGFloat = Tokens.loggerTapTarget
 
   public init(
@@ -74,9 +72,13 @@ public struct RestBarView: View {
     #endif
   }
 
+  /// The accessory is a fixed-height system slot, so its buttons do not grow with the type: at the
+  /// largest size a scaled 44 pt reached about 137, and four of them pushed the countdown out of
+  /// the slot. They stay at the 44 pt floor. Collapsed, the controls the slot has no room for are
+  /// the countdown's VoiceOver actions (see `body`).
   private var tapTarget: CGFloat {
     inAccessory
-      ? Tokens.tapTarget(scaledAccessoryTarget, floor: Tokens.minimumTapTarget)
+      ? Tokens.minimumTapTarget
       : Tokens.tapTarget(scaledLoggerTarget, floor: Tokens.loggerTapTarget)
   }
 

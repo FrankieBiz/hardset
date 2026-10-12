@@ -1015,3 +1015,15 @@ the `Hardset` scheme for the iOS 26.4 simulator.
   - [ ] Large: unchanged (56 and 44).
   - [ ] AX5: none grows past 88 pt; the keypad does not cover the row being edited, and the
         stacked set row still shows the whole hero weight.
+- [ ] (fix(ui): the rest bar's buttons fit the tab accessory at every text size) HardsetUI builds
+      for iOS and macOS 15. Written without a compiler: `RestBarView.tapTarget` is a fixed
+      `Tokens.minimumTapTarget` in the accessory and `Tokens.tapTarget(_:floor:)` in the logger.
+  - [ ] AX5, a rest running, tab bar expanded: −15, +15, pause and skip are 44 pt and the
+        countdown stays inside the accessory. Before, each button grew to about 137 pt.
+  - [ ] AX5: the button *labels* still scale ("−15" in subheadline, the countdown in title2), and
+        nothing caps Dynamic Type in the accessory. If the countdown or "−15" is clipped or pushed
+        out at AX3–AX5, the remaining fix is a Dynamic Type cap with the Large Content Viewer on
+        the accessory; record what you see.
+  - [ ] xSmall and Large: the accessory buttons are 44 pt; macOS's inline rest bar keeps 56–88 pt.
+  - [ ] Tab bar collapsed (inline): VoiceOver's actions on the countdown still offer Subtract 15
+        seconds, Add 15 seconds and Skip rest.
