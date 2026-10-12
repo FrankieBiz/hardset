@@ -1,4 +1,5 @@
 import HardsetCore
+import HardsetStore
 import HardsetUI
 import SwiftUI
 
@@ -11,10 +12,15 @@ import SwiftUI
 @MainActor
 public struct SettingsSheet: View {
   @Binding private var useImperial: Bool
+  private let gyms: GymStore?
   private let onDone: () -> Void
 
-  public init(useImperial: Binding<Bool>, onDone: @escaping () -> Void) {
+  /// `gyms` is nil where there is no store to show (a preview); the row is then hidden.
+  public init(
+    useImperial: Binding<Bool>, gyms: GymStore? = nil, onDone: @escaping () -> Void
+  ) {
     self._useImperial = useImperial
+    self.gyms = gyms
     self.onDone = onDone
   }
 
@@ -37,6 +43,16 @@ public struct SettingsSheet: View {
             "Every set is stored in kilograms, whichever you pick. Switching converts what you "
               + "see and changes nothing that was recorded."
           )
+        }
+
+        if let gyms {
+          Section {
+            NavigationLink("Gyms and machines") { GymsScreen(store: gyms) }
+          } footer: {
+            Text(
+              "Rename a gym or machine, or archive one you no longer use. History keeps every set."
+            )
+          }
         }
       }
       .navigationTitle("Settings")

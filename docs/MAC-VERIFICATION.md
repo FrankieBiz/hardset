@@ -721,6 +721,19 @@ the `Hardset` scheme for the iOS 26.4 simulator.
   - Compiler watch: `Group { if … FirstRunView else tabs }` carrying `.sheet`/`.task`;
     `#if os(iOS)` inside the TextField modifier chain; `useImperial` self-write via a local.
 
+- [ ] (feat(feature): rename or archive a gym or a machine) HardsetFeature builds (iOS, and
+      macOS 15 via `./test.sh`). In the simulator:
+  - [ ] Settings > Gyms and machines lists each gym with its machines.
+  - [ ] Rename a machine to "Leg Press 45°" with brand "Hammer Strength": the list, a past
+        session's detail and the movement's chart all read "Hammer Strength Leg Press 45°".
+  - [ ] Rename to spaces: Save stays disabled.
+  - [ ] Archive the selected gym, close Settings: the start screen no longer shows it; its sessions
+        are still in History with their machines named.
+  - [ ] Every action is reachable by swipe, by long press, and as a VoiceOver action.
+  - Compiler watch: `GymsScreen`'s private nested `Target` used by the file-private `RenameSheet`;
+    `confirmationDialog` title built from optional state; `.sheet(item:)` on `Target`.
+  - No new SF Symbols.
+
 ## Phase 4
 
 - [ ] (feat(app): launch in the app's own colour; a manifest for the widget) The `Hardset` scheme

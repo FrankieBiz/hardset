@@ -196,8 +196,10 @@ public struct HardsetRootView: View {
                 }
               }
             }
-            .sheet(isPresented: $isShowingSettings) {
-              SettingsSheet(useImperial: $useImperial) { isShowingSettings = false }
+            .sheet(isPresented: $isShowingSettings, onDismiss: refreshGyms) {
+              SettingsSheet(useImperial: $useImperial, gyms: environment.gyms) {
+                isShowingSettings = false
+              }
             }
         }
       }
