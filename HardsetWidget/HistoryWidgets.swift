@@ -130,13 +130,28 @@ struct LastTimeColumn: View {
     .accessibilityLabel(spokenLabel)
   }
 
-  /// The name, the machine, up to three sets, and the date.
-  @ViewBuilder private var homeScreenLines: some View {
-    // By position, not by text: three sets of "100 kg × 8" are three lines, not one.
-    let lines = lastTime.lines(formatter: formatter, limit: 3)
+  /// The name, the machine, up to two sets, and the date.
+  ///
+  /// A small or medium widget is about 158 pt tall, with some 126 pt inside its margins. The name,
+  /// the machine, two sets, "+N more sets" and the date are six rows, about 122 pt at the default
+  /// text size. Three sets made seven, about 142 pt, and the name and the date were cut. Where six
+  /// rows do not fit, at larger text, one set is shown, and at the largest sizes the "+N more sets"
+  /// row goes too, leaving four. A set line goes, never the date.
+  private var homeScreenLines: some View {
+    let oneSet = lastTime.lines(formatter: formatter, limit: 1)
+    return ViewThatFits(in: .vertical) {
+      homeScreenStack(lastTime.lines(formatter: formatter, limit: 2))
+      homeScreenStack(oneSet)
+      // The last choice is also the one shown when none fits.
+      homeScreenStack(Array(oneSet.prefix(1)))
+    }
+  }
+
+  private func homeScreenStack(_ lines: [String]) -> some View {
     VStack(alignment: .leading, spacing: Tokens.Spacing.tight) {
       Text(lastTime.exerciseName).font(.headline).lineLimit(1)
       Text(lastTime.equipmentText).font(Tokens.Text.caption).foregroundStyle(.secondary).lineLimit(1)
+      // By position, not by text: two sets of "100 kg × 8" are two lines, not one.
       ForEach(lines.indices, id: \.self) { index in
         Text(lines[index]).font(Tokens.Text.caption).monospacedDigit()
       }

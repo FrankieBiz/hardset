@@ -170,6 +170,12 @@ merge semantics. Use the iPhone plus a simulator signed into the same iCloud acc
 - [ ] **After a workout.** Finish one with a leg press on a branded machine: Last time shows the
       movement, "Hammer Strength Leg Press", the sets as "100 kg × 8", and a date ("Tue 7 Oct"),
       never "today" or "3 days ago". Last workout shows the date, "N sets · N kg" and the length.
+- [ ] **Home Screen fit.** Finish a workout with 4 or more sets of one movement. On a small Last
+      time widget (158 pt square on most iPhones), at the default text size: the movement, the
+      machine, two sets, "+2 more sets" and the date, with nothing cut. At xxxLarge (Settings ›
+      Display & Brightness › Text Size, all the way right, Larger Accessibility Sizes off): the
+      name and the date whole, and one set; "+N more sets" only if it fits. The medium widget's
+      columns the same.
 - [ ] **Mid-workout.** Start a workout and log on the same machine: the widget still shows the
       last *finished* time, not today's half-done sets.
 - [ ] **Units.** Switch to lb in Settings: both widgets read lb within a few seconds.

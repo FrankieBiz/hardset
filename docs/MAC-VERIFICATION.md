@@ -1128,3 +1128,12 @@ the `Hardset` scheme for the iOS 26.4 simulator.
         "62,5"; VoiceOver's label for the key (`spokenStep`) is unchanged.
   - [ ] A machine step of 1000 lb or more (if one can be entered) has no grouping separator, as
         everywhere else.
+- [ ] (fix(widget): Last time on the Home Screen keeps its name and its date) The widget extension
+      builds with no new warnings. Written without a compiler; look first at
+      `LastTimeColumn.homeScreenLines`, a plain computed property (`let`, then
+      `return ViewThatFits(in: .vertical) { … }`) whose three children are calls to
+      `homeScreenStack(_:)`, with no `if` in the builder.
+  - [ ] DEVICE-CHECKLIST §E "Home Screen fit": 4+ sets of one movement on a 158 pt small widget,
+        default and xxxLarge text. Default: two sets, "+2 more sets" and the date, nothing cut.
+        xxxLarge: the name and the date whole. If the date is still cut there, the last
+        `ViewThatFits` child is too tall: drop the machine row from it and record it here.
