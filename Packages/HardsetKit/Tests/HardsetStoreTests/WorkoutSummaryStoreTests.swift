@@ -194,4 +194,38 @@ struct WorkoutSummaryStoreTests {
     let (_, _, summaries) = try seeded()
     #expect(throws: LoggerStoreError.sessionNotFound) { try summaries.summary(for: SessionID()) }
   }
+
+  /// The detail embeds the summary and names this machine "Unnamed machine"; the summary used to
+  /// read it as free weight and leave it out of the machines used.
+  @Test("A machine row that no longer exists is named, not read as free weight")
+  func missingMachineIsNamed() throws {
+    let (database, logger, summaries) = try seeded()
+    let (press, name) = try exercise(database, slug: "barbell-bench-press")
+    let earlier = try logger.startSession(at: now.addingTimeInterval(-86_400))
+    try logger.finishSession(earlier, at: now.addingTimeInterval(-86_000))
+    let session = try logger.startSession(at: now)
+    let gone = MachineID()
+    // A synced set can arrive before, or outlive, its machine row. Foreign keys are switched off
+    // only to write that state.
+    try database.writeWithoutTransaction { db in
+      try db.execute(sql: "PRAGMA foreign_keys = OFF")
+      try LoggedSet.insert {
+        LoggedSet.Draft(
+          sessionID: earlier.rawValue, exerciseID: press.rawValue, machineID: gone.rawValue,
+          setOrdinal: 0, weightKg: 50, reps: 8, completedAt: now.addingTimeInterval(-86_300))
+        LoggedSet.Draft(
+          sessionID: session.rawValue, exerciseID: press.rawValue, machineID: gone.rawValue,
+          setOrdinal: 0, weightKg: 100, reps: 8, completedAt: now.addingTimeInterval(60))
+      }
+      .execute(db)
+      try db.execute(sql: "PRAGMA foreign_keys = ON")
+    }
+    try logger.finishSession(session, at: now.addingTimeInterval(3_600))
+
+    let summary = try summaries.summary(for: session)
+    #expect(summary.machinesUsed == ["Unnamed machine"])
+    #expect(!summary.records.isEmpty)
+    #expect(summary.records.allSatisfy { $0.exerciseName == name })
+    #expect(summary.records.allSatisfy { $0.machineName == "Unnamed machine" })
+  }
 }

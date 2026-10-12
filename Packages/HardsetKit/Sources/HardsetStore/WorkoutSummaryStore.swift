@@ -48,10 +48,9 @@ public nonisolated struct WorkoutSummaryStore {
       var used: [String] = []
       var seenMachines = Set<UUID>()
       for set in sets {
-        if let machineID = set.machineID, seenMachines.insert(machineID).inserted,
-          let name = machines[machineID]
-        {
-          used.append(name)
+        // A machine id with no row left is still a machine, named as the session detail names it.
+        if let machineID = set.machineID, seenMachines.insert(machineID).inserted {
+          used.append(machines[machineID] ?? "Unnamed machine")
         }
         let setID = SetID(rawValue: set.id)
         for record in records[setID] ?? [] {
@@ -59,7 +58,7 @@ public nonisolated struct WorkoutSummaryStore {
             WorkoutSummary.RecordLine(
               setID: setID,
               exerciseName: names[set.exerciseID] ?? "Unknown movement",
-              machineName: set.machineID.flatMap { machines[$0] },
+              machineName: set.machineID.map { machines[$0] ?? "Unnamed machine" },
               record: record
             )
           )
