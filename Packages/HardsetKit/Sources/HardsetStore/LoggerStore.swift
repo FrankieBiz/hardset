@@ -473,6 +473,7 @@ public nonisolated struct LoggerStore {
             .where { $0.exerciseID.eq(key.exerciseID.rawValue) }
             .where { $0.machineID.eq(machineID) }
             .where { !$0.isWarmup }
+            .where { $0.sessionID.neq(sessionID.rawValue) }
             .where { $0.completedAt < startedAt }
             .order { $0.completedAt.desc() }
             .limit(Self.recordHistoryLimit)
@@ -482,12 +483,13 @@ public nonisolated struct LoggerStore {
             .where { $0.exerciseID.eq(key.exerciseID.rawValue) }
             .where { $0.machineID.is(nil) }
             .where { !$0.isWarmup }
+            .where { $0.sessionID.neq(sessionID.rawValue) }
             .where { $0.completedAt < startedAt }
             .order { $0.completedAt.desc() }
             .limit(Self.recordHistoryLimit)
             .fetchAll(db)
         }
-        prior[key] = rows.filter { $0.sessionID != sessionID.rawValue }.map(Self.record(from:))
+        prior[key] = rows.map(Self.record(from:))
       }
 
       let machineIDs = Array(Set(own.compactMap(\.machineID)))
@@ -508,7 +510,8 @@ public nonisolated struct LoggerStore {
             reps: row.reps, isWarmup: row.isWarmup, completedAt: row.completedAt)
         },
         priorHistory: prior,
-        increments: increments
+        increments: increments,
+        window: Self.recordHistoryLimit
       )
     }
   }

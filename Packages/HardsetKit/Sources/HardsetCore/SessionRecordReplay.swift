@@ -32,15 +32,24 @@ public enum SessionRecordReplay {
   ///   - session: This session's sets, in the order they were performed.
   ///   - priorHistory: Working sets from before this session, per exercise and machine.
   ///   - increments: Stack increments for the machines involved.
+  ///   - window: When set, each set is judged against only the newest `window` sets (by
+  ///     `completedAt`) of its movement and machine, prior and this session's earlier sets
+  ///     together. That is the bound `completedSets(for:limit:)` puts on the live read, which
+  ///     slides as the session adds sets. `nil` judges against everything given.
   /// - Returns: The records each set earned. Sets that earned none are absent.
   public static func records(
     session: [Entry],
     priorHistory: [ProgressionKey: [PriorSetRecord]],
-    increments: [MachineID: Double]
+    increments: [MachineID: Double],
+    window: Int? = nil
   ) -> [SetID: [PersonalRecord]] {
     var history = priorHistory
     var result: [SetID: [PersonalRecord]] = [:]
     for entry in session {
+      if let window, let held = history[entry.key], held.count > window {
+        // Newest first; the sort is stable, so ties keep their given order.
+        history[entry.key] = Array(held.sorted { $0.completedAt > $1.completedAt }.prefix(window))
+      }
       let found = PersonalRecordDetector.records(
         for: .init(weightKg: entry.weightKg, reps: entry.reps, isWarmup: entry.isWarmup),
         history: history[entry.key] ?? [],

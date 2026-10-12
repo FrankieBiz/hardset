@@ -74,4 +74,19 @@ struct SessionRecordReplayTests {
       session: [set], priorHistory: [other: history([(60, 8)])], increments: [:])
     #expect(result.isEmpty)
   }
+
+  @Test("A window keeps the newest sets at each step, so an old best slides out")
+  func windowSlides() {
+    let old = PriorSetRecord(weightKg: 200, reps: 5, completedAt: Date(timeIntervalSince1970: 1))
+    let recent = PriorSetRecord(weightKg: 100, reps: 8, completedAt: Date(timeIntervalSince1970: 2))
+    let first = entry(120, 5)
+    let second = entry(130, 5)
+    let unbounded = SessionRecordReplay.records(
+      session: [first, second], priorHistory: [press: [old, recent]], increments: [:])
+    let windowed = SessionRecordReplay.records(
+      session: [first, second], priorHistory: [press: [old, recent]], increments: [:], window: 2)
+    #expect(unbounded.isEmpty)
+    #expect(windowed[first.setID] == nil)
+    #expect(windowed[second.setID]?.contains { $0.kind == .heaviestLoad } == true)
+  }
 }

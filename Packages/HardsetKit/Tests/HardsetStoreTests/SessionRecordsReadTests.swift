@@ -213,4 +213,57 @@ struct SessionRecordsReadTests {
     let read = try store.recordsBySet(in: coordinator.sessionID)
     #expect(Set((read[setID] ?? []).map(\.kind)) == announced)
   }
+
+  /// The window slides with the session: the k-th set is judged against the newest 1,000 of the
+  /// prior history plus this workout's own earlier sets, so the best prior set can fall out of the
+  /// window between the first and second set of the workout.
+  @Test("The replay slides the 1,000-set window with each own set, as the moment did")
+  func replaySlidesTheWindow() throws {
+    let database = try migratedDatabase()
+    let store = LoggerStore(database: database)
+    let exercise = try seedExercise(database)
+    let gyms = GymStore(database: database)
+    let gym = try gyms.createGym(name: "Home", now: start)
+    let machine = try gyms.createMachine(at: gym, name: "Leg Press", stackIncrementKg: 5, now: start)
+
+    let past = try store.startSession(at: start.addingTimeInterval(-90 * 86_400))
+    try database.write { db in
+      // 1,001 prior sets. The 200 kg best is the second oldest: inside the newest 1,000 for the
+      // workout's first set, pushed out by its own first set for the second.
+      var drafts: [LoggedSet.Draft] = []
+      for index in 0...1_000 {
+        drafts.append(LoggedSet.Draft(
+          sessionID: past.rawValue, exerciseID: exercise.rawValue, machineID: machine.rawValue,
+          setOrdinal: index, weightKg: index == 1 ? 200 : 100, reps: index == 1 ? 5 : 8,
+          completedAt: start.addingTimeInterval(-80 * 86_400 + Double(index))))
+      }
+      try LoggedSet.insert { drafts }.execute(db)
+    }
+    try store.finishSession(past, at: start.addingTimeInterval(-60 * 86_400))
+
+    var clock = start
+    let coordinator = try SessionCoordinator.start(
+      store: store, gymID: gym,
+      plan: [
+        PlannedExercise(
+          exerciseID: exercise, machineID: machine, exerciseName: "Leg Press", plannedSets: 4)
+      ],
+      now: { clock }
+    )
+    let state = coordinator.exercises[0]
+    var announced: [SetID: Set<PersonalRecordKind>] = [:]
+    for (index, weight) in [120.0, 130, 140, 150].enumerated() {
+      clock = start.addingTimeInterval(Double(index + 1) * 60)
+      coordinator.exercises[0].slots[index].draft = SetEntryDraft(weightKg: weight, reps: 5)
+      #expect(coordinator.logSet(slotID: state.slots[index].id, inExercise: state.id))
+      let setID = try #require(coordinator.exercises[0].slots[index].loggedSetID)
+      announced[setID] = Set(coordinator.lastRecords.map(\.kind))
+    }
+    #expect(announced.values.contains { !$0.isEmpty })
+
+    let read = try store.recordsBySet(in: coordinator.sessionID).mapValues { Set($0.map(\.kind)) }
+    for (setID, kinds) in announced {
+      #expect((read[setID] ?? []) == kinds)
+    }
+  }
 }
