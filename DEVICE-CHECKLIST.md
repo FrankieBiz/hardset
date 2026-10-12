@@ -221,7 +221,9 @@ has not yet decided on (`HANDOFF.md` §11.2). Until then this section cannot be 
 - [ ] **Turning it off.** Off, then finish a workout: nothing new in Health; earlier workouts stay
       (Hardset never deletes from Health).
 - [ ] **Health refuses the save.** With the toggle on, turn off Hardset's Workouts permission in
-      Settings › Health › Data Access & Devices, then finish a workout: the summary is titled
+      Settings › Health › Data Access & Devices (on iOS 18 and later possibly under Settings ›
+      Apps › Health; record which, and check the "Turn it on in Settings ›" line names the same
+      path), then finish a workout: the summary is titled
       "Workout saved", lists the workout, and says "Couldn't save this workout to Apple Health. It
       is still saved here."; History has the workout. The finish itself never fails over Health.
 - [ ] **Locked as it finishes.** Tap Finish and lock the phone at once. Unlock: the summary says

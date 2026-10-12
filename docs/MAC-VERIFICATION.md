@@ -1167,3 +1167,33 @@ the `Hardset` scheme for the iOS 26.4 simulator.
       `CFBundleShortVersionString` 1.0 and `CFBundleVersion` 1, never a literal `$(…)`
       (`INFOPLIST_EXPAND_BUILD_SETTINGS` is on by default). An archive uploaded to App Store
       Connect raises no ITMS-90473 version mismatch for the extension.
+- [ ] (docs: five things to look at first on the Mac, from the final review) None of these could
+      be settled without a build or a device; each names its fallback.
+  - [ ] **Shortcuts lists each action exactly once.** `RestIntents.swift` and `WorkoutIntents.swift`
+        are compiled into the widget extension too (`Tools/generate_project.py`), so the
+        discoverable `StartRestIntent`, `StopRestIntent` and `StartWorkoutIntent` exist in two
+        bundles. In Shortcuts › Hardset, count "Start a rest", "Skip the rest" and "Start a
+        workout": once each. If any appears twice, add a `WIDGET_EXTENSION` entry to the widget's
+        `SWIFT_ACTIVE_COMPILATION_CONDITIONS` in the generator and, under
+        `#if WIDGET_EXTENSION`, give those three `static let isDiscoverable = false` (the docs:
+        such an intent still runs "from a widget, but system features can't access it").
+  - [ ] **`NSSupportsLiveActivities`.** Neither Info.plist declares it, and AlarmKit's docs do not
+        say it is needed for the countdown presentation. If a running rest shows no countdown on
+        the Lock Screen or in the Dynamic Island (DEVICE-CHECKLIST §B "Locked screen"), add
+        `NSSupportsLiveActivities` = YES to `Hardset/Info.plist`, rebuild, and record here which
+        one it took.
+  - [ ] **TipKit in the extension.** The widget links HardsetUI, which imports TipKit
+        (`FeatureTipViews.swift`, `ExerciseSectionView.swift`). If the widget build refuses a
+        TipKit API as unavailable in app extensions, mark `HardsetTips` and the tip views
+        `@available(iOSApplicationExtension, unavailable)`; the widget uses neither.
+  - [ ] **`Button(intent:)` and `@AppDependency`.** The Lock Screen's Pause, Resume and Skip build
+        `PauseRestIntent()`, `ResumeRestIntent()` and `StopRestIntent()` in the widget process,
+        where nothing is registered. Rendering the Live Activity must not crash: the
+        `@AppDependency` has to resolve lazily, at `perform()` in the app. If the widget crashes
+        drawing the buttons, record the crash here: the controller must then be looked up inside
+        `perform()`, which runs in the app, rather than through a stored property wrapper.
+        (`IntentDependencies.swift` is compiled into the app only, so the widget cannot see it.)
+  - [ ] **The Health settings path.** `HealthExportCopy.accessDenied` and DEVICE-CHECKLIST §F say
+        "Settings › Health › Data Access & Devices › Hardset". On iOS 18 and later this may be
+        under Settings › Apps › Health. Follow it on the device; if it differs, correct the copy
+        in Core (and its test) and the checklist line.
