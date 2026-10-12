@@ -57,6 +57,9 @@ struct WidgetSnapshotTests {
     #expect(WidgetSnapshotFile.decode(data) == .unreadable)
   }
 
+  /// Pins the outcome, not the version-first decode behind it: a newer file and a torn one both
+  /// read as `.unreadable` today, so this passed before that change too. Telling them apart needs
+  /// a `.newer` case, which is a public change for a later task.
   @Test("A newer file whose body no longer decodes is still just newer")
   func newerVersionWithChangedShapeIsIgnored() {
     let data = Data(#"{"version": \#(WidgetSnapshot.currentVersion + 1), "sessions": "a different shape"}"#.utf8)

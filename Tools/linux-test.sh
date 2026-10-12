@@ -3,7 +3,8 @@
 #
 # Why this exists: development happens on a Linux machine with no Xcode. HardsetCore imports
 # only Foundation and HardsetStore's non-sync code is plain GRDB, so both build here; the
-# SwiftUI, AlarmKit and CloudKit code does not, and Package.swift omits it on Linux. A green
+# SwiftUI and AlarmKit targets do not, and Package.swift omits them on Linux; the CloudKit sync
+# code inside HardsetStore is `#if canImport(CloudKit)`-guarded in source. A green
 # run here is necessary but not sufficient -- the Mac build is the authority.
 #
 # Usage: Tools/linux-test.sh [extra `swift test` arguments, e.g. --filter LoggerStoreTests]

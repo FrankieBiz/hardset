@@ -79,8 +79,8 @@ public struct EvidenceSource: Hashable, Sendable, Codable, Identifiable {
       var from = word.startIndex
       while let start = word[from...].range(of: "10.") {
         from = start.upperBound
-        // A DOI starts at a boundary: the word's start, or after "(", "doi:" or "doi.org/", never
-        // inside a longer number such as "2010.5/6".
+        // A DOI starts where no letter, digit or "." comes before it: the word's start, or after
+        // punctuation such as "(", "doi:" or "doi.org/". Never inside a longer number ("2010.5/6").
         if let before = word[..<start.lowerBound].last, before.isLetter || before.isNumber || before == "." {
           continue
         }
