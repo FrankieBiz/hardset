@@ -193,7 +193,10 @@ public struct NumericPad: View {
     let sign = direction == .up ? "+" : "−"
     switch keypad.field {
     case .weight:
-      return sign + keypad.loadStep.amount.formatted(.number.precision(.fractionLength(0...2)))
+      // Through the one weight formatter, so its digits, separator and grouping match the row's.
+      // The step is in display units and the formatter takes kilograms, as in `spokenStep`.
+      let amountKg = keypad.unit.toKilograms(keypad.loadStep.amount)
+      return sign + WeightFormatter(unit: keypad.unit).number(kilograms: amountKg)
     case .reps:
       return sign + "1"
     }

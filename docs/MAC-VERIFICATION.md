@@ -1119,3 +1119,12 @@ the `Hardset` scheme for the iOS 26.4 simulator.
   - [ ] VoiceOver on that row ends "length unknown"; on "Legs", "length unknown, this session
         was left open"; on "Push", its clock time.
   - [ ] AX5: the label wraps beside the title rather than truncating it.
+- [ ] (fix(ui): the keypad's ± label goes through the weight formatter) HardsetUI builds for iOS
+      and macOS 15. `NumericPad.stepLabel` returns
+      `sign + WeightFormatter(unit: keypad.unit).number(kilograms: keypad.unit.toKilograms(…))`.
+  - [ ] Kilograms, no machine: the keys read "−2.5" and "+2.5". Pounds on a 5 kg stack: "−11.02"
+        and "+11.02". Pounds, no machine: "−5" and "+5".
+  - [ ] Region Germany (Settings → General → Language & Region): "+2,5", matching the row's
+        "62,5"; VoiceOver's label for the key (`spokenStep`) is unchanged.
+  - [ ] A machine step of 1000 lb or more (if one can be entered) has no grouping separator, as
+        everywhere else.
