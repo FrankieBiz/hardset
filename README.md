@@ -11,8 +11,11 @@ catalogue and a picker; plus the permanent muscle vocabulary, fractional sets-pe
 with coverage, per-machine load history, and a session history screen. The tests run on the host in
 well under a second.
 
-The app builds and runs in the simulator (see `DEVICE-CHECKLIST.md` §A), and has never run on a
-physical device.
+The app target built and ran in the iOS simulator once, early on (`DEVICE-CHECKLIST.md` §A). Since
+then everything has been written on Linux, where only HardsetCore and HardsetStore compile: at this
+commit the app, the widget extension and the App Intents have never been compiled, and nothing has
+run on a physical device. `docs/MAC-VERIFICATION.md` lists what to build and check on a Mac first;
+`DEVICE-CHECKLIST.md` is what must then pass on an iPhone.
 
 ## Layout
 
