@@ -182,8 +182,12 @@ public struct WidgetSnapshotFile: Sendable {
   }
 
   public static func decode(_ data: Data) -> WidgetSnapshotReading {
-    guard let snapshot = try? JSONDecoder().decode(WidgetSnapshot.self, from: data),
-      snapshot.version == WidgetSnapshot.currentVersion
+    // The version is read alone first: a newer build may have changed the rest of the shape, and
+    // a body this build cannot decode is then still "newer, ignored", never half-understood.
+    struct Header: Decodable { let version: Int }
+    guard let header = try? JSONDecoder().decode(Header.self, from: data),
+      header.version == WidgetSnapshot.currentVersion,
+      let snapshot = try? JSONDecoder().decode(WidgetSnapshot.self, from: data)
     else { return .unreadable }
     return .snapshot(snapshot)
   }

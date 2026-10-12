@@ -51,6 +51,14 @@ struct WidgetSnapshotStoreTests {
     return id
   }
 
+  @Test("A movement with no dated set is left out, never shown as trained on a made-up date")
+  func noDateNoEntry() {
+    let key = ProgressionKey(exerciseID: ExerciseID(), machineID: nil)
+    #expect(
+      WidgetSnapshotStore.lastTime(key: key, sets: [], exerciseName: "Squat", machineName: nil)
+        == nil)
+  }
+
   @Test("With nothing finished, the snapshot is empty")
   func nothingYet() throws {
     let f = try fixture()

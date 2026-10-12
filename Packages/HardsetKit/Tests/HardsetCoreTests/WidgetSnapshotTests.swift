@@ -57,6 +57,12 @@ struct WidgetSnapshotTests {
     #expect(WidgetSnapshotFile.decode(data) == .unreadable)
   }
 
+  @Test("A newer file whose body no longer decodes is still just newer")
+  func newerVersionWithChangedShapeIsIgnored() {
+    let data = Data(#"{"version": \#(WidgetSnapshot.currentVersion + 1), "sessions": "a different shape"}"#.utf8)
+    #expect(WidgetSnapshotFile.decode(data) == .unreadable)
+  }
+
   @Test("No App Group container, no file")
   func noContainer() {
     #expect(WidgetSnapshotFile(containerURL: nil) == nil)

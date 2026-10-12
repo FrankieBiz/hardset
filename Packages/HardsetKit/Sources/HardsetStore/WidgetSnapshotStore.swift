@@ -73,20 +73,31 @@ public nonisolated struct WidgetSnapshotStore {
           }
       let labels = Self.distinctLabels(for: keys, names: machines)
 
-      return keys.map { key in
+      return keys.compactMap { key in
         let own = sets
           .filter {
             $0.sessionID == latestSession[key] && $0.exerciseID == key.exerciseID.rawValue
               && $0.machineID == key.machineID?.rawValue
           }
           .sorted { ($0.completedAt, $0.setOrdinal) < ($1.completedAt, $1.setOrdinal) }
-        return WidgetSnapshot.LastTime(
-          exerciseID: key.exerciseID, machineID: key.machineID,
-          exerciseName: names[key.exerciseID.rawValue] ?? "Unknown movement",
-          machineName: labels[key], performedAt: own.last?.completedAt ?? .distantPast,
-          sets: own.map { WidgetSnapshot.SetLine(weightKg: $0.weightKg, reps: $0.reps) })
+        return Self.lastTime(
+          key: key, sets: own, exerciseName: names[key.exerciseID.rawValue] ?? "Unknown movement",
+          machineName: labels[key])
       }
     }
+  }
+
+  /// One "last time" entry from a movement's sets in its last session, oldest first. Without a
+  /// set there is no date, and a widget must never show one the lifter did not train on.
+  static func lastTime(
+    key: ProgressionKey, sets own: [LoggedSet], exerciseName: String, machineName: String?
+  ) -> WidgetSnapshot.LastTime? {
+    guard let performedAt = own.last?.completedAt else { return nil }
+    return WidgetSnapshot.LastTime(
+      exerciseID: key.exerciseID, machineID: key.machineID,
+      exerciseName: exerciseName, machineName: machineName,
+      performedAt: performedAt,
+      sets: own.map { WidgetSnapshot.SetLine(weightKg: $0.weightKg, reps: $0.reps) })
   }
 
   /// Machine names, numbered when two in the snapshot share one, so the widget never shows two
