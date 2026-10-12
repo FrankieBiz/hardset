@@ -113,6 +113,21 @@ struct RestReconcilerTests {
     #expect(result.staleAlarmIDs.isEmpty)
   }
 
+  @Test("R8: a lone countdown beside a ringing alert is adopted, and the alert is left alone")
+  func loneCountdownBesideAlertIsAdopted() {
+    let fire = now.addingTimeInterval(60)
+    let ringing = UUID()
+    let result = RestReconciler.reconcile(
+      persisted: nil,
+      alarms: [
+        AlarmSnapshot(id: ringing, mode: .alerting),
+        AlarmSnapshot(id: other, mode: .countdown(fireDate: fire)),
+      ],
+      now: now)
+    #expect(
+      result == RestReconciliation(state: .running(endsAt: fire), alarmID: other, staleAlarmIDs: []))
+  }
+
   @Test("R8: two unexplained alarms are both stale, not adopted")
   func twoUnexplainedAreStale() {
     let result = RestReconciler.reconcile(

@@ -98,10 +98,12 @@ public enum RestReconciler {
     persisted: PersistedRest?, alarms: [AlarmSnapshot]
   ) -> RestReconciliation {
     let persistedIsIdle = persisted == nil || persisted?.state == .idle
-    if persistedIsIdle, alarms.count == 1, case .countdown(let fireDate?) = alarms[0].mode {
+    // A ringing alert is the system's, not a competing rest, so it does not count against "one".
+    let candidates = alarms.filter { $0.mode != .alerting }
+    if persistedIsIdle, candidates.count == 1, case .countdown(let fireDate?) = candidates[0].mode {
       // The app died between scheduling and persisting. One countdown is explicable; it is ours.
       return RestReconciliation(
-        state: .running(endsAt: fireDate), alarmID: alarms[0].id, staleAlarmIDs: [])
+        state: .running(endsAt: fireDate), alarmID: candidates[0].id, staleAlarmIDs: [])
     }
     return RestReconciliation(state: .idle, alarmID: nil, staleAlarmIDs: staleCandidates(alarms))
   }
