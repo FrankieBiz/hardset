@@ -160,4 +160,57 @@ struct SessionRecordsReadTests {
     #expect(records[light]?.contains { $0.kind == .heaviestLoad } == true)
     #expect(records[heavy]?.contains { $0.kind == .heaviestLoad } == true)
   }
+
+  /// `logSet` judges against the newest 1,000 sets of the movement and machine. A replay that read
+  /// every set ever logged saw an older, heavier one and took a trophy away on resume.
+  @Test("Past 1,000 prior sets the replay judges against the same window the moment did")
+  func replayUsesTheMomentsWindow() throws {
+    let database = try migratedDatabase()
+    let store = LoggerStore(database: database)
+    let exercise = try seedExercise(database)
+    let gyms = GymStore(database: database)
+    let gym = try gyms.createGym(name: "Home", now: start)
+    let machine = try gyms.createMachine(at: gym, name: "Leg Press", stackIncrementKg: 5, now: start)
+    let other = try gyms.createMachine(at: gym, name: "Leg Press", brand: "Cybex", now: start)
+
+    let past = try store.startSession(at: start.addingTimeInterval(-90 * 86_400))
+    try database.write { db in
+      // The all-time best is the oldest set, 1,001st from the newest.
+      var drafts = [LoggedSet.Draft(
+        sessionID: past.rawValue, exerciseID: exercise.rawValue, machineID: machine.rawValue,
+        setOrdinal: 0, weightKg: 200, reps: 5,
+        completedAt: start.addingTimeInterval(-80 * 86_400))]
+      for index in 1...1_000 {
+        drafts.append(LoggedSet.Draft(
+          sessionID: past.rawValue, exerciseID: exercise.rawValue, machineID: machine.rawValue,
+          setOrdinal: index, weightKg: 100, reps: 8,
+          completedAt: start.addingTimeInterval(-70 * 86_400 + Double(index))))
+      }
+      // The other machine's heavy set must not leak into this machine's history.
+      drafts.append(LoggedSet.Draft(
+        sessionID: past.rawValue, exerciseID: exercise.rawValue, machineID: other.rawValue,
+        setOrdinal: 2_000, weightKg: 300, reps: 5,
+        completedAt: start.addingTimeInterval(-60 * 86_400)))
+      try LoggedSet.insert { drafts }.execute(db)
+    }
+    try store.finishSession(past, at: start.addingTimeInterval(-60 * 86_400 + 3_600))
+
+    let coordinator = try SessionCoordinator.start(
+      store: store, gymID: gym,
+      plan: [
+        PlannedExercise(
+          exerciseID: exercise, machineID: machine, exerciseName: "Leg Press", plannedSets: 1)
+      ],
+      now: { self.start }
+    )
+    let state = coordinator.exercises[0]
+    coordinator.exercises[0].slots[0].draft = SetEntryDraft(weightKg: 150, reps: 5)
+    #expect(coordinator.logSet(slotID: state.slots[0].id, inExercise: state.id))
+    let setID = try #require(coordinator.exercises[0].slots[0].loggedSetID)
+    let announced = Set(coordinator.lastRecords.map(\.kind))
+    #expect(!announced.isEmpty)
+
+    let read = try store.recordsBySet(in: coordinator.sessionID)
+    #expect(Set((read[setID] ?? []).map(\.kind)) == announced)
+  }
 }

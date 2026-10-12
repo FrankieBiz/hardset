@@ -431,14 +431,21 @@ public nonisolated struct LoggerStore {
 
   // MARK: - Records, as judged at the time
 
+  /// `completedSets(for:limit:)`'s default of 1,000, repeated so the replay reads the window
+  /// `logSet` did.
+  private static let recordHistoryLimit = 1_000
+
   /// Which sets in a session earned records, judged as `SessionCoordinator.logSet` judged each one
   /// when it was logged. That means against every earlier working set on the same exercise and
   /// machine: workouts before this one, plus this workout's own earlier sets.
   ///
   /// Read from the database, never from memory. An edited set is judged on its corrected values,
   /// and a deleted one is not judged at all. The summary, a resumed workout and a correction all
-  /// rely on that. This is not on the tap path: it runs at resume, after a correction, and for the
-  /// summary.
+  /// rely on that.
+  ///
+  /// This is on the tap path: it runs at resume, for the summary, and after every edit or undo
+  /// while a trophy exists. So prior history is bounded per movement and machine, to the same newest
+  /// `completedSets` limit `logSet` judged against.
   public func recordsBySet(in sessionID: SessionID) throws -> [SetID: [PersonalRecord]] {
     try database.read { db in
       guard let session = try Session.where({ $0.id.eq(sessionID.rawValue) }).fetchOne(db) else {
@@ -453,17 +460,34 @@ public nonisolated struct LoggerStore {
         }
       guard !own.isEmpty else { return [:] }
 
-      // History before this workout. A later workout cannot un-earn a record.
-      let exerciseIDs = Array(Set(own.map(\.exerciseID)))
+      // History before this workout, read per movement-and-machine exactly as `completedSets`
+      // reads it for `logSet`: newest first, at most 1,000. The same window at every moment keeps
+      // a trophy given at log time from vanishing on resume, and bounds the read. A later workout
+      // cannot un-earn a record.
       let startedAt = session.startedAt
-      let earlier = try LoggedSet
-        .where { $0.exerciseID.in(exerciseIDs) }
-        .where { !$0.isWarmup }
-        .where { $0.completedAt < startedAt }
-        .fetchAll(db)
       var prior: [ProgressionKey: [PriorSetRecord]] = [:]
-      for row in earlier where row.sessionID != sessionID.rawValue {
-        prior[Self.key(of: row), default: []].append(Self.record(from: row))
+      for key in Set(own.map(Self.key(of:))) {
+        let rows: [LoggedSet]
+        if let machineID = key.machineID?.rawValue {
+          rows = try LoggedSet
+            .where { $0.exerciseID.eq(key.exerciseID.rawValue) }
+            .where { $0.machineID.eq(machineID) }
+            .where { !$0.isWarmup }
+            .where { $0.completedAt < startedAt }
+            .order { $0.completedAt.desc() }
+            .limit(Self.recordHistoryLimit)
+            .fetchAll(db)
+        } else {
+          rows = try LoggedSet
+            .where { $0.exerciseID.eq(key.exerciseID.rawValue) }
+            .where { $0.machineID.is(nil) }
+            .where { !$0.isWarmup }
+            .where { $0.completedAt < startedAt }
+            .order { $0.completedAt.desc() }
+            .limit(Self.recordHistoryLimit)
+            .fetchAll(db)
+        }
+        prior[key] = rows.filter { $0.sessionID != sessionID.rawValue }.map(Self.record(from:))
       }
 
       let machineIDs = Array(Set(own.compactMap(\.machineID)))
