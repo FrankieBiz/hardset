@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <!-- 01, back: five plates of a weight stack. Flat white; Icon Composer adds glass and depth. -->
+  <rect x="272" y="284" width="480" height="72" rx="20" fill="#FFFFFF"/>
+  <rect x="272" y="380" width="480" height="72" rx="20" fill="#FFFFFF"/>
+  <rect x="272" y="476" width="480" height="72" rx="20" fill="#FFFFFF"/>
+  <rect x="272" y="572" width="480" height="72" rx="20" fill="#FFFFFF"/>
+  <rect x="272" y="668" width="480" height="72" rx="20" fill="#FFFFFF"/>
+</svg>

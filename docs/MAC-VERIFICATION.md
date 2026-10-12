@@ -682,3 +682,13 @@ the `Hardset` scheme for the iOS 26.4 simulator.
         same grey as the first screen, with no white or black flash before it.
   - [ ] Xcode › Product › Archive › Generate Privacy Report: the app lists UserDefaults CA92.1
         only; the widget lists nothing.
+- [ ] (docs(design): an icon brief and two layer drafts) **Needs the user's design judgement.**
+      In Icon Composer (Xcode › Open Developer Tool › Icon Composer): import `01-stack.svg` and
+      `02-pin.svg` from `Design/AppIcon/layers/`, set the background, check the default, dark,
+      tinted and clear appearances and the smallest size, and save as `AppIcon.icon`.
+  - [ ] Then, in a scratch copy of the project, add `AppIcon.icon` to the Hardset target in Xcode
+        once and read the `lastKnownFileType` Xcode writes for it. Add
+        `("AppIcon.icon", "Hardset", APP)` to `RESOURCES` in `Tools/generate_project.py`, teach
+        its file-type switch that extension, add the file to `group_children["Hardset"]`, keep
+        `ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon`, remove `AppIcon.appiconset`, regenerate
+        twice, and build. Never hand-edit the pbxproj.

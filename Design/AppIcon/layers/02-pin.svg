@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <!-- 02, front: the selector pin in the fourth plate (centre y 608), shaft then pull knob. -->
+  <rect x="640" y="596" width="184" height="24" rx="12" fill="#2E82F6"/>
+  <circle cx="852" cy="608" r="44" fill="#2E82F6"/>
+</svg>
