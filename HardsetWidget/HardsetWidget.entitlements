@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- The one container the app writes the widget snapshot into (DECISIONS.md §25). The widget
+	     only reads it, and never opens the database. -->
+	<key>com.apple.security.application-groups</key>
+	<array>
+		<string>group.com.hardset.app</string>
+	</array>
+</dict>
+</plist>

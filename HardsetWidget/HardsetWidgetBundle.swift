@@ -15,13 +15,17 @@ import WidgetKit
 /// the app and this extension, which is why `RestMetadata` lives in a shared package target
 /// rather than in the app.
 ///
-/// The extension also carries the two controls (`HardsetControls.swift`): Start workout and Rest.
+/// The extension also carries the two controls (`HardsetControls.swift`), Start workout and Rest,
+/// and the two widgets that read the app's snapshot file (`HistoryWidgets.swift`), Last time and
+/// Last workout.
 @main
 struct HardsetWidgetBundle: WidgetBundle {
   var body: some Widget {
     RestTimerLiveActivity()
     StartWorkoutControl()
     RestControl()
+    LastTimeWidget()
+    LastWorkoutWidget()
   }
 }
 

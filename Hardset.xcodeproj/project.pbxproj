@@ -10,6 +10,7 @@
 		ECC880F3E50363C05E57399D /* HardsetApp.swift in Hardset */ = {isa = PBXBuildFile; fileRef = 5727577A4D3484085A8EB0B5 /* HardsetApp.swift */; };
 		0ED5E055D9820A02EEE15DB4 /* HardsetWidgetBundle.swift in HardsetWidget */ = {isa = PBXBuildFile; fileRef = 094065545B074BB3C94068BC /* HardsetWidgetBundle.swift */; };
 		A0A4BF349DD948D001082450 /* HardsetControls.swift in HardsetWidget */ = {isa = PBXBuildFile; fileRef = 9C9EF35C741FB63052BF54D8 /* HardsetControls.swift */; };
+		302A0EB219AAAED038057A3A /* HistoryWidgets.swift in HardsetWidget */ = {isa = PBXBuildFile; fileRef = 5737B14AD4F3869C30D41112 /* HistoryWidgets.swift */; };
 		D06790A6910CE14033A7CB69 /* AppSmokeTests.swift in HardsetTests */ = {isa = PBXBuildFile; fileRef = 680B2E753A6F5EA9063B2981 /* AppSmokeTests.swift */; };
 		6DCDB5A744ADC53FFA2682EE /* RestIntents.swift in Hardset */ = {isa = PBXBuildFile; fileRef = 36B1313F69B407F7490A1993 /* RestIntents.swift */; };
 		CFEDA85F252E298534E94672 /* RestIntents.swift in HardsetWidget */ = {isa = PBXBuildFile; fileRef = 36B1313F69B407F7490A1993 /* RestIntents.swift */; };
@@ -69,6 +70,7 @@
 		5727577A4D3484085A8EB0B5 /* HardsetApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HardsetApp.swift; sourceTree = "<group>"; };
 		094065545B074BB3C94068BC /* HardsetWidgetBundle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HardsetWidgetBundle.swift; sourceTree = "<group>"; };
 		9C9EF35C741FB63052BF54D8 /* HardsetControls.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HardsetControls.swift; sourceTree = "<group>"; };
+		5737B14AD4F3869C30D41112 /* HistoryWidgets.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HistoryWidgets.swift; sourceTree = "<group>"; };
 		680B2E753A6F5EA9063B2981 /* AppSmokeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppSmokeTests.swift; sourceTree = "<group>"; };
 		36B1313F69B407F7490A1993 /* RestIntents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RestIntents.swift; sourceTree = "<group>"; };
 		15D3196E0274F0D905041233 /* IntentDependencies.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IntentDependencies.swift; sourceTree = "<group>"; };
@@ -80,6 +82,7 @@
 		05BDD562198C5966370152DC /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		D78D6EA50775A90846260323 /* Hardset.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Hardset.entitlements; sourceTree = "<group>"; };
 		4CF15E4702A6BA9A4DEC3A28 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		BA4AB6DB5449976B45B4510B /* HardsetWidget.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = HardsetWidget.entitlements; sourceTree = "<group>"; };
 		C0DD8C9D659EAB28228ED87D /* Hardset.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Hardset.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		E1B5F6FC2F875AC8EDAA1991 /* HardsetWidget.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = HardsetWidget.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		8C78985BD17648FF5F32A8BC /* HardsetTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = HardsetTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -203,7 +206,9 @@
 			children = (
 				094065545B074BB3C94068BC /* HardsetWidgetBundle.swift */,
 				9C9EF35C741FB63052BF54D8 /* HardsetControls.swift */,
+				5737B14AD4F3869C30D41112 /* HistoryWidgets.swift */,
 				4CF15E4702A6BA9A4DEC3A28 /* Info.plist */,
+				BA4AB6DB5449976B45B4510B /* HardsetWidget.entitlements */,
 				090815D7FDBE15CF7A4662CB /* PrivacyInfo.xcprivacy */,
 			);
 			path = HardsetWidget;
@@ -402,6 +407,7 @@
 			files = (
 				0ED5E055D9820A02EEE15DB4 /* HardsetWidgetBundle.swift in Sources */,
 				A0A4BF349DD948D001082450 /* HardsetControls.swift in Sources */,
+				302A0EB219AAAED038057A3A /* HistoryWidgets.swift in Sources */,
 				CFEDA85F252E298534E94672 /* RestIntents.swift in Sources */,
 				1FFBB8D459453FF40B35F131 /* WorkoutIntents.swift in Sources */,
 			);
@@ -542,6 +548,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				CLANG_ENABLE_MODULES = YES;
+				CODE_SIGN_ENTITLEMENTS = HardsetWidget/HardsetWidget.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				ENABLE_USER_SCRIPT_SANDBOXING = YES;
@@ -568,6 +575,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				CLANG_ENABLE_MODULES = YES;
+				CODE_SIGN_ENTITLEMENTS = HardsetWidget/HardsetWidget.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				ENABLE_USER_SCRIPT_SANDBOXING = YES;

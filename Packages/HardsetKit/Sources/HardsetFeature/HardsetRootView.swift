@@ -67,6 +67,10 @@ public struct HardsetRootView: View {
   /// Whether the launch read (resume, then the first-run decision) has run. Until it has, nothing
   /// is known about an open workout, so a Start workout request waits.
   @State private var launchReadDone = false
+  /// Why the widgets' file was last not written. Kept, not shown: a widget one workout behind is
+  /// not worth interrupting a lifter over, and it still shows its last file or "nothing yet". The
+  /// next write that succeeds clears it, and a debug build stops on it.
+  @State private var widgetSnapshotError: (any Error)?
   private let environment: HardsetEnvironment
   /// Overrides the stored preference. Exists for previews and tests; the app passes `nil` so the
   /// user's own choice wins.
@@ -142,8 +146,25 @@ public struct HardsetRootView: View {
         // is open, and an empty workout it starts is at the gym just preselected.
         launchReadDone = true
         handleSystemRequest()
+        // A workout that arrived by sync, or one finished before an update, reaches the widgets.
+        refreshWidgets()
       }
       .onChange(of: systemRequests.pending) { handleSystemRequest() }
+      .onChange(of: useImperial) { refreshWidgets() }
+  }
+
+  /// Rewrites the widgets' file from finished workouts (`DECISIONS.md` §25). Called after launch,
+  /// after a workout ends and when the unit changes; never from `body`, and never in the way of
+  /// what the lifter just did: it runs after that has been written, and a failure here changes
+  /// nothing on screen.
+  private func refreshWidgets() {
+    do {
+      try WidgetSnapshotWriter(store: environment.widgetSnapshots).refresh(unit: unit)
+      widgetSnapshotError = nil
+    } catch {
+      widgetSnapshotError = error
+      assertionFailure("The widget snapshot was not written: \(error)")
+    }
   }
 
   /// Ends the first screen. The flag is set only after the optional gym is written, so a failed
@@ -307,6 +328,8 @@ public struct HardsetRootView: View {
         onFinished: { exit in
           self.coordinator = nil
           if case .finished(let id) = exit { summaryTarget = SummaryTarget(id: id) }
+          // Finished or discarded, the workout is no longer open, so the widgets are rewritten.
+          refreshWidgets()
         }
       )
       .navigationTitle("Workout")

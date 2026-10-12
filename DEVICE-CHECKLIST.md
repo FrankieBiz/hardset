@@ -163,6 +163,18 @@ merge semantics. Use the iPhone plus a simulator signed into the same iCloud acc
       "Rest · Choose"; tapping it starts nothing.
 - [ ] **Rest control after a force-quit.** Force-quit Hardset, tap the configured control: the
       rest starts, and opening Hardset shows the same countdown.
+- [ ] **Widgets, before any workout.** Add Last time and Last workout: each reads "Your last
+      workout shows here once you finish one."
+- [ ] **After a workout.** Finish one with a leg press on a branded machine: Last time shows the
+      movement, "Hammer Strength Leg Press", the sets as "100 kg × 8", and a date ("Tue 7 Oct"),
+      never "today" or "3 days ago". Last workout shows the date, "N sets · N kg" and the length.
+- [ ] **Mid-workout.** Start a workout and log on the same machine: the widget still shows the
+      last *finished* time, not today's half-done sets.
+- [ ] **Units.** Switch to lb in Settings: both widgets read lb within a few seconds.
+- [ ] **Lock Screen.** Add Last time as a rectangular Lock Screen widget: one movement, two set
+      lines, legible.
+- [ ] **VoiceOver.** The small and Lock Screen widgets are each read as one element, and the
+      medium Last time as one element per movement, units in full ("100 kilograms for 8 reps").
 
 ---
 

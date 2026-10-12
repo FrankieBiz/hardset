@@ -878,3 +878,47 @@ the `Hardset` scheme for the iOS 26.4 simulator.
         builds, and the Start workout control opens Hardset on Train and starts the workout.
   - [ ] Every check added to DEVICE-CHECKLIST §E for controls.
   - SF Symbols: none new (`figure.strengthtraining.traditional`, `timer` are already used).
+
+- [ ] (feat(widget): last time on a machine, and the last workout, from a file) The `Hardset`
+      scheme builds; HardsetFeature builds for macOS 15. Written without a compiler; look first at
+      the `TimelineProvider` methods (if the SDK declares `@Sendable` completions, match them
+      exactly, or they are near-misses that are never called) and `.containerBackground(_:for:)`.
+      The doc JSON declares both completions `@escaping @Sendable`, and `HistoryWidgets.swift`
+      matches them.
+  - [ ] The app's and the widget's entitlements both carry `group.com.hardset.app`, and signing
+        succeeds with the group registered for the team. **Needs the paid Apple Developer Program
+        membership, a decision the user still owes (`HANDOFF.md` §11.2).** It adds no new barrier:
+        the app's iCloud and push entitlements already need it. If a signed build ever lacks the
+        group, `containerURL(forSecurityApplicationGroupIdentifier:)` is nil ("In iOS, the value
+        is nil when the group identifier is invalid"), the app writes nothing, and both widgets
+        say "nothing yet".
+  - [ ] `SnapshotEntry` and `SnapshotProvider` are `nonisolated`, so the provider's conformance is
+        not main-actor in a target whose default isolation is. Build with no isolated-conformance
+        diagnostic, and with the widget on the Home Screen nothing traps when WidgetKit asks for a
+        timeline.
+  - [ ] `HardsetRootView.refreshWidgets()` runs at the end of the launch `.task`, in
+        `onFinished` (finished and discarded) and on `.onChange(of: useImperial)`; never in
+        `body`. It reads the finished workouts on the main actor, as every screen's store read
+        does (bounded: `WidgetSnapshotStore.sessionWindow`, 30 sessions). Finishing a long
+        workout shows its summary with no visible hitch.
+  - [ ] A failed read or write is kept in `widgetSnapshotError`, not shown, and a debug build
+        stops on `assertionFailure("The widget snapshot was not written: …")`. If a debug run
+        ever stops there, record the error here: it means the widgets are a workout behind.
+        WidgetKit is asked to reload only after a write succeeds.
+  - [ ] `ForEach(lines.indices, id: \.self)` in `LastTimeColumn`: three identical sets ("100 kg ×
+        8" three times) draw three lines, with no "ID occurs multiple times" log.
+  - [ ] `accessoryRectangular` (Lock Screen): the column is a name, the machine, two set lines,
+        possibly "+N more sets", and a date. If that clips, record it; the fix is fewer lines in
+        the rectangular family, never a relative date.
+  - [ ] Every check added to DEVICE-CHECKLIST §E for widgets.
+  - SF Symbols: none new. The widgets draw text only.
+  - Already checked on Linux (swift:6.2, `-default-isolation MainActor`,
+    `NonisolatedNonsendingByDefault`, `InferIsolatedConformances`, `-warnings-as-errors`):
+    `SnapshotEntry` and `SnapshotProvider` exactly as committed, against a mock of the documented
+    WidgetKit declarations (the mock built in Swift 5 mode, as an SDK module is), and passed to a
+    `@MainActor` `StaticConfiguration` stand-in from a main-actor `Widget.body`. Without
+    `nonisolated` the same provider is inferred main-actor, and the compiler refuses that
+    conformance to a nonisolated caller (the stand-in for WidgetKit's). Also
+    `WidgetSnapshotWriter.swift` (its `os(iOS)` branch, against a mock `WidgetCenter`) and
+    `refreshWidgets()` pasted verbatim into a non-SwiftUI stand-in, against the real HardsetStore.
+    That rules out Swift-level isolation and Core/Store API mismatches, not SDK differences.

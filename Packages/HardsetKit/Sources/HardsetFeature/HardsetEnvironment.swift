@@ -23,6 +23,9 @@ public struct HardsetEnvironment {
 
   /// Whether the first screen shows, and ends it.
   public let firstRun: FirstRunStore
+  /// The widgets' snapshot, from finished workouts only. The app writes it; the widget only
+  /// reads the file (`DECISIONS.md` §25).
+  public let widgetSnapshots: WidgetSnapshotStore
 
   /// `firstRunFlag` defaults to the real one, so the app's `HardsetEnvironment(database:)` persists
   /// the flag without passing anything.
@@ -40,5 +43,6 @@ public struct HardsetEnvironment {
     self.shortcuts = WorkoutShortcutsStore(database: database)
     self.sessionDetails = SessionDetailStore(database: database)
     self.firstRun = FirstRunStore(database: database, flag: firstRunFlag)
+    self.widgetSnapshots = WidgetSnapshotStore(database: database)
   }
 }

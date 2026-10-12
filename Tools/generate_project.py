@@ -32,6 +32,8 @@ SOURCES = [
     ("HardsetApp.swift", "Hardset", APP),
     ("HardsetWidgetBundle.swift", "HardsetWidget", WIDGET),
     ("HardsetControls.swift", "HardsetWidget", WIDGET),
+    # Last time and Last workout: they read the app's snapshot file, never the database.
+    ("HistoryWidgets.swift", "HardsetWidget", WIDGET),
     ("AppSmokeTests.swift", "HardsetTests", TESTS),
     # App Intents the widget's buttons and controls name. Each is compiled into both targets;
     # `LiveActivityIntent` and foreground intents still run in the app's process.
@@ -84,6 +86,8 @@ def build_settings(target):
             "PRODUCT_BUNDLE_IDENTIFIER": f"{BUNDLE_ID}.widget",
             "PRODUCT_NAME": "HardsetWidget",
             "INFOPLIST_FILE": "HardsetWidget/Info.plist",
+            # The App Group the snapshot file lives in (DECISIONS.md §25).
+            "CODE_SIGN_ENTITLEMENTS": "HardsetWidget/HardsetWidget.entitlements",
             "SKIP_INSTALL": "YES",
             "LD_RUNPATH_SEARCH_PATHS": '"$(inherited) @executable_path/Frameworks @executable_path/../../Frameworks"',
         })
@@ -167,7 +171,8 @@ for fname, group, target in SOURCES + RESOURCES:
     elif fname.endswith(".xcassets"): ftype = "folder.assetcatalog"
     else: ftype = "text.plist.xml"
     w(f"\t\t{oid('fr_'+key)} /* {fname} */ = {{isa = PBXFileReference; lastKnownFileType = {ftype}; path = {fname}; sourceTree = \"<group>\"; }};")
-for fname, group in (("Info.plist", "Hardset"), ("Hardset.entitlements", "Hardset"), ("Info.plist", "HardsetWidget")):
+for fname, group in (("Info.plist", "Hardset"), ("Hardset.entitlements", "Hardset"), ("Info.plist", "HardsetWidget"),
+                     ("HardsetWidget.entitlements", "HardsetWidget")):
     key = group + fname
     if key in seen: continue
     seen.add(key)
@@ -223,7 +228,8 @@ w("\t\t\tsourceTree = \"<group>\";")
 w("\t\t};")
 group_children = {
     "Hardset": ["HardsetApp.swift", "Assets.xcassets", "Info.plist", "Hardset.entitlements", "PrivacyInfo.xcprivacy"],
-    "HardsetWidget": ["HardsetWidgetBundle.swift", "HardsetControls.swift", "Info.plist", "PrivacyInfo.xcprivacy"],
+    "HardsetWidget": ["HardsetWidgetBundle.swift", "HardsetControls.swift", "HistoryWidgets.swift", "Info.plist",
+                      "HardsetWidget.entitlements", "PrivacyInfo.xcprivacy"],
     "HardsetIntents": ["RestIntents.swift", "IntentDependencies.swift", "WorkoutIntents.swift", "HardsetShortcuts.swift"],
     "HardsetTests": ["AppSmokeTests.swift"],
 }

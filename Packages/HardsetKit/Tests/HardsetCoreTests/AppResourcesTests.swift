@@ -95,4 +95,13 @@ struct AppResourcesTests {
     try #require(scanned > 0, "no Swift files were scanned; is the checkout mounted?")
     #expect(offenders.isEmpty, "declare 1C8F.1 in both privacy manifests first: \(offenders)")
   }
+
+  /// Task 12. The app writes and the widget reads one file, so both must name the same group.
+  @Test("App and widget share the one App Group the snapshot lives in")
+  func appGroup() throws {
+    for path in ["Hardset/Hardset.entitlements", "HardsetWidget/HardsetWidget.entitlements"] {
+      let groups = try plist(path)["com.apple.security.application-groups"] as? [String]
+      #expect(groups == [WidgetSnapshotFile.appGroupIdentifier], "\(path)")
+    }
+  }
 }
