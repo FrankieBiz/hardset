@@ -68,6 +68,29 @@ struct HealthExportStoreTests {
         == .skip(.alreadyExported))
   }
 
+  @Test("Recording the same session twice leaves one row, and the first workout id")
+  func recordingTwiceIsOneRow() throws {
+    let db = try database()
+    let session = try workout(db)
+    let store = HealthExportStore(database: db)
+    let first = UUID()
+    try store.recordExport(of: session, healthWorkoutID: first, at: now.addingTimeInterval(3_001))
+    try store.recordExport(of: session, healthWorkoutID: UUID(), at: now.addingTimeInterval(3_002))
+    #expect(try db.read { try DeviceHealthExport.fetchCount($0) } == 1)
+    #expect(try store.healthWorkoutID(for: session) == first)
+  }
+
+  @Test("A database migrated only to v1, with a finished session, upgrades to v2 and keeps it")
+  func upgradeFromV1KeepsSessions() throws {
+    let db = try database(migrated: false)
+    try HardsetMigrations.migrator().migrate(db, upTo: "v1")
+    #expect(try db.read { try $0.tableExists("deviceHealthExports") } == false)
+    let session = try workout(db)
+    try HardsetMigrations.migrator().migrate(db)
+    #expect(try db.read { try $0.tableExists("deviceHealthExports") })
+    #expect(try db.read { try Session.where { $0.id.eq(session.rawValue) }.fetchCount($0) } == 1)
+  }
+
   /// Review Focus: signing out of iCloud wipes the synced session rows; signing back in downloads
   /// the same session again, under the same id. It must not reach Health a second time.
   @Test("The record survives the session row, so a re-downloaded workout is not sent twice")

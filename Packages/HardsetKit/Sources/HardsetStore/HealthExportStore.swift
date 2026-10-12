@@ -34,11 +34,15 @@ public nonisolated struct HealthExportStore {
     }
   }
 
-  /// Written only after HealthKit has saved the workout: persist before claiming.
+  /// Written only after HealthKit has saved the workout: persist before claiming. A second call
+  /// for the same session changes nothing, so the first workout id stays the one on record.
   public func recordExport(of sessionID: SessionID, healthWorkoutID: UUID, at now: Date = Date())
     throws
   {
     try database.write { db in
+      let recorded =
+        try DeviceHealthExport.where { $0.sessionID.eq(sessionID.rawValue) }.fetchCount(db) > 0
+      guard !recorded else { return }
       try DeviceHealthExport.insert {
         DeviceHealthExport.Draft(
           sessionID: sessionID.rawValue, healthWorkoutID: healthWorkoutID, exportedAt: now)
