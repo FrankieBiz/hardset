@@ -82,6 +82,11 @@ public struct RestBarView: View {
       : Tokens.tapTarget(scaledLoggerTarget, floor: Tokens.loggerTapTarget)
   }
 
+  /// Only a running rest is adjusted. AlarmKit cannot change a paused alarm's remainder, so ±15
+  /// while paused would leave this bar and the Lock Screen disagreeing about the rest. Resume
+  /// first, then adjust.
+  private var canAdjust: Bool { state.isRunning }
+
   public var body: some View {
     if case .idle = state {
       EmptyView()
@@ -92,13 +97,15 @@ public struct RestBarView: View {
           // would be unreachable by VoiceOver. They are offered as actions on the countdown.
           .accessibilityActions {
             if isInline {
-              Button("Subtract 15 seconds") {
-                adjustCount += 1
-                onAdjust(.seconds(-15))
-              }
-              Button("Add 15 seconds") {
-                adjustCount += 1
-                onAdjust(.seconds(15))
+              if canAdjust {
+                Button("Subtract 15 seconds") {
+                  adjustCount += 1
+                  onAdjust(.seconds(-15))
+                }
+                Button("Add 15 seconds") {
+                  adjustCount += 1
+                  onAdjust(.seconds(15))
+                }
               }
               Button("Skip rest", action: onSkip)
             }
@@ -106,7 +113,7 @@ public struct RestBarView: View {
 
         Spacer(minLength: 0)
 
-        if !isInline {
+        if !isInline && canAdjust {
           adjustButton(label: "−15", delta: .seconds(-15))
           adjustButton(label: "+15", delta: .seconds(15))
         }

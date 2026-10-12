@@ -1038,3 +1038,12 @@ the `Hardset` scheme for the iOS 26.4 simulator.
   - [ ] Accessibility Inspector: the chip's frame is at least 44 pt high at xSmall, Large and AX5.
   - [ ] Progress screen, Estimated 1RM with only high-rep sets: the readout still says "Not
         evaluated".
+- [ ] (fix(ui): a paused rest offers no ±15) HardsetUI builds for iOS and macOS 15.
+      `RestBarView.canAdjust` (`state.isRunning`) gates the −15 and +15 buttons and their
+      VoiceOver actions; the nested `if` inside `.accessibilityActions` is the thing to compile.
+  - [ ] Device, a rest running, tab bar expanded: pause it. −15 and +15 go; pause (now resume)
+        and skip stay. Resume: they come back, and ±15 moves both the bar and the Lock Screen.
+  - [ ] Tab bar collapsed, paused: VoiceOver's actions on the countdown offer only Skip rest;
+        running, they offer Subtract 15 seconds, Add 15 seconds and Skip rest.
+  - [ ] Together with the timer's own refusal of a paused adjust (the other final-review branch):
+        no path left adjusts a paused rest, so the bar and the Lock Screen never disagree.
