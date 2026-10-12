@@ -46,10 +46,11 @@ extension WeightUnit {
     locale.measurementSystem == .us ? .pounds : .kilograms
   }
 
-  /// The unit to show: the one the lifter already chose, if any, and only otherwise the region's
-  /// guess. A stored choice is never replaced by the guess, so an existing install, or a lifter who
-  /// picked a unit before, keeps theirs.
-  public static func resolved(stored: WeightUnit?, locale: Locale) -> WeightUnit {
-    stored ?? inferred(from: locale)
+  /// The region's guess, or nil when the lifter already chose a unit.
+  ///
+  /// The first screen states a guess as a guess (`Assumption.unitFromRegion`). A stored choice is
+  /// not a guess and is never replaced by one, so nothing is said "from your region" about it.
+  public static func regionGuess(stored: WeightUnit?, locale: Locale) -> WeightUnit? {
+    stored == nil ? inferred(from: locale) : nil
   }
 }

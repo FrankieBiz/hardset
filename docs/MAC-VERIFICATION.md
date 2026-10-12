@@ -707,7 +707,7 @@ the `Hardset` scheme for the iOS 26.4 simulator.
   - [ ] Region United States: the unit reads lb with the chip "Weights in pounds, from your
         region"; tapping the chip switches to kg and the chip disappears. Region UK: kg.
   - [ ] A unit chosen earlier wins: set kg in Settings under a US region, delete only
-        `hardset.firstRunComplete`, relaunch: the first screen opens on kg with no region chip.
+        `hardset.firstRunComplete`, relaunch: the first screen opens on kg with no region chip at all (a chosen unit is not a guess).
   - [ ] Start with the gym field empty: the Train tab, no gym selected. Relaunch: the first screen
         does not return.
   - [ ] Erase, type "  Iron   Temple ", Start: the start screen's gym row reads "Iron Temple".

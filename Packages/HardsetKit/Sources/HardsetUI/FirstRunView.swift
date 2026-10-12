@@ -6,14 +6,15 @@ import SwiftUI
 /// questionnaire. Draws only; the unit, the gym name, the failure and Start are the root's.
 public struct FirstRunView: View {
   @Binding private var useImperial: Bool
-  private let inferredUnit: WeightUnit
+  /// The region's guess, or nil when the unit was chosen, which shows no region chip.
+  private let inferredUnit: WeightUnit?
   @Binding private var gymName: String
   private let errorMessage: String?
   private let onStart: () -> Void
 
   public init(
     useImperial: Binding<Bool>,
-    inferredUnit: WeightUnit,
+    inferredUnit: WeightUnit?,
     gymName: Binding<String>,
     errorMessage: String?,
     onStart: @escaping () -> Void
@@ -82,7 +83,7 @@ public struct FirstRunView: View {
   /// a choice and the claim "from your region" would be untrue.
   private var unitSection: some View {
     VStack(alignment: .leading, spacing: Tokens.Spacing.snug) {
-      if useImperial == (inferredUnit == .pounds) {
+      if let inferredUnit, useImperial == (inferredUnit == .pounds) {
         let assumption = Assumption.unitFromRegion(inferredUnit)
         AssumptionChip(
           label: assumption.label, correctionPrompt: assumption.correctionPrompt,

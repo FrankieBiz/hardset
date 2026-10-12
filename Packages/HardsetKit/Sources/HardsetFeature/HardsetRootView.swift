@@ -46,19 +46,21 @@ public struct HardsetRootView: View {
   @State private var gymOptions: [GymRecord] = []
   @State private var isChoosingGym = false
   @State private var isShowingSettings = false
+  /// The one name of the stored unit choice, shared by `@AppStorage` and the first-run read.
+  private static let useImperialKey = "hardset.useImperial"
   /// Inferred from the device's locale on first launch rather than asked, and stored the moment the
   /// user disagrees. Kilograms remain the canonical storage unit either way — this only decides
   /// what is displayed and what typed numbers are read as.
-  @AppStorage("hardset.useImperial") private var useImperial =
+  @AppStorage(HardsetRootView.useImperialKey) private var useImperial =
     WeightUnit.inferred(from: .current) == .pounds
   /// Whether the first screen shows. Decided once, in `.task`.
   @State private var showsFirstRun = false
   @State private var firstRunGymName = ""
   @State private var firstRunError: String?
-  /// The unit the first screen calls the region's guess. Fixed when the screen is decided, from the
-  /// stored choice if there is one: a unit the lifter already chose wins over the guess, so the
-  /// chip never says "from your region" about a choice, and toggling it later cannot move it.
-  @State private var firstRunInferredUnit: WeightUnit = .inferred(from: .current)
+  /// What the first screen may call the region's guess: nil when the lifter already chose a unit,
+  /// so the chip never says "from your region" about a choice. Fixed when the screen is decided, so
+  /// toggling the unit cannot change it.
+  @State private var firstRunGuess: WeightUnit?
   /// Why the last gym write failed, in the user's words. A `try?` here hid a real failure behind a
   /// button that appeared to do nothing, which is precisely what this app is not allowed to do.
   @State private var gymError: String?
@@ -91,7 +93,7 @@ public struct HardsetRootView: View {
       if showsFirstRun {
         FirstRunView(
           useImperial: $useImperial,
-          inferredUnit: firstRunInferredUnit,
+          inferredUnit: firstRunGuess,
           gymName: $firstRunGymName,
           errorMessage: firstRunError,
           onStart: finishFirstRun
@@ -122,9 +124,9 @@ public struct HardsetRootView: View {
             showsFirstRun = false
           }
           if showsFirstRun {
-            let stored = UserDefaults.standard.object(forKey: "hardset.useImperial") as? Bool
+            let stored = UserDefaults.standard.object(forKey: HardsetRootView.useImperialKey) as? Bool
             let storedUnit: WeightUnit? = stored.map { $0 ? WeightUnit.pounds : WeightUnit.kilograms }
-            firstRunInferredUnit = WeightUnit.resolved(stored: storedUnit, locale: .current)
+            firstRunGuess = WeightUnit.regionGuess(stored: storedUnit, locale: .current)
           }
         }
         refreshGyms()
