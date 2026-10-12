@@ -71,9 +71,10 @@ public struct HardsetRootView: View {
   /// not worth interrupting a lifter over, and it still shows its last file or "nothing yet". The
   /// next write that succeeds clears it. Each failure is also logged, and a debug build stops on it.
   @State private var widgetSnapshotError: (any Error)?
-  /// The summary's Apple Health line, for the workout whose summary shows. Nil until Health has
-  /// answered, and when there is nothing worth saying.
-  @State private var healthLine: String?
+  /// The summary's Apple Health line, by workout, so a summary only ever shows its own. Absent
+  /// until Health has answered, when there is nothing worth saying, and for a workout this device
+  /// did not finish (`SessionExit.finishedElsewhere`), which sends nothing.
+  @State private var healthLines: [SessionID: String] = [:]
   /// What the Settings toggle shows: what is stored, which is on only once Health allowed saving.
   @State private var healthEnabled = false
   /// The last request was refused, so the row says where to turn it on.
@@ -133,7 +134,8 @@ public struct HardsetRootView: View {
       // ends, so a sheet it presented would go with it.
       .sheet(item: $summaryTarget) { target in
         SummarySheet(
-          sessionID: target.id, store: environment.summaries, unit: unit, healthLine: healthLine
+          sessionID: target.id, store: environment.summaries, unit: unit,
+          healthLine: healthLines[target.id]
         ) {
           summaryTarget = nil
         }
@@ -193,11 +195,10 @@ public struct HardsetRootView: View {
   /// and saved. The summary shows the outcome in `HealthExportCopy`'s words when it arrives.
   private func startHealthExport(_ id: SessionID) {
     guard healthExportsStarted.insert(id).inserted else { return }
-    healthLine = nil
     Task {
       let line = await exportToHealth(id)
-      // Only onto the summary it belongs to: a later workout's sheet is not this one's.
-      if summaryTarget?.id == id { healthLine = line }
+      // Keyed by the workout, so it lands only on that workout's summary, whenever it arrives.
+      healthLines[id] = line
     }
   }
 
@@ -428,12 +429,20 @@ public struct HardsetRootView: View {
         // the start screen.
         onFinished: { exit in
           self.coordinator = nil
-          if case .finished(let id) = exit {
+          switch exit {
+          case .finished(let id):
             summaryTarget = SummaryTarget(id: id)
-            // After the finish was written, never before it and never in its way.
+            // Finished here, by this tap, and written: the one moment it may go to Health. After
+            // the finish, never before it and never in its way.
             startHealthExport(id)
+          case .finishedElsewhere(let id):
+            // Already finished, by another device or by this one a tap ago: its summary shows,
+            // and Health is not asked (`DECISIONS.md` §24: only the device that finished it).
+            summaryTarget = SummaryTarget(id: id)
+          case .discarded:
+            break
           }
-          // Finished or discarded, the workout is no longer open, so the widgets are rewritten.
+          // However it ended, the workout is no longer open, so the widgets are rewritten.
           refreshWidgets()
         }
       )

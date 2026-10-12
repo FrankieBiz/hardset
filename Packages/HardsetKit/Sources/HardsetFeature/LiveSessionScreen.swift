@@ -66,7 +66,13 @@ public struct RestTimerHooks {
 /// The root needs to know which: a finished workout has a summary to read back from the database
 /// by its id, and a discarded one no longer exists, so there is nothing to show for it.
 public enum SessionExit: Hashable, Sendable {
+  /// Finished here, by this tap: the one finish that may send the workout to Apple Health
+  /// (`DECISIONS.md` §24).
   case finished(SessionID)
+  /// Already finished when Finish was tapped: by another device whose finish synced here first,
+  /// or by this one a tap earlier. It has a summary like any finished workout, but this finish
+  /// closed nothing, so it sends nothing to Health.
+  case finishedElsewhere(SessionID)
   case discarded
 }
 
@@ -125,7 +131,7 @@ public struct LiveSessionScreen: View {
   /// - Parameter shortcuts: Supplies the picker's Recent section. Passing `nil` leaves it out; the
   ///   full list is unaffected.
   /// - Parameter onFinished: Called once the session has been finished or discarded, after the
-  ///   write. Never called while the session is still open.
+  ///   write, or once it is found already finished. Never called while the session is still open.
   public init(
     coordinator: SessionCoordinator,
     unit: WeightUnit,
@@ -558,9 +564,13 @@ public struct LiveSessionScreen: View {
       try coordinator.finish()
       onFinished(.finished(coordinator.sessionID))
     } catch SessionTimelineError.alreadyFinished {
-      // Genuinely closed already — a double tap, or a finish that raced a recovery. Moving on is
-      // correct here because the session really is finished.
-      onFinished(.finished(coordinator.sessionID))
+      // Genuinely closed already, so moving on is correct: the session really is finished. Either
+      // a double tap here, where the first tap's finish was written and its Health export already
+      // ran or is running, or another device finished it first and that synced here (the store
+      // reads the stored row). Neither is a finish made by this tap, so it is reported apart: the
+      // summary shows, and nothing goes to Health. A second send from here would be a duplicate,
+      // and the other device's export record is device-local, so it cannot stop one from here.
+      onFinished(.finishedElsewhere(coordinator.sessionID))
     } catch {
       // Anything else and the session is STILL OPEN. Reporting it finished here was a bug: the
       // root view dropped the coordinator, the user started a new workout, and because

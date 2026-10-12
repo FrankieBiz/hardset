@@ -969,11 +969,14 @@ the `Hardset` scheme for the iOS 26.4 simulator.
         `HealthExportStore.recordExport` succeeded. A nil workout (saved while locked) or a
         recording failure says nothing (a debug build stops on the latter: record it here).
   - [ ] SF Symbols exist: `heart.text.square`, `info.circle`.
-  - [ ] Every check in DEVICE-CHECKLIST §F.
-  - Residual: `LiveSessionScreen.finish()` reports `.finished` for `SessionTimelineError
-    .alreadyFinished` too. If another device finished the same open workout and it synced before
-    the tap here, this device would send it as well (once; the record stops a second). Telling
-    the two apart needs a `SessionExit` change, outside this task.
+  - Fixed before review (was a residual): `LiveSessionScreen.finish()` reports
+    `SessionTimelineError.alreadyFinished` as `SessionExit.finishedElsewhere`, not `.finished`.
+    That covers a double tap here and a finish synced from another device. The root shows the
+    summary for both and refreshes the widgets for every exit, but sends to Health only for
+    `.finished`, so a workout this device did not finish is never sent from it. The root's
+    `switch` over `SessionExit` is exhaustive, so a new case must be handled. The Health line is
+    kept per workout (`healthLines[id]`), so such a summary never shows an earlier workout's line.
+  - [ ] Every check in DEVICE-CHECKLIST §F, including "Finished on another device first".
   - Already checked on Linux (swift:6.2, `-swift-version 6 -default-isolation MainActor`,
     `NonisolatedNonsendingByDefault`, `-warnings-as-errors`, `-c -wmo`):
     `HealthWorkoutWriter.swift` (its `#if` stripped) against a mock of the documented HealthKit

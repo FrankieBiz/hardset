@@ -201,6 +201,9 @@ has not yet decided on (`HANDOFF.md` §11.2). Until then this section cannot be 
       sent to Apple Health, because its length is unknown.", and Health has nothing new.
 - [ ] **Another device's workout.** A workout finished on a second device and synced here is not
       sent from this one.
+- [ ] **Finished on another device first.** Open the same workout on devices A and B (both with
+      the toggle on). Finish on A and let it sync to B, then tap Finish on B: B shows the summary
+      with no Health line and writes nothing to Health; A's workout is the only one in Health.
 - [ ] **Turning it off.** Off, then finish a workout: nothing new in Health; earlier workouts stay
       (Hardset never deletes from Health).
 - [ ] **Health refuses the save.** With the toggle on, turn off Hardset's Workouts permission in
