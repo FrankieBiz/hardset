@@ -992,3 +992,20 @@ the `Hardset` scheme for the iOS 26.4 simulator.
     `@_inheritActorContext`, which the doc JSON cannot show; without it the same mock also refuses
     `SetRowView`'s Binding that built at e5aff33. That rules out Swift-level isolation and
     Core/Store API mismatches, not SDK differences or the SwiftUI layouts.
+- [ ] (feat(ui): two tips that point at the machine chip and a movement's history) HardsetUI
+      builds for iOS and macOS 15. Written without a compiler; look first at
+      `@Parameter static var isEligible` and `#Rule(Self.$isEligible)` (TipKit's macro spelling),
+      the `nonisolated struct ...: Tip` conformances (`Tip` is `Sendable` with non-isolated
+      requirements, against HardsetUI's MainActor default), and `.onChange(of:initial:_:)`.
+  - [ ] Fresh install, a workout at a gym, one movement: the machine tip appears over the chip.
+        Tap the chip: the tip goes for good. Next day, with a movement that has history, the
+        history tip appears over its name; tapping the name ends it.
+  - [ ] No tip appears while the keypad is up, nor without a gym (no chip), nor on a movement with
+        no history. Never two tips on screen; never two in a day.
+  - [ ] VoiceOver reads each tip; dismissing it with its close button works.
+  - [ ] The chip row's `ViewThatFits` (side by side, or stacked at large type) still anchors the
+        machine tip to the one chip that is shown, and never shows it twice.
+  - [ ] Only the first movement anchors tips. With history on the second movement only, no history
+        tip appears.
+  - [ ] `AppSmokeTests` and any preview that taps the chip or name still run with TipKit not
+        configured (`Tip.invalidate(reason:)` before `Tips.configure` must not crash).

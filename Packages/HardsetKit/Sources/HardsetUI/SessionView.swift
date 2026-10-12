@@ -188,7 +188,8 @@ public struct SessionView: View {
               recordPulses: recordPulses,
               editingSlotID: editingSlotID(in: exercise.id),
               onEdit: editAction(in: exercise.id, proxy: proxy),
-              onDelete: deleteAction(in: exercise.id)
+              onDelete: deleteAction(in: exercise.id),
+              showsTips: showsTips(for: exercise.id)
             )
             .background(Tokens.Color.surface.opacity(0.4), in: RoundedRectangle(cornerRadius: Tokens.Radius.card))
             .padding(.horizontal, Tokens.Spacing.snug)
@@ -261,6 +262,8 @@ public struct SessionView: View {
     .onChange(of: focusedDraft) { reseedKeypad() }
     .onChange(of: focusedMachineIncrementKg) { reseedKeypad() }
     .onChange(of: unit) { reseedKeypad() }
+    // What TipKit may show right now: Core decides, from these facts (`FeatureTipPlan`).
+    .onChange(of: tipFacts, initial: true) { HardsetTips.update(tipFacts) }
     // A logged row is read-only, so the pad never stays on one, whichever path logged it. The one
     // exception is correcting a saved set, which opens the pad on a logged row on purpose and
     // writes only through Save.
@@ -279,6 +282,28 @@ public struct SessionView: View {
     // One haptic per pulse (spec 2.6): a record plays only the record haptic, an ordinary log a
     // quiet impact, and a failure an error. Keys and corrections play nothing of their own.
     .sensoryFeedback(trigger: feedback) { feedback.map { Tokens.Haptic.feedback(for: $0.event) } }
+  }
+
+  // MARK: - Tips
+
+  /// Only the first exercise anchors the two tips, so each has one place to appear. The facts are
+  /// about that exercise too: a movement with history further down must not make the history tip
+  /// appear over a first movement that has none. `ExerciseLogState.priorNote` marks only history
+  /// borrowed from another machine, so history is "has a suggestion for its first row".
+  private var tipFacts: FeatureTipFacts {
+    FeatureTipFacts(
+      sessionHasGym: onSelectMachine != nil,
+      hasMovementOnScreen: !exercises.isEmpty,
+      movementWithHistoryOnScreen: firstExerciseOpensHistory,
+      isEnteringNumbers: focus != nil)
+  }
+
+  private var firstExerciseOpensHistory: Bool {
+    onShowHistory != nil && exercises.first?.suggestion(forSetIndex: 0) != nil
+  }
+
+  private func showsTips(for exerciseID: UUID) -> Bool {
+    exercises.first?.id == exerciseID
   }
 
   // MARK: - Keypad

@@ -3,6 +3,7 @@ import HardsetCore
 import HardsetFeature
 import HardsetHealth
 import HardsetStore
+import HardsetUI
 import SQLiteData
 import SwiftUI
 import UserNotifications
@@ -36,6 +37,8 @@ struct HardsetApp: App {
   @State private var systemRequests: SystemRequestInbox
 
   init() {
+    // TipKit, once and before any view that shows a tip.
+    HardsetTips.configure()
     // Exactly once per process. `prepareDependencies` is the supported place to install the
     // default database, and calling it more than once is a programmer error.
     let database: (any DatabaseWriter)? = prepareDependencies { dependencies in

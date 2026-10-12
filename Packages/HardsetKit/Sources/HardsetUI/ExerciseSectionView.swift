@@ -1,5 +1,6 @@
 import HardsetCore
 import SwiftUI
+import TipKit
 
 /// One exercise in a live session: its header, its set rows, and a way to add another set.
 ///
@@ -28,6 +29,7 @@ public struct ExerciseSectionView: View {
   private let editingSlotID: UUID?
   private let onEdit: ((SetSlot) -> Void)?
   private let onDelete: ((SetSlot) -> Void)?
+  private let showsTips: Bool
 
   @State private var isChoosingCustomRest = false
   @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -52,6 +54,8 @@ public struct ExerciseSectionView: View {
   /// - Parameter editingSlotID: The logged row the pad is correcting, if it is in this exercise.
   /// - Parameter onEdit: Corrects a logged row. `nil` offers no Edit.
   /// - Parameter onDelete: Deletes a logged row. `nil` offers no Delete.
+  /// - Parameter showsTips: Anchors the machine-chip and history tips here. `SessionView` sets it
+  ///   on the first exercise only, so each tip has one anchor.
   public init(
     state: Binding<ExerciseLogState>,
     unit: WeightUnit,
@@ -69,7 +73,8 @@ public struct ExerciseSectionView: View {
     recordPulses: [UUID: Int] = [:],
     editingSlotID: UUID? = nil,
     onEdit: ((SetSlot) -> Void)? = nil,
-    onDelete: ((SetSlot) -> Void)? = nil
+    onDelete: ((SetSlot) -> Void)? = nil,
+    showsTips: Bool = false
   ) {
     self._state = state
     self.unit = unit
@@ -88,6 +93,7 @@ public struct ExerciseSectionView: View {
     self.editingSlotID = editingSlotID
     self.onEdit = onEdit
     self.onDelete = onDelete
+    self.showsTips = showsTips
   }
 
   public var body: some View {
@@ -138,6 +144,7 @@ public struct ExerciseSectionView: View {
         // been doing on this" is a question asked while standing at the machine, and a chart
         // buried in a separate browse tab does not get looked at mid-set.
         Button {
+          MovementHistoryTip().invalidate(reason: .actionPerformed)
           onShowHistory?()
         } label: {
           HStack(spacing: Tokens.Spacing.tight) {
@@ -158,6 +165,7 @@ public struct ExerciseSectionView: View {
           onShowHistory == nil
             ? state.exerciseName : "\(state.exerciseName). Show load history."
         )
+        .popoverTip(historyTip)
         Spacer()
         Text(progressDescription)
           .font(Tokens.Text.caption)
@@ -227,7 +235,10 @@ public struct ExerciseSectionView: View {
   ///
   /// Unset reads as an invitation, never a warning. A set with no machine is a real set.
   private func machineChip(action: @escaping () -> Void) -> some View {
-    Button(action: action) {
+    Button {
+      MachineChipTip().invalidate(reason: .actionPerformed)
+      action()
+    } label: {
       HStack(spacing: Tokens.Spacing.hairline) {
         Image(systemName: state.machineID == nil ? "dumbbell" : "dumbbell.fill")
         Text(state.machineName ?? "Choose machine")
@@ -247,6 +258,18 @@ public struct ExerciseSectionView: View {
     .accessibilityLabel(
       state.machineName.map { "Machine: \($0). Change." } ?? "No machine recorded. Choose one."
     )
+    .popoverTip(machineTip)
+  }
+
+  // Named, optional tips rather than conditional modifiers: `popoverTip(nil)` shows nothing and
+  // leaves the view's layout, tap target and accessibility as they are. The history tip is only
+  // anchored when the name is a button that opens it.
+  private var machineTip: (any Tip)? {
+    showsTips ? MachineChipTip() : nil
+  }
+
+  private var historyTip: (any Tip)? {
+    showsTips && onShowHistory != nil ? MovementHistoryTip() : nil
   }
 
   /// Where an exercise's rest is chosen. It sits beside the machine chip for the same reason the
