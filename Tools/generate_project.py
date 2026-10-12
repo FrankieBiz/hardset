@@ -31,6 +31,7 @@ APP, WIDGET, TESTS = "Hardset", "HardsetWidget", "HardsetTests"
 SOURCES = [
     ("HardsetApp.swift", "Hardset", APP),
     ("HardsetWidgetBundle.swift", "HardsetWidget", WIDGET),
+    ("HardsetControls.swift", "HardsetWidget", WIDGET),
     ("AppSmokeTests.swift", "HardsetTests", TESTS),
     # App Intents the widget's buttons and controls name. Each is compiled into both targets;
     # `LiveActivityIntent` and foreground intents still run in the app's process.
@@ -222,7 +223,7 @@ w("\t\t\tsourceTree = \"<group>\";")
 w("\t\t};")
 group_children = {
     "Hardset": ["HardsetApp.swift", "Assets.xcassets", "Info.plist", "Hardset.entitlements", "PrivacyInfo.xcprivacy"],
-    "HardsetWidget": ["HardsetWidgetBundle.swift", "Info.plist", "PrivacyInfo.xcprivacy"],
+    "HardsetWidget": ["HardsetWidgetBundle.swift", "HardsetControls.swift", "Info.plist", "PrivacyInfo.xcprivacy"],
     "HardsetIntents": ["RestIntents.swift", "IntentDependencies.swift", "WorkoutIntents.swift", "HardsetShortcuts.swift"],
     "HardsetTests": ["AppSmokeTests.swift"],
 }

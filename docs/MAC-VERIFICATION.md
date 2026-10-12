@@ -858,3 +858,18 @@ the `Hardset` scheme for the iOS 26.4 simulator.
     `AppShortcutsProvider`, `AppShortcut`, `AppShortcutPhrase` and `result()`; the widget's two
     shared files on their own; and `handleSystemRequest()` pasted verbatim into a non-SwiftUI
     stand-in. That rules out Swift-level isolation and Core API mismatches, not SDK differences.
+
+- [ ] (feat(widget): Start workout and Rest in Control Center) The widget extension builds.
+      Written without a compiler; look first at `promptsForUserConfiguration()` (name and
+      placement), `if case … else` inside the control template builder (if the builder rejects
+      it, move the two branches into a `@ControlWidgetTemplateBuilder` helper `button(for:)` and
+      record which form built), and `StaticControlConfiguration(kind:)`.
+  - [ ] Every check added to DEVICE-CHECKLIST §E for controls.
+  - [ ] Tapping Start workout in Control Center brings Hardset forward. Apple's "Creating controls
+        to perform actions across the system" says to open the app from a control with an
+        `OpenIntent`; `StartWorkoutIntent` and `OpenHardsetIntent` are plain `AppIntent`s with
+        `supportedModes = .foreground`, which the docs describe only generically ("bring the app
+        to the foreground before the action runs"). If the tap does nothing visible, make both
+        conform to `OpenIntent` (a `target` parameter over a one-case `AppEnum`, `perform()`
+        returning `.result()` after posting) and keep the policy in `perform()`.
+  - SF Symbols: none new (`figure.strengthtraining.traditional`, `timer` are already used).
