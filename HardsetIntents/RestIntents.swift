@@ -47,11 +47,6 @@ struct StartRestIntent: LiveActivityIntent {
 
   init() {}
 
-  /// For a caller that already knows the length.
-  init(seconds: Double) {
-    self.length = Measurement(value: seconds, unit: .seconds)
-  }
-
   @MainActor
   func perform() async throws -> some IntentResult & ProvidesDialog {
     let seconds = length.converted(to: .seconds).value
