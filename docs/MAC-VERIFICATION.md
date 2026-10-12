@@ -1073,3 +1073,9 @@ the `Hardset` scheme for the iOS 26.4 simulator.
         switches the unit (the tag is outermost, after the label).
   - [ ] VoiceOver on each segment: "Kilograms" / "Pounds", with the selected state; not "k g"
         or "l b". If iOS's segmented picker ignores the label, say so here.
+- [ ] (fix(ui): two machines with one name each get a row in the summary) HardsetUI builds for
+      iOS and macOS 15. `machinesSection` iterates `Array(machinesUsed.enumerated())` by
+      `\.offset`.
+  - [ ] A gym with two machines both named "Cable station"; log a set on each, finish. The
+        summary's Machines section lists "Cable station" twice, and the console shows no
+        "the ID … occurs multiple times" warning from `ForEach`.

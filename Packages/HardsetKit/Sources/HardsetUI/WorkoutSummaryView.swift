@@ -201,7 +201,9 @@ public struct WorkoutSummaryView: View {
 
   private func machinesSection(_ summary: WorkoutSummary) -> some View {
     Section("Machines") {
-      ForEach(summary.machinesUsed, id: \.self) { name in
+      // By position, not by name: two machines can share a name (a gym with two "Cable station"s),
+      // and duplicate ids leave `ForEach` drawing one row or the wrong one.
+      ForEach(Array(summary.machinesUsed.enumerated()), id: \.offset) { _, name in
         Text(name)
           .frame(minHeight: Tokens.minimumTapTarget, alignment: .leading)
       }
