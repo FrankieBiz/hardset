@@ -40,7 +40,8 @@ public enum HealthExportSkip: String, Hashable, Sendable, CaseIterable {
   case lengthUnknown
   /// Longer than any real workout (`SessionTimeline.plausibleLimit`): a session left open.
   case implausiblyLong
-  /// Ends after now: the device clock has moved, so the times cannot be trusted.
+  /// Ends after now: a clock has moved (this device's, or the one that synced it), so the times
+  /// cannot be trusted. The cause is not knowable here, so the copy names none.
   case endsInFuture
 }
 
@@ -105,7 +106,7 @@ public enum HealthExportCopy {
       case .lengthUnknown, .implausiblyLong:
         return "Not sent to Apple Health, because its length is unknown."
       case .endsInFuture:
-        return "Not sent to Apple Health, because the device clock changed during it."
+        return "Not sent to Apple Health, because its end time is in the future."
       }
     }
   }

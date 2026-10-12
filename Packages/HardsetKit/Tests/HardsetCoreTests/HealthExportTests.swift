@@ -76,9 +76,10 @@ struct HealthExportTests {
     #expect(HealthExportCopy.summaryLine(for: .skipped(.alreadyExported)) == nil)
     #expect(HealthExportCopy.summaryLine(for: .skipped(.implausiblyLong))?.contains("length is unknown") == true)
     #expect(HealthExportCopy.summaryLine(for: .skipped(.lengthUnknown))?.contains("length is unknown") == true)
-    // A workout that ends after now has a length; the clock is what cannot be trusted.
+    // A workout that ends after now has a length, and the code cannot know why it ends late
+    // (this device's clock, or another device's), so the line names no cause.
     let future = HealthExportCopy.summaryLine(for: .skipped(.endsInFuture))
-    #expect(future?.contains("clock") == true)
+    #expect(future == "Not sent to Apple Health, because its end time is in the future.")
     #expect(future?.contains("unknown") == false)
   }
 }
