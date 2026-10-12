@@ -1,6 +1,7 @@
 import Foundation
 import HardsetCore
 import HardsetStore
+import OSLog
 
 #if os(iOS)
   import WidgetKit
@@ -27,4 +28,15 @@ struct WidgetSnapshotWriter {
       WidgetCenter.shared.reloadAllTimelines()
     #endif
   }
+
+  /// Puts a failed refresh in the unified log, so a Release build keeps a trace of it too. Only
+  /// the error's type is public: its description can carry file paths, so it stays private.
+  static func log(_ error: any Error) {
+    let kind = String(reflecting: type(of: error))
+    let detail = String(describing: error)
+    logger.error(
+      "The widget snapshot was not written: \(kind, privacy: .public) \(detail, privacy: .private)")
+  }
+
+  private static let logger = Logger(subsystem: "com.hardset.app", category: "widget")
 }

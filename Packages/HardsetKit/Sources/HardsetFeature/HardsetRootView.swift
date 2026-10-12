@@ -69,7 +69,7 @@ public struct HardsetRootView: View {
   @State private var launchReadDone = false
   /// Why the widgets' file was last not written. Kept, not shown: a widget one workout behind is
   /// not worth interrupting a lifter over, and it still shows its last file or "nothing yet". The
-  /// next write that succeeds clears it, and a debug build stops on it.
+  /// next write that succeeds clears it. Each failure is also logged, and a debug build stops on it.
   @State private var widgetSnapshotError: (any Error)?
   private let environment: HardsetEnvironment
   /// Overrides the stored preference. Exists for previews and tests; the app passes `nil` so the
@@ -163,6 +163,7 @@ public struct HardsetRootView: View {
       widgetSnapshotError = nil
     } catch {
       widgetSnapshotError = error
+      WidgetSnapshotWriter.log(error)
       assertionFailure("The widget snapshot was not written: \(error)")
     }
   }

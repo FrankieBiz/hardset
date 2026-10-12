@@ -49,6 +49,35 @@ struct SnapshotEmptyView: View {
   }
 }
 
+/// The widgets' background: the app's surface on the Home Screen, and nothing on the Lock Screen.
+/// The Lock Screen draws accessory widgets vibrant, desaturated to a monochrome version
+/// (`WidgetRenderingMode.vibrant`), where a fixed colour would only be a slab behind the text.
+struct SnapshotBackground: View {
+  @Environment(\.widgetFamily) private var family
+
+  var body: some View {
+    if family == .accessoryRectangular {
+      Color.clear
+    } else {
+      Tokens.Color.surface
+    }
+  }
+}
+
+/// A line's last part, kept whole: the line's other text is what gets cut. For a date, which a
+/// widget must always show.
+struct UncutSuffix: View {
+  let text: String
+
+  var body: some View {
+    HStack(spacing: Tokens.Spacing.tight) {
+      Text(verbatim: "·").accessibilityHidden(true)
+      Text(text)
+    }
+    .layoutPriority(1)
+  }
+}
+
 /// The last finished time on the machines used most recently: one in the small widget and on
 /// the Lock Screen, three in the medium. Dates are dates (`WidgetSnapshot.dayText`).
 struct LastTimeWidget: Widget {
@@ -57,7 +86,7 @@ struct LastTimeWidget: Widget {
   var body: some WidgetConfiguration {
     StaticConfiguration(kind: Self.kind, provider: SnapshotProvider()) { entry in
       LastTimeView(reading: entry.reading)
-        .containerBackground(Tokens.Color.surface, for: .widget)
+        .containerBackground(for: .widget) { SnapshotBackground() }
     }
     .configurationDisplayName("Last time")
     .description("What you lifted last time on the machines you used most recently.")
@@ -74,9 +103,7 @@ struct LastTimeView: View {
       let shown = family == .systemMedium ? snapshot.lastTimes : Array(snapshot.lastTimes.prefix(1))
       HStack(alignment: .top, spacing: Tokens.Spacing.regular) {
         ForEach(shown) { lastTime in
-          LastTimeColumn(
-            lastTime: lastTime, formatter: snapshot.formatter,
-            lineLimit: family == .accessoryRectangular ? 2 : 3)
+          LastTimeColumn(lastTime: lastTime, formatter: snapshot.formatter)
         }
       }
     } else {
@@ -88,11 +115,25 @@ struct LastTimeView: View {
 struct LastTimeColumn: View {
   let lastTime: WidgetSnapshot.LastTime
   let formatter: WeightFormatter
-  let lineLimit: Int
+  @Environment(\.widgetFamily) private var family
 
   var body: some View {
+    Group {
+      if family == .accessoryRectangular {
+        lockScreenLines
+      } else {
+        homeScreenLines
+      }
+    }
+    .frame(maxWidth: .infinity, alignment: .leading)
+    .accessibilityElement(children: .ignore)
+    .accessibilityLabel(spokenLabel)
+  }
+
+  /// The name, the machine, up to three sets, and the date.
+  @ViewBuilder private var homeScreenLines: some View {
     // By position, not by text: three sets of "100 kg × 8" are three lines, not one.
-    let lines = lastTime.lines(formatter: formatter, limit: lineLimit)
+    let lines = lastTime.lines(formatter: formatter, limit: 3)
     VStack(alignment: .leading, spacing: Tokens.Spacing.tight) {
       Text(lastTime.exerciseName).font(.headline).lineLimit(1)
       Text(lastTime.equipmentText).font(Tokens.Text.caption).foregroundStyle(.secondary).lineLimit(1)
@@ -102,9 +143,31 @@ struct LastTimeColumn: View {
       Text(WidgetSnapshot.dayText(lastTime.performedAt))
         .font(Tokens.Text.caption).foregroundStyle(.secondary)
     }
-    .frame(maxWidth: .infinity, alignment: .leading)
-    .accessibilityElement(children: .ignore)
-    .accessibilityLabel(spokenLabel)
+  }
+
+  /// Three caption lines, what the rectangular slot holds: the name; the machine and the date,
+  /// where the machine's name is what gets cut (in the middle, so "(2)" stays); and one set, with
+  /// "+2 more sets" only when it fits.
+  @ViewBuilder private var lockScreenLines: some View {
+    let lines = lastTime.lines(formatter: formatter, limit: 1)
+    VStack(alignment: .leading, spacing: Tokens.Spacing.hairline) {
+      Text(lastTime.exerciseName).font(Tokens.Text.caption.weight(.semibold)).lineLimit(1)
+      HStack(spacing: Tokens.Spacing.tight) {
+        Text(lastTime.equipmentText).foregroundStyle(.secondary).truncationMode(.middle)
+        UncutSuffix(text: WidgetSnapshot.dayText(lastTime.performedAt))
+      }
+      .font(Tokens.Text.caption)
+      .lineLimit(1)
+      if let first = lines.first {
+        ViewThatFits(in: .horizontal) {
+          Text(lines.joined(separator: " · "))
+          Text(first)
+        }
+        .font(Tokens.Text.caption)
+        .monospacedDigit()
+        .lineLimit(1)
+      }
+    }
   }
 
   /// "Last time, Tue 7 Oct. Leg Press on Hammer Strength Leg Press: 100 kilograms for 8 reps, …"
@@ -122,7 +185,7 @@ struct LastWorkoutWidget: Widget {
   var body: some WidgetConfiguration {
     StaticConfiguration(kind: Self.kind, provider: SnapshotProvider()) { entry in
       LastWorkoutView(reading: entry.reading)
-        .containerBackground(Tokens.Color.surface, for: .widget)
+        .containerBackground(for: .widget) { SnapshotBackground() }
     }
     .configurationDisplayName("Last workout")
     .description("Your last finished workout, as it was saved.")
@@ -132,14 +195,32 @@ struct LastWorkoutWidget: Widget {
 
 struct LastWorkoutView: View {
   let reading: WidgetSnapshotReading
+  @Environment(\.widgetFamily) private var family
 
   var body: some View {
     if case .snapshot(let snapshot) = reading, let workout = snapshot.lastWorkout {
-      VStack(alignment: .leading, spacing: Tokens.Spacing.tight) {
-        Text(WidgetCopy.lastWorkoutTitle).font(Tokens.Text.caption).foregroundStyle(.secondary)
-        Text(WidgetSnapshot.dayText(workout.finishedAt)).font(.headline)
-        Text(workout.totalsText(formatter: snapshot.formatter)).font(Tokens.Text.caption)
-        Text(workout.lengthText).font(Tokens.Text.caption).monospacedDigit()
+      Group {
+        if family == .accessoryRectangular {
+          // Three caption lines: the title and the date (kept whole), the totals, the length.
+          VStack(alignment: .leading, spacing: Tokens.Spacing.hairline) {
+            HStack(spacing: Tokens.Spacing.tight) {
+              Text(WidgetCopy.lastWorkoutTitle).foregroundStyle(.secondary)
+              UncutSuffix(text: WidgetSnapshot.dayText(workout.finishedAt))
+                .font(Tokens.Text.caption.weight(.semibold))
+            }
+            .lineLimit(1)
+            Text(workout.totalsText(formatter: snapshot.formatter)).lineLimit(1)
+            Text(workout.lengthText).monospacedDigit().lineLimit(1)
+          }
+          .font(Tokens.Text.caption)
+        } else {
+          VStack(alignment: .leading, spacing: Tokens.Spacing.tight) {
+            Text(WidgetCopy.lastWorkoutTitle).font(Tokens.Text.caption).foregroundStyle(.secondary)
+            Text(WidgetSnapshot.dayText(workout.finishedAt)).font(.headline)
+            Text(workout.totalsText(formatter: snapshot.formatter)).font(Tokens.Text.caption)
+            Text(workout.lengthText).font(Tokens.Text.caption).monospacedDigit()
+          }
+        }
       }
       .frame(maxWidth: .infinity, alignment: .leading)
       .accessibilityElement(children: .combine)

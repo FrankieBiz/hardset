@@ -171,8 +171,12 @@ merge semantics. Use the iPhone plus a simulator signed into the same iCloud acc
 - [ ] **Mid-workout.** Start a workout and log on the same machine: the widget still shows the
       last *finished* time, not today's half-done sets.
 - [ ] **Units.** Switch to lb in Settings: both widgets read lb within a few seconds.
-- [ ] **Lock Screen.** Add Last time as a rectangular Lock Screen widget: one movement, two set
-      lines, legible.
+- [ ] **Lock Screen.** Add Last time as a rectangular Lock Screen widget: three lines, nothing
+      clipped. The movement; the machine then "· Tue 7 Oct", where a long machine name is cut in
+      the middle and the date never is; one set, with "· +2 more sets" only when it fits. Add Last
+      workout there too: "Last workout · Tue 7 Oct", "N sets · N kg", the length. Both legible
+      in the Lock Screen's vibrant (monochrome) look, with no coloured slab behind the text.
+      Repeat at the largest Dynamic Type size: lines may be cut, but the date stays whole.
 - [ ] **VoiceOver.** The small and Lock Screen widgets are each read as one element, and the
       medium Last time as one element per movement, units in full ("100 kilograms for 8 reps").
 

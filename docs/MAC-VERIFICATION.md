@@ -901,15 +901,27 @@ the `Hardset` scheme for the iOS 26.4 simulator.
         `body`. It reads the finished workouts on the main actor, as every screen's store read
         does (bounded: `WidgetSnapshotStore.sessionWindow`, 30 sessions). Finishing a long
         workout shows its summary with no visible hitch.
-  - [ ] A failed read or write is kept in `widgetSnapshotError`, not shown, and a debug build
-        stops on `assertionFailure("The widget snapshot was not written: …")`. If a debug run
-        ever stops there, record the error here: it means the widgets are a workout behind.
-        WidgetKit is asked to reload only after a write succeeds.
+  - [ ] A failed read or write is kept in `widgetSnapshotError`, not shown, logged once with
+        `Logger(subsystem: "com.hardset.app", category: "widget")` (the error's type public, its
+        description private), and a debug build stops on `assertionFailure("The widget snapshot
+        was not written: …")`. If a debug run ever stops there, record the error here: it means
+        the widgets are a workout behind. WidgetKit is asked to reload only after a write
+        succeeds. `import OSLog` in HardsetFeature builds for iOS and for macOS 15 (`Logger`:
+        iOS 14, macOS 11).
   - [ ] `ForEach(lines.indices, id: \.self)` in `LastTimeColumn`: three identical sets ("100 kg ×
         8" three times) draw three lines, with no "ID occurs multiple times" log.
-  - [ ] `accessoryRectangular` (Lock Screen): the column is a name, the machine, two set lines,
-        possibly "+N more sets", and a date. If that clips, record it; the fix is fewer lines in
-        the rectangular family, never a relative date.
+  - [ ] `accessoryRectangular` (Lock Screen) has its own three-line layout in both widgets; the
+        system families are unchanged. Last time: the name in semibold caption; the machine
+        (`.truncationMode(.middle)`) then `UncutSuffix` "· date" at `.layoutPriority(1)`; one set
+        in a `ViewThatFits(in: .horizontal)` that drops "· +N more sets" when it does not fit.
+        Last workout: title then "· date", the totals, the length. Check the date is never cut,
+        including at the largest Dynamic Type size, and that `ViewThatFits` falls back.
+  - [ ] The Lock Screen draws vibrant ("desaturates the widget, making a monochrome version"),
+        so in `accessoryRectangular` the container background is `Color.clear`
+        (`SnapshotBackground`); the Home Screen keeps `Tokens.Color.surface`. The Lock Screen
+        views use only the default and `.secondary` styles, no fixed colour, so no
+        `widgetAccentable` is needed (it acts only in `.accented` mode, which the iPhone Lock
+        Screen does not use).
   - [ ] Every check added to DEVICE-CHECKLIST §E for widgets.
   - SF Symbols: none new. The widgets draw text only.
   - Already checked on Linux (swift:6.2, `-default-isolation MainActor`,
@@ -922,3 +934,6 @@ the `Hardset` scheme for the iOS 26.4 simulator.
     `WidgetSnapshotWriter.swift` (its `os(iOS)` branch, against a mock `WidgetCenter`) and
     `refreshWidgets()` pasted verbatim into a non-SwiftUI stand-in, against the real HardsetStore.
     That rules out Swift-level isolation and Core/Store API mismatches, not SDK differences.
+    After fix round 1, the same again with `WidgetSnapshotWriter.log(_:)`, against a mock of the
+    documented `Logger`/`OSLogMessage` String interpolation. The SwiftUI layouts cannot be
+    checked here.
