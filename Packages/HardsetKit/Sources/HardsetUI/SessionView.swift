@@ -524,6 +524,8 @@ public struct SessionView: View {
         // The totals roll to their new values; under Reduce Motion they simply change.
         .contentTransition(.numericText())
         .animation(Tokens.Motion.quick(reduceMotion), value: volumeDescription)
+        // Units in full: "9400 kilograms", never "kg".
+        .accessibilityLabel(spokenVolumeDescription)
       // Hidden when the caller puts Finish elsewhere (the toolbar).
       if let onFinish {
         Button(action: onFinish) {
@@ -613,18 +615,21 @@ public struct SessionView: View {
     .transition(Tokens.Motion.edgeTransition(reduceMotion))
   }
 
-  /// Counted by `SessionVolume`, which is tested. The rules that matter — unlogged rows and
-  /// warm-ups excluded — live there rather than here, so this screen cannot disagree with the
-  /// history screen about what the session contained.
+  /// Counted by `SessionVolume`, which is tested, and written by `SessionVolumeText`, as History
+  /// and the session detail write it. The rules that matter — unlogged rows and warm-ups excluded
+  /// — live there rather than here, so this screen cannot disagree with the history screen about
+  /// what the session contained, or how it says so.
   private var volumeDescription: String {
     let volume = SessionVolume(exercises: exercises)
     guard !volume.isEmpty else { return "No sets logged yet" }
-    var parts = [CountText.sets(volume.workingSets), CountText.reps(volume.reps)]
-    if volume.volumeKg > 0 {
-      parts.append("\(WeightFormatter(unit: unit).total(kilograms: volume.volumeKg)) volume")
-    }
-    if volume.warmupSets > 0 { parts.append("\(volume.warmupSets) warm-up") }
-    return parts.joined(separator: " · ")
+    return SessionVolumeText.written(volume, formatter: WeightFormatter(unit: unit))
+  }
+
+  /// The same totals for VoiceOver: "12 sets, 96 reps, 9400 kilograms, 2 warm-up sets".
+  private var spokenVolumeDescription: String {
+    let volume = SessionVolume(exercises: exercises)
+    guard !volume.isEmpty else { return "No sets logged yet" }
+    return SessionVolumeText.spoken(volume, formatter: WeightFormatter(unit: unit))
   }
 }
 

@@ -1058,3 +1058,11 @@ the `Hardset` scheme for the iOS 26.4 simulator.
         level), never "greater than or equal to 6 sets"; the row's actions still open the
         source.
   - [ ] xSmall, Large and AX5: the totals line wraps rather than truncating.
+- [ ] (fix(ui): the live totals are History's line, spoken in full) HardsetUI builds for iOS and
+      macOS 15. `SessionView.volumeDescription` is `SessionVolumeText.written`; the new
+      `spokenVolumeDescription` (`.spoken`) labels it.
+  - [ ] Live workout with a warm-up and two working sets: the line under the list reads like the
+        History row ("2 sets · 16 reps · 1600 kg · 1 warm-up"), no longer "… kg volume".
+  - [ ] VoiceOver on it: "2 sets, 16 reps, 1600 kilograms, 1 warm-up set"; with nothing logged,
+        "No sets logged yet". Pounds: "… pounds".
+  - [ ] The numeric roll still animates on a log, and is instant under Reduce Motion.
