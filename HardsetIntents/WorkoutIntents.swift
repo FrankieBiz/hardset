@@ -2,9 +2,10 @@ import AppIntents
 import HardsetCore
 
 // Compiled into the app AND the widget extension (Tools/generate_project.py), so the Control
-// Center buttons (Task 11) can name these types. Both declare `supportedModes = .foreground`:
-// the system brings Hardset forward and performs them in the app's process, so the inbox is the
-// app's own. Neither takes a weight or a rep count.
+// Center buttons (Task 11) can name these types. Both run in the app's process, brought to the
+// front, so the inbox is the app's own: `StartWorkoutIntent` declares
+// `supportedModes = .foreground`, and `StartWorkoutControlIntent` is an `OpenIntent`, which the
+// system brings to the foreground to run. Neither takes a weight or a rep count.
 
 /// "Start a workout": opens Hardset and starts an empty one, or shows the one already open
 /// (`StartWorkoutPolicy`). It never logs anything (DECISIONS.md §26).
