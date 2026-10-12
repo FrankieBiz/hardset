@@ -1,5 +1,6 @@
 import AppIntents
 import HardsetAlarm
+import HardsetCore
 
 /// Hands the app's live objects to its App Intents.
 ///
@@ -8,9 +9,11 @@ import HardsetAlarm
 /// brings a dependency property wrapper of its own.
 enum IntentDependencies {
   /// Called from `HardsetApp.init()`, which runs on every launch, including the background
-  /// launch a Lock Screen button causes, before any intent is performed.
+  /// launch a Lock Screen button causes, before any intent is performed. The inbox is the one the
+  /// root view reads, so a Start workout request reaches the screen.
   @MainActor
-  static func register(restTimer: RestTimerController) {
+  static func register(restTimer: RestTimerController, systemRequests: SystemRequestInbox) {
     AppDependencyManager.shared.add(dependency: restTimer)
+    AppDependencyManager.shared.add(dependency: systemRequests)
   }
 }

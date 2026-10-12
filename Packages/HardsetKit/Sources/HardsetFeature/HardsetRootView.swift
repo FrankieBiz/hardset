@@ -64,23 +64,31 @@ public struct HardsetRootView: View {
   /// Why the last gym write failed, in the user's words. A `try?` here hid a real failure behind a
   /// button that appeared to do nothing, which is precisely what this app is not allowed to do.
   @State private var gymError: String?
+  /// Whether the launch read (resume, then the first-run decision) has run. Until it has, nothing
+  /// is known about an open workout, so a Start workout request waits.
+  @State private var launchReadDone = false
   private let environment: HardsetEnvironment
   /// Overrides the stored preference. Exists for previews and tests; the app passes `nil` so the
   /// user's own choice wins.
   private let unitOverride: WeightUnit?
   private let hooks: RestTimerHooks
   private let restPreferences: any RestPreferenceStore
+  /// Where Siri, Spotlight, the Action button and Control Center leave a Start workout request.
+  /// The app passes the one its intents were given; the default is an inbox nothing posts to.
+  private let systemRequests: SystemRequestInbox
 
   public init(
     environment: HardsetEnvironment,
     unit: WeightUnit? = nil,
     hooks: RestTimerHooks = .inert,
-    restPreferences: any RestPreferenceStore = InMemoryRestPreferences()
+    restPreferences: any RestPreferenceStore = InMemoryRestPreferences(),
+    systemRequests: SystemRequestInbox = SystemRequestInbox()
   ) {
     self.environment = environment
     self.unitOverride = unit
     self.hooks = hooks
     self.restPreferences = restPreferences
+    self.systemRequests = systemRequests
   }
 
   /// What every screen displays in. One derivation, so no screen can disagree with another.
@@ -130,7 +138,12 @@ public struct HardsetRootView: View {
           }
         }
         refreshGyms()
+        // Last, so a request that arrived before this read is acted on knowing whether a workout
+        // is open, and an empty workout it starts is at the gym just preselected.
+        launchReadDone = true
+        handleSystemRequest()
       }
+      .onChange(of: systemRequests.pending) { handleSystemRequest() }
   }
 
   /// Ends the first screen. The flag is set only after the optional gym is written, so a failed
@@ -145,8 +158,36 @@ public struct HardsetRootView: View {
       if let gym { selectedGym = gym }
       firstRunError = nil
       showsFirstRun = false
+      // A request from Siri on a fresh install waited for this screen; it starts the workout now.
+      handleSystemRequest()
     } catch {
       firstRunError = FailureCopy.message(for: error, during: .saveGym)
+    }
+  }
+
+  /// A Start workout request from Siri, Spotlight, the Action button or Control Center.
+  /// `StartWorkoutPolicy` decides; a request it says to wait on stays in the inbox until the
+  /// launch read has run or the first-run screen is done.
+  ///
+  /// `take()` empties the inbox whatever it holds, so it is called only in the branches that act.
+  /// `.wait` returns before it: before the launch read, and while the first-run screen shows, the
+  /// request must still be there for the next call (the end of `.task`, or `finishFirstRun`).
+  private func handleSystemRequest() {
+    guard systemRequests.pending == .startWorkout else { return }
+    let state = WorkoutLaunchState(
+      isReady: launchReadDone, hasOpenWorkout: coordinator != nil,
+      resumeFailed: resumeError != nil, showsFirstRun: showsFirstRun)
+    switch StartWorkoutPolicy.action(for: state) {
+    case .wait:
+      return
+    case .startEmptyWorkout:
+      _ = systemRequests.take()
+      selectedTab = .train
+      startEmptyWorkout()
+    case .showOpenWorkout, .showResumeFailure:
+      // Shown, never replaced: the open workout, or the screen that says it could not be read.
+      _ = systemRequests.take()
+      selectedTab = .train
     }
   }
 

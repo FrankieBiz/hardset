@@ -37,6 +37,10 @@ SOURCES = [
     ("RestIntents.swift", "HardsetIntents", APP),
     ("RestIntents.swift", "HardsetIntents", WIDGET),
     ("IntentDependencies.swift", "HardsetIntents", APP),
+    ("WorkoutIntents.swift", "HardsetIntents", APP),
+    ("WorkoutIntents.swift", "HardsetIntents", WIDGET),
+    # App Shortcuts are read from the app bundle only.
+    ("HardsetShortcuts.swift", "HardsetIntents", APP),
 ]
 RESOURCES = [
     ("PrivacyInfo.xcprivacy", "Hardset", APP),
@@ -219,7 +223,7 @@ w("\t\t};")
 group_children = {
     "Hardset": ["HardsetApp.swift", "Assets.xcassets", "Info.plist", "Hardset.entitlements", "PrivacyInfo.xcprivacy"],
     "HardsetWidget": ["HardsetWidgetBundle.swift", "Info.plist", "PrivacyInfo.xcprivacy"],
-    "HardsetIntents": ["RestIntents.swift", "IntentDependencies.swift"],
+    "HardsetIntents": ["RestIntents.swift", "IntentDependencies.swift", "WorkoutIntents.swift", "HardsetShortcuts.swift"],
     "HardsetTests": ["AppSmokeTests.swift"],
 }
 for g, children in group_children.items():

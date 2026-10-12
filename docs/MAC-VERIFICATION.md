@@ -830,3 +830,31 @@ the `Hardset` scheme for the iOS 26.4 simulator.
       rest stays paused in the app with the error shown, no alarm rings at the old deadline, and
       Resume schedules a fresh one. Two quick adjusts in a row (±15 twice within the debounce)
       still end with exactly one alarm (`schedulingID` is now cleared only by its own commit).
+- [ ] (feat(app): start a workout or a rest by voice, from Spotlight or the Action button) The
+      `Hardset` scheme builds (app and widget), HardsetFeature builds for macOS 15 via `./test.sh`,
+      and `AppSmokeTests` passes. Written without a compiler; look first at
+      `static let supportedModes: IntentModes = .foreground` (if `IntentModes` wants a call, use
+      `.foreground(.immediate)`), `AppShortcut(intent:phrases:shortTitle:systemImageName:)`, and
+      `.onChange(of: systemRequests.pending)` (zero-argument closure form, iOS 17).
+  - [ ] Shortcuts app › Hardset lists Start workout, Start rest and Skip rest, and no Pause, Resume
+        or Open Hardset. No action anywhere takes a weight or reps.
+  - [ ] Settings › Action Button › Shortcut › Hardset offers the same three.
+  - [ ] Spotlight: typing "Hardset" shows Start workout.
+  - [ ] Every check added to DEVICE-CHECKLIST §E.
+  - [ ] The widget extension builds with `WorkoutIntents.swift` in it (`supportedModes =
+        .foreground` in an extension target), and its App Intents metadata step reports nothing
+        about the two intents. Neither intent is used by the widget until Task 11.
+  - [ ] `HardsetRootView(…, systemRequests: SystemRequestInbox = SystemRequestInbox())` builds: a
+        main-actor default argument on the main-actor init. If it does not, make the parameter
+        `SystemRequestInbox? = nil` and build the inbox in the init body.
+  - [ ] During a rest started in the app, the bar (accessory on iOS, `SessionView` on macOS) still
+        captions the set that started it; a rest started from Siri shows no caption. The caption
+        now comes from `RestTimerController.metadata`, not the coordinator.
+  - SF Symbols: none new. `figure.strengthtraining.traditional`, `timer` and `forward.end` are
+    already used in HardsetFeature and HardsetUI.
+  - Already checked on Linux (swift:6.2, `-default-isolation MainActor`,
+    `InferIsolatedConformances`, `-warnings-as-errors`): the four `HardsetIntents` files as
+    committed, against Task 9's mock `AppIntents` extended with the documented `IntentModes`,
+    `AppShortcutsProvider`, `AppShortcut`, `AppShortcutPhrase` and `result()`; the widget's two
+    shared files on their own; and `handleSystemRequest()` pasted verbatim into a non-SwiftUI
+    stand-in. That rules out Swift-level isolation and Core API mismatches, not SDK differences.

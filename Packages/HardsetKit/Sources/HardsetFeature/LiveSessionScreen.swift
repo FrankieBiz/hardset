@@ -24,6 +24,9 @@ private struct MachineTarget: Identifiable, Hashable {
 @MainActor
 public struct RestTimerHooks {
   public var state: () -> RestTimerState
+  /// What the running rest is for, as the timer was told. Nil for a rest no set started (Siri, a
+  /// control), so the bar never captions such a rest with an older set.
+  public var metadata: () -> RestMetadata?
   public var start: (Duration, RestMetadata) -> Void
   public var adjust: (Duration) -> Void
   public var pauseOrResume: () -> Void
@@ -37,6 +40,7 @@ public struct RestTimerHooks {
 
   public init(
     state: @escaping () -> RestTimerState = { .idle },
+    metadata: @escaping () -> RestMetadata? = { nil },
     start: @escaping (Duration, RestMetadata) -> Void = { _, _ in },
     adjust: @escaping (Duration) -> Void = { _ in },
     pauseOrResume: @escaping () -> Void = {},
@@ -45,6 +49,7 @@ public struct RestTimerHooks {
     lastErrorMessage: @escaping () -> String? = { nil }
   ) {
     self.state = state
+    self.metadata = metadata
     self.start = start
     self.adjust = adjust
     self.pauseOrResume = pauseOrResume
@@ -148,9 +153,9 @@ public struct LiveSessionScreen: View {
       exercises: $bindable.exercises,
       unit: unit,
       restState: hooks.state(),
-      // The coordinator's record of what was asked of the timer, so the bar names the set that
-      // actually started this rest.
-      restMetadata: coordinator.activeRest,
+      // The timer's own record of what its rest is for, so the bar names the set that actually
+      // started it, and names none for a rest started from Siri or a control.
+      restMetadata: hooks.metadata(),
       errorMessage: errorMessage,
       onLogSet: { exerciseStateID, slot in
         attempt(.logSet) { coordinator.logSet(slotID: slot.id, inExercise: exerciseStateID) }
@@ -343,7 +348,8 @@ public struct LiveSessionScreen: View {
   }
 
   /// Why the rest may not sound, shown only while a rest is running or paused. The timer is the
-  /// truth here, not `activeRest`, which outlives a rest that ended on its own.
+  /// truth here, not the coordinator's record of the rest it last asked for, which outlives a rest
+  /// that ended on its own.
   ///
   /// A refusal and a failure can both be true (alarms off, and the stand-in notification failed),
   /// so each gets its own line rather than one hiding the other.

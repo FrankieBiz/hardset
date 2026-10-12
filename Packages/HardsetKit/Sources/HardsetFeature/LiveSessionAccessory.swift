@@ -19,9 +19,9 @@ struct LiveSessionAccessory: View {
     if restState != .idle {
       RestBarView(
         state: restState,
-        // The coordinator's record of what was asked of the timer, so the bar names the set that
-        // actually started this rest.
-        metadata: coordinator.activeRest,
+        // The timer's own record of what its rest is for, so the bar names the set that actually
+        // started it, and names none for a rest started from Siri or a control.
+        metadata: hooks.metadata(),
         onAdjust: hooks.adjust,
         onPauseResume: hooks.pauseOrResume,
         onSkip: {

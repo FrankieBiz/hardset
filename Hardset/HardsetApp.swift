@@ -13,8 +13,9 @@ import UserNotifications
 /// Swift macro plugin server does not survive it — so it is kept to wiring that has no logic to
 /// get wrong: open the database, install the account-change delegate, hand `RestTimerController`'s
 /// methods to the feature layer, install the foreground notification presenter, and show the root
-/// view. It also registers the rest timer for App Intents, so the Lock Screen's buttons and Siri
-/// act on this same controller.
+/// view. It also registers the rest timer and the request inbox for App Intents, so the Lock
+/// Screen's buttons and Siri act on this same controller, and a Start workout request reaches
+/// this same root view.
 ///
 /// Anything added here that a test could cover belongs in the package instead.
 @main
@@ -29,6 +30,9 @@ struct HardsetApp: App {
   /// Shows the rest notification while Hardset is in front. Held for the process lifetime because
   /// `UNUserNotificationCenter.delegate` is `weak`.
   @State private var notificationPresenter: RestNotificationPresenter
+  /// Where a Start workout request from Siri or Control Center waits for the root view. Built in
+  /// `init()` so the intent and the view share one.
+  @State private var systemRequests: SystemRequestInbox
 
   init() {
     // Exactly once per process. `prepareDependencies` is the supported place to install the
@@ -49,9 +53,11 @@ struct HardsetApp: App {
     // relaunch cannot find its alarm.
     let timer = RestTimerController(persistence: database.map { RestTimerStore(database: $0) })
     _restTimer = State(initialValue: timer)
+    let requests = SystemRequestInbox()
+    _systemRequests = State(initialValue: requests)
     // Before any intent can run: a Lock Screen button can launch the app in the background, and
-    // its intent asks for this controller.
-    IntentDependencies.register(restTimer: timer)
+    // its intent asks for this controller. Start workout posts to this inbox, which the root reads.
+    IntentDependencies.register(restTimer: timer, systemRequests: requests)
 
     // Here, not in a view: Apple asks for the delegate to be set before the app finishes
     // launching, and `init()` runs before any scene exists.
@@ -62,7 +68,7 @@ struct HardsetApp: App {
 
   var body: some Scene {
     WindowGroup {
-      RootView(syncDelegate: syncDelegate, restTimer: restTimer)
+      RootView(syncDelegate: syncDelegate, restTimer: restTimer, systemRequests: systemRequests)
     }
   }
 }
@@ -70,6 +76,7 @@ struct HardsetApp: App {
 private struct RootView: View {
   let syncDelegate: HardsetSyncDelegate
   let restTimer: RestTimerController
+  let systemRequests: SystemRequestInbox
 
   /// Retained for the process lifetime, and that is load-bearing rather than tidy.
   ///
@@ -90,6 +97,7 @@ private struct RootView: View {
       unit: nil,
       hooks: RestTimerHooks(
         state: { restTimer.state },
+        metadata: { restTimer.metadata },
         start: { duration, metadata in
           restTimer.start(duration: duration, metadata: metadata)
         },
@@ -106,7 +114,8 @@ private struct RootView: View {
         }
       ),
       // Device-local and keyed by exercise. Without it every choice was forgotten on relaunch.
-      restPreferences: UserDefaultsRestPreferences()
+      restPreferences: UserDefaultsRestPreferences(),
+      systemRequests: systemRequests
     )
     .task {
       // Launch first: a force-quit relaunches the app idle while its alarm still counts down.

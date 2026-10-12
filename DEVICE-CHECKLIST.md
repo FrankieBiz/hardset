@@ -137,6 +137,24 @@ merge semantics. Use the iPhone plus a simulator signed into the same iCloud acc
 - [ ] Paid Applications Agreement signed; Small Business Program enrolment done; EU DSA trader
       details submitted and verified.
 
+## E. System surfaces — Siri, Spotlight, the Action button, Control Center, widgets
+
+- [ ] **Siri, cold.** Force-quit Hardset. "Hey Siri, start a workout in Hardset": the app opens on
+      Train with an empty workout. Say it again: the same workout is shown, not a second one.
+- [ ] **Siri mid-workout, from another tab.** With a workout open, go to History and say it: the
+      app switches to Train and shows that workout, with every logged set still there.
+- [ ] **Siri, with a workout open that cannot be read.** (Debug throw in `resume`.) "Start a
+      workout in Hardset": "Workout unavailable" shows; no new workout is started.
+- [ ] **Siri on a fresh install.** The first-run screen shows first. Tap Start: the workout starts.
+- [ ] **A rest by voice.** "Start a rest in Hardset": Siri asks how long. "Two minutes": a 2:00
+      rest starts and shows on the Lock Screen titled "Rest". "Ten seconds": Siri says "A rest can
+      be from 0:15 to 30:00." and nothing starts.
+- [ ] **A rest by voice, app never opened since install.** Note whether the alarm permission
+      prompt can appear, and what Siri says. The rest must not be silently alarm-less with no word.
+- [ ] **Skip by voice.** With a rest running, "Skip my rest in Hardset" ends it. With none, Siri
+      says "No rest is running."
+- [ ] **Action button.** Assign Start workout; press it: as the first check.
+
 ---
 
 **Rule for reporting.** An unchecked box is not "probably fine." If a box cannot be tested — no
