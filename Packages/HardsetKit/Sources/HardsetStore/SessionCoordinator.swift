@@ -1,5 +1,6 @@
 import Foundation
 import HardsetCore
+import Observation
 import SQLiteData
 
 /// Drives one live workout: holds the exercise states, persists sets, and asks for rest.

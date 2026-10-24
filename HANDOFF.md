@@ -237,3 +237,41 @@ that. And when you finish something, say plainly what you verified and what you 
    the EU trader-status paperwork, which has a real queue.
 3. **The founding-price structure** — $3.99 grandfathered with a $8.99 standing price, versus flat
    $3.99. Cannot be changed after the first sale.
+
+---
+
+## 12. Autonomous Multi-Model Orchestration Mandate
+
+To preserve architectural velocity and calibration honesty, this workspace adheres to the **Apex Orca Multi-Model Orchestration Framework** (`docs/ORCA_ORCHESTRATION.md`).
+
+### 12.1 Response Format Requirement
+- **Always State Models Used First**: The very first block of every single response to the user must explicitly list which models were called and their roles:
+  ```markdown
+  ### Models Used:
+  - **OpenAI GPT-6.1** (`gpt-6.1-sol` via Codex): Core engine & Store engineering...
+  - **Anthropic Claude** (`claude-sonnet-5.5`): Frontend SwiftUI ergonomics...
+  - **DeepSeek** (`deepseek-v4.1-flash`): Taxonomy extraction & fuzzing...
+  - **Antigravity** (`coordinator`): System integration & release verification...
+  ```
+
+### 12.2 Mandated Frontier Model Tiers (Strict Prohibition on Older Tiers)
+- **STRICTLY FORBIDDEN**: Never orchestrate with older or lower-tier models (no Claude 3.5, no Claude 3.7, no GPT-4o, no legacy tiers).
+- **OpenAI / Codex Tier**: Use ONLY `gpt-6` or `gpt-6.1` (specifically `gpt-6.1-sol`, `gpt-6-astra`, high effort).
+- **Anthropic / Claude Tier**: Use ONLY the highest frontier tier available (specifically Claude Sonnet 5.5 / Opus 5.5 with high reasoning).
+- **DeepSeek Tier**: Use `deepseek-v4.1-flash` (or DeepSeek V3/R1 flash via `DEEPSEEK_API_KEY`) for rapid extraction, taxonomy parsing, and fuzzing.
+
+### 12.3 Functional Division of Labor
+- **OpenAI GPT-6.1 (`gpt-6.1-sol`)**: Foundation-only `HardsetCore` engine, timeline math, fractional volume calculations, GRDB schema rules (`DECISIONS.md` §4), SQLiteData sync engine retention, and Swift 6 strict concurrency (`NonisolatedNonsendingByDefault`). Guided by `CODEX.md`.
+- **Anthropic Claude (`claude-sonnet-5.5` / high reasoning)**: SwiftUI design tokens (`DesignTokens.swift`), CertaintyBadge calibrated honesty UI, custom numeric pad ergonomics, set row interactions, and session recovery UX. Guided by `CLAUDE.md`.
+- **DeepSeek (`deepseek-v4.1-flash`)**: Hypertrophy muscle taxonomy verification (`docs/MuscleTaxonomy-spec.md`), 50-movement seed catalogue audits, and boundary fuzzing. Guided by `DEEPSEEK.md`.
+- **Antigravity (Coordinator)**: Orca orchestration supervisor, task DAG management, running `make check` (`hardset-check all`), and Git finish protocol executor.
+
+### 12.4 Autonomous Execution & Finish Protocol
+- **Strict No Diagrams Rule**: Never generate Mermaid diagrams or ASCII/plaintext diagram boxes. All concepts, workflows, and architectures must be presented in markdown lists, tables, or clean prose.
+- **Mandatory Git Finish Protocol**:
+  - Author/Committer must strictly be `FrankieBiz <frankabisignano@gmail.com>`.
+  - Zero AI names (Claude, ChatGPT, Gemini, Anthropic, OpenAI) and zero `Co-Authored-By` lines.
+  - Push directly to production main:
+    ```bash
+    agent-finish "<imperative commit message>"
+    ```
