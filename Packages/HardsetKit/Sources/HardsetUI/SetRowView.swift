@@ -153,6 +153,11 @@ public struct SetRowView: View {
     suffix: String
   ) -> some View {
     Button {
+      if field == .weight && !weightBuffer.isEmpty {
+        weightBuffer.replaceOnFirstEntry = true
+      } else if field == .reps && !repsBuffer.isEmpty {
+        repsBuffer.replaceOnFirstEntry = true
+      }
       editing = field
     } label: {
       HStack(alignment: .firstTextBaseline, spacing: Tokens.Spacing.tight) {
@@ -193,7 +198,7 @@ public struct SetRowView: View {
         .contentShape(Rectangle())
     }
     .buttonStyle(.plain)
-    .foregroundStyle(isLogged ? Tokens.Color.certainty(.high) : Tokens.Color.accent)
+    .foregroundStyle(isLogged ? Tokens.Color.success : Tokens.Color.accent)
     // The same predicate the store enforces. There is no second definition of "complete".
     .disabled(!draft.isLoggable)
     .opacity(draft.isLoggable || isLogged ? 1 : 0.35)
@@ -207,13 +212,20 @@ public struct SetRowView: View {
       ? Binding(get: { weightBuffer }, set: { weightBuffer = $0; pushToDraft() })
       : Binding(get: { repsBuffer }, set: { repsBuffer = $0; pushToDraft() })
 
-    return NumericPad(buffer: binding) { editing = nil }
-      .presentationDetents([.height(360)])
-      // The row stays visible and tappable behind the pad, so this reads as a keyboard
-      // replacement rather than a modal that interrupts the set.
-      #if os(iOS)
-        .presentationBackgroundInteraction(.enabled(upThrough: .height(360)))
-      #endif
+    return NumericPad(
+      buffer: binding,
+      onDone: { editing = nil },
+      onNext: field == .weight ? {
+        if !repsBuffer.isEmpty { repsBuffer.replaceOnFirstEntry = true }
+        editing = .reps
+      } : nil
+    )
+    .presentationDetents([.height(370)])
+    // The row stays visible and tappable behind the pad, so this reads as a keyboard
+    // replacement rather than a modal that interrupts the set.
+    #if os(iOS)
+      .presentationBackgroundInteraction(.enabled(upThrough: .height(370)))
+    #endif
   }
 
   // MARK: - Wiring

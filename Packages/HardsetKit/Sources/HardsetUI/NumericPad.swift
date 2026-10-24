@@ -13,10 +13,20 @@ import SwiftUI
 public struct NumericPad: View {
   @Binding private var buffer: NumericEntryBuffer
   private let onDone: (() -> Void)?
+  private let onNext: (() -> Void)?
 
-  public init(buffer: Binding<NumericEntryBuffer>, onDone: (() -> Void)? = nil) {
+  public init(
+    buffer: Binding<NumericEntryBuffer>,
+    onDone: (() -> Void)? = nil,
+    onNext: (() -> Void)? = nil
+  ) {
     self._buffer = buffer
     self.onDone = onDone
+    self.onNext = onNext
+  }
+
+  private var quickAdjusters: [Double] {
+    buffer.allowsDecimal ? [-5.0, -2.5, 2.5, 5.0] : [-1.0, 1.0, 2.0]
   }
 
   private var keys: [[Key]] {
@@ -32,6 +42,8 @@ public struct NumericPad: View {
 
   public var body: some View {
     VStack(spacing: Tokens.Spacing.snug) {
+      adjustersRow
+
       ForEach(Array(keys.enumerated()), id: \.offset) { _, row in
         HStack(spacing: Tokens.Spacing.snug) {
           ForEach(row) { key in
@@ -39,20 +51,83 @@ public struct NumericPad: View {
           }
         }
       }
-      if let onDone {
-        Button(action: onDone) {
-          Text("Done")
-            .font(Tokens.Text.label.weight(.semibold))
-            .frame(maxWidth: .infinity, minHeight: Tokens.loggerTapTarget)
-        }
-        .buttonStyle(.plain)
-        .background(Tokens.Color.accent.opacity(0.15), in: RoundedRectangle(cornerRadius: Tokens.Radius.control))
-      }
+      footerActions
     }
     .padding(Tokens.Spacing.regular)
     // Opaque, not glass. Glass cannot sample glass, and a translucent keypad over a dense set
     // grid is unreadable in a bright gym besides.
     .background(Tokens.Color.surface)
+  }
+
+  private var adjustersRow: some View {
+    HStack(spacing: Tokens.Spacing.snug) {
+      ForEach(quickAdjusters, id: \.self) { delta in
+        Button {
+          buffer.adjust(by: delta)
+        } label: {
+          Text(delta > 0 ? "+\(formatDelta(delta))" : formatDelta(delta))
+            .font(Tokens.Text.caption.weight(.medium))
+            .foregroundStyle(Tokens.Color.textPrimary)
+            .frame(maxWidth: .infinity, minHeight: 36)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .background(
+          Tokens.Color.background,
+          in: RoundedRectangle(cornerRadius: Tokens.Radius.control)
+        )
+      }
+    }
+  }
+
+  private func formatDelta(_ delta: Double) -> String {
+    delta == delta.rounded() ? String(Int(delta)) : String(format: "%.1f", delta)
+  }
+
+  @ViewBuilder
+  private var footerActions: some View {
+    if onNext != nil && onDone != nil {
+      HStack(spacing: Tokens.Spacing.snug) {
+        if let onDone {
+          Button(action: onDone) {
+            Text("Done")
+              .font(Tokens.Text.label.weight(.semibold))
+              .frame(maxWidth: .infinity, minHeight: Tokens.loggerTapTarget)
+          }
+          .buttonStyle(.plain)
+          .background(
+            Tokens.Color.background,
+            in: RoundedRectangle(cornerRadius: Tokens.Radius.control)
+          )
+        }
+        if let onNext {
+          Button(action: onNext) {
+            HStack(spacing: Tokens.Spacing.tight) {
+              Text("Next")
+              Image(systemName: "chevron.right")
+            }
+            .font(Tokens.Text.label.weight(.semibold))
+            .frame(maxWidth: .infinity, minHeight: Tokens.loggerTapTarget)
+          }
+          .buttonStyle(.plain)
+          .background(
+            Tokens.Color.accent.opacity(0.15),
+            in: RoundedRectangle(cornerRadius: Tokens.Radius.control)
+          )
+        }
+      }
+    } else if let onDone {
+      Button(action: onDone) {
+        Text("Done")
+          .font(Tokens.Text.label.weight(.semibold))
+          .frame(maxWidth: .infinity, minHeight: Tokens.loggerTapTarget)
+      }
+      .buttonStyle(.plain)
+      .background(
+        Tokens.Color.accent.opacity(0.15),
+        in: RoundedRectangle(cornerRadius: Tokens.Radius.control)
+      )
+    }
   }
 
   private func keyButton(_ key: Key) -> some View {

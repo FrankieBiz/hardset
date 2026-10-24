@@ -8,17 +8,21 @@ public struct SetSlot: Hashable, Sendable, Identifiable {
   /// Non-nil once the set has been persisted. The row shows a filled check and stops being
   /// re-loggable; it is not removed, because the user still wants to see what they did.
   public var loggedSetID: SetID?
+  /// The equipment on which this set was completed, preventing cross-machine load bleeding.
+  public var loggedMachineID: MachineID?
 
   public init(
     id: UUID = UUID(),
     draft: SetEntryDraft,
     isWarmup: Bool = false,
-    loggedSetID: SetID? = nil
+    loggedSetID: SetID? = nil,
+    loggedMachineID: MachineID? = nil
   ) {
     self.id = id
     self.draft = draft
     self.isWarmup = isWarmup
     self.loggedSetID = loggedSetID
+    self.loggedMachineID = loggedMachineID
   }
 
   public var isLogged: Bool { loggedSetID != nil }
@@ -131,12 +135,20 @@ public struct ExerciseLogState: Hashable, Sendable, Identifiable {
     public let weightKg: Double
     public let reps: Int
     public let isWarmup: Bool
+    public let machineID: MachineID?
 
-    public init(setID: SetID, weightKg: Double, reps: Int, isWarmup: Bool) {
+    public init(
+      setID: SetID,
+      weightKg: Double,
+      reps: Int,
+      isWarmup: Bool,
+      machineID: MachineID? = nil
+    ) {
       self.setID = setID
       self.weightKg = weightKg
       self.reps = reps
       self.isWarmup = isWarmup
+      self.machineID = machineID
     }
   }
 
@@ -177,7 +189,8 @@ public struct ExerciseLogState: Hashable, Sendable, Identifiable {
       SetSlot(
         draft: SetEntryDraft(weightKg: logged.weightKg, reps: logged.reps),
         isWarmup: logged.isWarmup,
-        loggedSetID: logged.setID
+        loggedSetID: logged.setID,
+        loggedMachineID: logged.machineID ?? machineID
       )
     }
 
@@ -228,9 +241,9 @@ public struct ExerciseLogState: Hashable, Sendable, Identifiable {
   /// last week: after logging 100 × 8, the next row opens at 100 × 8. Only when nothing has
   /// been logged yet does this fall back to history.
   public mutating func appendSlot(isWarmup: Bool = false) {
-    let index = slots.count
+    let workingIndex = slots.count { !$0.isWarmup }
     let suggestion: PriorSetRecord? =
-      lastLoggedRecord() ?? prior?.suggestion(forSetIndex: index)
+      lastLoggedRecord() ?? prior?.suggestion(forSetIndex: isWarmup ? slots.count : workingIndex)
     slots.append(SetSlot(draft: SetEntryDraft(suggestion: suggestion), isWarmup: isWarmup))
   }
 
@@ -268,12 +281,14 @@ public struct ExerciseLogState: Hashable, Sendable, Identifiable {
   public mutating func markLogged(slotID: UUID, setID: SetID) {
     guard let index = slots.firstIndex(where: { $0.id == slotID }) else { return }
     slots[index].loggedSetID = setID
+    slots[index].loggedMachineID = self.machineID
   }
 
-  /// The most recent values actually written in this session, used to seed the next row.
+  /// The most recent values actually written on this machine in this session, used to seed the next row.
   /// Warm-ups are skipped: a warm-up load must not become a working-set suggestion.
   private func lastLoggedRecord() -> PriorSetRecord? {
     for slot in slots.reversed() where slot.isLogged && !slot.isWarmup {
+      guard slot.loggedMachineID == self.machineID else { continue }
       if let resolved = slot.draft.resolved() {
         return PriorSetRecord(
           weightKg: resolved.weightKg,

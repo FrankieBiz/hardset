@@ -30,6 +30,11 @@ public enum Tokens {
     public static let textPrimary = SwiftUI.Color.primary
     public static let textSecondary = SwiftUI.Color.secondary
 
+    public static let success = SwiftUI.Color.green
+    public static let warning = SwiftUI.Color.orange
+    public static let error = SwiftUI.Color.red
+    public static let pr = SwiftUI.Color.yellow
+
     /// Certainty is communicated with colour *and* text, never colour alone -- a
     /// colour-only signal is inaccessible and, for a claim about someone's training, unclear.
     public static func certainty(_ level: CertaintyLevel) -> SwiftUI.Color {

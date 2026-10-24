@@ -173,26 +173,32 @@ public enum ProgressionAnalyzer {
     )
   }
 
-  /// Points where the machine changed between consecutive sessions, in chronological order.
+  /// Points where the machine changed between consecutive sessions or stints, in chronological order.
   ///
   /// Computed across the whole exercise rather than within a series, because a machine change is
   /// by definition a move between series and would be invisible inside either one.
   public static func machineChanges(from samples: [ProgressionSample]) -> [MachineChange] {
-    // One entry per session: which machine, and the heaviest load on it.
-    var perSession: [SessionID: (date: Date, machineID: MachineID?, heaviest: Double)] = [:]
+    struct SessionMachineKey: Hashable {
+      let sessionID: SessionID
+      let machineID: MachineID?
+    }
+
+    // One entry per session-machine pair: which machine, and the heaviest load on that specific machine.
+    var perSessionMachine: [SessionMachineKey: (date: Date, machineID: MachineID?, heaviest: Double)] = [:]
     for sample in samples {
-      if let existing = perSession[sample.sessionID] {
-        perSession[sample.sessionID] = (
+      let key = SessionMachineKey(sessionID: sample.sessionID, machineID: sample.machineID)
+      if let existing = perSessionMachine[key] {
+        perSessionMachine[key] = (
           min(existing.date, sample.completedAt),
-          existing.machineID,
+          sample.machineID,
           max(existing.heaviest, sample.weightKg)
         )
       } else {
-        perSession[sample.sessionID] = (sample.completedAt, sample.machineID, sample.weightKg)
+        perSessionMachine[key] = (sample.completedAt, sample.machineID, sample.weightKg)
       }
     }
 
-    let ordered = perSession.values.sorted { $0.date < $1.date }
+    let ordered = perSessionMachine.values.sorted { $0.date < $1.date }
     guard ordered.count > 1 else { return [] }
 
     var changes: [MachineChange] = []

@@ -172,6 +172,31 @@ struct ProgressionTests {
     #expect(change.heaviestLoadDeltaKg == 40)
   }
 
+  @Test("Machine switch within the same session reports load delta correctly")
+  func intraSessionMachineSwitch() throws {
+    let session = SessionID()
+    let sample1 = ProgressionSample(
+      sessionID: session,
+      machineID: hammer,
+      weightKg: 100,
+      reps: 8,
+      completedAt: day(0)
+    )
+    let sample2 = ProgressionSample(
+      sessionID: session,
+      machineID: cybex,
+      weightKg: 75,
+      reps: 10,
+      completedAt: day(0).addingTimeInterval(300)
+    )
+    let changes = ProgressionAnalyzer.machineChanges(from: [sample1, sample2])
+    #expect(changes.count == 1)
+    let change = try #require(changes.first)
+    #expect(change.fromMachineID == hammer)
+    #expect(change.toMachineID == cybex)
+    #expect(change.heaviestLoadDeltaKg == -25)
+  }
+
   @Test("The disclosure states the estimate's limit and the machine caveat")
   func disclosureIsHonest() {
     let range = ProgressionAnalyzer.source.validRange ?? ""

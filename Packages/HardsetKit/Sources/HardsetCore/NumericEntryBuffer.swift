@@ -17,17 +17,21 @@ public struct NumericEntryBuffer: Hashable, Sendable {
   public let allowsDecimal: Bool
   public let maximumIntegerDigits: Int
   public let maximumFractionDigits: Int
+  /// When true, entering the first digit or separator replaces the existing seeded text.
+  public var replaceOnFirstEntry: Bool
 
   public init(
     text: String = "",
     allowsDecimal: Bool = true,
     maximumIntegerDigits: Int = 4,
-    maximumFractionDigits: Int = 2
+    maximumFractionDigits: Int = 2,
+    replaceOnFirstEntry: Bool = false
   ) {
     self.text = text
     self.allowsDecimal = allowsDecimal
     self.maximumIntegerDigits = maximumIntegerDigits
     self.maximumFractionDigits = maximumFractionDigits
+    self.replaceOnFirstEntry = replaceOnFirstEntry
   }
 
   /// Seeds the buffer from a prefill value.
@@ -39,7 +43,8 @@ public struct NumericEntryBuffer: Hashable, Sendable {
     value: Double?,
     allowsDecimal: Bool = true,
     maximumIntegerDigits: Int = 4,
-    maximumFractionDigits: Int = 2
+    maximumFractionDigits: Int = 2,
+    replaceOnFirstEntry: Bool = false
   ) {
     let seed: String
     switch value {
@@ -57,7 +62,8 @@ public struct NumericEntryBuffer: Hashable, Sendable {
       text: seed,
       allowsDecimal: allowsDecimal,
       maximumIntegerDigits: maximumIntegerDigits,
-      maximumFractionDigits: maximumFractionDigits
+      maximumFractionDigits: maximumFractionDigits,
+      replaceOnFirstEntry: replaceOnFirstEntry
     )
   }
 
@@ -90,6 +96,10 @@ public struct NumericEntryBuffer: Hashable, Sendable {
 
   public mutating func append(digit: Int) {
     guard (0...9).contains(digit) else { return }
+    if replaceOnFirstEntry {
+      replaceOnFirstEntry = false
+      text = ""
+    }
     // A single leading zero is meaningful ("0.5"); a second one is not.
     if text == "0" { text = String(digit); return }
 
@@ -103,15 +113,33 @@ public struct NumericEntryBuffer: Hashable, Sendable {
   }
 
   public mutating func appendDecimalSeparator() {
-    guard allowsDecimal, !text.contains(".") else { return }
+    guard allowsDecimal else { return }
+    if replaceOnFirstEntry {
+      replaceOnFirstEntry = false
+      text = ""
+    }
+    guard !text.contains(".") else { return }
     // Leading "." is ambiguous to read on a dense row; make it explicit.
     text = text.isEmpty ? "0." : text + "."
   }
 
   public mutating func deleteBackward() {
+    replaceOnFirstEntry = false
     guard !text.isEmpty else { return }
     text.removeLast()
   }
 
-  public mutating func clear() { text = "" }
+  public mutating func clear() {
+    replaceOnFirstEntry = false
+    text = ""
+  }
+
+  /// Adjusts the value by a signed delta (e.g. +2.5, -2.5 kg or +1, -1 rep), clamping to a minimum of 0.
+  public mutating func adjust(by delta: Double) {
+    replaceOnFirstEntry = false
+    let current = value ?? 0
+    let updated = max(0, current + delta)
+    let fraction = allowsDecimal ? maximumFractionDigits : 0
+    text = Self.seedText(updated, fractionDigits: fraction)
+  }
 }

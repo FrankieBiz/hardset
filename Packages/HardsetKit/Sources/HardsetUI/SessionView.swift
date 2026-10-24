@@ -67,7 +67,7 @@ public struct SessionView: View {
           // so the user can retry rather than discovering the gap days later.
           Label(errorMessage, systemImage: "exclamationmark.triangle.fill")
             .font(Tokens.Text.label)
-            .foregroundStyle(Tokens.Color.certainty(.low))
+            .foregroundStyle(Tokens.Color.error)
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(Tokens.Spacing.regular)
             .background(Tokens.Color.surface, in: RoundedRectangle(cornerRadius: Tokens.Radius.card))
@@ -89,7 +89,7 @@ public struct SessionView: View {
               } icon: {
                 Image(systemName: "trophy")
               }
-              .foregroundStyle(Tokens.Color.certainty(.high))
+              .foregroundStyle(Tokens.Color.pr)
             }
           }
           .frame(maxWidth: .infinity, alignment: .leading)

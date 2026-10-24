@@ -80,9 +80,10 @@ public nonisolated struct ProgressionStore {
       try LoggedSet
         .where { $0.exerciseID.eq(exerciseID.rawValue) }
         .where { !$0.isWarmup }
-        .order { $0.completedAt }
+        .order { $0.completedAt.desc() }
         .limit(limit)
         .fetchAll(db)
+        .reversed()
         .map {
           ProgressionSample(
             sessionID: SessionID(rawValue: $0.sessionID),

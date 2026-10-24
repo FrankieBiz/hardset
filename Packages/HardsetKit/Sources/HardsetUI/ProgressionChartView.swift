@@ -95,12 +95,33 @@ public struct ProgressionChartView: View {
   }
 
   private var picker: some View {
-    Picker("Metric", selection: $metric) {
-      ForEach(ProgressionMetric.allCases, id: \.self) { option in
-        Text(option.label).tag(option)
+    VStack(alignment: .leading, spacing: Tokens.Spacing.tight) {
+      Picker("Metric", selection: $metric) {
+        ForEach(ProgressionMetric.allCases, id: \.self) { option in
+          Text(option.label).tag(option)
+        }
+      }
+      .pickerStyle(.segmented)
+
+      HStack(spacing: Tokens.Spacing.tight) {
+        Text("Measurement certainty:")
+          .font(Tokens.Text.caption)
+          .foregroundStyle(Tokens.Color.textSecondary)
+        if metric == .estimatedOneRepMax {
+          CertaintyBadge(
+            level: .moderate,
+            methodology: ProgressionAnalyzer.source.methodology,
+            citation: ProgressionAnalyzer.source.validRange
+          )
+        } else {
+          CertaintyBadge(
+            level: .high,
+            methodology: "Verified empirical load logged in active sessions on this specific machine.",
+            citation: "Exact weight recorded by user"
+          )
+        }
       }
     }
-    .pickerStyle(.segmented)
   }
 
   private var chart: some View {

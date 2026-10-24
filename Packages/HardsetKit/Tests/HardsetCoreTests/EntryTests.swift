@@ -103,6 +103,47 @@ struct NumericEntryBufferTests {
     buffer.clear()
     #expect(buffer.value == nil)
   }
+
+  @Test("replaceOnFirstEntry replaces prefill on first keystroke")
+  func replaceOnFirstEntryReplacesPrefill() {
+    var buffer = NumericEntryBuffer(value: 60, replaceOnFirstEntry: true)
+    #expect(buffer.displayText == "60")
+    buffer.append(digit: 8)
+    #expect(buffer.displayText == "8")
+    #expect(!buffer.replaceOnFirstEntry)
+    buffer.append(digit: 5)
+    #expect(buffer.displayText == "85")
+  }
+
+  @Test("adjust increments and decrements value cleanly")
+  func adjustIncrementsAndDecrements() {
+    var buffer = NumericEntryBuffer(value: 60)
+    buffer.adjust(by: 2.5)
+    #expect(buffer.displayText == "62.5")
+    #expect(buffer.value == 62.5)
+    buffer.adjust(by: -5.0)
+    #expect(buffer.displayText == "57.5")
+    #expect(buffer.value == 57.5)
+    buffer.adjust(by: -100.0)
+    #expect(buffer.displayText == "0")
+    #expect(buffer.value == 0)
+  }
+
+  @Test("Infinite or NaN weight is not loggable")
+  func nonFiniteWeightRejected() {
+    let infiniteDraft = SetEntryDraft(weightKg: .infinity, reps: 10)
+    #expect(!infiniteDraft.isLoggable)
+    #expect(infiniteDraft.resolved() == nil)
+
+    let nanDraft = SetEntryDraft(weightKg: .nan, reps: 10)
+    #expect(!nanDraft.isLoggable)
+    #expect(nanDraft.resolved() == nil)
+
+    let validDraft = SetEntryDraft(weightKg: 100, reps: 10)
+    #expect(validDraft.isLoggable)
+    #expect(validDraft.resolved()?.weightKg == 100)
+    #expect(validDraft.resolved()?.reps == 10)
+  }
 }
 
 @Suite("Kilograms are canonical and conversion round-trips")

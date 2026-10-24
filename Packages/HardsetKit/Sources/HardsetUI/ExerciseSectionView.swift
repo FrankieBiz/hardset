@@ -98,11 +98,11 @@ public struct ExerciseSectionView: View {
         machineChip(action: onSelectMachine)
       }
       if let note = state.priorNote {
-        // Stated as a caveat about where the numbers came from, in words, once.
-        Label(note, systemImage: "arrow.triangle.branch")
-          .font(Tokens.Text.caption)
-          .foregroundStyle(Tokens.Color.certainty(.low))
-          .accessibilityLabel("Suggested loads came from another machine.")
+        CertaintyBadge(
+          level: .low,
+          methodology: "Suggested loads are borrowed from another machine (\(note)). Movement mechanics and leverage differ between equipment.",
+          citation: "Epistemic honesty: equipment cannot be merged"
+        )
       }
     }
     .padding(.horizontal, Tokens.Spacing.regular)

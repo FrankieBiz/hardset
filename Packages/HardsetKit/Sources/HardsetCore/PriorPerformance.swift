@@ -105,9 +105,9 @@ public struct SetEntryDraft: Hashable, Sendable {
   public var isLoggable: Bool { resolved() != nil }
 
   /// The values to persist, or `nil` if this row is not complete.
-  /// Zero reps is not a logged set, and negative load is not a load.
+  /// Zero reps is not a logged set, negative load is not a load, and non-finite weights are rejected.
   public func resolved() -> (weightKg: Double, reps: Int)? {
-    guard let weightKg, let reps, reps > 0, weightKg >= 0 else { return nil }
+    guard let weightKg, let reps, reps > 0, weightKg.isFinite, weightKg >= 0 else { return nil }
     return (weightKg, reps)
   }
 }

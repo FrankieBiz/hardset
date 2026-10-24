@@ -178,6 +178,50 @@ struct ExerciseLogStateTests {
     #expect(state.slots[1].draft.weightKg == 100)
   }
 
+  @Test("Machine switch does not leak previous machine load when appending slot")
+  func machineSwitchDoesNotLeakLoad() {
+    let machineA = MachineID()
+    let machineB = MachineID()
+    let keyA = ProgressionKey(exerciseID: exercise, machineID: machineA)
+    let keyB = ProgressionKey(exerciseID: exercise, machineID: machineB)
+    let priorB = PriorPerformance(
+      key: keyB,
+      lastSets: [PriorSetRecord(weightKg: 30, reps: 10, completedAt: now)],
+      heaviestSet: nil
+    )
+    let snap = PriorPerformanceSnapshot(
+      entries: [
+        keyA: PriorPerformance(key: keyA, lastSets: [PriorSetRecord(weightKg: 100, reps: 8, completedAt: now)], heaviestSet: nil),
+        keyB: priorB
+      ],
+      capturedAt: now
+    )
+
+    var state = ExerciseLogState.build(
+      exerciseID: exercise,
+      machineID: machineA,
+      exerciseName: "Chest Press",
+      snapshot: snap
+    )
+    state.slots[0].draft.weightKg = 100
+    state.slots[0].draft.reps = 8
+    state.markLogged(slotID: state.slots[0].id, setID: SetID())
+
+    // Switch to machine B
+    state.changeMachine(
+      to: machineB,
+      machineName: "Dumbbells",
+      machineIncrementKg: 2.0,
+      prior: priorB
+    )
+
+    // Appending a slot on machine B must use machine B's prior (30 kg), not machine A's 100 kg.
+    state.appendSlot()
+    #expect(state.slots.count == 2)
+    #expect(state.slots[1].draft.weightKg == 30)
+    #expect(state.slots[1].draft.reps == 10)
+  }
+
   @Test("An empty state holds no database handle and stays a value")
   func isAValue() {
     let a = ExerciseLogState.build(
