@@ -38,6 +38,7 @@ LEDGER_FILE = QA_DIR / "token_ledger.json"
 DEFAULT_CODEX_MODEL = "gpt-6.1-sol"
 DEFAULT_CLAUDE_MODEL = "sonnet"  # Aliases to claude-sonnet-5.5
 DEFAULT_DEEPSEEK_MODEL = "deepseek-chat"  # Maps to latest deepseek-flash
+DEFAULT_OPENCODE_MODEL = "deepseek/deepseek-flash"
 
 # Prohibited Legacy Tiers (Strict Rule Enforcer)
 PROHIBITED_MODELS = {
@@ -105,6 +106,15 @@ def ensure_dirs() -> None:
                     "cost_usd": 0.0,
                 },
                 "deepseek": {
+                    "runs": 0,
+                    "input_tokens": 0,
+                    "cached_tokens": 0,
+                    "output_tokens": 0,
+                    "reasoning_tokens": 0,
+                    "total_tokens": 0,
+                    "cost_usd": 0.0,
+                },
+                "opencode": {
                     "runs": 0,
                     "input_tokens": 0,
                     "cached_tokens": 0,
@@ -566,7 +576,176 @@ def dispatch_deepseek(
 
 
 # -----------------------------------------------------------------------------
-# 4. Orchestration Diagnostic Probe
+# 4. OpenCode Worker Dispatcher (deepseek/deepseek-flash)
+# -----------------------------------------------------------------------------
+def dispatch_opencode(
+    task: str,
+    files: list[str] | None = None,
+    model: str = DEFAULT_OPENCODE_MODEL,
+    verify: bool = False,
+    timeout_s: int = 600,
+) -> TaskResult:
+    """Dispatch a task to OpenCode (deepseek/deepseek-flash)."""
+    validate_frontier_model(model)
+    run_id = f"opencode_{int(time.time())}"
+    start_time = time.time()
+
+    opencode_bin = shutil.which("opencode") or str(
+        Path.home() / ".opencode" / "bin" / "opencode"
+    )
+    if not Path(opencode_bin).exists():
+        raise FileNotFoundError(f"OpenCode executable not found at '{opencode_bin}'")
+
+    file_context = ""
+    if files:
+        file_context = "\nTarget Files:\n" + "\n".join(f"- {f}" for f in files) + "\n"
+
+    full_prompt = (
+        "You are the Hardset OpenCode Worker.\n"
+        "Strictly NO diagrams (no Mermaid, no ASCII box art). Adhere to Swift 6 strict concurrency, nonisolated HardsetCore, permanent schema rules, zero database work per render.\n"
+        "Zero AI attribution. Attributed strictly to FrankieBiz <frankabisignano@gmail.com>.\n"
+        f"{file_context}\n"
+        f"TASK:\n{task}"
+    )
+
+    before_files = set(get_git_modified_files())
+
+    cmd = [
+        opencode_bin,
+        "run",
+        "--auto",
+        "--format",
+        "json",
+        "-m",
+        model,
+        full_prompt,
+    ]
+
+    tokens = TokenUsage()
+    output_lines: list[str] = []
+    text_parts: list[str] = []
+    success = False
+    exit_code = 1
+
+    try:
+        proc = subprocess.Popen(
+            cmd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            cwd=str(REPO_ROOT),
+        )
+        assert proc.stdout is not None
+        for line in proc.stdout:
+            line_str = line.strip()
+            if not line_str:
+                continue
+            output_lines.append(line_str)
+            try:
+                event = json.loads(line_str)
+                event_type = event.get("type")
+                if event_type == "text":
+                    part = event.get("part", {})
+                    if "text" in part:
+                        text_parts.append(part["text"])
+                elif event_type == "step_finish":
+                    part = event.get("part", {})
+                    tokens.cost_usd = float(part.get("cost", 0.0))
+                    tok = part.get("tokens", {})
+                    tokens.input_tokens = tok.get("input", 0)
+                    tokens.output_tokens = tok.get("output", 0)
+                    tokens.reasoning_tokens = tok.get("reasoning", 0)
+                    tokens.cached_tokens = tok.get("cache", {}).get("read", 0)
+                    tokens.total_tokens = tokens.input_tokens + tokens.output_tokens
+            except json.JSONDecodeError:
+                pass
+
+        proc.wait(timeout=timeout_s)
+        exit_code = proc.returncode
+        success = exit_code == 0
+    except (subprocess.SubprocessError, OSError) as e:
+        text_parts.append(f"Execution failed: {e}")
+
+    duration = round(time.time() - start_time, 2)
+    after_files = set(get_git_modified_files())
+    changed = sorted(after_files - before_files)
+
+    ver_passed = None
+    ver_out = None
+    if verify and success:
+        ver_passed, ver_out = run_verification()
+
+    res = TaskResult(
+        run_id=run_id,
+        agent="opencode",
+        model=model,
+        task=task,
+        success=success,
+        exit_code=exit_code,
+        duration_s=duration,
+        output="".join(text_parts) or "\n".join(output_lines[-10:]),
+        tokens=tokens,
+        files_changed=changed,
+        verification_passed=ver_passed,
+        verification_output=ver_out,
+    )
+    update_ledger(res)
+    return res
+
+
+# -----------------------------------------------------------------------------
+# 5. Child Worktree Spawning & Supervision Functions
+# -----------------------------------------------------------------------------
+def spawn_child_worktree(
+    agent: str,
+    name: str,
+    prompt: str,
+    model: str | None = None,
+    effort: str | None = None,
+) -> dict[str, Any]:
+    """Spawn a supervised child worktree via Orca CLI."""
+    orca_script = REPO_ROOT / "scripts" / "orca-child.sh"
+    cmd = [str(orca_script), "spawn", agent, name, prompt]
+    if model:
+        cmd.append(model)
+    if effort:
+        cmd.append(effort)
+
+    proc = subprocess.run(cmd, capture_output=True, text=True, check=False)
+    if proc.returncode != 0:
+        raise RuntimeError(f"Failed to spawn child worktree: {proc.stderr or proc.stdout}")
+    stdout = proc.stdout
+    idx = stdout.find("{")
+    if idx != -1:
+        return json.loads(stdout[idx:])
+    return {"raw_output": stdout}
+
+
+def list_child_worktrees() -> list[dict[str, Any]]:
+    """List child worktrees of the active parent workspace."""
+    orca_script = REPO_ROOT / "scripts" / "orca-child.sh"
+    proc = subprocess.run([str(orca_script), "list"], capture_output=True, text=True, check=False)
+    if proc.returncode != 0:
+        raise RuntimeError(f"Failed to list child worktrees: {proc.stderr or proc.stdout}")
+    stdout = proc.stdout
+    idx = stdout.find("[")
+    if idx != -1:
+        return json.loads(stdout[idx:])
+    return []
+
+
+def merge_child_worktree(name: str, verify: bool = True) -> bool:
+    """Merge child worktree non-destructively and run make check."""
+    orca_script = REPO_ROOT / "scripts" / "orca-child.sh"
+    cmd = [str(orca_script), "merge", name]
+    if not verify:
+        cmd.append("--no-verify")
+    proc = subprocess.run(cmd, check=False)
+    return proc.returncode == 0
+
+
+# -----------------------------------------------------------------------------
+# 6. Orchestration Diagnostic Probe
 # -----------------------------------------------------------------------------
 def run_probe() -> dict[str, Any]:
     """Test access, versions, and latency to all mandated models and Orca."""
@@ -577,7 +756,7 @@ def run_probe() -> dict[str, Any]:
     print("================================================================")
 
     # 1. Probe Codex (gpt-6.1-sol)
-    print("\n[1/4] Probing OpenAI / Codex (gpt-6.1-sol)...")
+    print("\n[1/5] Probing OpenAI / Codex (gpt-6.1-sol)...")
     try:
         t0 = time.time()
         codex_res = dispatch_codex(
@@ -604,7 +783,7 @@ def run_probe() -> dict[str, Any]:
         print(f"  ✗ Codex Failed: {e}")
 
     # 2. Probe Claude (claude-sonnet-5.5)
-    print("\n[2/4] Probing Anthropic / Claude (claude-sonnet-5.5)...")
+    print("\n[2/5] Probing Anthropic / Claude (claude-sonnet-5.5)...")
     try:
         t0 = time.time()
         claude_res = dispatch_claude(
@@ -630,8 +809,8 @@ def run_probe() -> dict[str, Any]:
         probe_results["claude"] = {"status": "FAIL", "error": str(e)}
         print(f"  ✗ Claude Failed: {e}")
 
-    # 3. Probe DeepSeek (deepseek-v4.1-flash)
-    print("\n[3/4] Probing DeepSeek (deepseek-v4.1-flash)...")
+    # 3. Probe DeepSeek (deepseek-v4.1-flash API)
+    print("\n[3/5] Probing DeepSeek (deepseek-v4.1-flash API)...")
     try:
         t0 = time.time()
         deepseek_res = dispatch_deepseek(
@@ -655,8 +834,35 @@ def run_probe() -> dict[str, Any]:
         probe_results["deepseek"] = {"status": "FAIL", "error": str(e)}
         print(f"  ✗ DeepSeek Failed: {e}")
 
-    # 4. Probe Orca Orchestration Runtime
-    print("\n[4/4] Probing Orca Orchestration Runtime...")
+    # 4. Probe OpenCode (deepseek/deepseek-flash)
+    print("\n[4/5] Probing OpenCode (deepseek/deepseek-flash)...")
+    try:
+        t0 = time.time()
+        opencode_res = dispatch_opencode(
+            task="Respond with exact text: OpenCode connection OK",
+            model="deepseek/deepseek-flash",
+            timeout_s=30,
+        )
+        latency = round(time.time() - t0, 2)
+        probe_results["opencode"] = {
+            "status": "PASS" if opencode_res.success else "FAIL",
+            "model": opencode_res.model,
+            "latency_s": latency,
+            "tokens": asdict(opencode_res.tokens),
+            "cost_usd": opencode_res.tokens.cost_usd,
+            "output_preview": opencode_res.output[:120].strip(),
+        }
+        print(
+            f"  ✓ OpenCode Online: model={opencode_res.model}, "
+            f"latency={latency}s, tokens={opencode_res.tokens.total_tokens}, "
+            f"cost=${opencode_res.tokens.cost_usd:.4f}"
+        )
+    except (subprocess.SubprocessError, OSError, ValueError) as e:
+        probe_results["opencode"] = {"status": "FAIL", "error": str(e)}
+        print(f"  ✗ OpenCode Failed: {e}")
+
+    # 5. Probe Orca Orchestration Runtime
+    print("\n[5/5] Probing Orca Orchestration Runtime...")
     try:
         proc = subprocess.run(
             ["orca", "--version"],
@@ -779,6 +985,61 @@ def main() -> None:
         "--json", action="store_true", help="Require structured JSON output"
     )
 
+    # OpenCode dispatch
+    opencode_p = subparsers.add_parser(
+        "opencode",
+        help="Dispatch task to OpenCode (deepseek/deepseek-flash)",
+    )
+    opencode_p.add_argument("--task", "-t", required=True, help="Task description")
+    opencode_p.add_argument(
+        "--files", "-f", nargs="*", default=None, help="Target files"
+    )
+    opencode_p.add_argument(
+        "--model", "-m", default=DEFAULT_OPENCODE_MODEL, help="Model override"
+    )
+    opencode_p.add_argument(
+        "--verify", "-v", action="store_true", help="Run make check after task"
+    )
+
+    # Child worktree spawn
+    child_spawn_p = subparsers.add_parser(
+        "child-spawn",
+        help="Spawn a child worktree for claude, opencode, or codex",
+    )
+    child_spawn_p.add_argument(
+        "--agent", "-a", required=True, choices=["claude", "opencode", "codex"], help="Agent type"
+    )
+    child_spawn_p.add_argument(
+        "--name", "-n", required=True, help="Worktree and branch name descriptor"
+    )
+    child_spawn_p.add_argument(
+        "--prompt", "-p", required=True, help="Task specification contract"
+    )
+    child_spawn_p.add_argument(
+        "--model", "-m", default=None, help="Optional frontier model override"
+    )
+    child_spawn_p.add_argument(
+        "--effort", "-e", default=None, help="Optional reasoning effort (high | xhigh)"
+    )
+
+    # Child worktree list
+    subparsers.add_parser(
+        "child-list",
+        help="List child worktrees of active workspace",
+    )
+
+    # Child worktree merge
+    child_merge_p = subparsers.add_parser(
+        "child-merge",
+        help="Merge child worktree non-destructively and run make check",
+    )
+    child_merge_p.add_argument(
+        "--name", "-n", required=True, help="Child worktree name or branch"
+    )
+    child_merge_p.add_argument(
+        "--no-verify", action="store_true", help="Skip make check verification"
+    )
+
     args = parser.parse_args()
 
     if args.command == "probe":
@@ -833,6 +1094,40 @@ def main() -> None:
             f"Time: {res.duration_s}s"
         )
         print("\nOutput:\n", res.output)
+    elif args.command == "opencode":
+        res = dispatch_opencode(
+            task=args.task,
+            files=args.files,
+            model=args.model,
+            verify=args.verify,
+        )
+        print(f"\n[OpenCode Result] Run: {res.run_id} | Success: {res.success}")
+        print(
+            f"Model: {res.model} | Tokens: {res.tokens.total_tokens:,} | "
+            f"Cost: ${res.tokens.cost_usd:.4f} | Time: {res.duration_s}s"
+        )
+        if res.files_changed:
+            print(f"Files Modified: {', '.join(res.files_changed)}")
+        if res.verification_passed is not None:
+            ver_text = "PASSED" if res.verification_passed else "FAILED"
+            print(f"make check: {ver_text}")
+        print("\nWorker Output:\n", res.output)
+    elif args.command == "child-spawn":
+        out = spawn_child_worktree(
+            agent=args.agent,
+            name=args.name,
+            prompt=args.prompt,
+            model=args.model,
+            effort=args.effort,
+        )
+        print(json.dumps(out, indent=2))
+    elif args.command == "child-list":
+        children = list_child_worktrees()
+        print(json.dumps(children, indent=2))
+    elif args.command == "child-merge":
+        success = merge_child_worktree(name=args.name, verify=not args.no_verify)
+        if not success:
+            sys.exit(1)
 
 
 if __name__ == "__main__":

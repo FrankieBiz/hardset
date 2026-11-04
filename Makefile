@@ -29,5 +29,8 @@ orchestrate-probe: ## Test connectivity and latencies of all mandated frontier m
 orchestrate-stats: ## Display multi-model token ledger, dispatches, and cost accounting
 	$(PY) scripts/orchestrate.py stats
 
+orchestrate-children: ## List active child worktrees for the current workspace
+	./scripts/orca-child.sh list
+
 help: ## List available targets
 	@awk 'BEGIN { FS = ":.*## " } /^[a-zA-Z_-]+:.*## / { printf "  make %-18s %s\n", $$1, $$2 }' $(MAKEFILE_LIST)

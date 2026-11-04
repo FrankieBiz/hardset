@@ -14,8 +14,8 @@ Older-generation models (e.g. Claude 3.5, Claude 3.7, GPT-4o, legacy tiers) are 
 | :--- | :--- | :--- | :--- |
 | **OpenAI / Codex** | Worker: `codex`<br>Model: `gpt-6.1-sol` or `gpt-6-astra`<br>Effort: `high` / `xhigh` | **Core Engine, GRDB Storage, & Swift 6 Strict Concurrency**<br>Flawless algorithmic reasoning, Swift 6 strict concurrency (`NonisolatedNonsendingByDefault`), nonisolated Foundation-only `HardsetCore`, permanent schema rules (`DECISIONS.md` §4), SQLiteData sync engine preservation, and zero database work per render. Guided by `CODEX.md`. | - Foundation-only `HardsetCore` engine & timeline logic<br>- GRDB schema migrations & permanent SQLite rules<br>- `PriorPerformanceSnapshot` build-once performance contracts<br>- Swift 6 concurrency verification & `hardset-check store` |
 | **Anthropic / Claude** | Worker: `claude`<br>Model: `claude-sonnet-5.5` / `claude-opus-5-5`<br>Effort: `high` | **SwiftUI Ergonomics, UI Tokens & Calibrated Honesty**<br>Deliberate aesthetic restraint, typography hierarchy (`Tokens.Typography`), monochrome signals, CertaintyBadge design, keypad interaction ergonomics, and session log craft. Guided by `CLAUDE.md`. | - `HardsetUI` design tokens & dark slate components<br>- `CertaintyBadge` honest reporting without invention<br>- Custom numeric keypad & dynamic set row interactions<br>- Session history, progression charts, & volume reports |
-| **DeepSeek** | Worker: `deepseek`<br>Model: `deepseek-v4.1-flash` (or API flash endpoint)<br>Speed: Sub-second | **Taxonomy Parsing, Seed Audits & Boundary Fuzzing**<br>Extreme speed and low latency for repetitive, high-volume structured parsing, exercise catalogue auditing, and edge-case fuzz testing. Guided by `DEEPSEEK.md`. | - Muscle taxonomy parsing against `docs/MuscleTaxonomy-spec.md`<br>- 50-movement seed catalogue verification & attribution<br>- Fractional volume attribution matrices & boundary fuzzing<br>- Multi-machine load conflict edge cases |
-| **Antigravity** | Role: `orchestrator`<br>Authority: Master Conductor | **Master Conductor, System Integrator & Release Authority**<br>Coordinates multi-model workers, defines task contracts, resolves integration conflicts, executes tests (`make check` / `hardset-check all`), and drives git finish protocol. | - Task decomposition & specification<br>- Multi-model worker dispatch & telemetry tracking<br>- Test suite execution (`make check`) & project generator (`make project`)<br>- Production release push via `agent-finish` |
+| **DeepSeek (OpenCode / API)** | Worker: `opencode` / `deepseek`<br>Model: `deepseek/deepseek-flash`<br>Speed: Sub-second | **Taxonomy Parsing, Seed Audits & Boundary Fuzzing**<br>High-throughput execution for structured hypertrophy taxonomy parsing, seed catalogue auditing, volume math verification, and boundary fuzzing. Guided by `docs/MuscleTaxonomy-spec.md`. | - Muscle taxonomy parsing against `docs/MuscleTaxonomy-spec.md`<br>- 50-movement seed catalogue verification & attribution<br>- Fractional volume attribution matrices & boundary fuzzing<br>- Multi-machine load conflict edge cases |
+| **Antigravity** | Role: `orchestrator`<br>Authority: Master Conductor | **Master Conductor, System Integrator & Release Authority**<br>Coordinates multi-model workers, spins up child worktrees for Claude Code and OpenCode, defines task contracts, resolves integration conflicts, executes tests (`make check` / `hardset-check all`), and drives git finish protocol. | - Task decomposition & contract specification<br>- Child worktree creation (`scripts/orca-child.sh`)<br>- Multi-model worker dispatch & telemetry tracking<br>- Test suite execution (`make check`) & project generator (`make project`)<br>- Production release push via `agent-finish` |
 
 ---
 
@@ -57,6 +57,58 @@ python3 scripts/orchestrate.py extract \
   --prompt "Verify the fractional muscle volume attribution matrix for unilateral split squats" \
   --json
 ```
+
+#### 4. OpenCode Dispatch (OpenCode `deepseek/deepseek-flash`)
+```bash
+python3 scripts/orchestrate.py opencode \
+  --task "Audit exercise catalog seed definitions against muscle taxonomy spec" \
+  --files docs/MuscleTaxonomy-spec.md Packages/HardsetKit/Sources/HardsetStore/CatalogSeeder.swift \
+  --verify
+```
+Dispatches task execution to OpenCode CLI runtime with automated streaming NDJSON parsing, cost tracking, and optional `--verify` test gate.
+
+### Child Worktree Spawning for Claude Code & OpenCode
+
+Antigravity spins up isolated child worktrees for worker agents using the dedicated child helper `scripts/orca-child.sh` or `scripts/orchestrate.py`:
+
+#### 1. Spawn a Claude Code Child Worktree
+```bash
+./scripts/orca-child.sh spawn claude ui-certainty-badge "Refine CertaintyBadge typography tokens and high-density set row spacing"
+```
+Or via Python:
+```bash
+python3 scripts/orchestrate.py child-spawn --agent claude --name ui-certainty-badge --prompt "Refine CertaintyBadge tokens"
+```
+Creates a child worktree under the current parent workspace, sets up the Claude session, and binds the child git branch.
+
+#### 2. Spawn an OpenCode Child Worktree
+```bash
+./scripts/orca-child.sh spawn opencode taxonomy-fuzz "Verify fractional volume attribution matrix for unilateral split squats"
+```
+Or via Python:
+```bash
+python3 scripts/orchestrate.py child-spawn --agent opencode --name taxonomy-fuzz --prompt "Verify taxonomy matrix"
+```
+Creates a child worktree under the current parent workspace, sets up OpenCode with `deepseek/deepseek-flash`, and binds the child git branch.
+
+#### 3. List Active Child Worktrees
+```bash
+./scripts/orca-child.sh list
+# Or:
+make orchestrate-children
+```
+
+#### 4. Inspect Child Progress
+```bash
+./scripts/orca-child.sh inspect <worktree-selector>
+```
+Displays git status, recent commits, and diffs from the child worktree without touching working state.
+
+#### 5. Non-Destructive Child Integration & Test Gate
+```bash
+./scripts/orca-child.sh merge <worktree-selector>
+```
+Ensures child working copy is clean, merges the child branch non-destructively, and runs `make check`. If any tests fail, the merge is rolled back immediately.
 
 ### Telemetry & Token Ledger
 Every worker dispatch is recorded in `.qa/orchestration/token_ledger.json` and saved as an individual receipt in `.qa/orchestration/runs/`:
