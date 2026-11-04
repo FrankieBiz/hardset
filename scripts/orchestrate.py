@@ -38,7 +38,7 @@ LEDGER_FILE = QA_DIR / "token_ledger.json"
 DEFAULT_CODEX_MODEL = "gpt-6.1-sol"
 DEFAULT_CLAUDE_MODEL = "sonnet"  # Aliases to claude-sonnet-5.5
 DEFAULT_DEEPSEEK_MODEL = "deepseek-chat"  # Maps to latest deepseek-flash
-DEFAULT_OPENCODE_MODEL = "deepseek/deepseek-flash"
+DEFAULT_OPENCODE_MODEL = "opencode/deepseek-v4.1-flash-free"
 
 # Prohibited Legacy Tiers (Strict Rule Enforcer)
 PROHIBITED_MODELS = {
@@ -585,7 +585,10 @@ def dispatch_opencode(
     verify: bool = False,
     timeout_s: int = 600,
 ) -> TaskResult:
-    """Dispatch a task to OpenCode (deepseek/deepseek-flash)."""
+    """Dispatch a task to OpenCode (deepseek-v4.1-flash)."""
+    # Normalize model aliases
+    if model in ("deepseek-4.1-flash", "deepseek-v4.1-flash", "deepseek-flash", "flash", "opencode"):
+        model = "opencode/deepseek-v4.1-flash-free"
     validate_frontier_model(model)
     run_id = f"opencode_{int(time.time())}"
     start_time = time.time()
@@ -834,13 +837,13 @@ def run_probe() -> dict[str, Any]:
         probe_results["deepseek"] = {"status": "FAIL", "error": str(e)}
         print(f"  ✗ DeepSeek Failed: {e}")
 
-    # 4. Probe OpenCode (deepseek/deepseek-flash)
-    print("\n[4/5] Probing OpenCode (deepseek/deepseek-flash)...")
+    # 4. Probe OpenCode (opencode/deepseek-v4.1-flash-free)
+    print("\n[4/5] Probing OpenCode (deepseek-v4.1-flash)...")
     try:
         t0 = time.time()
         opencode_res = dispatch_opencode(
             task="Respond with exact text: OpenCode connection OK",
-            model="deepseek/deepseek-flash",
+            model="opencode/deepseek-v4.1-flash-free",
             timeout_s=30,
         )
         latency = round(time.time() - t0, 2)

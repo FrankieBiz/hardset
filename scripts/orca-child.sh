@@ -73,6 +73,31 @@ validate_frontier_model() {
     esac
 }
 
+resolve_selector() {
+    local raw="$1"
+    if [[ "$raw" == *":"* ]]; then
+        echo "$raw"
+        return
+    fi
+    if [ -d "$raw" ]; then
+        echo "path:$(cd "$raw" && pwd)"
+        return
+    fi
+    local by_name
+    by_name=$("$ORCA_BIN" worktree show --worktree "name:$raw" --json 2>/dev/null | jq -r '.result.worktree.id // empty' || true)
+    if [ -n "$by_name" ]; then
+        echo "name:$raw"
+        return
+    fi
+    local by_branch
+    by_branch=$("$ORCA_BIN" worktree show --worktree "branch:$raw" --json 2>/dev/null | jq -r '.result.worktree.id // empty' || true)
+    if [ -n "$by_branch" ]; then
+        echo "branch:$raw"
+        return
+    fi
+    echo "name:$raw"
+}
+
 # -----------------------------------------------------------------------------
 # 4. Commands
 # -----------------------------------------------------------------------------
@@ -100,7 +125,11 @@ cmd_spawn() {
             effort="${effort:-high}"
             ;;
         opencode)
-            model="${model:-deepseek/deepseek-flash}"
+            case "${model:-}" in
+                ""|deepseek-4.1-flash|deepseek-v4.1-flash|deepseek-flash|opencode)
+                    model="opencode/deepseek-v4.1-flash-free"
+                    ;;
+            esac
             effort=""
             ;;
         codex)
@@ -175,8 +204,10 @@ cmd_inspect() {
         exit 1
     fi
 
+    local sel
+    sel=$(resolve_selector "$target")
     local wt_info
-    wt_info=$("$ORCA_BIN" worktree show --worktree "$target" --json 2>/dev/null || true)
+    wt_info=$("$ORCA_BIN" worktree show --worktree "$sel" --json 2>/dev/null || true)
     local target_path
     target_path=$(echo "$wt_info" | jq -r '.result.worktree.path // empty')
 
@@ -184,7 +215,7 @@ cmd_inspect() {
         if [ -d "$target" ]; then
             target_path="$target"
         else
-            echo "ERROR: Could not locate worktree for selector '$target'" >&2
+            echo "ERROR: Could not locate worktree for selector '$target' (resolved: '$sel')" >&2
             exit 1
         fi
     fi
@@ -209,8 +240,10 @@ cmd_merge() {
 
     verify_repo
 
+    local sel
+    sel=$(resolve_selector "$target")
     local wt_info
-    wt_info=$("$ORCA_BIN" worktree show --worktree "$target" --json 2>/dev/null || true)
+    wt_info=$("$ORCA_BIN" worktree show --worktree "$sel" --json 2>/dev/null || true)
     local child_branch
     child_branch=$(echo "$wt_info" | jq -r '.result.worktree.branch // empty')
     local child_path
@@ -260,8 +293,10 @@ cmd_cleanup() {
         echo "Usage: $0 cleanup <worktree-selector>" >&2
         exit 1
     fi
-    echo "[orca-child] Removing child worktree '$target'..."
-    "$ORCA_BIN" worktree rm --worktree "$target" --delete-branch --json
+    local sel
+    sel=$(resolve_selector "$target")
+    echo "[orca-child] Removing child worktree '$sel'..."
+    "$ORCA_BIN" worktree rm --worktree "$sel" --delete-branch --force --json
 }
 
 # -----------------------------------------------------------------------------

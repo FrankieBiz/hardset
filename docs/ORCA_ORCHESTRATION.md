@@ -14,7 +14,7 @@ Older-generation models (e.g. Claude 3.5, Claude 3.7, GPT-4o, legacy tiers) are 
 | :--- | :--- | :--- | :--- |
 | **OpenAI / Codex** | Worker: `codex`<br>Model: `gpt-6.1-sol` or `gpt-6-astra`<br>Effort: `high` / `xhigh` | **Core Engine, GRDB Storage, & Swift 6 Strict Concurrency**<br>Flawless algorithmic reasoning, Swift 6 strict concurrency (`NonisolatedNonsendingByDefault`), nonisolated Foundation-only `HardsetCore`, permanent schema rules (`DECISIONS.md` §4), SQLiteData sync engine preservation, and zero database work per render. Guided by `CODEX.md`. | - Foundation-only `HardsetCore` engine & timeline logic<br>- GRDB schema migrations & permanent SQLite rules<br>- `PriorPerformanceSnapshot` build-once performance contracts<br>- Swift 6 concurrency verification & `hardset-check store` |
 | **Anthropic / Claude** | Worker: `claude`<br>Model: `claude-sonnet-5.5` / `claude-opus-5-5`<br>Effort: `high` | **SwiftUI Ergonomics, UI Tokens & Calibrated Honesty**<br>Deliberate aesthetic restraint, typography hierarchy (`Tokens.Typography`), monochrome signals, CertaintyBadge design, keypad interaction ergonomics, and session log craft. Guided by `CLAUDE.md`. | - `HardsetUI` design tokens & dark slate components<br>- `CertaintyBadge` honest reporting without invention<br>- Custom numeric keypad & dynamic set row interactions<br>- Session history, progression charts, & volume reports |
-| **DeepSeek (OpenCode / API)** | Worker: `opencode` / `deepseek`<br>Model: `deepseek/deepseek-flash`<br>Speed: Sub-second | **Taxonomy Parsing, Seed Audits & Boundary Fuzzing**<br>High-throughput execution for structured hypertrophy taxonomy parsing, seed catalogue auditing, volume math verification, and boundary fuzzing. Guided by `docs/MuscleTaxonomy-spec.md`. | - Muscle taxonomy parsing against `docs/MuscleTaxonomy-spec.md`<br>- 50-movement seed catalogue verification & attribution<br>- Fractional volume attribution matrices & boundary fuzzing<br>- Multi-machine load conflict edge cases |
+| **DeepSeek (OpenCode / API)** | Worker: `opencode` / `deepseek`<br>Model: `opencode/deepseek-v4.1-flash-free`<br>Speed: Sub-second | **Taxonomy Parsing, Seed Audits & Boundary Fuzzing**<br>High-throughput execution for structured hypertrophy taxonomy parsing, seed catalogue auditing, volume math verification, and boundary fuzzing. Guided by `docs/MuscleTaxonomy-spec.md`. | - Muscle taxonomy parsing against `docs/MuscleTaxonomy-spec.md`<br>- 50-movement seed catalogue verification & attribution<br>- Fractional volume attribution matrices & boundary fuzzing<br>- Multi-machine load conflict edge cases |
 | **Antigravity** | Role: `orchestrator`<br>Authority: Master Conductor | **Master Conductor, System Integrator & Release Authority**<br>Coordinates multi-model workers, spins up child worktrees for Claude Code and OpenCode, defines task contracts, resolves integration conflicts, executes tests (`make check` / `hardset-check all`), and drives git finish protocol. | - Task decomposition & contract specification<br>- Child worktree creation (`scripts/orca-child.sh`)<br>- Multi-model worker dispatch & telemetry tracking<br>- Test suite execution (`make check`) & project generator (`make project`)<br>- Production release push via `agent-finish` |
 
 ---
@@ -58,14 +58,14 @@ python3 scripts/orchestrate.py extract \
   --json
 ```
 
-#### 4. OpenCode Dispatch (OpenCode `deepseek/deepseek-flash`)
+#### 4. OpenCode Dispatch (OpenCode `deepseek-v4.1-flash`)
 ```bash
 python3 scripts/orchestrate.py opencode \
   --task "Audit exercise catalog seed definitions against muscle taxonomy spec" \
   --files docs/MuscleTaxonomy-spec.md Packages/HardsetKit/Sources/HardsetStore/CatalogSeeder.swift \
   --verify
 ```
-Dispatches task execution to OpenCode CLI runtime with automated streaming NDJSON parsing, cost tracking, and optional `--verify` test gate.
+Dispatches task execution to OpenCode CLI runtime targeting `opencode/deepseek-v4.1-flash-free` with automated streaming NDJSON parsing, cost tracking, and optional `--verify` test gate.
 
 ### Child Worktree Spawning for Claude Code & OpenCode
 
@@ -81,7 +81,7 @@ python3 scripts/orchestrate.py child-spawn --agent claude --name ui-certainty-ba
 ```
 Creates a child worktree under the current parent workspace, sets up the Claude session, and binds the child git branch.
 
-#### 2. Spawn an OpenCode Child Worktree
+#### 2. Spawn an OpenCode Child Worktree (DeepSeek 4.1 Flash)
 ```bash
 ./scripts/orca-child.sh spawn opencode taxonomy-fuzz "Verify fractional volume attribution matrix for unilateral split squats"
 ```
@@ -89,7 +89,7 @@ Or via Python:
 ```bash
 python3 scripts/orchestrate.py child-spawn --agent opencode --name taxonomy-fuzz --prompt "Verify taxonomy matrix"
 ```
-Creates a child worktree under the current parent workspace, sets up OpenCode with `deepseek/deepseek-flash`, and binds the child git branch.
+Creates a child worktree under the current parent workspace, sets up OpenCode with `opencode/deepseek-v4.1-flash-free`, and binds the child git branch.
 
 #### 3. List Active Child Worktrees
 ```bash
