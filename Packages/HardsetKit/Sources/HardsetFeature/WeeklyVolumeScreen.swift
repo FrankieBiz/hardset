@@ -34,11 +34,17 @@ public struct WeeklyVolumeScreen: View {
       } else if loadFailed {
         // Says what is wrong and what is not. Logged sets are safe either way, and saying so is
         // the difference between an error and a scare.
-        ContentUnavailableView {
-          Label("Could not read this week", systemImage: "exclamationmark.triangle")
-        } description: {
-          Text("Your logged sets are safe. Pull down to try again.")
+        VStack {
+          Spacer()
+          HardsetEmptyState(
+            title: "Could not read this week",
+            detail: "Your logged sets are safe. Pull down to try again.",
+            systemImage: "exclamationmark.triangle"
+          )
+          Spacer()
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Tokens.Color.background)
       } else {
         ProgressView()
           .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -51,6 +57,7 @@ public struct WeeklyVolumeScreen: View {
       // Generated from the same value the counting uses, so the disclosure cannot drift from the
       // arithmetic.
       MethodologySheet(source: SetCounting.source, certainty: .moderate)
+        .hardsetSheet()
     }
   }
 

@@ -123,13 +123,28 @@ public struct LiveSessionScreen: View {
     )
     .sheet(isPresented: $isPickerPresented) {
       NavigationStack {
-        ExercisePickerView(query: $pickerQuery, entries: pickerEntries) { entry in
+        ExercisePickerView(
+          query: $pickerQuery,
+          entries: pickerEntries
+        ) { entry in
           coordinator.addExercise(entry)
           isPickerPresented = false
           pickerQuery = ""
         }
         .navigationTitle("Add movement")
+        #if os(iOS)
+          .navigationBarTitleDisplayMode(.inline)
+        #endif
+        .toolbar {
+          ToolbarItem(placement: .cancellationAction) {
+            Button("Done") {
+              isPickerPresented = false
+              pickerQuery = ""
+            }
+          }
+        }
       }
+      .hardsetSheet()
       // Searching hits the database, so it happens here rather than inside the picker, which
       // stays free of storage. The query is re-run on change instead of filtering in memory so a
       // user-created movement shows up without reopening the sheet.
@@ -142,6 +157,7 @@ public struct LiveSessionScreen: View {
           recent: machineOptions.recent,
           others: machineOptions.others,
           selected: coordinator.exercises.first { $0.id == target }?.machineID,
+          unit: unit,
           onSelect: { machineID in
             selectMachine(machineID, forExercise: target)
             machineTarget = nil
@@ -149,6 +165,9 @@ public struct LiveSessionScreen: View {
           onAddMachine: { isAddingMachine = true }
         )
         .navigationTitle("Machine")
+        #if os(iOS)
+          .navigationBarTitleDisplayMode(.inline)
+        #endif
         .toolbar {
           ToolbarItem(placement: .cancellationAction) {
             Button("Cancel") { machineTarget = nil }
@@ -168,8 +187,10 @@ public struct LiveSessionScreen: View {
             },
             onCancel: { isAddingMachine = false }
           )
+          .hardsetSheet()
         }
       }
+      .hardsetSheet()
       // Reloaded per presentation: what the lifter used most recently changes as they log.
       .task(id: wrapped) { refreshMachines(forExercise: target) }
     }
@@ -189,6 +210,7 @@ public struct LiveSessionScreen: View {
             }
           }
         }
+        .hardsetSheet()
       }
     }
   }

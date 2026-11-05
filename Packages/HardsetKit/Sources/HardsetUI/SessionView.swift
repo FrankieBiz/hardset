@@ -133,11 +133,13 @@ public struct SessionView: View {
         // An empty workout says so, and says what to do about it, rather than rendering a bare
         // "Finish" button under nothing.
         if exercises.isEmpty {
-          ContentUnavailableView {
-            Label("Nothing added yet", systemImage: "dumbbell")
-          } description: {
-            Text("Add a movement to start logging sets.")
-          }
+          HardsetEmptyState(
+            title: "Nothing added yet",
+            detail: "Add a movement to start logging sets.",
+            systemImage: "dumbbell",
+            actionTitle: onAddExercise == nil ? nil : "Add movement",
+            action: onAddExercise
+          )
         }
 
         summary

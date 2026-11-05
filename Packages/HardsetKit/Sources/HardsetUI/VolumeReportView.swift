@@ -32,11 +32,11 @@ public struct VolumeReportView: View {
       VStack(alignment: .leading, spacing: Tokens.Spacing.section) {
         header
         if report.hardSets == 0 {
-          ContentUnavailableView {
-            Label("Nothing logged this week", systemImage: "chart.bar")
-          } description: {
-            Text("Sets per muscle appear here once you log a workout.")
-          }
+          HardsetEmptyState(
+            title: "Nothing logged this week",
+            detail: "Sets per muscle appear here once you log a workout.",
+            systemImage: "chart.bar"
+          )
         } else {
           trainedSection
           gapsSection

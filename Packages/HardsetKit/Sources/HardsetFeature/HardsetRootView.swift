@@ -115,6 +115,7 @@ public struct HardsetRootView: View {
             }
             .sheet(isPresented: $isShowingSettings) {
               SettingsSheet(useImperial: $useImperial) { isShowingSettings = false }
+                .hardsetSheet()
             }
         }
       }
@@ -169,21 +170,24 @@ public struct HardsetRootView: View {
 
   private var startView: some View {
     VStack(spacing: Tokens.Spacing.loose) {
-      ContentUnavailableView {
-        Label("No workout in progress", systemImage: "figure.strengthtraining.traditional")
-      } description: {
-        Text("Start an empty workout and add movements as you go.")
-      }
+      Spacer()
+
+      HardsetEmptyState(
+        title: "No workout in progress",
+        detail: "Start an empty workout and add movements as you go.",
+        systemImage: "figure.strengthtraining.traditional"
+      )
+
       gymRow
 
       Button(action: startEmptyWorkout) {
         Text("Start workout")
-          .font(Tokens.Text.label.weight(.semibold))
+          .font(Tokens.Text.labelEmphasis)
+          .foregroundStyle(Tokens.Color.background)
           .frame(maxWidth: .infinity, minHeight: Tokens.loggerTapTarget)
+          .background(Tokens.Color.accent, in: RoundedRectangle(cornerRadius: Tokens.Radius.control))
       }
       .buttonStyle(.plain)
-      .foregroundStyle(Tokens.Color.accent)
-      .background(Tokens.Color.surface, in: RoundedRectangle(cornerRadius: Tokens.Radius.control))
       .padding(.horizontal, Tokens.Spacing.section)
 
       if startFailed {
@@ -191,10 +195,12 @@ public struct HardsetRootView: View {
           .font(Tokens.Text.caption)
           .foregroundStyle(Tokens.Color.certainty(.low))
       }
+
+      Spacer()
     }
     .frame(maxWidth: .infinity, maxHeight: .infinity)
     .background(Tokens.Color.background)
-    .sheet(isPresented: $isChoosingGym) { gymSheet }
+    .sheet(isPresented: $isChoosingGym) { gymSheet.hardsetSheet() }
   }
 
   /// Sets where this workout is, which is what makes per-machine tracking reachable at all: a
@@ -208,10 +214,13 @@ public struct HardsetRootView: View {
     } label: {
       HStack(spacing: Tokens.Spacing.snug) {
         Image(systemName: "mappin.and.ellipse")
+          .font(.system(size: 14, weight: .semibold))
+          .foregroundStyle(Tokens.Color.accent)
         Text(selectedGymName ?? "Add a gym to track machines")
         Spacer(minLength: 0)
         Image(systemName: "chevron.right")
           .font(Tokens.Text.caption)
+          .foregroundStyle(Tokens.Color.textSecondary)
       }
       .font(Tokens.Text.caption)
       .foregroundStyle(
@@ -220,6 +229,7 @@ public struct HardsetRootView: View {
       .frame(minHeight: Tokens.minimumTapTarget)
       .padding(.horizontal, Tokens.Spacing.regular)
       .contentShape(Rectangle())
+      .hardsetCard(cornerRadius: Tokens.Radius.control)
     }
     .buttonStyle(.plain)
     .padding(.horizontal, Tokens.Spacing.section)
@@ -231,61 +241,20 @@ public struct HardsetRootView: View {
 
   private var gymSheet: some View {
     NavigationStack {
-      List {
-        Section {
-          ForEach(gymOptions) { gym in
-            Button {
-              selectedGym = gym.id
-              isChoosingGym = false
-            } label: {
-              HStack {
-                Text(gym.name).foregroundStyle(Tokens.Color.textPrimary)
-                Spacer()
-                if selectedGym == gym.id {
-                  Image(systemName: "checkmark").foregroundStyle(Tokens.Color.accent)
-                }
-              }
-              .frame(minHeight: Tokens.minimumTapTarget)
-              .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-          }
-        } footer: {
-          if let gymError {
-            Text(gymError).foregroundStyle(Tokens.Color.certainty(.low))
-          } else {
-            Text("Loads are tracked per machine, and machines belong to a gym.")
-          }
-        }
-
-        Section {
-          Button {
-            // Not recorded stays available: someone training at home or travelling should not be
-            // made to invent a gym to log a set.
-            selectedGym = nil
-            isChoosingGym = false
-          } label: {
-            HStack {
-              Text("Not recorded").foregroundStyle(Tokens.Color.textSecondary)
-              Spacer()
-              if selectedGym == nil {
-                Image(systemName: "checkmark").foregroundStyle(Tokens.Color.accent)
-              }
-            }
-            .frame(minHeight: Tokens.minimumTapTarget)
-            .contentShape(Rectangle())
-          }
-          .buttonStyle(.plain)
-
-          Button { isAddingGym = true } label: {
-            Label("Add a gym", systemImage: "plus")
-              .frame(minHeight: Tokens.minimumTapTarget)
-          }
-          .buttonStyle(.plain)
-          .foregroundStyle(Tokens.Color.accent)
-        }
-      }
+      GymPickerView(
+        gyms: gymOptions.map { GymOption(id: $0.id, name: $0.name) },
+        selected: selectedGym,
+        errorMessage: gymError,
+        onSelect: { id in
+          selectedGym = id
+          isChoosingGym = false
+        },
+        onAddGym: { isAddingGym = true }
+      )
       .navigationTitle("Where are you training?")
+      #if os(iOS)
+        .navigationBarTitleDisplayMode(.inline)
+      #endif
       .toolbar {
         ToolbarItem(placement: .confirmationAction) {
           Button("Done") { isChoosingGym = false }
@@ -304,6 +273,7 @@ public struct HardsetRootView: View {
           },
           onCancel: { isAddingGym = false }
         )
+        .hardsetSheet()
       }
     }
   }

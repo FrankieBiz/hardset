@@ -4,53 +4,157 @@ import SwiftUI
 /// Picks a movement to add to the session.
 ///
 /// Search is handed in as a binding and filtering is the caller's job, because the caller is the
-/// one holding the database. This view sorts and groups what it is given, and reports a choice.
+/// one holding the database. This view sorts and groups what it is given, provides an intuitive
+/// anatomical region filter rail, and reports choices.
 ///
 /// Grouped by the muscle a movement primarily trains, because that is how a lifter looking at a
-/// plan thinks about a gap — "I have nothing for hamstrings" — rather than alphabetically, which
-/// only helps someone who already knows the exact name they want. The search field covers that
-/// case.
+/// plan thinks about a gap — "I have nothing for hamstrings" — rather than alphabetically.
 public struct ExercisePickerView: View {
   @Binding private var query: String
   private let entries: [CatalogEntry]
+  private let onCreate: ((String) -> Void)?
   private let onSelect: (CatalogEntry) -> Void
+
+  @State private var selectedCategory: MuscleFilterCategory?
 
   public init(
     query: Binding<String>,
     entries: [CatalogEntry],
+    onCreate: ((String) -> Void)? = nil,
     onSelect: @escaping (CatalogEntry) -> Void
   ) {
     self._query = query
     self.entries = entries
+    self.onCreate = onCreate
     self.onSelect = onSelect
   }
 
   public var body: some View {
-    List {
-      if entries.isEmpty {
-        // Names the query rather than showing a bare "No results", and offers the action that
-        // actually resolves it.
-        ContentUnavailableView {
-          Label("No movement found", systemImage: "magnifyingglass")
-        } description: {
-          Text(
-            query.isEmpty
-              ? "The catalogue is empty."
-              : "Nothing in the catalogue matches “\(query)”."
-          )
+    VStack(spacing: 0) {
+      // Top search & anatomical filter header
+      VStack(spacing: Tokens.Spacing.snug) {
+        HardsetSearchField(text: $query, prompt: "Search movements")
+          .padding(.horizontal, Tokens.Spacing.loose)
+          .padding(.top, Tokens.Spacing.tight)
+
+        filterChipsRail
+      }
+      .padding(.bottom, Tokens.Spacing.snug)
+      .background(Tokens.Color.background)
+
+      // Exercise List or Empty State
+      if displayedEntries.isEmpty {
+        ScrollView {
+          VStack {
+            Spacer(minLength: Tokens.Spacing.loose)
+
+            HardsetEmptyState(
+              title: "No movement found",
+              detail: emptyStateDetail,
+              systemImage: "magnifyingglass",
+              actionTitle: query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                ? nil
+                : "Add “\(query.trimmingCharacters(in: .whitespacesAndNewlines))” as movement",
+              action: {
+                let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
+                if !trimmed.isEmpty { onCreate?(trimmed) }
+              }
+            )
+
+            Spacer(minLength: Tokens.Spacing.loose)
+          }
+          .padding(.top, Tokens.Spacing.section)
         }
       } else {
-        ForEach(groups) { group in
-          Section(sectionTitle(group.key)) {
-            ForEach(group.entries) { entry in
-              row(entry)
+        ScrollView {
+          LazyVStack(alignment: .leading, spacing: Tokens.Spacing.loose, pinnedViews: [.sectionHeaders]) {
+            ForEach(groups) { group in
+              Section {
+                VStack(spacing: Tokens.Spacing.tight) {
+                  ForEach(group.entries) { entry in
+                    row(entry)
+                  }
+                }
+                .padding(.horizontal, Tokens.Spacing.loose)
+              } header: {
+                sectionHeader(group.key)
+              }
+            }
+          }
+          .padding(.top, Tokens.Spacing.snug)
+          .padding(.bottom, Tokens.Spacing.section)
+        }
+      }
+    }
+    .background(Tokens.Color.background)
+  }
+
+  // MARK: - Anatomical Filter Rail
+
+  private var filterChipsRail: some View {
+    ScrollView(.horizontal, showsIndicators: false) {
+      HStack(spacing: Tokens.Spacing.tight) {
+        chip(title: "All", isSelected: selectedCategory == nil) {
+          selectedCategory = nil
+        }
+
+        ForEach(MuscleFilterCategory.allCases, id: \.rawValue) { category in
+          chip(
+            title: Self.categoryTitle(for: category),
+            isSelected: selectedCategory == category
+          ) {
+            if selectedCategory == category {
+              selectedCategory = nil
+            } else {
+              selectedCategory = category
             }
           }
         }
       }
+      .padding(.horizontal, Tokens.Spacing.loose)
     }
-    .searchable(text: $query, prompt: "Search movements")
   }
+
+  private func chip(title: String, isSelected: Bool, action: @escaping () -> Void) -> some View {
+    Button(action: action) {
+      Text(title)
+        .font(Tokens.Text.caption.weight(isSelected ? .semibold : .medium))
+        .foregroundStyle(isSelected ? Tokens.Color.background : Tokens.Color.textPrimary)
+        .padding(.horizontal, Tokens.Spacing.regular)
+        .padding(.vertical, 6)
+        .background(
+          isSelected ? Tokens.Color.accent : Tokens.Color.surfaceRaised,
+          in: Capsule()
+        )
+        .overlay(
+          Capsule()
+            .strokeBorder(
+              isSelected ? Tokens.Color.accent : Tokens.Color.border,
+              lineWidth: Tokens.Stroke.hairline
+            )
+        )
+    }
+    .buttonStyle(.plain)
+    .accessibilityAddTraits(isSelected ? [.isSelected] : [])
+  }
+
+  // MARK: - Section Header
+
+  private func sectionHeader(_ key: MuscleKey) -> some View {
+    HStack {
+      Text(sectionTitle(key).uppercased())
+        .font(Tokens.Text.sectionHeader)
+        .foregroundStyle(Tokens.Color.textSecondary)
+        .tracking(0.5)
+
+      Spacer()
+    }
+    .padding(.horizontal, Tokens.Spacing.loose)
+    .padding(.vertical, Tokens.Spacing.tight)
+    .background(Tokens.Color.background.opacity(0.95))
+  }
+
+  // MARK: - Exercise Row
 
   private func row(_ entry: CatalogEntry) -> some View {
     Button {
@@ -59,10 +163,9 @@ public struct ExercisePickerView: View {
       HStack(spacing: Tokens.Spacing.regular) {
         VStack(alignment: .leading, spacing: Tokens.Spacing.hairline) {
           Text(entry.name)
-            .font(Tokens.Text.label)
+            .font(Tokens.Text.rowTitle.weight(.medium))
             .foregroundStyle(Tokens.Color.textPrimary)
-          // Credited muscles only. Grip and bracing are stabilisers and are deliberately not
-          // listed here: showing them as "also trains" is the claim the role split exists to stop.
+
           if !supportingText(for: entry).isEmpty {
             Text(supportingText(for: entry))
               .font(Tokens.Text.caption)
@@ -70,28 +173,61 @@ public struct ExercisePickerView: View {
               .lineLimit(1)
           }
         }
-        Spacer(minLength: 0)
+
+        Spacer(minLength: Tokens.Spacing.snug)
+
         if let modality = entry.modality {
           Text(modality.label)
-            .font(Tokens.Text.caption)
+            .font(Tokens.Text.caption.weight(.medium))
             .foregroundStyle(Tokens.Color.textSecondary)
+            .padding(.horizontal, Tokens.Spacing.snug)
+            .padding(.vertical, 3)
+            .background(
+              Tokens.Color.surfaceRaised,
+              in: RoundedRectangle(cornerRadius: Tokens.Radius.control / 2)
+            )
+            .overlay(
+              RoundedRectangle(cornerRadius: Tokens.Radius.control / 2)
+                .strokeBorder(Tokens.Color.border, lineWidth: Tokens.Stroke.hairline)
+            )
         }
-        // A movement the user created is marked, so a typo'd duplicate of a curated entry is
-        // visibly theirs rather than looking official.
+
         if !entry.isCurated {
-          Image(systemName: "person.crop.circle")
-            .font(Tokens.Text.caption)
-            .foregroundStyle(Tokens.Color.textSecondary)
-            .accessibilityLabel("Your own movement")
+          Image(systemName: "person.crop.circle.fill")
+            .font(.system(size: 14))
+            .foregroundStyle(Tokens.Color.accent)
+            .accessibilityLabel("Custom movement")
         }
       }
-      .frame(minHeight: Tokens.minimumTapTarget)
+      .padding(.horizontal, Tokens.Spacing.regular)
+      .padding(.vertical, Tokens.Spacing.snug)
+      .frame(minHeight: Tokens.loggerTapTarget)
       .contentShape(Rectangle())
+      .hardsetCard(cornerRadius: Tokens.Radius.control)
     }
     .buttonStyle(.plain)
     .accessibilityElement(children: .combine)
     .accessibilityLabel(Self.spokenLabel(for: entry))
     .accessibilityHint("Double tap to add to this workout.")
+  }
+
+  // MARK: - Data Grouping & Filtering
+
+  private var displayedEntries: [CatalogEntry] {
+    if let selectedCategory {
+      return entries.filter { selectedCategory.matches($0.primaryMuscle) }
+    }
+    return entries
+  }
+
+  private var emptyStateDetail: String {
+    if !query.isEmpty {
+      return "Nothing in the catalogue matches “\(query)”."
+    }
+    if let selectedCategory {
+      return "No movements recorded for \(Self.categoryTitle(for: selectedCategory))."
+    }
+    return "The movement catalogue is empty."
   }
 
   private struct Group: Identifiable {
@@ -100,20 +236,12 @@ public struct ExercisePickerView: View {
     var id: String { key.storedValue }
   }
 
-  /// Grouped by the muscle a movement primarily trains, ordered by the vocabulary's own
-  /// declaration order.
-  ///
-  /// The hand-maintained `muscleOrder` array this replaced was a second source of truth that could
-  /// silently omit a token — a new muscle would have sorted last with no warning. `Muscle.allCases`
-  /// cannot drift from the enum.
   private var groups: [Group] {
-    let grouped = Dictionary(grouping: entries, by: \.primaryMuscle)
+    let grouped = Dictionary(grouping: displayedEntries, by: \.primaryMuscle)
     let index = Dictionary(uniqueKeysWithValues: Muscle.allCases.enumerated().map { ($1, $0) })
     return grouped
       .map { Group(key: $0.key, entries: $0.value.sorted { $0.name < $1.name }) }
       .sorted { lhs, rhs in
-        // Unrecognised and unattributed tokens sort last rather than being hidden: a row nobody
-        // has attributed is a data problem to see.
         let l = lhs.key.muscle.map { index[$0] ?? Int.max } ?? Int.max
         let r = rhs.key.muscle.map { index[$0] ?? Int.max } ?? Int.max
         if l != r { return l < r }
@@ -121,8 +249,6 @@ public struct ExercisePickerView: View {
       }
   }
 
-  /// Section title. Comes from the vocabulary, so there is no title-casing fallback that would
-  /// make an unrecognised token look like an authored muscle name.
   private func sectionTitle(_ key: MuscleKey) -> String {
     Self.displayName(key)
   }
@@ -133,12 +259,25 @@ public struct ExercisePickerView: View {
     return "also " + others.map { Self.displayName($0.key) }.joined(separator: ", ")
   }
 
-  /// Placeholder resolution of the String Catalog key.
-  ///
-  /// The real lookup is `String(localized:)` once a catalog exists; until then this is the ONE
-  /// place that turns a key into words, so localisation is a change here and nowhere else. It
-  /// deliberately does not title-case an unknown raw value.
-  static func displayName(_ key: MuscleKey) -> String {
+  // MARK: - Display Names & Localisation Seams
+
+  public static func categoryTitle(for category: MuscleFilterCategory) -> String {
+    switch category {
+    case .chest: "Chest"
+    case .shoulders: "Shoulders"
+    case .back: "Back"
+    case .arms: "Arms"
+    case .core: "Core"
+    case .quads: "Quads"
+    case .hamstrings: "Hamstrings"
+    case .glutes: "Glutes"
+    case .hips: "Hips"
+    case .calves: "Calves"
+    case .neck: "Neck"
+    }
+  }
+
+  public static func displayName(_ key: MuscleKey) -> String {
     if let muscle = key.muscle { return Self.copy[muscle] ?? muscle.rawValue }
     return key.isReservedSentinel ? "Not attributed" : "Not recognised"
   }
@@ -154,7 +293,7 @@ public struct ExercisePickerView: View {
     .gastrocnemius: "Gastrocnemius", .soleus: "Soleus",
   ]
 
-  static func spokenLabel(for entry: CatalogEntry) -> String {
+  public static func spokenLabel(for entry: CatalogEntry) -> String {
     var parts = [entry.name, displayName(entry.primaryMuscle)]
     if let modality = entry.modality { parts.append(modality.label) }
     if !entry.isCurated { parts.append("your own movement") }
@@ -178,8 +317,12 @@ public struct ExercisePickerView: View {
 
       var body: some View {
         NavigationStack {
-          ExercisePickerView(query: $query, entries: entries) { _ in }
-            .navigationTitle("Add movement")
+          ExercisePickerView(
+            query: $query,
+            entries: entries,
+            onCreate: { _ in }
+          ) { _ in }
+          .navigationTitle("Add movement")
         }
       }
     }

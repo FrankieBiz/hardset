@@ -20,11 +20,17 @@ public struct HistoryScreen: View {
   public var body: some View {
     Group {
       if loadFailed {
-        ContentUnavailableView {
-          Label("Could not read your history", systemImage: "exclamationmark.triangle")
-        } description: {
-          Text("Your logged sets are safe. Pull down to try again.")
+        VStack {
+          Spacer()
+          HardsetEmptyState(
+            title: "Could not read your history",
+            detail: "Your logged sets are safe. Pull down to try again.",
+            systemImage: "exclamationmark.triangle"
+          )
+          Spacer()
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Tokens.Color.background)
       } else {
         HistoryView(rows: rows, unit: unit)
       }

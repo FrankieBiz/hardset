@@ -60,11 +60,11 @@ public struct ProgressionChartView: View {
   public var body: some View {
     VStack(alignment: .leading, spacing: Tokens.Spacing.regular) {
       if series.isEmpty {
-        ContentUnavailableView {
-          Label("No history yet", systemImage: "chart.xyaxis.line")
-        } description: {
-          Text("Log this movement a few times and its load history appears here.")
-        }
+        HardsetEmptyState(
+          title: "No history yet",
+          detail: "Log this movement a few times and its load history appears here.",
+          systemImage: "chart.xyaxis.line"
+        )
       } else {
         picker
         chart

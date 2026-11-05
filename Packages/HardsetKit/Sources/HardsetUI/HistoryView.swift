@@ -54,24 +54,40 @@ public struct HistoryView: View {
   }
 
   public var body: some View {
-    List {
-      if rows.isEmpty {
-        ContentUnavailableView {
-          Label("No workouts yet", systemImage: "clock.arrow.circlepath")
-        } description: {
-          Text("Finished workouts appear here.")
+    if rows.isEmpty {
+      ScrollView {
+        VStack {
+          Spacer(minLength: Tokens.Spacing.loose)
+          HardsetEmptyState(
+            title: "No workouts yet",
+            detail: "Finished workouts appear here.",
+            systemImage: "clock.arrow.circlepath"
+          )
+          Spacer(minLength: Tokens.Spacing.loose)
         }
-      } else {
-        ForEach(rows) { row in
-          Button {
-            onSelect?(row)
-          } label: {
-            content(row)
-          }
-          .buttonStyle(.plain)
-          .disabled(onSelect == nil)
-        }
+        .padding(.top, Tokens.Spacing.section)
       }
+      .background(Tokens.Color.background)
+    } else {
+      ScrollView {
+        LazyVStack(spacing: Tokens.Spacing.snug) {
+          ForEach(rows) { row in
+            Button {
+              onSelect?(row)
+            } label: {
+              content(row)
+                .padding(Tokens.Spacing.regular)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .hardsetCard(cornerRadius: Tokens.Radius.control)
+            }
+            .buttonStyle(.plain)
+            .disabled(onSelect == nil)
+          }
+        }
+        .padding(.horizontal, Tokens.Spacing.loose)
+        .padding(.vertical, Tokens.Spacing.regular)
+      }
+      .background(Tokens.Color.background)
     }
   }
 

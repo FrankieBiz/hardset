@@ -49,12 +49,16 @@ public struct NameEntrySheet: View {
             .focused($isFocused)
             .submitLabel(.done)
             .onSubmit(confirm)
+            .listRowBackground(Tokens.Color.surface)
         } footer: {
           if let footnote {
             Text(footnote)
+              .foregroundStyle(Tokens.Color.textSecondary)
           }
         }
       }
+      .scrollContentBackground(.hidden)
+      .background(Tokens.Color.background)
       .navigationTitle(title)
       .toolbar {
         ToolbarItem(placement: .cancellationAction) {

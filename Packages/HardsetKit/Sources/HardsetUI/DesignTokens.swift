@@ -25,6 +25,14 @@ public enum Tokens {
     public static let surface = dynamic(
       light: (1.000, 1.000, 1.000), dark: (0.110, 0.110, 0.122)
     )
+    /// Subtle charcoal hairline for cards, rows, and dividers.
+    public static let border = dynamic(
+      light: (0.878, 0.878, 0.894), dark: (0.196, 0.196, 0.220)
+    )
+    /// Elevated or pressed surface fill, one step above `surface`.
+    public static let surfaceRaised = dynamic(
+      light: (0.945, 0.945, 0.957), dark: (0.157, 0.157, 0.176)
+    )
     public static let accent = SwiftUI.Color.accentColor
 
     public static let textPrimary = SwiftUI.Color.primary
@@ -90,12 +98,20 @@ public enum Tokens {
     public static let card: CGFloat = 16
   }
 
+  public enum Stroke {
+    public static let hairline: CGFloat = 1
+    public static let selected: CGFloat = 2
+  }
+
   public enum Text {
     /// Numeric readouts use a monospaced digit width so a ticking value does not reflow.
     public static let readout = Font.system(.title2, design: .rounded).monospacedDigit()
     public static let setEntry = Font.system(.title3, design: .rounded).monospacedDigit()
     public static let label = Font.subheadline
     public static let caption = Font.caption
+    public static let rowTitle = Font.body
+    public static let labelEmphasis = Font.subheadline.weight(.semibold)
+    public static let sectionHeader = Font.caption.weight(.semibold).smallCaps()
   }
 
   /// Minimum tap target anywhere in the app — Apple's floor, fine for chips and badges.
@@ -134,5 +150,56 @@ public enum CertaintyLevel: String, Sendable, CaseIterable {
     case .low: "exclamationmark.triangle"
     case .unevaluated: "questionmark.circle"
     }
+  }
+}
+
+// MARK: - View Modifiers
+
+public struct HardsetCardModifier: ViewModifier {
+  public let isSelected: Bool
+  public let cornerRadius: CGFloat
+
+  public init(isSelected: Bool = false, cornerRadius: CGFloat = Tokens.Radius.card) {
+    self.isSelected = isSelected
+    self.cornerRadius = cornerRadius
+  }
+
+  public func body(content: Content) -> some View {
+    content
+      .background(Tokens.Color.surface, in: RoundedRectangle(cornerRadius: cornerRadius))
+      .overlay(
+        RoundedRectangle(cornerRadius: cornerRadius)
+          .strokeBorder(
+            isSelected ? Tokens.Color.accent : Tokens.Color.border,
+            lineWidth: isSelected ? Tokens.Stroke.selected : Tokens.Stroke.hairline
+          )
+      )
+  }
+}
+
+public struct HardsetSheetModifier: ViewModifier {
+  public init() {}
+
+  public func body(content: Content) -> some View {
+    #if os(iOS)
+      content
+        .presentationBackground(Tokens.Color.background)
+        .presentationDragIndicator(.visible)
+        .presentationCornerRadius(Tokens.Radius.card)
+    #else
+      content
+        .presentationBackground(Tokens.Color.background)
+        .presentationDragIndicator(.visible)
+    #endif
+  }
+}
+
+public extension View {
+  func hardsetCard(selected: Bool = false, cornerRadius: CGFloat = Tokens.Radius.card) -> some View {
+    modifier(HardsetCardModifier(isSelected: selected, cornerRadius: cornerRadius))
+  }
+
+  func hardsetSheet() -> some View {
+    modifier(HardsetSheetModifier())
   }
 }

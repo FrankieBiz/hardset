@@ -35,11 +35,16 @@ public struct ExerciseProgressScreen: View {
   public var body: some View {
     ScrollView {
       if loadFailed {
-        ContentUnavailableView {
-          Label("Could not read this history", systemImage: "exclamationmark.triangle")
-        } description: {
-          Text("Your logged sets are safe. Pull down to try again.")
+        VStack {
+          Spacer(minLength: Tokens.Spacing.loose)
+          HardsetEmptyState(
+            title: "Could not read this history",
+            detail: "Your logged sets are safe. Pull down to try again.",
+            systemImage: "exclamationmark.triangle"
+          )
+          Spacer(minLength: Tokens.Spacing.loose)
         }
+        .padding(.top, Tokens.Spacing.section)
       } else {
         ProgressionChartView(
           series: seriesInputs,
@@ -58,6 +63,7 @@ public struct ExerciseProgressScreen: View {
       // The estimate is a formula applied to the user's own sets, not a study finding, and the
       // sheet says which formula and where it stops being meaningful.
       MethodologySheet(source: ProgressionAnalyzer.source)
+        .hardsetSheet()
     }
   }
 

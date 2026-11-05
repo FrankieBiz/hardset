@@ -27,8 +27,11 @@ public struct SettingsSheet: View {
             Text(WeightUnit.pounds.abbreviation).tag(true)
           }
           .pickerStyle(.segmented)
+          .listRowBackground(Tokens.Color.surface)
         } header: {
           Text("Units")
+            .font(Tokens.Text.sectionHeader)
+            .foregroundStyle(Tokens.Color.textSecondary)
         } footer: {
           // Stated because it is the reason switching never corrupts anything, and because a
           // lifter who has logged in one unit deserves to know the other view is a conversion,
@@ -37,8 +40,12 @@ public struct SettingsSheet: View {
             "Every set is stored in kilograms, whichever you pick. Switching converts what you "
               + "see and changes nothing that was recorded."
           )
+          .font(Tokens.Text.caption)
+          .foregroundStyle(Tokens.Color.textSecondary)
         }
       }
+      .scrollContentBackground(.hidden)
+      .background(Tokens.Color.background)
       .navigationTitle("Settings")
       .toolbar {
         ToolbarItem(placement: .confirmationAction) {
