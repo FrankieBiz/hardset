@@ -136,6 +136,34 @@ public enum Muscle: String, CaseIterable, Sendable, Hashable {
     case .glutes: .glutes
     }
   }
+
+  /// The picker's filter category. A NAVIGATION grouping, never an accounting one.
+  ///
+  /// This is deliberately a second, finer partition rather than a reuse of `group`. A lifter
+  /// browsing the picker asks "show me hamstring work", not "show me legs", so the rollup's
+  /// six-member `legs` bucket is unusable as a filter: it would bury a leg curl next to a calf
+  /// raise. Splitting it for navigation changes nothing about volume accounting, which continues
+  /// to roll up through `group` only.
+  ///
+  /// Total, exhaustive, no `default` — so adding a 23rd token cannot silently ship without a
+  /// home in the picker. `MuscleFilterCategory.members` is derived from this switch rather than
+  /// written out, so the two directions of this hierarchy are structurally incapable of drifting
+  /// apart (unlike `MuscleGroup`, whose written-out `members` needs a test to stay honest).
+  public var filterCategory: MuscleFilterCategory {
+    switch self {
+    case .chest: .chest
+    case .frontDelts, .sideDelts, .rearDelts, .rotatorCuff: .shoulders
+    case .lats, .upperBack, .traps, .lowerBack: .back
+    case .biceps, .triceps, .forearms: .arms
+    case .abs, .obliques: .core
+    case .quadriceps: .quads
+    case .hamstrings: .hamstrings
+    case .glutes: .glutes
+    case .adductors, .hipAbductors: .hips
+    case .gastrocnemius, .soleus: .calves
+    case .neck: .neck
+    }
+  }
 }
 
 /// Where a token's number may be interpreted.
@@ -176,6 +204,10 @@ public enum MuscleAdmissionGround: String, Sendable, Hashable, CaseIterable {
 /// would freeze the group set forever. The moment any code path persists a group key — a CSV
 /// header, a widget configuration, a notification payload — that freedom is silently gone.
 /// Exports must namespace, because `Muscle` and `MuscleGroup` collide on `glutes` and `neck`.
+///
+/// A group is an ACCOUNTING edge: it is what `setsTouching(group:)` counts and the coarsest level
+/// at which volume may be described. It is not a picker filter — see `MuscleFilterCategory` for
+/// that, and never present a group with a set total (spec §3, §9.12).
 public enum MuscleGroup: String, CaseIterable, Sendable, Hashable {
   case chest, shoulders, back, arms, core, neck, legs, glutes
 
@@ -198,6 +230,69 @@ public enum MuscleGroup: String, CaseIterable, Sendable, Hashable {
   /// Namespaced key for export, so a reader can never confuse `muscle.glutes` with
   /// `group.glutes`.
   public var exportKey: String { "group.\(rawValue)" }
+}
+
+// MARK: - The picker's filter partition
+
+/// Lifter-intuitive anatomical filter categories for `ExercisePickerView`.
+///
+/// **This is navigation, not accounting.** It answers one question — "which chip do I tap to see
+/// the movements that train this area?" — and it must never be summed, banded, compared to a
+/// target, exported as a volume dimension, or written to a column. Volume keeps using
+/// `MuscleGroup` (see `setsTouching(group:)`) and dose keeps using a single `Muscle`. Using a
+/// filter category as a rollup would silently reintroduce the group-sum bug via a parallel type.
+///
+/// **Why a second partition instead of `MuscleGroup`.** The rollup's `legs` bucket holds six
+/// tokens, which is the right granularity for "did anything train my legs" and the wrong one for
+/// browsing: a lifter looking for hamstring work should not have to scan calf raises. So the
+/// filter split differs from the group split in exactly one place — `legs` becomes quads,
+/// hamstrings, hips and calves, and `glutes` keeps the chip it already had — and is identical
+/// everywhere else. The two are related by `Muscle.filterCategory`, not by a mapping between the
+/// enums.
+///
+/// **One source of truth.** `members` is derived from `Muscle.filterCategory` rather than written
+/// out, so the partition cannot drift: every one of the 22 tokens belongs to exactly one category
+/// by construction, and adding a token without a home fails to compile in `filterCategory`.
+///
+/// **Picker membership is the display primary only.** An entry files under the category of its
+/// `primaryMuscle`; a bench press is Chest, not Triceps, even though triceps is credited. The
+/// reason is the same one the picker sections on a single muscle: matching any credited muscle
+/// would put most compound movements in Arms and Back, and a filter whose every chip returns the
+/// same 40 rows is worse than no filter. Cross-region contribution stays visible in the row's
+/// "also ..." line, which is a credit statement and not a filter claim.
+///
+/// **Unknown tokens match no category.** `MuscleKey(stored:)` with an unrecognised or reserved
+/// value has no anatomical region, so it is never folded into a chip that would make it look
+/// attributed. Such rows remain visible under the picker's unfiltered "All" state, exactly as
+/// they sort last in the sectioned list today.
+///
+/// Declaration order is chip order: broad regions a lifter scans first, then the leg groups.
+public enum MuscleFilterCategory: String, CaseIterable, Sendable, Hashable {
+  case chest, back, shoulders, arms, core, quads, hamstrings, glutes, hips, calves, neck
+
+  /// String Catalog key, resolved by the UI layer. Never a title-cased fallback from the raw
+  /// value, for the same reason `Muscle.displayNameKey` is not: a generated label looks authored.
+  public var displayNameKey: String { "muscleFilter.\(rawValue)" }
+
+  /// Namespaced for export, because these raw values collide with BOTH other vocabularies:
+  /// `chest`, `back`, `shoulders`, `arms`, `core`, `glutes` and `neck` are also `MuscleGroup` raw
+  /// values, and `chest`, `hamstrings`, `glutes` and `neck` are also `Muscle` raw values. Three
+  /// namespaces (`muscle.`, `muscleGroup.`, `filter.`), never two.
+  public var exportKey: String { "filter.\(rawValue)" }
+
+  /// Every token filed under this category, in `Muscle` declaration order. Derived, so it cannot
+  /// disagree with `Muscle.filterCategory`. 1 + 4 + 4 + 3 + 2 + 1 + 1 + 1 + 2 + 2 + 1 = 22.
+  public var members: [Muscle] { Muscle.allCases.filter { $0.filterCategory == self } }
+
+  public func contains(_ muscle: Muscle) -> Bool { muscle.filterCategory == self }
+
+  /// The category a stored key files under, or `nil` for an unrecognised or unattributed token.
+  /// Non-normalising, because it delegates to `MuscleKey.muscle`.
+  public static func category(for key: MuscleKey) -> MuscleFilterCategory? { key.muscle?.filterCategory }
+
+  /// Picker predicate. `false` for every key that is not one of the 22 tokens — an unknown key
+  /// belongs to no chip rather than to a guessed one.
+  public func matches(_ key: MuscleKey) -> Bool { key.muscle?.filterCategory == self }
 }
 
 // MARK: - The storage boundary

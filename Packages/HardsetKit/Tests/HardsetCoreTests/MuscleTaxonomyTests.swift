@@ -118,6 +118,66 @@ struct MuscleGroupTests {
   }
 }
 
+@Suite("The picker's filter partition covers every token exactly once")
+struct MuscleFilterCategoryTests {
+  /// A token with no chip is invisible in the picker; a token in two chips is double-counted by
+  /// any naive badge. Deriving `members` from `Muscle.filterCategory` makes both unrepresentable,
+  /// and this test pins the derivation.
+  @Test("Every muscle has exactly one filter category")
+  func partitionIsExact() {
+    let all = MuscleFilterCategory.allCases.flatMap(\.members)
+    #expect(MuscleFilterCategory.allCases.count == 11)
+    #expect(all.count == Muscle.allCases.count)
+    #expect(Set(all) == Set(Muscle.allCases))
+    for category in MuscleFilterCategory.allCases {
+      #expect(!category.members.isEmpty, "\(category.rawValue) is empty")
+      for muscle in category.members {
+        #expect(muscle.filterCategory == category)
+      }
+    }
+  }
+
+  /// The filter partition is the rollup with the legs group split, and nothing else. A category
+  /// spanning two groups would be a hidden cross-region claim.
+  @Test("No filter category spans two rollup groups")
+  func noCategorySpansGroups() {
+    for category in MuscleFilterCategory.allCases {
+      let groups = Set(category.members.map(\.group))
+      #expect(groups.count == 1, "\(category.rawValue) spans \(groups.map(\.rawValue))")
+    }
+    let legChips = MuscleFilterCategory.allCases.filter {
+      $0.members.allSatisfy { $0.group == .legs }
+    }
+    #expect(Set(legChips) == [.quads, .hamstrings, .hips, .calves])
+    #expect(legChips.flatMap(\.members).count == 6)
+  }
+
+  /// A v2 token or the reserved sentinel must never inherit a region it was never attributed to.
+  @Test("An unknown or unattributed key matches no chip")
+  func unseenKeysHaveNoChip() {
+    for raw in ["", "unknown", "serratusAnterior", "Chest", " chest "] {
+      let key = MuscleKey(stored: raw)
+      #expect(MuscleFilterCategory.category(for: key) == nil, "\(raw) was given a chip")
+      #expect(!MuscleFilterCategory.allCases.contains { $0.matches(key) })
+    }
+    #expect(MuscleFilterCategory.category(for: MuscleKey(.chest)) == .chest)
+    #expect(MuscleFilterCategory.shoulders.matches(MuscleKey(.rotatorCuff)))
+  }
+
+  /// Three vocabularies now share raw spellings, so the filter prefix is load-bearing.
+  @Test("Filter export keys are namespaced against both muscle vocabularies")
+  func exportKeysAreNamespaced() {
+    for category in MuscleFilterCategory.allCases {
+      #expect(category.displayNameKey == "muscleFilter.\(category.rawValue)")
+      #expect(category.exportKey == "filter.\(category.rawValue)")
+      #expect(category.exportKey != category.displayNameKey)
+      if let group = MuscleGroup(rawValue: category.rawValue) {
+        #expect(category.exportKey != group.exportKey)
+      }
+    }
+  }
+}
+
 @Suite("A muscle key cannot split one muscle into two buckets")
 struct MuscleKeyTests {
   /// The reason `MuscleKey` is a struct and not an enum: an enum case could construct a second

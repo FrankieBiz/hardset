@@ -46,6 +46,66 @@ Tiers are **two**, not three. The three-tier CORE/ADVISORY/JOINT-HEALTH structur
 
 **Groups (8, derived in code, never stored):** `chest {chest}`; `shoulders {frontDelts, sideDelts, rearDelts, rotatorCuff}`; `back {lats, upperBack, traps, lowerBack}`; `arms {biceps, triceps, forearms}`; `core {abs, obliques}`; `neck {neck}`; `legs {quadriceps, hamstrings, adductors, hipAbductors, gastrocnemius, soleus}`; `glutes {glutes}`. 1+4+4+3+2+1+6+1 = 22.
 
+**A second, finer partition exists for the picker only** — 11 anatomical filter categories, listed in full below. It is navigation, not accounting: it never sums, never bands, and never stores. `MuscleGroup` remains the only rollup and `Muscle` remains the only dose unit.
+
+### The picker's filter partition (11 categories, navigation only)
+
+`ExercisePickerView` needs chips a lifter recognises, not the rollup's accounting edge. A lifter's gap is named per muscle ("I have nothing for hamstrings"), so a single `legs` chip is unusable as a filter: it buries a leg curl next to a calf raise. The filter partition therefore differs from the group partition in exactly one place — `legs` splits into quads, hamstrings, hips and calves, while `glutes` keeps the chip it already had — and is identical everywhere else. The relation between the two is `Muscle.filterCategory`; there is no mapping table between the enums.
+
+| # | chip | raw value | members (all 22 tokens) | n |
+|---|---|---|---|---|
+| 1 | Chest | `chest` | `chest` | 1 |
+| 2 | Back | `back` | `lats`, `upperBack`, `traps`, `lowerBack` | 4 |
+| 3 | Shoulders | `shoulders` | `frontDelts`, `sideDelts`, `rearDelts`, `rotatorCuff` | 4 |
+| 4 | Arms | `arms` | `biceps`, `triceps`, `forearms` | 3 |
+| 5 | Core | `core` | `abs`, `obliques` | 2 |
+| 6 | Quads | `quads` | `quadriceps` | 1 |
+| 7 | Hamstrings | `hamstrings` | `hamstrings` | 1 |
+| 8 | Glutes | `glutes` | `glutes` | 1 |
+| 9 | Hips | `hips` | `adductors`, `hipAbductors` | 2 |
+| 10 | Calves | `calves` | `gastrocnemius`, `soleus` | 2 |
+| 11 | Neck | `neck` | `neck` | 1 |
+
+1+4+4+3+2+1+1+1+2+2+1 = 22, exactly once each. These raw values are not schema and no column holds them, but they are frozen once a shipped build writes one into an export, a log a support engineer reads, or a persisted view state: renaming one at that point is a silent break with no migration to catch it.
+
+The same partition stated muscle-by-muscle, in `Muscle` declaration order. This table is the authoritative answer to "which chip does this token file under" and the two directions must never be maintained separately in code:
+
+| # | muscle | chip | why that chip and not another |
+|---|---|---|---|
+| 1 | `chest` | Chest | One token, no upper/lower split (§2.1). |
+| 2 | `frontDelts` | Shoulders | Delt head. Never filed under Chest despite being a bench synergist — that would make the Chest chip return every press. |
+| 3 | `sideDelts` | Shoulders | Delt head; lateral raise is the only direct entry. |
+| 4 | `rearDelts` | Shoulders | Delt head. Not Back: filing it there would hide the most common coverage gap behind a compound-heavy chip. |
+| 5 | `rotatorCuff` | Shoulders | Shoulder joint, but a distinct tissue; the chip label is a region, not a tissue claim. |
+| 6 | `lats` | Back | Vertical/horizontal pulling. |
+| 7 | `upperBack` | Back | Scapular retraction/depression; includes lower traps (§1). |
+| 8 | `traps` | Back | Scapular elevation; still a back-region movement (shrugs, carries). |
+| 9 | `lowerBack` | Back | Spinal extension; hinges and back extensions live with the rest of the posterior chain. |
+| 10 | `biceps` | Arms | Elbow flexion. |
+| 11 | `triceps` | Arms | Elbow extension. |
+| 12 | `forearms` | Arms | Wrist and radioulnar work; grip is a stabiliser and never earns the chip by itself (§5). |
+| 13 | `abs` | Core | Trunk flexion. |
+| 14 | `obliques` | Core | Trunk rotation/lateral flexion. |
+| 15 | `neck` | Neck | Own chip. Filing neck work under Back or Shoulders is the mis-file both predecessor apps made (§1). |
+| 16 | `quadriceps` | Quads | Knee extension; its own chip so a squat and a leg extension are findable without the hamstring noise. |
+| 17 | `hamstrings` | Hamstrings | Knee flexion and hip extension. |
+| 18 | `glutes` | Glutes | Hip extension; its own chip, never merged into Hips, because the hip thrust/squat/abduction work a lifter is looking for is not interchangeable. |
+| 19 | `adductors` | Hips | Hip adduction; "inner thigh" is where a lifter looks, and it must not be orphaned. |
+| 20 | `hipAbductors` | Hips | Hip abduction. Not Glutes: Plotkin measured gluteus medius/minimus as one unit distinct from maximus (§2.12), and a chip named Glutes would imply the tokens are the same tissue even though the chip carries no volume. |
+| 21 | `gastrocnemius` | Calves | Knee-extended plantarflexion. |
+| 22 | `soleus` | Calves | Plantarflexion at any knee angle. Both calf tokens share one chip: `calves` is the correct *navigation* granularity even though it was the wrong *accounting* granularity (§2.13). |
+
+**Rules the implementation and the picker must both honour.**
+
+- **The chip row is `MuscleFilterCategory.allCases`, in declaration order.** "All" is a view state, not a case: it never enters Core, so it cannot be counted, exported, or confused with a region.
+- **Membership is the display primary only.** An entry files under `primaryMuscle.filterCategory`; a bench press is Chest, not Arms. Matching any credited muscle would put most compounds into Arms and Back, and every chip would return the same rows. Cross-region contribution stays in the row's "also ..." line, which is a credit statement, not a filter claim.
+- **Unknown and unattributed keys match no chip.** `MuscleKey.muscle` is `nil` for both, so a v2 token or the reserved `unknown` sentinel is never folded into a region that would make it look attributed. Those rows stay visible under "All" and sort last, as they do today.
+- **No chip count is ever a set count.** If a badge is shown it is "N movements", from the in-memory `[CatalogEntry]` the view was handed. The filter must not query the database, and it exposes no member of type `Double`/`Int` derived from sets — the same enforcement as `MuscleGroupStatus` (§3, test 16).
+- **Never reuse this partition for volume, bands, warnings or export dimensions.** `setsTouching(group:)` stays keyed on `MuscleGroup`; only `fractionalSets(for:)` may ever meet a band.
+- **Export namespacing is mandatory and larger than the group case.** Seven filter raw values collide with `MuscleGroup` (`chest`, `back`, `shoulders`, `arms`, `core`, `glutes`, `neck`) and four collide with `Muscle` (`chest`, `hamstrings`, `glutes`, `neck`). The prefix is `filter.`.
+- **Not a program split.** Push/Pull/Legs, Upper/Lower and Full Body are rejected here for the same reason they are rejected in §1: they are program templates whose membership changes with the program, and "Full Body" is an assertion about a session rather than a region. A filter must not encode a routine.
+
+
 ### The two admission grounds (write these into the file's doc comment)
 
 A token is admissible only on one of two grounds, and the spec records which.
@@ -403,6 +463,25 @@ public enum Muscle: String, CaseIterable, Sendable, Hashable {
     case .glutes: .glutes
     }
   }
+
+  /// The picker's NAVIGATION category. Never an accounting rollup: see
+  /// `MuscleFilterCategory`. Total switch, no `default`, so a 23rd token cannot ship homeless
+  /// in the filter row.
+  public var filterCategory: MuscleFilterCategory {
+    switch self {
+    case .chest: .chest
+    case .frontDelts, .sideDelts, .rearDelts, .rotatorCuff: .shoulders
+    case .lats, .upperBack, .traps, .lowerBack: .back
+    case .biceps, .triceps, .forearms: .arms
+    case .abs, .obliques: .core
+    case .quadriceps: .quads
+    case .hamstrings: .hamstrings
+    case .glutes: .glutes
+    case .adductors, .hipAbductors: .hips
+    case .gastrocnemius, .soleus: .calves
+    case .neck: .neck
+    }
+  }
 }
 
 /// Where a token's number may be interpreted, and where it may only be counted.
@@ -422,6 +501,8 @@ public enum MuscleEvidenceTier: String, Sendable, Hashable, CaseIterable {
 /// The moment any code path persists a group key — a CSV header, a widget configuration, a
 /// notification payload — that freedom is silently gone. Exports must prefix
 /// (`muscle.glutes` vs `group.glutes`), because those two raw values collide.
+///
+/// A group is the ACCOUNTING edge (`setsTouching(group:)`), never a picker filter.
 public enum MuscleGroup: String, CaseIterable, Sendable, Hashable {
   case chest, shoulders, back, arms, core, neck, legs, glutes
 
@@ -438,6 +519,33 @@ public enum MuscleGroup: String, CaseIterable, Sendable, Hashable {
     case .glutes: [.glutes]
     }
   }
+}
+
+/// The picker's 11 anatomical filter categories. NAVIGATION ONLY — never summed, never
+/// banded, never stored. The rollup stays `MuscleGroup`; the dose unit stays `Muscle`.
+///
+/// `members` is DERIVED from `Muscle.filterCategory`, not written out, so the partition
+/// cannot drift and every one of the 22 tokens has exactly one home by construction.
+public enum MuscleFilterCategory: String, CaseIterable, Sendable, Hashable {
+  case chest, back, shoulders, arms, core, quads, hamstrings, glutes, hips, calves, neck
+
+  public var displayNameKey: String { "muscleFilter.\(rawValue)" }
+
+  /// Three namespaces, never two: seven raw values also collide with `MuscleGroup` and four
+  /// with `Muscle`.
+  public var exportKey: String { "filter.\(rawValue)" }
+
+  public var members: [Muscle] { Muscle.allCases.filter { $0.filterCategory == self } }
+
+  public func contains(_ muscle: Muscle) -> Bool { muscle.filterCategory == self }
+
+  /// `nil` for an unrecognised token and for the reserved `unknown` sentinel: no region is
+  /// guessed for a value this build cannot attribute.
+  public static func category(for key: MuscleKey) -> MuscleFilterCategory? {
+    key.muscle?.filterCategory
+  }
+
+  public func matches(_ key: MuscleKey) -> Bool { key.muscle?.filterCategory == self }
 }
 
 /// The ONLY type that crosses the storage boundary.
@@ -709,6 +817,7 @@ Extend `ExerciseCatalogTests` (`Tests/HardsetStoreTests/CatalogSeederTests.swift
 | 16 | `MuscleGroupStatus` exposes no member of type `Double`/`Int` named or derived as a summed set count; and a fixture asserting `setsTouching(group: .back)` for one barbell-row set is `1`, not `2.5` | the group-level sum. One barbell-row set credits upperBack 1.0 + lats 0.5 + rearDelts 0.5 + lowerBack 0.5 (ExerciseCatalog.swift:265-272) |
 | 17 | Re-seeding an existing row leaves `primaryMuscle` and `secondaryMusclesJSON` unchanged unless the stored value is empty or `"unknown"`; and no row is pruned for having a slug absent from the local catalogue | the v1/v2 launch-time ping-pong under field-wise last-edit-wins, which makes the volume readout depend on which phone was opened last; and a v1 device deleting a v2-introduced movement |
 | 18 | No muscle-typed field exists on the `machines` table; every volume computation routes `sessionExercises.exerciseID` → `exercises.primaryMuscle`, never `loggedSets.machineID` | attribution drifting onto the machine. `loggedSets.machineID` (Schema.swift:90) makes machine-level attribution one join away, and scraped equipment body-part data is marketing copy — 242 ancestor records claimed "Full Body" |
+| 19 | `MuscleFilterCategory.allCases.flatMap(\.members)` is a permutation of `Muscle.allCases`; 11 categories, 22 members, every category non-empty; for every `Muscle`, `filterCategory.members.contains($0)`; `MuscleKey(stored: "")`, `"unknown"` and `"serratusAnterior"` match no category; and every `exportKey` differs from its `displayNameKey` and from `MuscleGroup(rawValue: rawValue)?.exportKey` | a token with no chip (invisible in the picker), a token with two chips (double-counted by any naive chip badge), an unknown token inheriting a region it was never attributed to, and an export where `filter.glutes` is unreadable as a filter rather than a group |
 
 ---
 
@@ -734,6 +843,8 @@ Statements the taxonomy must never make, in code, copy, marketing, or App Review
 16. **That no competitor does fractional indirect counting.** What is verified is **silence, not absence**: Hevy's public material describes volume as counting "the number of sets done per muscle group" and confirms user-labelled secondary targets feed its graphs without stating a weight (hevyapp.com/features/sets-per-muscle-group-per-week, 2026-08-20); MacroFactor's Muscle Groups article states no weighting; Strong advertises only a "Muscle Heat Map"; Setgraph and Boostcamp publish no method. Settling it requires installing the apps and logging a compound lift, which no pass has done. **"Unclaimed differentiator" must not appear in any document a decision rests on.** (And for the record: Boostcamp **does** advertise a muscle breakdown — "Muscle Volume Tracking – See which muscle groups you're hitting and which ones you're neglecting." appears verbatim in its own App Store description's "WHAT YOU GET" block, three occurrences, in the same block as its "POPULAR PROGRAMS" list. The earlier finding attributing that line to a neighbouring app is withdrawn.)
 17. **Ontology provenance beyond documentation.** An Uberon mapping, if recorded, is a static table in `HardsetCore` with an explicit alignment quality — never a column, never an interchange format. Verified anchors only: `UBERON:0002463` for hamstrings (**exact**, via exact synonym "hamstring muscle" — the earlier "no usable group term" claim is withdrawn), `UBERON:0001665` triceps surae for the gastrocnemius+soleus pair (**exact**, related synonym "calf muscle" — the earlier composite is withdrawn), `UBERON:0001377` quadriceps femoris (exact), `UBERON:0001112` latissimus dorsi (exact), `UBERON:0002381` pectoralis major (exact for our single `chest`), `UBERON:0003683` rotator cuff (exact), `UBERON:0002380` trapezius (**broader** — spans `traps` and `upperBack`), `UBERON:0001476` deltoid (**broader** — spans all three delt tokens). Individual gastrocnemius and soleus ids were not fetched in any pass and must be verified before the table ships. Uberon's confirmed resolution gaps — no deltoid-head term, no clavicular/sternal pectoralis head term, no upper/middle/lower trapezius term — are on their own sufficient to reject it as the stored representation. **FMA is declined on availability, not licence:** its canonical licence page refused connection (ECONNREFUSED 140.142.142.151:443, 2026-08-20), BioPortal returned HTTP 403, and Bioregistry records an `FMA_RETIRED` prefix. Do **not** repeat the claim that FMA's licence prevents citing it as a source — Bioregistry records FMA as CC-BY-3.0, and the restriction in secondary summaries applies to redistributing *modifications* under the FMA/UW names, materially identical to CC BY 3.0 §4(b), which Uberon also carries. And FMA is *finer* than Uberon, not worse.
 18. **That the vocabulary's size is justified by body-map drawability.** It is not, and that argument is deleted.
+19. **That a picker filter category is a training, dose or volume concept.** It is a navigation label. A movement files under one chip because of its display primary, not because every muscle credited on it belongs there; a chip badge, if shown, counts movements and never sets; and no filter category may ever be summed, banded or compared to a target.
+20. **That a filter chip describes the tissue it is named after.** The Shoulders chip contains `rotatorCuff`, the Hips chip contains both `adductors` and `hipAbductors`, and the Back chip contains four tokens with different joint actions. The chip is a recognisable region, not an anatomical equivalence claim — which is also why `hipAbductors` is not filed under Glutes (§2.12).
 
 ---
 
