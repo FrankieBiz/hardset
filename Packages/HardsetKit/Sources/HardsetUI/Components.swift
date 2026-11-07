@@ -53,6 +53,9 @@ public struct HeaderIconButton: View {
   private let systemImage: String
   private let accessibilityLabel: String
   private let action: () -> Void
+  /// Scales with the glyph. A fixed 44 pt circle let the symbol spill outside it at accessibility
+  /// text sizes.
+  @ScaledMetric(relativeTo: .headline) private var diameter = Tokens.minimumTapTarget
 
   public init(systemImage: String, accessibilityLabel: String, action: @escaping () -> Void) {
     self.systemImage = systemImage
@@ -65,7 +68,7 @@ public struct HeaderIconButton: View {
       Image(systemName: systemImage)
         .font(Tokens.Text.headline)
         .foregroundStyle(Tokens.Color.textPrimary)
-        .frame(width: Tokens.minimumTapTarget, height: Tokens.minimumTapTarget)
+        .frame(width: diameter, height: diameter)
         .background(Tokens.Color.surfaceRaised, in: Circle())
         .overlay(Circle().strokeBorder(Tokens.Color.controlBorder, lineWidth: Tokens.Stroke.hairline))
         .contentShape(Circle())

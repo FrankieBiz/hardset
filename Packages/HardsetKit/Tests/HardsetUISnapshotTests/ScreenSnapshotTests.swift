@@ -79,10 +79,11 @@
         }
         .background(Tokens.Color.background)
       }
-      try await Snapshot.capture("restbar-dark-440", size: CGSize(width: 440, height: 200)) {
+      // Paused shows static text, so this isolates the one-line layout from the live timer.
+      try await Snapshot.capture("restbar-paused-440", size: CGSize(width: 440, height: 200)) {
         VStack {
           Spacer()
-          Fixtures.restBar()
+          Fixtures.restBar(paused: true)
         }
         .background(Tokens.Color.background)
       }
@@ -197,9 +198,10 @@
       }
     }
 
-    /// A workout left open is resumed on launch, so the root view opens on the live session with
-    /// its header and the tab bar's workout accessory.
-    @Test func resumedSession() async throws {
+    /// The live session wired to a real coordinator and database, as the Train tab shows it.
+    /// Rendered outside the tab view: this renderer cannot draw the tab bar's glass accessory,
+    /// which veiled the whole screen when it was included.
+    @Test func liveSessionOnRealData() async throws {
       guard Snapshot.directory != nil else { return }
       let database = try Fixtures.database()
       let environment = HardsetEnvironment(database: database)
@@ -210,8 +212,56 @@
       )
       try Fixtures.logTwoSets(in: coordinator, catalog: environment.catalog)
 
-      try await Snapshot.capture("root-session-dark") {
-        HardsetRootView(environment: environment, unit: .kilograms)
+      try await Snapshot.capture("live-session-real-dark") {
+        NavigationStack {
+          LiveSessionScreen(
+            coordinator: coordinator,
+            unit: .kilograms,
+            catalog: environment.catalog,
+            gyms: environment.gyms,
+            progression: environment.progression,
+            gymName: "Metroflex Gym",
+            onShowSettings: {}
+          )
+          .hardsetTabRoot()
+        }
+      }
+    }
+
+    /// Outlined capsules drawn by SwiftUI's own renderer rather than through Core Animation, to
+    /// tell a real drawing defect from an artefact of the layer renderer used everywhere else.
+    @Test func capsulesThroughImageRenderer() async throws {
+      guard let directory = Snapshot.directory else { return }
+      try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+      let strip = VStack(alignment: .leading, spacing: Tokens.Spacing.regular) {
+        HStack {
+          HardsetChip("All", isSelected: true) {}
+          HardsetChip("Back", isSelected: false) {}
+          HardsetChip("Shoulders", isSelected: false) {}
+        }
+        CertaintyBadge(level: .moderate, methodology: "Method.")
+        CertaintyBadge(level: .high, methodology: "Method.")
+      }
+      .padding(Tokens.Spacing.loose)
+      .frame(width: 402, alignment: .leading)
+      .background(Tokens.Color.background)
+      .environment(\.colorScheme, .dark)
+
+      let renderer = ImageRenderer(content: strip)
+      renderer.scale = 2
+      let data = try #require(renderer.uiImage?.pngData())
+      try data.write(to: directory.appendingPathComponent("capsules-imagerenderer-dark.png"))
+    }
+
+    /// Last on purpose: the first run stalled here, at the one width where the bar takes its
+    /// one-line layout beside a live countdown. Kept separate so a stall cannot hide the rest.
+    @Test func restBarRunningAtProMaxWidth() async throws {
+      try await Snapshot.capture("restbar-running-440", size: CGSize(width: 440, height: 200)) {
+        VStack {
+          Spacer()
+          Fixtures.restBar()
+        }
+        .background(Tokens.Color.background)
       }
     }
   }
@@ -356,9 +406,9 @@
       )
     }
 
-    static func restBar() -> some View {
+    static func restBar(paused: Bool = false) -> some View {
       RestBarView(
-        state: .running(endsAt: Date().addingTimeInterval(96)),
+        state: paused ? .paused(remaining: .seconds(96)) : .running(endsAt: Date().addingTimeInterval(96)),
         metadata: RestMetadata(
           exerciseName: "Leg Press", setOrdinal: 2, plannedSets: 4, machineName: "Hammer Strength"
         ),

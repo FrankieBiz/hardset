@@ -219,7 +219,8 @@ public struct ProgressionChartView: View {
     .chartSymbolScale(domain: names, range: shapes)
     .chartLegend(.hidden)
     .chartXAxis {
-      AxisMarks { _ in
+      // Four labels at most: with more, the last date crowded the plot's edge and truncated to "…".
+      AxisMarks(values: .automatic(desiredCount: 4)) { _ in
         AxisGridLine(stroke: StrokeStyle(lineWidth: gridWidth))
           .foregroundStyle(grid)
         AxisValueLabel()

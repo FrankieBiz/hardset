@@ -199,13 +199,17 @@ public struct ExerciseSectionView: View {
           .font(Tokens.Text.caption.weight(.semibold))
         Text(state.machineName ?? "Choose machine")
           .font(Tokens.Text.caption.weight(.semibold))
-          .lineLimit(1)
+          // One line at ordinary sizes; at accessibility sizes the name wraps rather than
+          // truncating to "Hamm…", because it is how the lifter recognises the machine.
+          .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 1)
         if let increment = state.machineIncrementKg {
-          // Shown because it is the constraint on what a suggestion may propose.
-          Text("\(Self.format(unit.fromKilograms(increment))) \(unit.abbreviation) steps")
+          // Shown because it is the constraint on what a suggestion may propose. Rounded to a
+          // tenth before formatting, so 10 kg reads "22 lb steps" rather than "22.0".
+          let step = (unit.fromKilograms(increment) * 10).rounded() / 10
+          Text("\(Self.format(step)) \(unit.abbreviation) steps")
             .font(Tokens.Text.caption)
             .foregroundStyle(Tokens.Color.textSecondary)
-            .lineLimit(1)
+            .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 1)
         }
         Image(systemName: "chevron.down")
           .font(Tokens.Text.caption.weight(.semibold))

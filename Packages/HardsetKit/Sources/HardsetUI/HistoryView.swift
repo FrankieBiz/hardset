@@ -289,8 +289,10 @@ private struct HistoryRowContent: View {
     .frame(maxWidth: .infinity, alignment: .leading)
   }
 
+  /// An untitled session reads "Workout": the date block beside it already says which day, and
+  /// repeating the date as the title said it twice.
   private var titleText: some View {
-    Text(row.title.isEmpty ? HistoryView.dateText(row.date) : row.title)
+    Text(row.title.isEmpty ? "Workout" : row.title)
       .font(Tokens.Text.headline)
       .foregroundStyle(Tokens.Color.textPrimary)
       .lineLimit(2)

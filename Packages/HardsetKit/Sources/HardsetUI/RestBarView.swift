@@ -85,7 +85,7 @@ public struct RestBarView: View {
           Text("\(metadata.exerciseName), \(metadata.setLabel.lowercased())")
             .font(Tokens.Text.caption)
             .foregroundStyle(Tokens.Color.textSecondary)
-            .lineLimit(1)
+            .lineLimit(2)
         }
       }
     }

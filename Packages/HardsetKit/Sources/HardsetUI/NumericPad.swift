@@ -111,7 +111,7 @@ public struct NumericPad: View {
           // A real minus sign, not a hyphen: at this size the difference is visible, and a
           // hyphen next to a plus reads as a dash.
           Text(delta > 0 ? "+\(formatDelta(delta))" : "−\(formatDelta(-delta))")
-            .font(Tokens.Text.figure)
+            .font(Tokens.Text.setEntry)
             .foregroundStyle(Tokens.Color.accent)
         }
         .buttonStyle(HardsetKeyStyle())
