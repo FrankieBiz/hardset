@@ -9,7 +9,9 @@ name: iOS build and screens
 
 on:
   push:
-    branches: ["FrankieBiz/**"]
+    # main too: Core and Store changes land there from other worktrees, and one already broke the
+    # UI's compile without anything on Linux noticing.
+    branches: ["main", "FrankieBiz/**"]
   workflow_dispatch:
 
 permissions:
