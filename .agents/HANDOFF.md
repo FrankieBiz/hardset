@@ -253,3 +253,48 @@ The requested architectural review is documented. No production Swift source or 
   work includes progression limits/order, consistent recovery reads, numeric/import
   validation and command retry identity, durable rest/sync ownership, native
   app/widget compilation, and Release iPhone launch/loading/hitch measurements.
+
+## UI design-system elevation follow-up — 2026-11-07
+
+- Objective: perfect and elevate the entire UI so no screen reads as a stock Apple
+  screen. Maintainer: FrankieBiz <frankabisignano@gmail.com>.
+- Worktree: `/home/frankbiz/orca/workspaces/hardset/snapper`; branch
+  `FrankieBiz/ui-elevation-overhaul`, rebased onto `origin/main` at `33d2b09`. Four
+  commits: design system foundation, unit-aware machine-change notes (Core), accent
+  and launch wiring (app target), and the screen-by-screen pass. Not pushed.
+- Settled decisions (see `DESIGN.md`): "calibrated instrument" direction; readout-cyan
+  accent `#00515E`/`#5ED3E6` replacing the asset blue; colour only for meaning; SF Pro
+  Condensed tabular figures and SF Expanded screen titles (system fonts only, no
+  resource bundle); every control has a fill or 3:1 border, tags never do; dashed
+  outline means "nothing here yet"; one spring (the log stamp); Reduce Motion
+  honoured everywhere. Tab roots draw their own `ScreenHeader` with the stock bar
+  hidden (`hardsetTabRoot()`); sheets use `hardsetNavigationTitle(_:)`.
+- Changed paths: all of `HardsetUI`, the Feature screens (root, live session,
+  settings, history, volume, progress), `HardsetWidgetBundle.swift`, `Progression.swift`
+  and `ProgressionTests.swift`, `AccentColor`/`LaunchBackground` colorsets, `Info.plist`,
+  `Tools/generate_project.py` (global accent setting), project file, `Makefile`,
+  `Tools/check_contrast.py`, `DESIGN.md`, `docs/MAC-VERIFICATION.md`, the audit doc.
+- Defects fixed on the way: a create-movement button that did nothing; `GymOption`
+  holding `UUID` while callers passed `GymID` (would not compile); warm-ups counted as
+  working sets in exercise progress; record banners and machine chips hard-coded to kg;
+  machine-change notes in kg (Core, tested); chart series merged when two machines
+  share a name; rest controls hidden from VoiceOver; keypad detent shorter than the
+  keypad; set row overflowing 375 pt phones; unreachable pull-to-refresh on error
+  states; false empty states before first load; gap copy overclaiming under lower
+  bounds; widget timer range able to invert; methodology sheet with no way to close.
+- Review: three implementation agents on disjoint files, then two independent
+  compile-plausibility reviews. Rejected with evidence: "computed `id` cannot satisfy
+  `Identifiable` under default MainActor" and "`.refreshable { load() }` needs await"
+  (both patterns compiled in the build recorded at `e5aff33`); hedged the three new
+  computed-id types with `nonisolated` anyway. Not adopted: replacing the conditional
+  `tabViewBottomAccessory` (pre-existing, documented, and it is what refreshes tabs
+  after a workout).
+- Verification on Linux: `make check` passed after rebase: 91 files parsed, 179 Core
+  tests, 72 Store tests in five suites, query-index gate, palette contrast (172 pairs:
+  7:1 text in four appearances, 3:1 control borders, 4.5:1 pressed fills). Project
+  regeneration has no drift; `git diff --check` clean. Nothing in HardsetUI,
+  HardsetFeature, the widget or the app has been compiled.
+- Next concrete step: on the Mac, work through `docs/MAC-VERIFICATION.md` (build
+  gates first, then appearance, logger ergonomics at 375 pt, hit regions, glare).
+  Open user decision: the app icon set has no image; the final icon is still the
+  user's call.
