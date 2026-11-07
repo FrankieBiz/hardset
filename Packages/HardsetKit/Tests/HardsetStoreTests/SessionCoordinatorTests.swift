@@ -2,6 +2,7 @@ import Foundation
 import GRDB
 import HardsetCore
 import SQLiteData
+import Synchronization
 import Testing
 
 @testable import HardsetStore
@@ -38,6 +39,103 @@ struct SessionCoordinatorTests {
   }
 
   // MARK: - Starting
+
+  @Test("A failed plan insert leaves no partial workout or exercise rows")
+  func failedStartRollsBackPlan() throws {
+    let database = try migratedDatabase()
+    let store = LoggerStore(database: database)
+    let exercise = try seedExercise(database)
+    // Reject the second plan row after the first has been inserted. This also
+    // covers failures occurring during the write, after startup reads succeeded.
+    try database.write { db in
+      try db.execute(sql: """
+        CREATE TEMP TRIGGER fail_second_plan BEFORE INSERT ON sessionExercises
+        WHEN NEW.position = 1 BEGIN
+          SELECT RAISE(ABORT, 'injected plan failure');
+        END
+        """)
+    }
+    #expect(throws: (any Error).self) {
+      _ = try SessionCoordinator.start(
+        store: store,
+        plan: [
+          PlannedExercise(exerciseID: exercise, exerciseName: "First block"),
+          PlannedExercise(exerciseID: exercise, exerciseName: "Second block"),
+        ],
+        now: { self.start }
+      )
+    }
+    try database.read { db in
+      let sessions = try Int.fetchOne(db, sql: "SELECT count(*) FROM sessions")
+      let exercises = try Int.fetchOne(db, sql: "SELECT count(*) FROM sessionExercises")
+      #expect(sessions == 0)
+      #expect(exercises == 0)
+    }
+  }
+
+  @Test("A startup history-read failure does not create an abandoned workout")
+  func failedHistoryReadDoesNotCreateSession() throws {
+    let database = try migratedDatabase()
+    let store = LoggerStore(database: database)
+    let exercise = try seedExercise(database)
+    try database.write { db in
+      try db.execute(sql: "DROP TABLE loggedSets")
+    }
+    #expect(throws: (any Error).self) {
+      _ = try SessionCoordinator.start(
+        store: store,
+        plan: [PlannedExercise(exerciseID: exercise, exerciseName: "Leg Press")],
+        now: { self.start }
+      )
+    }
+    #expect(try store.openSession() == nil)
+  }
+
+  @Test("A twelve-exercise workout starts with one write transaction")
+  func startUsesOneWriteTransaction() throws {
+    let database = try migratedDatabase()
+    let store = LoggerStore(database: database)
+    let exercise = try seedExercise(database)
+    let statements = Mutex<[String]>([])
+    try database.writeWithoutTransaction { db in
+      db.trace { event in
+        if case .statement(let statement) = event {
+          statements.withLock { $0.append(statement.sql) }
+        }
+      }
+    }
+    let coordinator = try SessionCoordinator.start(
+      store: store,
+      plan: (0..<12).map { index in
+        PlannedExercise(exerciseID: exercise, exerciseName: "Block \(index)", plannedSets: index + 1)
+      },
+      now: { self.start }
+    )
+    let writes = statements.withLock { rows in
+      rows.filter { $0.hasPrefix("BEGIN IMMEDIATE") }.count
+    }
+    #expect(writes == 1)
+    let saved = try store.sessionExercises(in: coordinator.sessionID)
+    #expect(saved.map(\.position) == Array(0..<12))
+    #expect(saved.map(\.plannedSets) == (1...12).map { Optional($0) })
+    #expect(coordinator.exercises.map { $0.slots.count } == Array(1...12))
+  }
+
+  @Test("A failed movement history read leaves both memory and the saved plan unchanged")
+  func failedAddDoesNotPersistMovement() throws {
+    let database = try migratedDatabase()
+    let store = LoggerStore(database: database)
+    let exercise = try seedExercise(database)
+    let coordinator = try SessionCoordinator.start(store: store, plan: [], now: { self.start })
+    try database.write { db in
+      try db.execute(sql: "DROP TABLE loggedSets")
+    }
+    let added = coordinator.addExercise(exerciseID: exercise, exerciseName: "Leg Press")
+    #expect(!added)
+    #expect(coordinator.lastError != nil)
+    #expect(coordinator.exercises.isEmpty)
+    #expect(try store.sessionExercises(in: coordinator.sessionID).isEmpty)
+  }
 
   @Test("Starting a session opens it and builds a row per planned set")
   func startBuildsPlan() throws {

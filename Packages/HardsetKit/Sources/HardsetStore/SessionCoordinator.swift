@@ -94,11 +94,10 @@ public final class SessionCoordinator {
     onStartRest: @escaping (Duration, RestMetadata) -> Void = { _, _ in }
   ) throws -> SessionCoordinator {
     let startedAt = now()
-    let sessionID = try store.startSession(gymID: gymID, title: title, at: startedAt)
-
+    // Prepare fallible reads before creating durable state. There is no new
+    // session to exclude yet, and a read failure must not abandon an empty one.
     let snapshot = try store.priorPerformanceSnapshot(
       for: plan.map(\.progressionKey),
-      excluding: sessionID,
       asOf: startedAt
     )
 
@@ -108,14 +107,8 @@ public final class SessionCoordinator {
     // increment was passed in — and nothing in the app passed one — while `resume` read it from
     // storage, so the same set could be a record before a restart and not after.
     let increments = try store.machineIncrements(for: plan.compactMap(\.machineID))
+    let saved = try store.startSession(gymID: gymID, title: title, at: startedAt, plan: plan)
     for (position, planned) in plan.enumerated() {
-      let rowID = try store.addExercise(
-        to: sessionID,
-        exerciseID: planned.exerciseID,
-        machineID: planned.machineID,
-        position: position,
-        plannedSets: planned.plannedSets
-      )
       let state = ExerciseLogState.build(
         exerciseID: planned.exerciseID,
         machineID: planned.machineID,
@@ -126,13 +119,13 @@ public final class SessionCoordinator {
         snapshot: snapshot,
         plannedSets: planned.plannedSets
       )
-      rowIDs[state.id] = rowID
+      rowIDs[state.id] = saved.planRowIDs[position]
       states.append(state)
     }
 
     let coordinator = SessionCoordinator(
       store: store,
-      sessionID: sessionID,
+      sessionID: saved.sessionID,
       exercises: states,
       gymID: gymID,
       now: now,
@@ -255,13 +248,6 @@ public final class SessionCoordinator {
   ) -> Bool {
     let key = ProgressionKey(exerciseID: exerciseID, machineID: machineID)
     do {
-      let rowID = try store.addExercise(
-        to: sessionID,
-        exerciseID: exerciseID,
-        machineID: machineID,
-        position: exercises.count,
-        plannedSets: plannedSets
-      )
       let snapshot = try store.priorPerformanceSnapshot(
         for: [key], excluding: sessionID, asOf: now()
       )
@@ -275,6 +261,13 @@ public final class SessionCoordinator {
         machineName: machineName,
         machineIncrementKg: resolvedIncrement,
         snapshot: snapshot,
+        plannedSets: plannedSets
+      )
+      let rowID = try store.addExercise(
+        to: sessionID,
+        exerciseID: exerciseID,
+        machineID: machineID,
+        position: exercises.count,
         plannedSets: plannedSets
       )
       planRowIDs[state.id] = rowID
@@ -458,7 +451,7 @@ public final class SessionCoordinator {
 }
 
 /// One exercise on today's plan, before the session exists.
-public struct PlannedExercise: Hashable, Sendable {
+public nonisolated struct PlannedExercise: Hashable, Sendable {
   public let exerciseID: ExerciseID
   public let machineID: MachineID?
   public let exerciseName: String

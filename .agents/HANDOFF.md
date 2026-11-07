@@ -59,3 +59,29 @@ The requested architectural review is documented. No production Swift source or 
   with Release device traces, and continue complete-history/record query fixes
   from the Core/Store review. Linux cannot verify SwiftUI/app/widget builds,
   CloudKit integration, AlarmKit, or physical-device performance.
+
+## Atomic workout-start follow-up — 2026-11-07
+
+- Same objective/worktree/branch as the loading follow-up above; goal stays active.
+- `LoggerStore` now saves the session and its whole plan in one write transaction.
+  `SessionCoordinator` prepares fallible history/increment reads before creating
+  the session. Adding a movement likewise prepares history/state before its save.
+- `PlannedExercise` explicitly opts out of default MainActor isolation so immutable
+  plan values can be used on database queues; Swift 6 compilation passed.
+- Owned changes: `LoggerStore.swift`, `SessionCoordinator.swift`,
+  `SessionCoordinatorTests.swift`, loading document, this handoff.
+- Four new tests cover partial-plan rollback, failed startup reads, failed add
+  reads, and twelve-exercise transaction count/order. Original sources reproduced
+  all four regressions, including thirteen transactions; changed sources use one.
+- Verification: `make check` passed: 90 syntax checks, 171 Core tests, 50 Store
+  tests, and query-plan gate. Project generator output remains identical.
+- Test development: throwing fetch calls inside `#expect` in a database closure
+  needed hoisting to local values. Baseline-log verification searched for a
+  function name absent from test output; inspecting the actual assertion text
+  confirmed the expected failures. Sources restored and full gate passed after it.
+- Still pending: device measurements/native app compilation; complete and fair
+  prior-performance/record queries; numeric/machine provenance correctness;
+  recovery snapshot consistency; local-write validation; historical v1 upgrade
+  safety; durable rest/sync ownership. Next independent code step: reproduce the
+  global 500-row snapshot starvation and replace its incomplete history selection
+  with complete latest-session data and complete record benchmarks.

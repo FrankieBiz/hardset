@@ -51,6 +51,37 @@ Verification: `make check` passed (90 Swift files parsed, 171 Core tests,
 `python3 Tools/generate_project.py` produced identical project and scheme files.
 Linux checks exclude SwiftUI, CloudKit wiring, AlarmKit, and iOS app compilation.
 
+## Verified workout-start milestone — 2026-11-07
+
+`SessionCoordinator.start` now prepares history and machine-increment reads
+before saving, then commits the session and all planned exercise rows together.
+An internal Store command returns the saved plan IDs for the coordinator to bind
+to exercise states. The public empty-session API uses the same write path.
+`PlannedExercise` is explicitly nonisolated, matching its immutable, Sendable
+value semantics when captured by the database writer.
+
+A twelve-exercise start previously used thirteen write transactions. A native
+SQL-trace regression test measures one now, without expanding or logging bound
+arguments. This reduces commit overhead; elapsed device startup time has not
+been measured. Tests also pin exercise positions and planned set counts.
+
+Failure injection proved that the original implementation left a partial
+session/plan when the second plan row failed, and left an empty open session
+when the initial history read failed. Both now leave no new session or plan.
+Adding a movement during a workout also prepares its history/state before saving
+the plan row, so a history-read failure no longer saves an invisible movement
+that could reappear after recovery or be duplicated on retry.
+
+All four regression tests were run against the original implementation and
+failed for the expected behaviors, then passed against the changed sources.
+No production instrumentation remains.
+
+Acceptance: atomic startup rollback, no durable state after preparation failure,
+one startup write transaction, preserved plan ordering/counts, no persisted
+movement after failed add preparation, and passing existing recovery/logging tests.
+Verification: `make check` passed (90 Swift files, 171 Core tests, 50 Store tests,
+and the query-plan gate). Project regeneration remains byte-identical.
+
 ## Remaining app-wide work
 
 - Capture Release cold/warm launch, first usable workout, resume, picker, history,
@@ -62,7 +93,7 @@ Linux checks exclude SwiftUI, CloudKit wiring, AlarmKit, and iOS app compilation
   with cancellation and consistent snapshot semantics.
 - Measure first-launch index creation and ongoing set-write/storage overhead.
 - Address complete prior-performance/record queries, global history row limits,
-  machine provenance, and transaction boundaries from
+  machine provenance, consistent recovery reads, and write validation from
   `CORE_STORE_ARCHITECTURE_REVIEW.md`; do not trade correctness for smaller reads.
 - Verify earliest shipped v1 fixtures: this index migration does not repair
   historical edits to v1 columns or debug schema-erasure behavior identified in

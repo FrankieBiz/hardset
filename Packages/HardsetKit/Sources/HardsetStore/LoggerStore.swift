@@ -33,7 +33,19 @@ public nonisolated struct LoggerStore {
     title: String = "",
     at startedAt: Date
   ) throws -> SessionID {
+    try startSession(gymID: gymID, title: title, at: startedAt, plan: []).sessionID
+  }
+
+  /// Saves the session and its entire plan in one transaction. A failed plan row
+  /// must not leave an open session or a partial plan for recovery to discover.
+  func startSession(
+    gymID: GymID?,
+    title: String,
+    at startedAt: Date,
+    plan: [PlannedExercise]
+  ) throws -> (sessionID: SessionID, planRowIDs: [UUID]) {
     let id = SessionID()
+    let rowIDs = plan.map { _ in UUID() }
     try database.write { db in
       try Session.insert {
         Session.Draft(
@@ -46,8 +58,21 @@ public nonisolated struct LoggerStore {
         )
       }
       .execute(db)
+      for (position, planned) in plan.enumerated() {
+        try SessionExercise.insert {
+          SessionExercise.Draft(
+            id: rowIDs[position],
+            sessionID: id.rawValue,
+            exerciseID: planned.exerciseID.rawValue,
+            machineID: planned.machineID?.rawValue,
+            position: position,
+            plannedSets: planned.plannedSets
+          )
+        }
+        .execute(db)
+      }
     }
-    return id
+    return (id, rowIDs)
   }
 
   /// Adds an exercise slot to a session. `position` orders the session; it is not an id.
