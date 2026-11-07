@@ -339,3 +339,37 @@ The requested architectural review is documented. No production Swift source or 
   completed sessions and no active workout; add an appropriate index if the query
   plan confirms it scans finished history. Also audit report reads for the same
   interleaving pattern now fixed in recovery.
+
+
+### 2026-11-07 19:20 UTC — Bound open-workout lookup to open rows
+
+- Objective: eliminate completed-history scans during recovery with no open workout.
+  Existing task worktree `/home/frankbiz/orca/workspaces/hardset/mojarra`, branch
+  `FrankieBiz/mojarra`; clean at start, no other changes found.
+- Owned paths: Store/Migrations.swift, StoreTests/HistoryStoreTests.swift,
+  StoreTests/LoggerStoreTests.swift, Tools/check_query_performance.py, this handoff,
+  docs/LOADING_PERFORMANCE.md. No changes to LoggerStore query semantics.
+- Confirmed absent-workout lookup scans sessions_on_startedAt. Added expected-empty
+  5,000-finished-session benchmark; pre-fix --require-indexes failed only for that
+  lookup. Native generated-query regression failed eight plan assertions across
+  four lookups; all selection/finish/new-workout assertions already passed.
+- v6_openSessionLookup adds non-unique partial sessions_on_openStartedAt index
+  (finishedAt, startedAt DESC) WHERE finishedAt IS NULL. Earlier migrations untouched.
+  Finished rows consume no entries; initial index creation still scans sessions.
+  Migration preservation/nonunique tests now cover v1 through v5.
+- Benchmark: 0.481 -> 0.001 ms warm median on local fixture, SCAN -> SEARCH without
+  sorting. SQLite microbenchmark only; no iPhone launch-time claim. All eight query
+  cases preserve results and foreign keys. Only named absent-workout case permits
+  an empty result; existing seven queries still require nonempty fixtures.
+- Verification: make check passed (90 parsed Swift files, 177 Core tests/23 suites,
+  79 Store tests/5 suites, eight plan cases); expanded Release Store passed 157
+  tests/16 suites across fourteen portable files via prior runpy wrapper procedure.
+  Project and scheme regeneration identical; git diff --check clean.
+- No failed fix attempts; expected pre-fix regression failures only. Linux cannot
+  validate native app/widget/CloudKit/AlarmKit or physical-device load/frame times.
+- Remaining broad goal: async startup/writer-engine ownership, consistent report
+  reads, progression limits/order, incomplete-plan recovery, provenance UX, numeric
+  validation, retry identity, rest persistence/account gating, native/device checks.
+  Next concrete step: reproduce a concurrent volume report mixing countableSets
+  with attributionIndex from separate database.read snapshots, then compose the
+  report in one snapshot if confirmed. App-wide goal remains active.

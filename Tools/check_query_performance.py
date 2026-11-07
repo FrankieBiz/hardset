@@ -6,6 +6,7 @@ informational; plan shape and unchanged results are the regression gates.
 """
 
 import argparse
+from datetime import datetime, timedelta
 from pathlib import Path
 import re
 import sqlite3
@@ -17,6 +18,10 @@ MIGRATIONS = ROOT / "Packages/HardsetKit/Sources/HardsetStore/Migrations.swift"
 
 # Same predicates and ordering as VolumeStore, ProgressionStore and LoggerStore.
 QUERIES = {
+    "open workout (absent)": (
+        'SELECT * FROM sessions WHERE finishedAt IS NULL ORDER BY startedAt DESC LIMIT 1',
+        (),
+    ),
     "rolling volume": (
         'SELECT * FROM loggedSets WHERE completedAt >= ? AND completedAt < ? ORDER BY completedAt',
         ("2026-10-28", "2026-11-04"),
@@ -92,7 +97,12 @@ def main():
     db.create_function("uuid", 0, lambda: "fixture-default-id")
     apply_migration_sql(db, baseline)
     db.executemany('INSERT INTO exercises (id) VALUES (?)', [(f"exercise-{i}",) for i in range(50)])
-    db.executemany('INSERT INTO sessions (id) VALUES (?)', [(f"session-{i}",) for i in range(5000)])
+    db.executemany(
+        'INSERT INTO sessions (id, startedAt, finishedAt) VALUES (?, ?, ?)',
+        [(f"session-{i}", (datetime(2012, 1, 1) + timedelta(days=i)).isoformat(),
+          (datetime(2012, 1, 1, 1) + timedelta(days=i)).isoformat()) for i in range(5000)],
+    )
+    assert db.execute('SELECT count(*) FROM sessions WHERE finishedAt IS NULL').fetchone()[0] == 0
     db.executemany(
         'INSERT INTO loggedSets (id, sessionID, exerciseID, setOrdinal, weightKg, reps, isWarmup, completedAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
         ((f"set-{i}", f"session-{i // 20}", f"exercise-{(i // 4) % 50}", i % 20,
@@ -112,7 +122,10 @@ def main():
         old_rows, old_elapsed, old_plan = before[name]
         # Ordering ties are deliberately unspecified by the Store API.
         assert sorted(rows) == sorted(old_rows), f"{name}: results changed"
-        assert rows, f"{name}: empty fixture cannot verify a loading query"
+        if name == "open workout (absent)":
+            assert rows == [], "Finished history must not resume a workout"
+        else:
+            assert rows, f"{name}: empty fixture cannot verify a loading query"
         print(f"{name}: {old_elapsed:.3f} -> {elapsed:.3f} ms ({len(rows)} rows)")
         print(f"  before: {'; '.join(old_plan)}")
         print(f"  after:  {'; '.join(plan)}")

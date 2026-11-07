@@ -406,6 +406,19 @@ public nonisolated enum HardsetMigrations {
       }
     }
 
+    // Finished history must not be scanned when launch finds no workout to
+    // resume. Keep this local, non-unique index small by indexing open rows only.
+    migrator.registerMigration("v6_openSessionLookup") { db in
+      try #sql(
+        """
+        CREATE INDEX "sessions_on_openStartedAt"
+          ON "sessions"("finishedAt", "startedAt" DESC)
+          WHERE "finishedAt" IS NULL
+        """
+      )
+      .execute(db)
+    }
+
     return migrator
   }
 }

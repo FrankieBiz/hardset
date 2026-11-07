@@ -334,6 +334,35 @@ suites, and seven query-plan checks. Expanded Release Store verification passed
 regeneration remained identical. CloudKit-backed interleavings, native app/widget
 builds, and actual iPhone loading behavior remain outside these Linux checks.
 
+## Open-workout lookup without scanning completed history
+
+Launch/recovery asks for the newest session with `finishedAt IS NULL`. The old
+`startedAt` index satisfied ordering but scanned completed workouts to establish
+that none was open. The regression fixture now includes 5,000 finished sessions
+and explicitly checks this expected-empty result. Before the fix, the plan gate
+failed with `SCAN sessions USING INDEX sessions_on_startedAt`.
+
+Additive migration `v6_openSessionLookup` creates the non-unique partial index
+`sessions_on_openStartedAt` on `(finishedAt, startedAt DESC)` for rows where
+`finishedAt IS NULL`. SQLite can search the null key and return the newest open
+row without sorting. Finished sessions occupy no entries in this index; earlier
+migrations and workout rows remain unchanged. Index creation still examines the
+existing sessions once during migration, so this does not eliminate upgrade cost.
+
+On the deterministic local fixture, the median of five warm absent-workout reads
+changed from 0.481 ms to 0.001 ms, with a `SEARCH` plan. This measures the SQLite
+lookup only, not app launch or iPhone latency. The native Store regression traces
+and explains the actual generated query and checks newest-open selection,
+finishing to reveal an older open workout, no-open results, and a subsequent new
+workout. Against the original schema, all four query-plan checks failed while
+functional assertions passed; with the migration, all pass. Upgrade tests now
+cover v1 through v5 and verify row preservation and non-unique indexes.
+
+`make check` passed: 90 Swift files, 177 Core tests, 79 Store tests in five local
+suites, and eight query-plan cases. Expanded Release Store verification passed
+157 tests in sixteen suites (all fourteen portable test files). Project/scheme
+regeneration was identical.
+
 ## Remaining app-wide work
 
 - Capture Release cold/warm launch, first usable workout, resume, picker, history,
