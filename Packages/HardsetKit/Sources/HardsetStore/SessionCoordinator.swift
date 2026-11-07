@@ -151,27 +151,19 @@ public final class SessionCoordinator {
     restAfterSet: Duration? = nil,
     onStartRest: @escaping (Duration, RestMetadata) -> Void = { _, _ in }
   ) throws -> SessionCoordinator? {
-    guard let session = try store.openSession() else { return nil }
+    guard let recovery = try store.recoverySnapshot(asOf: now()) else { return nil }
+    let session = recovery.session
+    let planned = recovery.planned
+    let written = recovery.written
+    let snapshot = recovery.prior
 
-    let planned = try store.sessionExercises(in: session.id)
-    let written = try store.sets(in: session.id)
-
-    // One history read for the whole session, excluding the session itself so a recovered
-    // workout cannot suggest values from its own sets.
-    let snapshot = try store.priorPerformanceSnapshot(
-      for: planned.map(\.progressionKey),
-      excluding: session.id,
-      asOf: now()
-    )
-
-    // Grouped by EXERCISE, not by progression key. A lifter who moves machines mid-exercise
+    // Previously grouped by EXERCISE, not by progression key. A lifter who moves machines mid-exercise
     // produces sets with mixed machine ids under one plan row, and keying on the machine returned
     // only the subset that happened to match — reporting written sets as unlogged and inviting the
     // user to log them again. The set's machine is still recorded on the set itself; it is simply
     // not what identifies which plan row the set belongs to.
     //
-    // Known limitation: the same exercise appearing twice in one session merges, because
-    // `loggedSets` carries no reference to a `sessionExercises` row and so cannot distinguish them.
+    // Grouping only by exercise would merge two blocks of the same movement.
     // Grouped by PLAN ROW where the set records one. That is what distinguishes two blocks of the
     // same movement, which neither of the earlier keys could: grouping by machine lost sets when a
     // lifter moved mid-exercise, and grouping by exercise made both blocks claim the same sets.

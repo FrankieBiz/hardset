@@ -376,25 +376,29 @@ public nonisolated struct LoggerStore {
   /// Note it does not close anything on its own — an abandoned session is finished by an
   /// explicit user choice, never by assuming "now".
   public func openSession() throws -> SessionRecord? {
-    try database.read { db in
-      try Session
-        .where { $0.finishedAt.is(nil) }
-        .order { $0.startedAt.desc() }
-        .limit(1)
-        .fetchOne(db)
-        .map(SessionRecord.init(row:))
-    }
+    try database.read { db in try Self.readOpenSession(in: db) }
+  }
+
+  private static func readOpenSession(in db: Database) throws -> SessionRecord? {
+    try Session
+      .where { $0.finishedAt.is(nil) }
+      .order { $0.startedAt.desc() }
+      .limit(1)
+      .fetchOne(db)
+      .map(SessionRecord.init(row:))
   }
 
   /// Sets belonging to a session, in performed order.
   public func sets(in sessionID: SessionID) throws -> [LoggedSetRecord] {
-    try database.read { db in
-      try LoggedSet
-        .where { $0.sessionID.eq(sessionID.rawValue) }
-        .order { $0.setOrdinal }
-        .fetchAll(db)
-        .map(LoggedSetRecord.init(row:))
-    }
+    try database.read { db in try Self.readSets(in: sessionID, db: db) }
+  }
+
+  private static func readSets(in sessionID: SessionID, db: Database) throws -> [LoggedSetRecord] {
+    try LoggedSet
+      .where { $0.sessionID.eq(sessionID.rawValue) }
+      .order { $0.setOrdinal }
+      .fetchAll(db)
+      .map(LoggedSetRecord.init(row:))
   }
 
   /// The exercises on a session's plan, in order, with the names needed to render them.
@@ -403,42 +407,46 @@ public nonisolated struct LoggerStore {
   /// a session's worth, the joins would be the only ones in the codebase, and a wrong join is a
   /// subtler bug than a wrong dictionary lookup.
   public func sessionExercises(in sessionID: SessionID) throws -> [PlannedExerciseRecord] {
-    try database.read { db in
-      let rows = try SessionExercise
-        .where { $0.sessionID.eq(sessionID.rawValue) }
-        .order { $0.position }
+    try database.read { db in try Self.readSessionExercises(in: sessionID, db: db) }
+  }
+
+  private static func readSessionExercises(
+    in sessionID: SessionID, db: Database
+  ) throws -> [PlannedExerciseRecord] {
+    let rows = try SessionExercise
+      .where { $0.sessionID.eq(sessionID.rawValue) }
+      .order { $0.position }
+      .fetchAll(db)
+    guard !rows.isEmpty else { return [] }
+
+    let exerciseIDs = Array(Set(rows.map(\.exerciseID)))
+    let names = try Exercise
+      .where { $0.id.in(exerciseIDs) }
+      .fetchAll(db)
+      .reduce(into: [UUID: String]()) { $0[$1.id] = $1.name }
+
+    let machineIDs = Array(Set(rows.compactMap(\.machineID)))
+    let machines =
+      machineIDs.isEmpty
+      ? [:]
+      : try Machine
+        .where { $0.id.in(machineIDs) }
         .fetchAll(db)
-      guard !rows.isEmpty else { return [] }
+        .reduce(into: [UUID: Machine]()) { $0[$1.id] = $1 }
 
-      let exerciseIDs = Array(Set(rows.map(\.exerciseID)))
-      let names = try Exercise
-        .where { $0.id.in(exerciseIDs) }
-        .fetchAll(db)
-        .reduce(into: [UUID: String]()) { $0[$1.id] = $1.name }
-
-      let machineIDs = Array(Set(rows.compactMap(\.machineID)))
-      let machines =
-        machineIDs.isEmpty
-        ? [:]
-        : try Machine
-          .where { $0.id.in(machineIDs) }
-          .fetchAll(db)
-          .reduce(into: [UUID: Machine]()) { $0[$1.id] = $1 }
-
-      return rows.map { row in
-        PlannedExerciseRecord(
-          id: row.id,
-          exerciseID: ExerciseID(rawValue: row.exerciseID),
-          machineID: row.machineID.map(MachineID.init(rawValue:)),
-          // A missing name means a deleted exercise row, which the foreign key should prevent.
-          // Shown as unknown rather than crashing a recovery path.
-          exerciseName: names[row.exerciseID] ?? "Unknown movement",
-          machineName: row.machineID.flatMap { machines[$0]?.name },
-          position: row.position,
-          plannedSets: row.plannedSets,
-          machineIncrementKg: row.machineID.flatMap { machines[$0]?.stackIncrementKg }
-        )
-      }
+    return rows.map { row in
+      PlannedExerciseRecord(
+        id: row.id,
+        exerciseID: ExerciseID(rawValue: row.exerciseID),
+        machineID: row.machineID.map(MachineID.init(rawValue:)),
+        // A missing name means a deleted exercise row, which the foreign key should prevent.
+        // Shown as unknown rather than crashing a recovery path.
+        exerciseName: names[row.exerciseID] ?? "Unknown movement",
+        machineName: row.machineID.flatMap { machines[$0]?.name },
+        position: row.position,
+        plannedSets: row.plannedSets,
+        machineIncrementKg: row.machineID.flatMap { machines[$0]?.stackIncrementKg }
+      )
     }
   }
 
@@ -476,6 +484,20 @@ public nonisolated struct LoggerStore {
 
   // MARK: - The one hoisted read
 
+  /// All recovery inputs share one SQLite read snapshot. The connection never
+  /// escapes this closure; callers receive immutable, Sendable records only.
+  func recoverySnapshot(asOf: Date) throws -> SessionRecoverySnapshot? {
+    try database.read { db in
+      guard let session = try Self.readOpenSession(in: db) else { return nil }
+      let planned = try Self.readSessionExercises(in: session.id, db: db)
+      let written = try Self.readSets(in: session.id, db: db)
+      let prior = try Self.readPriorPerformance(
+        for: planned.map(\.progressionKey), excluding: session.id, asOf: asOf, in: db
+      )
+      return SessionRecoverySnapshot(session: session, planned: planned, written: written, prior: prior)
+    }
+  }
+
   /// Loads complete latest-session sets and an all-time heaviest set per machine.
   ///
   /// Selection runs inside one database read transaction. Only the latest session's
@@ -498,51 +520,66 @@ public nonisolated struct LoggerStore {
     asOf: Date
   ) throws -> PriorPerformanceSnapshot {
     guard !keys.isEmpty else { return .empty(capturedAt: asOf) }
+    return try database.read { db in
+      try Self.readPriorPerformance(for: keys, excluding: excludedSession, asOf: asOf, in: db)
+    }
+  }
+
+  private static func readPriorPerformance(
+    for keys: [ProgressionKey], excluding excludedSession: SessionID?, asOf: Date, in db: Database
+  ) throws -> PriorPerformanceSnapshot {
+    guard !keys.isEmpty else { return .empty(capturedAt: asOf) }
     let exerciseIDs = Set(keys.map(\.exerciseID.rawValue))
     let excluded = excludedSession?.rawValue
 
-    return try database.read { db in
-      var entries: [ProgressionKey: PriorPerformance] = [:]
-      for exerciseID in exerciseIDs {
-        let history = LoggedSet
-          .where { $0.exerciseID.eq(exerciseID) }
-          .where { !$0.isWarmup }
-          .where { #sql("\($0.sessionID) IS NOT \(excluded)", as: Bool.self) }
-        // Discover only equipment identifiers, rather than decoding every prior
-        // set. DISTINCT uses the exercise/machine index and includes free weights.
-        let machineIDs = try history.distinct().select(\.machineID).fetchAll(db)
-        for machineID in machineIDs {
-          let exact = history.where { $0.machineID.is(machineID) }
-          let latest = try exact
-            .order { ($0.completedAt.desc(), $0.id.desc()) }
-            .limit(1)
-            .fetchOne(db)
-          guard let latest else { continue }
+    var entries: [ProgressionKey: PriorPerformance] = [:]
+    for exerciseID in exerciseIDs {
+      let history = LoggedSet
+        .where { $0.exerciseID.eq(exerciseID) }
+        .where { !$0.isWarmup }
+        .where { #sql("\($0.sessionID) IS NOT \(excluded)", as: Bool.self) }
+      // Discover only equipment identifiers, rather than decoding every prior
+      // set. DISTINCT uses the exercise/machine index and includes free weights.
+      let machineIDs = try history.distinct().select(\.machineID).fetchAll(db)
+      for machineID in machineIDs {
+        let exact = history.where { $0.machineID.is(machineID) }
+        let latest = try exact
+          .order { ($0.completedAt.desc(), $0.id.desc()) }
+          .limit(1)
+          .fetchOne(db)
+        guard let latest else { continue }
 
-          let lastSets = try exact
-            .where { $0.sessionID.eq(latest.sessionID) }
-            .order { ($0.setOrdinal, $0.completedAt, $0.id) }
-            .fetchAll(db)
-            .map(Self.record(from:))
-          let heaviest = try exact
-            .order { ($0.weightKg.desc(), $0.reps.desc(), $0.completedAt.desc(), $0.id.desc()) }
-            .limit(1)
-            .fetchOne(db)
-            .map(Self.record(from:))
-          let key = ProgressionKey(
-            exerciseID: ExerciseID(rawValue: exerciseID),
-            machineID: machineID.map(MachineID.init(rawValue:))
-          )
-          entries[key] = PriorPerformance(key: key, lastSets: lastSets, heaviestSet: heaviest)
-        }
+        let lastSets = try exact
+          .where { $0.sessionID.eq(latest.sessionID) }
+          .order { ($0.setOrdinal, $0.completedAt, $0.id) }
+          .fetchAll(db)
+          .map(Self.record(from:))
+        let heaviest = try exact
+          .order { ($0.weightKg.desc(), $0.reps.desc(), $0.completedAt.desc(), $0.id.desc()) }
+          .limit(1)
+          .fetchOne(db)
+          .map(Self.record(from:))
+        let key = ProgressionKey(
+          exerciseID: ExerciseID(rawValue: exerciseID),
+          machineID: machineID.map(MachineID.init(rawValue:))
+        )
+        entries[key] = PriorPerformance(key: key, lastSets: lastSets, heaviestSet: heaviest)
       }
-      return PriorPerformanceSnapshot(entries: entries, capturedAt: asOf)
     }
+    return PriorPerformanceSnapshot(entries: entries, capturedAt: asOf)
   }
 
   private static func record(from row: LoggedSet) -> PriorSetRecord {
     PriorSetRecord(weightKg: row.weightKg, reps: row.reps, completedAt: row.completedAt)
   }
+}
+
+/// Internal composition input; it owns values rather than a database connection.
+nonisolated struct SessionRecoverySnapshot: Hashable, Sendable {
+  let session: SessionRecord
+  let planned: [PlannedExerciseRecord]
+  let written: [LoggedSetRecord]
+  let prior: PriorPerformanceSnapshot
 }
 
 // MARK: - Public records

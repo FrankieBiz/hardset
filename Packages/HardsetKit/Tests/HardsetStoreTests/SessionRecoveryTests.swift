@@ -2,6 +2,7 @@ import Foundation
 import GRDB
 import HardsetCore
 import SQLiteData
+import Synchronization
 import Testing
 
 @testable import HardsetStore
@@ -51,6 +52,105 @@ struct SessionRecoveryTests {
     let database = try migratedDatabase()
     let store = LoggerStore(database: database)
     #expect(try SessionCoordinator.resume(store: store, now: { self.start }) == nil)
+  }
+
+  @Test("Recovery loads the workout in one read transaction")
+  func recoveryUsesOneReadTransaction() throws {
+    let database = try migratedDatabase()
+    let store = LoggerStore(database: database)
+    let exercise = try seedExercise(database, "Press")
+    _ = try SessionCoordinator.start(
+      store: store, plan: [PlannedExercise(exerciseID: exercise, exerciseName: "Press")],
+      now: { self.start }
+    )
+    let statements = Mutex<[String]>([])
+    try database.writeWithoutTransaction { db in
+      db.trace { event in
+        if case .statement(let statement) = event {
+          statements.withLock { $0.append(statement.sql) }
+        }
+      }
+    }
+    let recovered = try SessionCoordinator.resume(store: store, now: { self.start })
+    #expect(recovered != nil)
+    let begins = statements.withLock { $0.filter { $0.hasPrefix("BEGIN") }.count }
+    #expect(begins == 1)
+  }
+
+  @Test("A concurrent writer cannot mix recovery's plan, sets, and prior performance")
+  func recoveryHasConsistentReadSnapshot() throws {
+    let directory = FileManager.default.temporaryDirectory.appendingPathComponent("hardset-recovery-\(UUID())")
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: directory) }
+    let path = directory.appendingPathComponent("history.sqlite").path
+    var configuration = Configuration()
+    configuration.foreignKeysEnabled = true
+    let reader = try DatabaseQueue(path: path, configuration: configuration)
+    defer { try? reader.close() }
+    try reader.writeWithoutTransaction { db in try db.execute(sql: "PRAGMA journal_mode = WAL") }
+    try HardsetMigrations.migrator().migrate(reader)
+    let writer = try DatabaseQueue(path: path, configuration: configuration)
+    defer { try? writer.close() }
+    let store = LoggerStore(database: reader)
+    let a = try seedExercise(reader, "Movement A")
+    let b = try seedExercise(reader, "Movement B")
+    let (gym, machine) = try seedGymAndMachine(reader, machine: "Shared station")
+    let past = try store.startSession(gymID: gym, at: start.addingTimeInterval(-1000))
+    for (exercise, weight) in [(a, 80.0), (b, 50.0)] {
+      _ = try store.logSet(sessionID: past, exerciseID: exercise, machineID: machine,
+                           draft: SetEntryDraft(weightKg: weight, reps: 8), at: start.addingTimeInterval(-900))
+    }
+    try store.finishSession(past, at: start.addingTimeInterval(-500))
+    let live = try SessionCoordinator.start(
+      store: store, gymID: gym,
+      plan: [PlannedExercise(exerciseID: a, machineID: machine, exerciseName: "Movement A", plannedSets: 2)],
+      now: { self.start }
+    )
+    let state = live.exercises[0]
+    live.exercises[0].slots[0].draft = SetEntryDraft(weightKg: 100, reps: 8)
+    #expect(live.logSet(slotID: state.slots[0].id, inExercise: state.id))
+    let plan = try #require(try store.sessionExercises(in: live.sessionID).first)
+    let fired = Mutex(false)
+    let writeError = Mutex<String?>(nil)
+    try reader.writeWithoutTransaction { db in
+      db.trace(options: .profile) { event in
+        guard case .profile(let statement, _) = event,
+          statement.sql.contains("FROM \"machines\"")
+        else { return }
+        let shouldWrite = fired.withLock { fired in
+          if fired { return false }
+          fired = true
+          return true
+        }
+        guard shouldWrite else { return }
+        do {
+          // A separate WAL connection can commit while the reader's snapshot
+          // remains open. Trigger exactly after its plan metadata was fetched.
+          try writer.write { other in
+            try #sql("UPDATE sessionExercises SET exerciseID = \(b.rawValue) WHERE id = \(plan.id)").execute(other)
+            try #sql("UPDATE loggedSets SET exerciseID = \(b.rawValue), weightKg = 900 WHERE sessionExerciseID = \(plan.id)").execute(other)
+            try #sql("UPDATE loggedSets SET weightKg = 200 WHERE sessionID = \(past.rawValue) AND exerciseID = \(a.rawValue)").execute(other)
+            try #sql("UPDATE loggedSets SET weightKg = 300 WHERE sessionID = \(past.rawValue) AND exerciseID = \(b.rawValue)").execute(other)
+          }
+        } catch {
+          writeError.withLock { $0 = String(describing: error) }
+        }
+      }
+    }
+    let recovered = try #require(try SessionCoordinator.resume(store: store, now: { self.start }))
+    #expect(fired.withLock { $0 })
+    #expect(writeError.withLock { $0 } == nil)
+    let recoveredExercise = try #require(recovered.exercises.first)
+    #expect(recoveredExercise.exerciseID == a)
+    #expect(recoveredExercise.slots.first?.draft.weightKg == 100)
+    #expect(recoveredExercise.slots.last?.draft.weightKg == 80)
+    // A later load sees the whole newly committed version, proving recovery
+    // isn't passing by ignoring the writer or keeping an application cache.
+    let refreshed = try #require(try SessionCoordinator.resume(store: store, now: { self.start }))
+    let refreshedExercise = try #require(refreshed.exercises.first)
+    #expect(refreshedExercise.exerciseID == b)
+    #expect(refreshedExercise.slots.first?.draft.weightKg == 900)
+    #expect(refreshedExercise.slots.last?.draft.weightKg == 300)
   }
 
   @Test("Next-set equipment provenance agrees before and after recovery",

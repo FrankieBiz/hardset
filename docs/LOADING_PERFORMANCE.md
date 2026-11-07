@@ -300,6 +300,40 @@ Disabling debug erasure also removes GRDB's temporary schema-reconstruction
 database from normal debug migration checks. App launch timing and native
 CloudKit-backed upgrades still require device/Apple-platform verification.
 
+## Verified recovery-snapshot milestone — 2026-11-07
+
+Recovery previously read the open session, plan metadata, logged sets, and prior
+performance through four independent database read transactions. A deterministic
+two-connection WAL test committed a movement/load/history change after plan
+metadata was fetched. The old loader then combined movement A's plan with the
+new 900 kg set and 200 kg history, describing neither committed database version.
+
+`LoggerStore.recoverySnapshot` now gathers all recovery inputs inside one
+`database.read` closure. Connection-scoped helpers share the existing query
+implementations with the public read APIs, avoiding nested or reentrant writer
+reads. The connection remains inside the closure; the coordinator receives an
+immutable, Sendable value bundle and constructs its state after the read ends.
+No query limits, reconstruction rules, public read APIs, or migrations changed.
+
+The regression test now returns the coherent earlier version: movement A,
+100 kg logged, and 80 kg history. Its independent writer demonstrably commits
+during the load, and the next recovery sees the complete newer version:
+movement B, 900 kg logged, and 300 kg history. A trace test measures one read
+transaction instead of four. Both tests were run against the original loader
+and failed for the expected interleaving/transaction-count defects, then passed.
+
+This provides consistency at the read snapshot. It does not freeze the database
+after returning or silently replace drafts when a later write arrives; local
+write-context validation still protects subsequent saves. It reduces transaction
+and queue-entry overhead without adding database queries. Device loading latency
+has not been measured.
+
+`make check` passed: 90 Swift files, 177 Core tests, 78 Store tests in five local
+suites, and seven query-plan checks. Expanded Release Store verification passed
+156 tests in sixteen suites (all fourteen portable test files). Project/scheme
+regeneration remained identical. CloudKit-backed interleavings, native app/widget
+builds, and actual iPhone loading behavior remain outside these Linux checks.
+
 ## Remaining app-wide work
 
 - Capture Release cold/warm launch, first usable workout, resume, picker, history,
@@ -310,8 +344,8 @@ CloudKit-backed upgrades still require device/Apple-platform verification.
   in `HardsetApp.init`; profile then move measured blocking work off the main actor
   with cancellation and consistent snapshot semantics.
 - Measure first-launch index creation and ongoing set-write/storage overhead.
-- Address progression-chart row limits, machine provenance, consistent recovery
-  reads, and retry/concurrent-command identity from
+- Address progression-chart row limits/order, machine provenance, consistent
+  multi-read report loading, and retry/concurrent-command identity from
   `CORE_STORE_ARCHITECTURE_REVIEW.md`; do not trade correctness for smaller reads.
 - Verify repaired historical schemas with native CloudKit metadatabases, sync
   triggers, account transitions, and the full app launch/recovery flow.

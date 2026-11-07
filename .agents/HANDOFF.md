@@ -302,3 +302,40 @@ The requested architectural review is documented. No production Swift source or 
   command retry identity, durable rest and sync ownership/account gating.
   Next independent code step: make recovery's session/plan/sets/history reads one
   consistent database snapshot and reproduce a concurrent-update interleaving.
+
+## Consistent recovery snapshot follow-up — 2026-11-07
+
+- Full-app objective remains active; same worktree/branch.
+- Reproduced recovery using four read transactions and combining an old movement-A
+  plan with a new 900 kg set and 200 kg prior history. Test uses two real SQLite
+  connections in WAL mode; a profile callback commits a deterministic external
+  update after plan-machine metadata is fetched. No sleeps or probabilistic race.
+- Store now exposes an internal immutable `SessionRecoverySnapshot`, collecting
+  session, plan metadata, sets, and prior performance in one database.read.
+  Private connection-scoped helpers share logic with unchanged public read APIs.
+  Coordinator builds state from the value bundle after the connection is released.
+  Corrected stale nearby wording about grouping repeated exercise blocks.
+- Concurrency regression now sees coherent A/100/80 despite the writer commit;
+  the next load sees B/900/300. Explicit fired/error checks ensure writer execution;
+  later-load assertions ensure no application cache hides it. Trace proves 4 -> 1
+  read transactions. Both regressions verified red before implementation, then green.
+- Owned paths: Store `LoggerStore.swift`, `SessionCoordinator.swift`; Store
+  `SessionRecoveryTests.swift`; loading doc; handoff. No migrations or new queries.
+- Verification: `make check` passed: 90 Swift files, 177 Core tests, 78 Store tests
+  in five suites, seven query-plan checks. Expanded Release Store passed 156 tests
+  in sixteen suites (same fourteen portable files/runpy release procedure as the
+  previous handoff). Project/scheme regeneration identical; whitespace check clean.
+- No failed implementation attempts. Do not nest database.read calls to compose
+  recovery; use the connection helpers within the owning read closure.
+- Snapshot consistency is point-in-time, not a lock against later updates or
+  offline devices. Subsequent local writes still validate current context. No
+  iPhone latency/CloudKit integration claim. Existing reconstruction behavior for
+  missing/unassigned plan hints is unchanged and deserves a separate completeness audit.
+- Remaining: async startup/engine ownership, partial/absent open-session lookup
+  indexing, coherent multi-read volume/progression reports, progression limits/order,
+  numeric/import validation, retry identity, durable rest and account/sync gating,
+  native app/widget/CloudKit/AlarmKit checks, Release iPhone loading/hitch traces.
+  Next concrete performance step: measure open-session lookup with years of
+  completed sessions and no active workout; add an appropriate index if the query
+  plan confirms it scans finished history. Also audit report reads for the same
+  interleaving pattern now fixed in recovery.
