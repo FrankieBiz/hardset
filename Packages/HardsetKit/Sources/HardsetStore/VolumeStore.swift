@@ -93,22 +93,7 @@ public nonisolated struct ProgressionStore {
     -> [ProgressionSample]
   {
     try database.read { db in
-      try LoggedSet
-        .where { $0.exerciseID.eq(exerciseID.rawValue) }
-        .where { !$0.isWarmup }
-        .order { $0.completedAt.desc() }
-        .limit(limit)
-        .fetchAll(db)
-        .reversed()
-        .map {
-          ProgressionSample(
-            sessionID: SessionID(rawValue: $0.sessionID),
-            machineID: $0.machineID.map(MachineID.init(rawValue:)),
-            weightKg: $0.weightKg,
-            reps: $0.reps,
-            completedAt: $0.completedAt
-          )
-        }
+      try Self.readSamples(for: exerciseID, limit: limit, in: db)
     }
   }
 
@@ -116,22 +101,53 @@ public nonisolated struct ProgressionStore {
   /// series is labelled generically rather than dropped — the sets were still performed.
   public func machineNames(_ ids: [MachineID]) throws -> [MachineID: String] {
     guard !ids.isEmpty else { return [:] }
-    let raws = ids.map(\.rawValue)
     return try database.read { db in
-      try Machine
-        .where { $0.id.in(raws) }
-        .fetchAll(db)
-        .reduce(into: [MachineID: String]()) { $0[MachineID(rawValue: $1.id)] = $1.name }
+      try Self.readMachineNames(ids, in: db)
     }
   }
 
-  /// Everything a load-history chart needs for one exercise.
+  /// Everything a load-history chart needs, read from one consistent snapshot.
   public func history(for exerciseID: ExerciseID) throws -> ProgressionHistory {
-    let samples = try samples(for: exerciseID)
+    let (samples, names) = try database.read { db in
+      let samples = try Self.readSamples(for: exerciseID, limit: 2_000, in: db)
+      let ids = Array(Set(samples.compactMap(\.machineID)))
+      return (samples, try Self.readMachineNames(ids, in: db))
+    }
     let series = ProgressionAnalyzer.series(from: samples, exerciseID: exerciseID)
     let changes = ProgressionAnalyzer.machineChanges(from: samples)
-    let names = try machineNames(series.compactMap(\.key.machineID))
     return ProgressionHistory(series: series, machineChanges: changes, machineNames: names)
+  }
+
+  private static func readSamples(for exerciseID: ExerciseID, limit: Int, in db: Database) throws
+    -> [ProgressionSample]
+  {
+    try LoggedSet
+      .where { $0.exerciseID.eq(exerciseID.rawValue) }
+      .where { !$0.isWarmup }
+      .order { $0.completedAt.desc() }
+      .limit(limit)
+      .fetchAll(db)
+      .reversed()
+      .map {
+        ProgressionSample(
+          sessionID: SessionID(rawValue: $0.sessionID),
+          machineID: $0.machineID.map(MachineID.init(rawValue:)),
+          weightKg: $0.weightKg,
+          reps: $0.reps,
+          completedAt: $0.completedAt
+        )
+      }
+  }
+
+  private static func readMachineNames(_ ids: [MachineID], in db: Database) throws
+    -> [MachineID: String]
+  {
+    guard !ids.isEmpty else { return [:] }
+    let raws = ids.map(\.rawValue)
+    return try Machine
+      .where { $0.id.in(raws) }
+      .fetchAll(db)
+      .reduce(into: [MachineID: String]()) { $0[MachineID(rawValue: $1.id)] = $1.name }
   }
 }
 

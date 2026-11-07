@@ -396,6 +396,32 @@ then all fourteen portable Store files passed in Release (159 tests, sixteen
 suites). Project/scheme regeneration remained identical. Native app/widget and
 CloudKit execution, plus physical-device loading/frame measurements, are pending.
 
+## Consistent progression history — 2026-11-07
+
+`ProgressionStore.history` previously read working sets and machine names in
+separate transactions. A test with two file-backed SQLite WAL connections
+reproduces an atomic edit of a 100 kg set and its machine name: the old loader
+returned 100 kg under the new name although the committed newer version contained
+200 kg. The original history-equality check and transaction-count check both
+failed; the free-weight variant already used only one transaction.
+
+The loader now fetches samples and names within one read snapshot, using shared
+connection-scoped helpers for its existing public input APIs. Machine IDs are
+deduplicated from the samples; free-weight/empty history skips the names query.
+Chart grouping and machine-change analysis remain outside the read closure. The
+SQL filtering/order, 2,000-set limit, per-machine grouping and label fallbacks
+remain unchanged. This prevents mixed snapshots and removes one transaction/queue
+entry for machine history without adding queries. It does not establish phone
+latency or fix the separately tracked chart-limit/tie-order issues.
+
+The regression verifies the independent writer actually committed, the current
+load matches the complete earlier history, and a later load sees both the new
+200 kg load and renamed station. It uses no sleeps or mocked database writes.
+`make check` passed: 90 Swift files, 177 Core tests, 81 Store tests in five suites,
+and eight query-plan cases. Expanded Release Store passed all fourteen portable
+test files (161 tests in sixteen suites). Project/scheme regeneration remained
+identical. Native builds, CloudKit execution and device timings remain pending.
+
 ## Remaining app-wide work
 
 - Capture Release cold/warm launch, first usable workout, resume, picker, history,
@@ -406,8 +432,8 @@ CloudKit execution, plus physical-device loading/frame measurements, are pending
   in `HardsetApp.init`; profile then move measured blocking work off the main actor
   with cancellation and consistent snapshot semantics.
 - Measure first-launch index creation and ongoing set-write/storage overhead.
-- Address progression-chart row limits/order, machine provenance, consistent
-  consistent progression-history reads, and retry/concurrent-command identity from
+- Address progression-chart row limits/order, machine provenance,
+  and retry/concurrent-command identity from
   `CORE_STORE_ARCHITECTURE_REVIEW.md`; do not trade correctness for smaller reads.
 - Verify repaired historical schemas with native CloudKit metadatabases, sync
   triggers, account transitions, and the full app launch/recovery flow.

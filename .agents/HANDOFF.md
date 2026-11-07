@@ -412,3 +412,38 @@ The requested architectural review is documented. No production Swift source or 
   engine, and WeeklyVolumeScreen.load runs the sync report on MainActor. Native
   builds, CloudKit/AlarmKit/widget integration and Release iPhone timing/frame/memory
   measurements remain required before any app-wide completion claim. Goal active.
+
+
+### 2026-11-07 19:27 UTC — Read progression history consistently
+
+- Objective: prevent progression samples and labels from different database versions
+  and reduce read boundaries. Prior turn made verified progress (de56a8b). Existing
+  worktree `/home/frankbiz/orca/workspaces/hardset/mojarra`, branch FrankieBiz/mojarra;
+  clean at start. No subagents used.
+- Owned paths: Store/VolumeStore.swift (ProgressionStore section only),
+  StoreTests/ProgressionStoreTests.swift, docs/LOADING_PERFORMANCE.md, this handoff.
+- Reproduced a real atomic WAL update via two DatabaseQueues. After sample SELECT,
+  writer changes weight100->200 and station name Original->Renamed. Original loader
+  produced 100 under Renamed, not either committed state. Baseline hardset-check
+  store failed exactly history equality plus machine-history BEGIN count2 vs1.
+  Free-weight variant already had one read and no labels query.
+- history now reads samples and deduplicated machine IDs' names in one database.read,
+  sharing connection helpers with public samples/machineNames. Analysis/grouping runs
+  after the read ends. No nested reads, extra SQL, migration, or public API change.
+  Existing warmup filtering, date order, 2000-set cap and labels remain unchanged;
+  chart cap/partial-session and tied-time ordering problems remain separate work.
+- Regression asserts writer fired/succeeded, older coherent history during update,
+  newer200/Renamed on next load, exactly1 read, and no names query for free weights.
+  Deterministic profile callback, no sleeps. Actual iPhone latency not measured.
+- Verification: make check passed (90 Swift parse files, 177 Core tests/23 suites,
+  81 Store tests/5 suites, 8 query-plan cases); expanded Release all14 portable Store
+  files passed161 tests/16 suites via established runpy wrapper. Project and scheme
+  regeneration identical; reviewed diff and whitespace clean. Expected red baseline
+  only; no failed fix attempts. Native app/widget/CloudKit/AlarmKit not run on Linux.
+- Next priority: measure synchronous feature load handlers/main actor occupancy and
+  startup opening/migration, then design tested async loading with cancellation and
+  durable process ownership for writer/sync engine. Existing screen .task closures
+  call synchronous store methods. Do not equate async syntax with off-main execution
+  under NonisolatedNonsendingByDefault. Native validation remains necessary. Also
+  pending complete chart histories/tie ordering, incomplete-plan recovery, provenance
+  UI, validation/retry identity, durable rest/account gating. Full-app goal active.
