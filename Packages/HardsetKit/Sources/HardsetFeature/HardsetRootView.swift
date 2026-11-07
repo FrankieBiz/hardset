@@ -581,7 +581,9 @@ public struct HardsetRootView: View {
 /// the boundary is what tells the lifter it can be tapped. Pressed, it sinks to the pressed fill;
 /// with Reduce Motion on, the scale is dropped and only the fill changes.
 private struct OutlinedCardButtonStyle: ButtonStyle {
-  func makeBody(configuration: Configuration) -> some View {
+  // Spelled out rather than `Configuration`: this file imports SQLiteData, whose GRDB
+  // `Configuration` shadows the style's associated type and breaks the conformance.
+  func makeBody(configuration: ButtonStyleConfiguration) -> some View {
     OutlinedCardButtonBody(configuration: configuration)
   }
 }

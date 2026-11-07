@@ -188,7 +188,7 @@ private nonisolated enum Disclosure: Identifiable {
 /// boundary is what tells the lifter the row can be tapped. Pressed, it sinks to the pressed fill;
 /// with Reduce Motion on, the scale is dropped and only the fill changes.
 private struct DisclosureRowButtonStyle: ButtonStyle {
-  func makeBody(configuration: Configuration) -> some View {
+  func makeBody(configuration: ButtonStyleConfiguration) -> some View {
     DisclosureRowButtonBody(configuration: configuration)
   }
 }

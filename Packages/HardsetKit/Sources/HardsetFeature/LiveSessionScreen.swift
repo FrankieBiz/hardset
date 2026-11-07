@@ -301,11 +301,32 @@ public struct LiveSessionScreen: View {
     }
     guard let error = coordinator.lastError else { return nil }
     if let storeError = error as? LoggerStoreError {
+      // Exhaustive on purpose, with no `default`: a new failure added to the store must arrive
+      // here as a compile error and get its own sentence, not slip into a generic one.
       switch storeError {
       case .incompleteSet:
         return "Enter a weight and reps before logging this set."
       case .sessionNotFound:
         return "This workout could not be found. Your logged sets are safe."
+      case .sessionClosed:
+        return "This workout has already been finished, so nothing was added to it. "
+          + "Your logged sets are safe."
+      case .exerciseNotFound:
+        return "That movement is no longer in the catalogue, so nothing was saved for it."
+      case .sessionExerciseNotFound:
+        return "That movement is no longer part of this workout, so nothing was saved for it."
+      case .sessionExerciseMismatch:
+        return "That movement's details changed while you were logging, so the set was not "
+          + "saved. Try again."
+      case .gymNotFound:
+        return "This workout's gym could not be found, so nothing was changed."
+      case .machineNotFound:
+        return "That machine could not be found, so nothing was changed. Choose it again or "
+          + "pick another."
+      case .machineGymMismatch:
+        return "That machine belongs to a different gym, so nothing was changed."
+      case .writeNotApplied:
+        return "That set could not be saved. It has not been logged — tap to try again."
       }
     }
     return "That set could not be saved. It has not been logged — tap to try again."
