@@ -363,6 +363,39 @@ suites, and eight query-plan cases. Expanded Release Store verification passed
 157 tests in sixteen suites (all fourteen portable test files). Project/scheme
 regeneration was identical.
 
+## Consistent volume reports — 2026-11-07
+
+`VolumeStore.report` previously loaded date-window sets and current exercise
+attribution in separate read transactions. A deterministic test with two real
+SQLite WAL connections now reproduces the consequence: an independent writer
+moves four bench sets outside the window and archives the exercise between the
+two reads. The old report showed four unattributed sets, although the complete
+older version contained four attributed chest sets and the newer version had
+zero sets in the window. Both the report-equality test and a transaction trace
+failed before the fix (two reads instead of one).
+
+The report now reads both inputs inside one `database.read` closure using
+connection-scoped helpers shared with the existing public input APIs. It builds
+the attribution index and computes volume after the read ends. The original SQL,
+date boundaries, warm-up handling, and archived/unreadable-attribution policies
+are preserved. The regression returns the coherent older report while the writer
+commits; its next load sees zero sets, proving the update was actually applied.
+There are no sleeps, mocked writer behavior, additional queries, or migrations.
+
+This removes one transaction/queue entry and prevents mixed reports. It does not
+measure main-thread responsiveness or phone loading latency; `WeeklyVolumeScreen`
+still calls this synchronous API from its load handler. Scheduling and cancellation
+need their own measured follow-up. Snapshot consistency also does not freeze data
+after the method returns or make attribution historical: later loads still use
+current stored attribution.
+
+Verification: `make check` passed (90 Swift files, 177 Core tests, 79 Store tests,
+eight query-plan cases). The default Linux Store selection omits VolumeStoreTests,
+so these regressions were run explicitly: 90 tests in six suites passed in Debug,
+then all fourteen portable Store files passed in Release (159 tests, sixteen
+suites). Project/scheme regeneration remained identical. Native app/widget and
+CloudKit execution, plus physical-device loading/frame measurements, are pending.
+
 ## Remaining app-wide work
 
 - Capture Release cold/warm launch, first usable workout, resume, picker, history,
@@ -374,7 +407,7 @@ regeneration was identical.
   with cancellation and consistent snapshot semantics.
 - Measure first-launch index creation and ongoing set-write/storage overhead.
 - Address progression-chart row limits/order, machine provenance, consistent
-  multi-read report loading, and retry/concurrent-command identity from
+  consistent progression-history reads, and retry/concurrent-command identity from
   `CORE_STORE_ARCHITECTURE_REVIEW.md`; do not trade correctness for smaller reads.
 - Verify repaired historical schemas with native CloudKit metadatabases, sync
   triggers, account transitions, and the full app launch/recovery flow.

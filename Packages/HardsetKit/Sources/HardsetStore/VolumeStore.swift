@@ -4,9 +4,9 @@ import SQLiteData
 
 /// Reads the sets and the attribution a volume report needs.
 ///
-/// Two queries, both bounded by a date window, and then pure arithmetic in `VolumeAnalyzer`. The
-/// counting itself has no database handle, so a volume figure cannot depend on when it was asked
-/// for — which is what makes the report reproducible from the same window.
+/// Date-window sets and current exercise attribution are read from one database snapshot,
+/// followed by pure arithmetic in `VolumeAnalyzer`. A concurrent edit cannot mix sets from
+/// before that edit with attribution from after it.
 public nonisolated struct VolumeStore {
   private let database: any DatabaseWriter
 
@@ -20,12 +20,7 @@ public nonisolated struct VolumeStore {
   /// when two adjacent weeks are compared, which shows up as a phantom set in both.
   public func countableSets(from: Date, to: Date) throws -> [CountableSet] {
     try database.read { db in
-      try LoggedSet
-        .where { $0.completedAt >= from }
-        .where { $0.completedAt < to }
-        .order { $0.completedAt }
-        .fetchAll(db)
-        .map { CountableSet(exerciseID: ExerciseID(rawValue: $0.exerciseID), isWarmup: $0.isWarmup) }
+      try Self.readCountableSets(from: from, to: to, in: db)
     }
   }
 
@@ -37,17 +32,38 @@ public nonisolated struct VolumeStore {
   /// zero — the distinction the report is built on.
   public func attributionIndex() throws -> AttributionIndex {
     let entries = try database.read { db in
-      try Exercise.where { !$0.isArchived }.fetchAll(db).map(CatalogEntry.init(row:))
+      try Self.readAttributionEntries(in: db)
     }
     return AttributionIndex(entries: entries)
   }
 
-  /// The report for one window.
+  /// The report for one window, using a consistent snapshot for both inputs.
   public func report(from: Date, to: Date) throws -> MuscleVolumeReport {
-    VolumeAnalyzer.report(
-      sets: try countableSets(from: from, to: to),
-      attribution: try attributionIndex()
+    let (sets, entries) = try database.read { db in
+      (
+        try Self.readCountableSets(from: from, to: to, in: db),
+        try Self.readAttributionEntries(in: db)
+      )
+    }
+    return VolumeAnalyzer.report(
+      sets: sets,
+      attribution: AttributionIndex(entries: entries)
     )
+  }
+
+  private static func readCountableSets(from: Date, to: Date, in db: Database) throws
+    -> [CountableSet]
+  {
+    try LoggedSet
+      .where { $0.completedAt >= from }
+      .where { $0.completedAt < to }
+      .order { $0.completedAt }
+      .fetchAll(db)
+      .map { CountableSet(exerciseID: ExerciseID(rawValue: $0.exerciseID), isWarmup: $0.isWarmup) }
+  }
+
+  private static func readAttributionEntries(in db: Database) throws -> [CatalogEntry] {
+    try Exercise.where { !$0.isArchived }.fetchAll(db).map(CatalogEntry.init(row:))
   }
 
   /// The report for the seven days ending at `now`.

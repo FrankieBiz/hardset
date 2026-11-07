@@ -373,3 +373,42 @@ The requested architectural review is documented. No production Swift source or 
   Next concrete step: reproduce a concurrent volume report mixing countableSets
   with attributionIndex from separate database.read snapshots, then compose the
   report in one snapshot if confirmed. App-wide goal remains active.
+
+
+### 2026-11-07 19:24 UTC — Read volume-report inputs consistently
+
+- Objective: reproduce and eliminate mixed volume sets/attribution during concurrent
+  edits, reducing separate read transactions. Prior turn was verified progress
+  (06e48b4 on main). Existing worktree `/home/frankbiz/orca/workspaces/hardset/mojarra`,
+  branch `FrankieBiz/mojarra`; clean at start.
+- Owned paths: Store/VolumeStore.swift, StoreTests/VolumeStoreTests.swift,
+  docs/LOADING_PERFORMANCE.md and this handoff. ProgressionStore in the same source
+  file remains unchanged. No migrations or public API changes.
+- Two real file-backed DatabaseQueues in WAL reproduce the bug without sleeps:
+  after reading four bench sets, an independent writer atomically moves their dates
+  outside the window and archives the exercise. Old report mixed four earlier sets
+  with later missing attribution (4 unattributed), matching neither complete state.
+  Baseline extended Debug command failed exactly report equality and BEGIN count
+  (2 vs 1). Catalog decoding and archive rules work in the complete before/after
+  fixtures; changing only read composition resolves the defect.
+- report now reads both inputs in one database.read, via private connection helpers
+  shared with countableSets/attributionIndex. AttributionIndex and VolumeAnalyzer
+  arithmetic execute after closing the read. Existing SQL/date bounds/warmup and
+  archive/unreadable attribution policies preserved. No nested database reads.
+- Test proves the independent write fired and succeeded, coherent older report
+  during load, complete newer zero-set report on next load, and one read transaction.
+  No phone latency claim; screen load remains synchronous on MainActor.
+- Verification: make check passed (90 parsed files, 177 Core tests/23 suites,
+  79 Store tests/5 suites, 8 query-plan cases); default checker excludes Volume tests.
+  Explicit Debug with STORE_TESTS += ('VolumeStoreTests.swift',) passed 90 tests/6
+  suites. Expanded Release all14 portable Store files passed 159 tests/16 suites
+  using existing runpy release wrapper procedure. Generated project/scheme identical;
+  whitespace/diff review clean. No failed fix attempts beyond expected red baseline.
+- Remaining: progression history still reads samples and labels in separate reads;
+  next concrete step is reproduce an atomic machine-label/history update with a WAL
+  writer and compose that load if confirmed. Also prioritize async screen/startup
+  loading with cancellation and process-owned writer/sync engine: HardsetApp.init
+  currently opens/migrates synchronously, RootView.task can recreate a view-owned
+  engine, and WeeklyVolumeScreen.load runs the sync report on MainActor. Native
+  builds, CloudKit/AlarmKit/widget integration and Release iPhone timing/frame/memory
+  measurements remain required before any app-wide completion claim. Goal active.
