@@ -7,7 +7,7 @@ import SQLiteData
 /// Date-window sets and current exercise attribution are read from one database snapshot,
 /// followed by pure arithmetic in `VolumeAnalyzer`. A concurrent edit cannot mix sets from
 /// before that edit with attribution from after it.
-public nonisolated struct VolumeStore {
+public nonisolated struct VolumeStore: Sendable {
   private let database: any DatabaseWriter
 
   public init(database: any DatabaseWriter) {
@@ -51,6 +51,20 @@ public nonisolated struct VolumeStore {
     )
   }
 
+  /// Suspends the caller while GRDB reads one consistent, cancellable snapshot.
+  public func loadRollingWeek(endingAt now: Date) async throws -> MuscleVolumeReport {
+    try Task.checkCancellation()
+    let from = now.addingTimeInterval(-7 * 86_400)
+    let (sets, entries) = try await database.read { db in
+      (
+        try Self.readCountableSets(from: from, to: now, in: db),
+        try Self.readAttributionEntries(in: db)
+      )
+    }
+    try Task.checkCancellation()
+    return VolumeAnalyzer.report(sets: sets, attribution: AttributionIndex(entries: entries))
+  }
+
   private static func readCountableSets(from: Date, to: Date, in db: Database) throws
     -> [CountableSet]
   {
@@ -78,7 +92,7 @@ public nonisolated struct VolumeStore {
 }
 
 /// Reads load history for one exercise, per machine.
-public nonisolated struct ProgressionStore {
+public nonisolated struct ProgressionStore: Sendable {
   private let database: any DatabaseWriter
 
   public init(database: any DatabaseWriter) {
@@ -109,10 +123,32 @@ public nonisolated struct ProgressionStore {
   /// Everything a load-history chart needs, read from one consistent snapshot.
   public func history(for exerciseID: ExerciseID) throws -> ProgressionHistory {
     let (samples, names) = try database.read { db in
-      let samples = try Self.readSamples(for: exerciseID, limit: 2_000, in: db)
-      let ids = Array(Set(samples.compactMap(\.machineID)))
-      return (samples, try Self.readMachineNames(ids, in: db))
+      try Self.readHistoryInputs(for: exerciseID, in: db)
     }
+    return Self.analyze(samples: samples, names: names, exerciseID: exerciseID)
+  }
+
+  /// Suspends the caller while GRDB reads samples and labels in one snapshot.
+  public func loadHistory(for exerciseID: ExerciseID) async throws -> ProgressionHistory {
+    try Task.checkCancellation()
+    let (samples, names) = try await database.read { db in
+      try Self.readHistoryInputs(for: exerciseID, in: db)
+    }
+    try Task.checkCancellation()
+    return Self.analyze(samples: samples, names: names, exerciseID: exerciseID)
+  }
+
+  private static func readHistoryInputs(for exerciseID: ExerciseID, in db: Database) throws
+    -> ([ProgressionSample], [MachineID: String])
+  {
+    let samples = try readSamples(for: exerciseID, limit: 2_000, in: db)
+    let ids = Array(Set(samples.compactMap(\.machineID)))
+    return (samples, try readMachineNames(ids, in: db))
+  }
+
+  private static func analyze(
+    samples: [ProgressionSample], names: [MachineID: String], exerciseID: ExerciseID
+  ) -> ProgressionHistory {
     let series = ProgressionAnalyzer.series(from: samples, exerciseID: exerciseID)
     let changes = ProgressionAnalyzer.machineChanges(from: samples)
     return ProgressionHistory(series: series, machineChanges: changes, machineNames: names)
@@ -205,7 +241,7 @@ public nonisolated struct SessionSummary: Hashable, Sendable, Identifiable {
 }
 
 /// Reads finished sessions for the history screen.
-public nonisolated struct HistoryStore {
+public nonisolated struct HistoryStore: Sendable {
   private let database: any DatabaseWriter
 
   public init(database: any DatabaseWriter) {
@@ -217,46 +253,56 @@ public nonisolated struct HistoryStore {
   /// Open sessions are excluded: an unfinished workout belongs in the recovery path, not in
   /// history, and showing it with no duration invites the reader to think it lasted zero minutes.
   public func recentSessions(limit: Int = 50) throws -> [SessionSummary] {
-    try database.read { db in
-      let sessions = try Session
-        .where { $0.finishedAt.isNot(nil) }
-        .order { $0.startedAt.desc() }
-        .limit(limit)
+    try database.read { db in try Self.readRecentSessions(limit: limit, in: db) }
+  }
+
+  /// Suspends the caller while GRDB reads the history snapshot and summaries.
+  public func loadRecentSessions(limit: Int = 50) async throws -> [SessionSummary] {
+    try Task.checkCancellation()
+    let rows = try await database.read { db in try Self.readRecentSessions(limit: limit, in: db) }
+    try Task.checkCancellation()
+    return rows
+  }
+
+  private static func readRecentSessions(limit: Int, in db: Database) throws -> [SessionSummary] {
+    let sessions = try Session
+      .where { $0.finishedAt.isNot(nil) }
+      .order { $0.startedAt.desc() }
+      .limit(limit)
+      .fetchAll(db)
+    guard !sessions.isEmpty else { return [] }
+
+    let sessionIDs = sessions.map(\.id)
+    let sets = try LoggedSet
+      .where { $0.sessionID.in(sessionIDs) }
+      .order { $0.setOrdinal }
+      .fetchAll(db)
+
+    let exerciseIDs = Array(Set(sets.map(\.exerciseID)))
+    let names = exerciseIDs.isEmpty
+      ? [:]
+      : try Exercise
+        .where { $0.id.in(exerciseIDs) }
         .fetchAll(db)
-      guard !sessions.isEmpty else { return [] }
+        .reduce(into: [UUID: String]()) { $0[$1.id] = $1.name }
 
-      let sessionIDs = sessions.map(\.id)
-      let sets = try LoggedSet
-        .where { $0.sessionID.in(sessionIDs) }
-        .order { $0.setOrdinal }
-        .fetchAll(db)
+    let setsBySession = Dictionary(grouping: sets, by: \.sessionID)
 
-      let exerciseIDs = Array(Set(sets.map(\.exerciseID)))
-      let names = exerciseIDs.isEmpty
-        ? [:]
-        : try Exercise
-          .where { $0.id.in(exerciseIDs) }
-          .fetchAll(db)
-          .reduce(into: [UUID: String]()) { $0[$1.id] = $1.name }
-
-      let setsBySession = Dictionary(grouping: sets, by: \.sessionID)
-
-      return sessions.map { session in
-        let own = setsBySession[session.id] ?? []
-        var seen = Set<UUID>()
-        var ordered: [String] = []
-        for set in own where !seen.contains(set.exerciseID) {
-          seen.insert(set.exerciseID)
-          ordered.append(names[set.exerciseID] ?? "Unknown movement")
-        }
-        return SessionSummary(
-          id: SessionID(rawValue: session.id),
-          title: session.title,
-          timeline: SessionTimeline(startedAt: session.startedAt, finishedAt: session.finishedAt),
-          exerciseNames: ordered,
-          volume: Self.volume(of: own)
-        )
+    return sessions.map { session in
+      let own = setsBySession[session.id] ?? []
+      var seen = Set<UUID>()
+      var ordered: [String] = []
+      for set in own where !seen.contains(set.exerciseID) {
+        seen.insert(set.exerciseID)
+        ordered.append(names[set.exerciseID] ?? "Unknown movement")
       }
+      return SessionSummary(
+        id: SessionID(rawValue: session.id),
+        title: session.title,
+        timeline: SessionTimeline(startedAt: session.startedAt, finishedAt: session.finishedAt),
+        exerciseNames: ordered,
+        volume: Self.volume(of: own)
+      )
     }
   }
 

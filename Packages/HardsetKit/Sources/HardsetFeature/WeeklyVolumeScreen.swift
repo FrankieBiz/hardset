@@ -10,8 +10,7 @@ import SwiftUI
 /// once — and there is no live-updating requirement here that would justify the complexity.
 @MainActor
 public struct WeeklyVolumeScreen: View {
-  @State private var report: MuscleVolumeReport?
-  @State private var loadFailed = false
+  @State private var snapshot = SnapshotLoader<MuscleVolumeReport>()
   @State private var isShowingMethodology = false
 
   private let store: VolumeStore
@@ -24,14 +23,14 @@ public struct WeeklyVolumeScreen: View {
 
   public var body: some View {
     Group {
-      if let report {
+      if let report = snapshot.value {
         VolumeReportView(
           report: report,
           // Tokens the catalogue cannot train yet are content debt, not the user's coverage gap.
           excludedFromGaps: ExerciseCatalog.unauthoredDirectTokens,
           onExplainCounting: { isShowingMethodology = true }
         )
-      } else if loadFailed {
+      } else if snapshot.loadFailed {
         // Says what is wrong and what is not. Logged sets are safe either way, and saying so is
         // the difference between an error and a scare.
         VStack {
@@ -51,8 +50,8 @@ public struct WeeklyVolumeScreen: View {
           .background(Tokens.Color.background)
       }
     }
-    .task { load() }
-    .refreshable { load() }
+    .task { await load() }
+    .refreshable { await load() }
     .sheet(isPresented: $isShowingMethodology) {
       // Generated from the same value the counting uses, so the disclosure cannot drift from the
       // arithmetic.
@@ -61,13 +60,9 @@ public struct WeeklyVolumeScreen: View {
     }
   }
 
-  private func load() {
-    do {
-      report = try store.rollingWeek(endingAt: now())
-      loadFailed = false
-    } catch {
-      report = nil
-      loadFailed = true
-    }
+  private func load() async {
+    let store = store
+    let instant = now()
+    await snapshot.load { try await store.loadRollingWeek(endingAt: instant) }
   }
 }

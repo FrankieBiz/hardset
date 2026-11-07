@@ -422,6 +422,56 @@ and eight query-plan cases. Expanded Release Store passed all fourteen portable
 test files (161 tests in sixteen suites). Project/scheme regeneration remained
 identical. Native builds, CloudKit execution and device timings remain pending.
 
+## Suspend screen database waits — 2026-11-07
+
+History, progression, and weekly-volume screens called synchronous Store APIs from
+MainActor `.task` and refresh handlers. A portable runtime probe schedules a
+MainActor job from a real GRDB query callback. With the synchronous path, that job
+cannot execute until the database wait ends; all three cases failed the
+availability assertion. This measures executor availability, not iPhone frame
+latency. The test uses a bounded semaphore wait only inside the synthetic probe;
+production code contains no semaphore or detached task.
+
+The three stores now offer explicitly named async loading APIs backed by GRDB's
+cancellable async `read`, sharing the existing connection helpers. Each complete
+load still uses one read snapshot and returns the same values as its synchronous
+reference. Public stores have compiler-checked Sendable conformance through their
+DatabaseWriter field. No unchecked annotations, new dependencies or migrations.
+The caller suspends for database work under the project's Swift 6.2 isolation
+settings; adding `async` alone to the old synchronous body would not provide this.
+Volume/progression analysis after the read still runs on the caller's actor; its
+CPU cost needs profiling before a separate executor change.
+
+A shared MainActor `@Observable SnapshotLoader` owns screen results and cancels a
+previous read when a newer request begins. It propagates caller cancellation to
+the active task, drops stale successes/errors, silently preserves visible content
+on cancellation, and surfaces actual failures with the existing retry flow. The
+three screens await it from appearance and refresh tasks. History rows are mapped
+once per successful load. Initial reads show the native progress indicator before
+empty/data content; refresh preserves readable content. No custom animation was
+added, so reduced-motion behavior is unchanged. `DESIGN.md` records the existing
+tokens and these states because no design document previously existed.
+
+The main-actor availability probe passes on the async path. Tests also verify
+async/sync result equality and read counts, already-canceled loads issue no SELECT,
+active-query cancellation leaves the connection usable, old successes/failures
+cannot replace newer content, and cancellation reaches an operation even when it
+ignores cancellation until it returns. Failure/retry and silent CancellationError
+behavior are covered. Tests use continuations for overlap control, without sleeps.
+
+Final verification: `make check` passed (92 Swift files, 177 Core tests, 81 default
+Store tests and eight query-plan cases). Explicit Debug with SnapshotLoadingTests
+passed 87 tests in six suites. Expanded Release Store passed all fifteen portable
+test files (167 tests in seventeen suites). Project/scheme regeneration was
+identical. The default Linux test selection omits SnapshotLoadingTests, so the
+expanded run is required to execute these regressions.
+
+SwiftUI source is syntax-checked on Linux, not compiled or rendered with an Apple
+SDK. Native navigation, keyboard/VoiceOver, refresh and dismissal behavior,
+responsive appearance, and mid-range-device frame/load measurements remain
+unverified. Synchronous app initialization, catalog/recovery and picker paths are
+separate remaining loading work; this milestone does not establish launch time.
+
 ## Remaining app-wide work
 
 - Capture Release cold/warm launch, first usable workout, resume, picker, history,

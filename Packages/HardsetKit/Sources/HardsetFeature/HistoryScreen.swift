@@ -6,8 +6,7 @@ import SwiftUI
 /// Past workouts, wired.
 @MainActor
 public struct HistoryScreen: View {
-  @State private var rows: [HistoryRow] = []
-  @State private var loadFailed = false
+  @State private var snapshot = SnapshotLoader<[HistoryRow]>()
 
   private let store: HistoryStore
   private let unit: WeightUnit
@@ -19,7 +18,7 @@ public struct HistoryScreen: View {
 
   public var body: some View {
     Group {
-      if loadFailed {
+      if snapshot.loadFailed {
         VStack {
           Spacer()
           HardsetEmptyState(
@@ -31,17 +30,23 @@ public struct HistoryScreen: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Tokens.Color.background)
-      } else {
+      } else if let rows = snapshot.value {
         HistoryView(rows: rows, unit: unit)
+      } else {
+        ProgressView()
+          .frame(maxWidth: .infinity, maxHeight: .infinity)
+          .background(Tokens.Color.background)
       }
     }
-    .task { load() }
-    .refreshable { load() }
+    .task { await load() }
+    .refreshable { await load() }
   }
 
-  private func load() {
-    do {
-      rows = try store.recentSessions().map { summary in
+  private func load() async {
+    let store = store
+    await snapshot.load { @MainActor in
+      let summaries = try await store.loadRecentSessions()
+      return summaries.map { summary in
         HistoryRow(
           id: summary.id,
           title: summary.title,
@@ -52,10 +57,6 @@ public struct HistoryScreen: View {
           hasImplausibleDuration: summary.hasImplausibleDuration
         )
       }
-      loadFailed = false
-    } catch {
-      rows = []
-      loadFailed = true
     }
   }
 }

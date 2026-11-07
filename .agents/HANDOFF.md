@@ -447,3 +447,55 @@ The requested architectural review is documented. No production Swift source or 
   under NonisolatedNonsendingByDefault. Native validation remains necessary. Also
   pending complete chart histories/tie ordering, incomplete-plan recovery, provenance
   UI, validation/retry identity, durable rest/account gating. Full-app goal active.
+
+
+### 2026-11-07 19:35 UTC — Suspend screen database waits and own refresh results
+
+- Objective: stop History/ExerciseProgress/WeeklyVolume screen database waits from
+  occupying MainActor, preserve read snapshots and reject stale/canceled UI results.
+  Prior turn was verified progress (a28c301). Existing worktree
+  `/home/frankbiz/orca/workspaces/hardset/mojarra`, branch FrankieBiz/mojarra; clean
+  at start. No agents delegated.
+- Owned paths: Store/VolumeStore.swift, new Store/SnapshotLoader.swift, new
+  StoreTests/SnapshotLoadingTests.swift, Feature/{HistoryScreen,ExerciseProgressScreen,
+  WeeklyVolumeScreen}.swift, new DESIGN.md, docs/LOADING_PERFORMANCE.md, this handoff.
+- Runtime baseline: query callback schedules MainActor job; all three original sync
+  loaders block that job until a bounded test wait ends. Baseline test failed each
+  availability assertion. Setup first needed await on GRDB write overloads in async
+  test (one compile correction, no failed production approach). Probe uses semaphore
+  only in fixture, timeout now2s to allow unrelated suite scheduling; no production
+  locks, sleeps or detached tasks added.
+- New named async Store APIs: loadRollingWeek, loadHistory, loadRecentSessions.
+  Use actual GRDB async read with cancellation, shared helpers and one snapshot;
+  synchronous public APIs preserved. Sendable conformances compiler-checked through
+  DatabaseWriter. Under NonisolatedNonsendingByDefault, async alone is insufficient;
+  GRDB read suspends here. Post-read volume/progression CPU remains on caller actor,
+  pending profiling; no invented @concurrent or background responsiveness claim.
+- SnapshotLoader is MainActor @Observable, cancels superseded active tasks, propagates
+  parent cancellation with a cancellation handler, rejects stale successes/errors,
+  silently preserves content on cancellation and reports actual failures. Screens
+  await it; initial loads use native progress before data/empty states, refresh
+  retains content. HistoryRow mapping remains once per success. No new motion;
+  existing tokens retained. DESIGN.md records source token values and loading states.
+- Portable tests cover main-actor availability, async/sync result equality and1 read
+  each, no query when already canceled, cancellation during real query plus connection
+  health afterward, latest-request success/error races, cancellation propagation even
+  when operation returns late, failure/retry and silent CancellationError. Continuation
+  gates control races without sleeps. Extended Debug passed87 tests/6 suites.
+- Final make check passed:92 syntax files,177 Core tests/23 suites,81 default Store
+  tests/5 suites,8 query-plan cases. Default checker omits the new test file; include
+  SnapshotLoadingTests.swift in STORE_TESTS for extended runs. Expanded Release now
+  uses15 portable files (prior14 plus SnapshotLoadingTests.swift); see next validation
+  line for final result. Generated project/scheme identical; reviewed diff clean.
+  Final expanded Release passed167 tests/17 suites (15 portable test files).
+- Native SwiftUI compilation/rendering, keyboard/VoiceOver, refresh/dismissal, screen
+  resizing and mid-range-device load/frame timings remain unverified on Linux. Never
+  turn the executor-availability test into an iPhone latency claim. New screens were
+  syntax checked only; Store and loader were fully compiled/executed.
+- Next: inspect/test startup ownership and failure path. HardsetApp.init still opens
+  and migrates synchronously via prepareDependencies, RootView.task owns/recreates
+  syncEngine; current assertionFailure can continue with an unintended default
+  database. Also catalog/recovery/pickers remain synchronous. Native startup/CloudKit
+  environment is needed before release-quality whole-app validation. Other pending
+  work: chart limits/tie order, incomplete-plan recovery, provenance, numeric/retry
+  identity, durable rest and account gating. Goal remains active.

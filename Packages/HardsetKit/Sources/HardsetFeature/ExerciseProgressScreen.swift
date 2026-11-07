@@ -11,8 +11,7 @@ import SwiftUI
 /// been doing on this" is a question asked while standing at the machine, not at a desk.
 @MainActor
 public struct ExerciseProgressScreen: View {
-  @State private var history: ProgressionHistory?
-  @State private var loadFailed = false
+  @State private var snapshot = SnapshotLoader<ProgressionHistory>()
   @State private var isShowingMethodology = false
 
   private let store: ProgressionStore
@@ -34,7 +33,7 @@ public struct ExerciseProgressScreen: View {
 
   public var body: some View {
     ScrollView {
-      if loadFailed {
+      if snapshot.loadFailed {
         VStack {
           Spacer(minLength: Tokens.Spacing.loose)
           HardsetEmptyState(
@@ -45,20 +44,24 @@ public struct ExerciseProgressScreen: View {
           Spacer(minLength: Tokens.Spacing.loose)
         }
         .padding(.top, Tokens.Spacing.section)
-      } else {
+      } else if snapshot.value != nil {
         ProgressionChartView(
           series: seriesInputs,
-          machineChanges: history?.machineChanges ?? [],
+          machineChanges: snapshot.value?.machineChanges ?? [],
           unit: unit,
           onExplain: { isShowingMethodology = true }
         )
         .padding(.horizontal, Tokens.Spacing.regular)
+      } else {
+        ProgressView()
+          .frame(maxWidth: .infinity)
+          .padding(.top, Tokens.Spacing.section)
       }
     }
     .background(Tokens.Color.background)
     .navigationTitle(exerciseName)
-    .task { load() }
-    .refreshable { load() }
+    .task(id: exerciseID) { await load() }
+    .refreshable { await load() }
     .sheet(isPresented: $isShowingMethodology) {
       // The estimate is a formula applied to the user's own sets, not a study finding, and the
       // sheet says which formula and where it stops being meaningful.
@@ -71,7 +74,7 @@ public struct ExerciseProgressScreen: View {
   /// deliberately free of storage. Ordered by most recently used so the machine the lifter is on
   /// now reads first in the legend.
   private var seriesInputs: [ProgressionChartView.SeriesInput] {
-    guard let history else { return [] }
+    guard let history = snapshot.value else { return [] }
     return history.series
       .sorted { lhs, rhs in
         (lhs.points.last?.date ?? .distantPast) > (rhs.points.last?.date ?? .distantPast)
@@ -81,13 +84,9 @@ public struct ExerciseProgressScreen: View {
       }
   }
 
-  private func load() {
-    do {
-      history = try store.history(for: exerciseID)
-      loadFailed = false
-    } catch {
-      history = nil
-      loadFailed = true
-    }
+  private func load() async {
+    let store = store
+    let id = exerciseID
+    await snapshot.load { try await store.loadHistory(for: id) }
   }
 }
