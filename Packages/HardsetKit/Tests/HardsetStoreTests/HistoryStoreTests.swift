@@ -18,6 +18,38 @@ struct HistoryStoreTests {
     return queue
   }
 
+  @Test("Loading indexes upgrade an existing v1 database without changing workout rows")
+  func loadingIndexUpgrade() throws {
+    let queue = try DatabaseQueue()
+    let migrator = HardsetMigrations.migrator()
+    try migrator.migrate(queue, upTo: "v1")
+    let id = UUID().uuidString.lowercased()
+    try queue.write { db in
+      try db.execute(
+        sql: "INSERT INTO sessions (id, title) VALUES (?, ?)",
+        arguments: [id, "Keep this workout"]
+      )
+    }
+    try migrator.migrate(queue)
+    // Reopening must not rerun CREATE INDEX or mutate data either.
+    try migrator.migrate(queue)
+    try queue.read { db in
+      let title = try String.fetchOne(db, sql: "SELECT title FROM sessions WHERE id = ?", arguments: [id])
+      #expect(title == "Keep this workout")
+      let indexes = try String.fetchAll(db, sql: "SELECT name FROM sqlite_master WHERE type = 'index'")
+      for name in [
+        "loggedSets_on_completedAt", "loggedSets_on_exerciseID_completedAt",
+        "loggedSets_on_exerciseID_machineID_completedAt", "loggedSets_on_sessionID_setOrdinal",
+        "sessionExercises_on_sessionID_position",
+      ] {
+        #expect(indexes.contains(name), "Missing loading index: \(name)")
+        let isUnique = try Bool.fetchOne(db, sql: "SELECT \"unique\" FROM pragma_index_list('loggedSets') WHERE name = ?", arguments: [name])
+          ?? Bool.fetchOne(db, sql: "SELECT \"unique\" FROM pragma_index_list('sessionExercises') WHERE name = ?", arguments: [name])
+        #expect(isUnique == false)
+      }
+    }
+  }
+
   private func fixture() throws -> (any DatabaseWriter, LoggerStore, HistoryStore, ExerciseID, ExerciseID) {
     let database = try migratedDatabase()
     let press = ExerciseID()

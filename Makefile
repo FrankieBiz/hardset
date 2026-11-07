@@ -7,6 +7,7 @@ PY := python3
 
 check: ## Run honest Linux checks across all targets (parse syntax, Core suite, Store suite)
 	hardset-check all
+	$(PY) Tools/check_query_performance.py --require-indexes
 
 check-core: ## Run HardsetCore unit test suite
 	hardset-check core

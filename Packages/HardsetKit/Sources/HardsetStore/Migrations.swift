@@ -315,6 +315,49 @@ public nonisolated enum HardsetMigrations {
       .execute(db)
     }
 
+    // Keep v1 intact: existing installations must receive the same loading indexes
+    // as new databases without rebuilding tables or touching synchronized records.
+    migrator.registerMigration("v2_loadingIndexes") { db in
+      // Date windows for volume reports should visit only the selected interval.
+      try #sql(
+        """
+        CREATE INDEX "loggedSets_on_completedAt" ON "loggedSets"("completedAt")
+        """
+      )
+      .execute(db)
+      // Exercise-wide charts and exact-machine history need separate ordered paths.
+      // Keep warm-ups in the indexes so either SQL boolean spelling can use them.
+      try #sql(
+        """
+        CREATE INDEX "loggedSets_on_exerciseID_completedAt"
+          ON "loggedSets"("exerciseID", "completedAt" DESC)
+        """
+      )
+      .execute(db)
+      try #sql(
+        """
+        CREATE INDEX "loggedSets_on_exerciseID_machineID_completedAt"
+          ON "loggedSets"("exerciseID", "machineID", "completedAt" DESC)
+        """
+      )
+      .execute(db)
+      // Recovery reads the plan and its sets in display order, once per session.
+      try #sql(
+        """
+        CREATE INDEX "loggedSets_on_sessionID_setOrdinal"
+          ON "loggedSets"("sessionID", "setOrdinal")
+        """
+      )
+      .execute(db)
+      try #sql(
+        """
+        CREATE INDEX "sessionExercises_on_sessionID_position"
+          ON "sessionExercises"("sessionID", "position")
+        """
+      )
+      .execute(db)
+    }
+
     return migrator
   }
 }

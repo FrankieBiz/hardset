@@ -36,3 +36,26 @@ The requested architectural review is documented. No production Swift source or 
 - Add explicit semantic foreground/fill roles and increased-contrast resolution. Keep all changes within HardsetUI; preserve Core/Store and zero database work per render.
 - Verification: `make check` passed with 86 Swift files parsed, 167 Core tests, and 45 Store tests across five local suites. CloudKit and native UI behavior are excluded. Contrast candidates were checked numerically; iOS resolved colors, actual hit regions, Dynamic Type layouts, and physical glare testing remain pending.
 - Next work: implement the audit's prioritized recommendations as a separate task, with native UI verification. The earlier architectural review findings above remain open.
+
+## App loading follow-up — 2026-11-07
+
+- Objective remains active: improve code and loading throughout the entire app.
+- Worktree: `/home/frankbiz/orca/workspaces/hardset/mojarra`; branch `FrankieBiz/mojarra`.
+- Implemented `v2_loadingIndexes` without editing v1: date-range, exercise/date,
+  exercise/machine/date, session/ordinal, and plan session/position indexes.
+- Changed paths: `Migrations.swift`, `HistoryStoreTests.swift`, `Makefile`,
+  `Tools/check_query_performance.py`, `docs/LOADING_PERFORMANCE.md`, this handoff.
+- Verification: `make check` passed: 90 files parsed, 171 Core tests, 46 Store
+  tests, and large-fixture query-plan/result gate. Native migrator upgrade/reopen
+  test passed. Project generator produced identical project and scheme files.
+- Evidence: 100,000-set fixture originally failed the plan gate for all five
+  reads; all now use indexed searches without temporary sorting. Local volume
+  read median improved 4.342 to 1.079 ms. These are warm in-memory SQLite results,
+  not iPhone or launch measurements. See loading document for all measurements.
+- Settled: keep immutable snapshots and machine keys; avoid caches that hide
+  incomplete history. Retain existing v1 indexes until write/storage tradeoffs
+  are measured. This does not fix historical v1-column upgrades/debug erasure.
+- Next concrete step: profile synchronous feature loading and app initialization
+  with Release device traces, and continue complete-history/record query fixes
+  from the Core/Store review. Linux cannot verify SwiftUI/app/widget builds,
+  CloudKit integration, AlarmKit, or physical-device performance.
