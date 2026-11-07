@@ -409,7 +409,9 @@ public final class SessionCoordinator {
         lastError = SessionCoordinatorError.untrackedExercise
         return false
       }
-      try store.setSessionExerciseMachine(rowID: rowID, machineID: machineID)
+      try store.setSessionExerciseMachine(
+        rowID: rowID, machineID: machineID, sessionID: sessionID, exerciseID: exercise.exerciseID
+      )
       // Same rule: the equipment's own step size, not whatever the caller happened to know.
       let resolvedIncrement =
         machineIncrementKg

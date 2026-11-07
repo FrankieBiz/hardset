@@ -57,6 +57,166 @@ struct LoggerStoreTests {
 
   // MARK: - Write path
 
+  @Test("Finished workouts reject set, plan, and equipment mutations",
+        arguments: ["set", "plan", "machine"])
+  func closedWorkoutRejectsMutations(command: String) throws {
+    let database = try migratedDatabase()
+    let store = LoggerStore(database: database)
+    let exercise = try seedExercise(database)
+    let gym = try seedGym(database)
+    let machine = try seedMachine(database, gym: gym, name: "Press")
+    let session = try store.startSession(gymID: gym, at: start)
+    let row = try store.addExercise(to: session, exerciseID: exercise, position: 0)
+    try store.finishSession(session, at: start.addingTimeInterval(600))
+    #expect(throws: LoggerStoreError.sessionClosed) {
+      switch command {
+      case "set":
+        _ = try store.logSet(sessionID: session, exerciseID: exercise,
+                             draft: SetEntryDraft(weightKg: 100, reps: 8), at: start.addingTimeInterval(700))
+      case "plan":
+        _ = try store.addExercise(to: session, exerciseID: exercise, position: 1)
+      default:
+        try store.setSessionExerciseMachine(rowID: row, machineID: machine)
+      }
+    }
+    let saved = try store.sessionExercises(in: session)
+    #expect(saved.count == 1)
+    #expect(saved[0].machineID == nil)
+    #expect(try store.sets(in: session).isEmpty)
+  }
+
+  @Test("A logged set must match the supplied plan row's session, exercise, and machine",
+        arguments: ["session", "exercise", "machine", "missing"])
+  func setRejectsMismatchedPlan(context: String) throws {
+    let database = try migratedDatabase()
+    let store = LoggerStore(database: database)
+    let exercise = try seedExercise(database)
+    let otherExercise = try seedExercise(database, name: "Curl")
+    let gym = try seedGym(database)
+    let machine = try seedMachine(database, gym: gym, name: "Press")
+    let session = try store.startSession(gymID: gym, at: start)
+    let otherSession = try store.startSession(gymID: gym, at: start)
+    let row = try store.addExercise(to: session, exerciseID: exercise, position: 0)
+    let expected: LoggerStoreError = context == "missing" ? .sessionExerciseNotFound : .sessionExerciseMismatch
+    #expect(throws: expected) {
+      _ = try store.logSet(
+        sessionID: context == "session" ? otherSession : session,
+        exerciseID: context == "exercise" ? otherExercise : exercise,
+        machineID: context == "machine" ? machine : nil,
+        sessionExerciseID: context == "missing" ? UUID() : row,
+        draft: SetEntryDraft(weightKg: 100, reps: 8), at: start
+      )
+    }
+    #expect(try store.sets(in: session).isEmpty)
+    #expect(try store.sets(in: otherSession).isEmpty)
+  }
+
+  @Test("Local commands reject a machine at a different known gym",
+        arguments: ["start", "plan", "set", "machine"])
+  func rejectsWrongGymMachine(command: String) throws {
+    let database = try migratedDatabase()
+    let store = LoggerStore(database: database)
+    let exercise = try seedExercise(database)
+    let gym = try seedGym(database)
+    let otherGym = try seedGym(database)
+    let machine = try seedMachine(database, gym: otherGym, name: "Other gym press")
+    let session = try store.startSession(gymID: gym, at: start)
+    let row = try store.addExercise(to: session, exerciseID: exercise, position: 0)
+    #expect(throws: LoggerStoreError.machineGymMismatch) {
+      switch command {
+      case "start":
+        _ = try store.startSession(gymID: gym, title: "Invalid plan", at: start,
+                                  plan: [PlannedExercise(exerciseID: exercise, machineID: machine,
+                                                         exerciseName: "Press")])
+      case "plan":
+        _ = try store.addExercise(to: session, exerciseID: exercise, machineID: machine, position: 1)
+      case "set":
+        _ = try store.logSet(sessionID: session, exerciseID: exercise, machineID: machine,
+                             draft: SetEntryDraft(weightKg: 100, reps: 8), at: start)
+      default:
+        try store.setSessionExerciseMachine(rowID: row, machineID: machine)
+      }
+    }
+    let saved = try store.sessionExercises(in: session)
+    #expect(saved.count == 1)
+    #expect(saved[0].machineID == nil)
+    #expect(try store.sets(in: session).isEmpty)
+    let sessions = try database.read { db in try Int.fetchOne(db, sql: "SELECT count(*) FROM sessions") }
+    #expect(sessions == 1)
+  }
+
+  @Test("A missing plan row cannot report a successful machine change")
+  func missingPlanCannotChangeMachine() throws {
+    let database = try migratedDatabase()
+    let store = LoggerStore(database: database)
+    #expect(throws: LoggerStoreError.sessionExerciseNotFound) {
+      try store.setSessionExerciseMachine(rowID: UUID(), machineID: nil)
+    }
+  }
+
+  @Test("Ignored local writes cannot report success",
+        arguments: ["start", "plan", "set", "machine", "finish"])
+  func ignoredWriteFails(command: String) throws {
+    let database = try migratedDatabase()
+    let store = LoggerStore(database: database)
+    let exercise = try seedExercise(database)
+    let session = try store.startSession(at: start)
+    let row = try store.addExercise(to: session, exerciseID: exercise, position: 0)
+    let table = command == "start" || command == "finish" ? "sessions"
+      : command == "set" ? "loggedSets" : "sessionExercises"
+    let operation = command == "machine" || command == "finish" ? "UPDATE" : "INSERT"
+    try database.write { db in
+      try db.execute(sql: "CREATE TEMP TRIGGER ignore_command BEFORE \(operation) ON \(table) BEGIN SELECT RAISE(IGNORE); END")
+    }
+    #expect(throws: LoggerStoreError.writeNotApplied) {
+      switch command {
+      case "start": _ = try store.startSession(at: start)
+      case "plan": _ = try store.addExercise(to: session, exerciseID: exercise, position: 1)
+      case "set":
+        _ = try store.logSet(sessionID: session, exerciseID: exercise,
+                             draft: SetEntryDraft(weightKg: 100, reps: 8), at: start)
+      case "machine": try store.setSessionExerciseMachine(rowID: row, machineID: nil)
+      default: try store.finishSession(session, at: start.addingTimeInterval(600))
+      }
+    }
+    #expect(try store.openSession()?.id == session)
+    #expect(try store.sessionExercises(in: session).count == 1)
+    #expect(try store.sets(in: session).isEmpty)
+  }
+
+  @Test("Missing local references return explicit errors without partial writes",
+        arguments: ["session", "exercise", "gym", "machine"])
+  func missingReferencesFail(context: String) throws {
+    let database = try migratedDatabase()
+    let store = LoggerStore(database: database)
+    let exercise = try seedExercise(database)
+    let session = try store.startSession(at: start)
+    let expected: LoggerStoreError
+    switch context {
+    case "session": expected = .sessionNotFound
+    case "exercise": expected = .exerciseNotFound
+    case "gym": expected = .gymNotFound
+    default: expected = .machineNotFound
+    }
+    #expect(throws: expected) {
+      switch context {
+      case "session":
+        _ = try store.logSet(sessionID: SessionID(), exerciseID: exercise,
+                             draft: SetEntryDraft(weightKg: 100, reps: 8), at: start)
+      case "exercise":
+        _ = try store.addExercise(to: session, exerciseID: ExerciseID(), position: 0)
+      case "gym": _ = try store.startSession(gymID: GymID(), at: start)
+      default:
+        _ = try store.logSet(sessionID: session, exerciseID: exercise, machineID: MachineID(),
+                             draft: SetEntryDraft(weightKg: 100, reps: 8), at: start)
+      }
+    }
+    #expect(try store.sets(in: session).isEmpty)
+    #expect(try store.sessionExercises(in: session).isEmpty)
+    let sessions = try database.read { db in try Int.fetchOne(db, sql: "SELECT count(*) FROM sessions") }
+    #expect(sessions == 1)
+  }
+
   @Test("A complete draft is written")
   func logsACompleteSet() throws {
     let database = try migratedDatabase()

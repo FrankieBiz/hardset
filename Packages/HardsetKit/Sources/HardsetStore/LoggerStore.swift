@@ -47,6 +47,16 @@ public nonisolated struct LoggerStore {
     let id = SessionID()
     let rowIDs = plan.map { _ in UUID() }
     try database.write { db in
+      if let gymID {
+        let gym = try Gym.where { $0.id.eq(gymID.rawValue) }.select(\.id).fetchOne(db)
+        guard gym != nil else { throw LoggerStoreError.gymNotFound }
+      }
+      for exerciseID in Set(plan.map(\.exerciseID)) {
+        try Self.requireExercise(exerciseID, in: db)
+      }
+      for machineID in Set(plan.compactMap(\.machineID)) {
+        try Self.requireMachine(machineID, at: gymID?.rawValue, in: db)
+      }
       try Session.insert {
         Session.Draft(
           id: id.rawValue,
@@ -58,6 +68,7 @@ public nonisolated struct LoggerStore {
         )
       }
       .execute(db)
+      try Self.requireSingleChange(in: db)
       for (position, planned) in plan.enumerated() {
         try SessionExercise.insert {
           SessionExercise.Draft(
@@ -70,6 +81,7 @@ public nonisolated struct LoggerStore {
           )
         }
         .execute(db)
+        try Self.requireSingleChange(in: db)
       }
     }
     return (id, rowIDs)
@@ -86,6 +98,9 @@ public nonisolated struct LoggerStore {
   ) throws -> UUID {
     let rowID = UUID()
     try database.write { db in
+      let gymID = try Self.requireOpenSession(sessionID, in: db)
+      try Self.requireExercise(exerciseID, in: db)
+      try Self.requireMachine(machineID, at: gymID, in: db)
       try SessionExercise.insert {
         SessionExercise.Draft(
           id: rowID,
@@ -97,6 +112,7 @@ public nonisolated struct LoggerStore {
         )
       }
       .execute(db)
+      try Self.requireSingleChange(in: db)
     }
     return rowID
   }
@@ -105,12 +121,31 @@ public nonisolated struct LoggerStore {
   ///
   /// Without this the plan row keeps the machine the exercise STARTED on while the logged sets
   /// carry the one it moved to, and recovery rebuilds from a plan that contradicts the record.
-  public func setSessionExerciseMachine(rowID: UUID, machineID: MachineID?) throws {
+  /// Optional expected IDs let a coordinator reject a plan row reparented by
+  /// another writer instead of changing a different workout's equipment.
+  public func setSessionExerciseMachine(
+    rowID: UUID,
+    machineID: MachineID?,
+    sessionID: SessionID? = nil,
+    exerciseID: ExerciseID? = nil
+  ) throws {
     try database.write { db in
+      let row = try SessionExercise.where { $0.id.eq(rowID) }.fetchOne(db)
+      guard let row else { throw LoggerStoreError.sessionExerciseNotFound }
+      if let sessionID, row.sessionID != sessionID.rawValue {
+        throw LoggerStoreError.sessionExerciseMismatch
+      }
+      if let exerciseID, row.exerciseID != exerciseID.rawValue {
+        throw LoggerStoreError.sessionExerciseMismatch
+      }
+      let gymID = try Self.requireOpenSession(SessionID(rawValue: row.sessionID), in: db)
+      try Self.requireExercise(ExerciseID(rawValue: row.exerciseID), in: db)
+      try Self.requireMachine(machineID, at: gymID, in: db)
       try SessionExercise
         .where { $0.id.eq(rowID) }
         .update { $0.machineID = #bind(machineID?.rawValue) }
         .execute(db)
+      try Self.requireSingleChange(in: db)
     }
   }
 
@@ -119,6 +154,8 @@ public nonisolated struct LoggerStore {
   /// Throws `LoggerStoreError.incompleteSet` when the draft has no usable weight-and-reps
   /// pair. Zero added load is accepted — bodyweight work is a real set — but a missing value
   /// is not, and the two are distinct because `SetEntryDraft` holds optionals.
+  /// Session state and any supplied plan/equipment context are validated inside
+  /// the save transaction, before reading record comparisons or inserting a set.
   /// - Parameters:
   ///   - sessionExerciseID: The plan row this set belongs to. Supplying it is what lets recovery
   ///     tell two blocks of the same movement apart.
@@ -166,6 +203,16 @@ public nonisolated struct LoggerStore {
     let id = SetID()
     var records: [PersonalRecord] = []
     try database.write { db in
+      let gymID = try Self.requireOpenSession(sessionID, in: db)
+      try Self.requireExercise(exerciseID, in: db)
+      if let sessionExerciseID {
+        let row = try SessionExercise.where { $0.id.eq(sessionExerciseID) }.fetchOne(db)
+        guard let row else { throw LoggerStoreError.sessionExerciseNotFound }
+        guard row.sessionID == sessionID.rawValue, row.exerciseID == exerciseID.rawValue,
+          row.machineID == machineID?.rawValue
+        else { throw LoggerStoreError.sessionExerciseMismatch }
+      }
+      try Self.requireMachine(machineID, at: gymID, in: db)
       if detectingRecords, !isWarmup {
         let candidate = PersonalRecordDetector.Candidate(weightKg: resolved.weightKg, reps: resolved.reps)
         let key = ProgressionKey(exerciseID: exerciseID, machineID: machineID)
@@ -203,8 +250,39 @@ public nonisolated struct LoggerStore {
         )
       }
       .execute(db)
+      try Self.requireSingleChange(in: db)
     }
     return (id, records)
+  }
+
+  // Local command validation belongs in the writer transaction, not in schema
+  // constraints that could reject an otherwise legitimate row arriving via sync.
+  /// Returns the session's recorded gym. Project only the validation fields so
+  /// every set save avoids reading notes or decoding unrelated timestamps.
+  private static func requireOpenSession(_ id: SessionID, in db: Database) throws -> UUID? {
+    let context = try Session.where { $0.id.eq(id.rawValue) }
+      .select { ($0.gymID, $0.finishedAt.is(nil)) }.fetchOne(db)
+    guard let context else { throw LoggerStoreError.sessionNotFound }
+    guard context.1 else { throw LoggerStoreError.sessionClosed }
+    return context.0
+  }
+
+  private static func requireExercise(_ id: ExerciseID, in db: Database) throws {
+    let exercise = try Exercise.where { $0.id.eq(id.rawValue) }.select(\.id).fetchOne(db)
+    guard exercise != nil else { throw LoggerStoreError.exerciseNotFound }
+  }
+
+  private static func requireMachine(_ id: MachineID?, at gymID: UUID?, in db: Database) throws {
+    guard let id else { return }
+    let machineGym = try Machine.where { $0.id.eq(id.rawValue) }.select(\.gymID).fetchOne(db)
+    guard let machineGym else { throw LoggerStoreError.machineNotFound }
+    // Legacy/local-only sessions without a recorded gym retain their equipment
+    // provenance. A known gym must agree with the physical machine's inventory.
+    if let gymID, machineGym != gymID { throw LoggerStoreError.machineGymMismatch }
+  }
+
+  private static func requireSingleChange(in db: Database) throws {
+    guard db.changesCount == 1 else { throw LoggerStoreError.writeNotApplied }
   }
 
   /// At most 14 actual sets preserve every comparison the Core detector makes:
@@ -288,6 +366,7 @@ public nonisolated struct LoggerStore {
         .where { $0.id.eq(sessionID.rawValue) }
         .update { $0.finishedAt = timeline.finishedAt }
         .execute(db)
+      try Self.requireSingleChange(in: db)
     }
   }
 
@@ -544,4 +623,14 @@ public enum LoggerStoreError: Error, Equatable, Sendable {
   /// `SetEntryDraft.isLoggable` so this is unreachable from the UI.
   case incompleteSet
   case sessionNotFound
+  case sessionClosed
+  case exerciseNotFound
+  case gymNotFound
+  case machineNotFound
+  case machineGymMismatch
+  case sessionExerciseNotFound
+  /// The plan row no longer matches the requested workout, movement, or equipment.
+  case sessionExerciseMismatch
+  /// A single-row insert or update completed without affecting exactly one row.
+  case writeNotApplied
 }

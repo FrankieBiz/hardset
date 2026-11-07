@@ -175,6 +175,48 @@ regeneration is byte-identical. The single best-at-reps SQL query measured
 0.241 ms before loading indexes versus 0.003 ms after in the 100,000-set fixture;
 this does not measure total logging latency or device performance.
 
+## Verified local-write validation milestone — 2026-11-07
+
+Store now validates local commands inside their write transactions. Adding plan
+rows, changing equipment, and logging sets require an existing open session and
+existing references. Supplied set-plan IDs must match the workout, movement, and
+equipment being logged. Equipment must belong to the workout's gym when that gym
+is known. Older sessions without a recorded gym retain their machine provenance.
+Archiving remains a picker visibility policy; existing archived references are
+not invalidated by these existence/context checks.
+
+Machine changes accept expected session/exercise IDs, which the coordinator
+passes so a plan row reparented by another writer cannot change a different
+workout. Deleted, reparented, or ignored updates leave the coordinator's exercise
+state unchanged. Rejected set writes leave drafts unlogged, record claims empty,
+and rest timers unstarted. Every session/plan/set insert and equipment/finish
+update checks that exactly one row was affected, preventing success after a
+`RAISE(IGNORE)` operation. A skipped row inside initial plan creation rolls back
+the entire workout.
+
+Validation uses primary-key lookups before record-history queries. Session
+validation projects only gym ID and the open/closed flag, avoiding session notes
+and timestamp decoding on each logged set. Exercise and machine validation also
+project only the identifiers needed. Startup deduplicates exercise/machine
+references before validation. This adds bounded validation work; total device
+logging latency remains unmeasured.
+
+Seventeen baseline scenarios reproduced accepted invalid writes or successful
+no-op commands before the change, then passed with typed error expectations.
+Additional coordinator tests cover a workout closed elsewhere and plan rows
+deleted, moved to another session/exercise, changed to different equipment, or
+subject to ignored updates. Missing-reference tests verify explicit errors with
+no partial rows. Existing machine/gym suites preserve valid machine transitions,
+recovery, and equipment history for sessions with no recorded gym.
+
+`make check` passed: 90 Swift files, 172 Core tests, 70 Store tests in five local
+suites, and seven query-plan checks. The expanded Store run adding record,
+machine-change, machine-state, gym-selection, gym-store, and divergence test files
+passed 120 tests across twelve suites. Project/scheme regeneration matched the
+committed files. No synchronized schema or migration changed. These local command
+checks do not define conflict resolution between devices that logged/finished
+independently while offline; native sync/device validation remains outstanding.
+
 ## Remaining app-wide work
 
 - Capture Release cold/warm launch, first usable workout, resume, picker, history,
@@ -186,7 +228,7 @@ this does not measure total logging latency or device performance.
   with cancellation and consistent snapshot semantics.
 - Measure first-launch index creation and ongoing set-write/storage overhead.
 - Address progression-chart row limits, machine provenance, consistent recovery
-  reads, and write validation from
+  reads, and retry/concurrent-command identity from
   `CORE_STORE_ARCHITECTURE_REVIEW.md`; do not trade correctness for smaller reads.
 - Verify earliest shipped v1 fixtures: this index migration does not repair
   historical edits to v1 columns or debug schema-erasure behavior identified in

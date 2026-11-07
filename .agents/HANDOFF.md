@@ -164,3 +164,46 @@ The requested architectural review is documented. No production Swift source or 
   mismatched plan/exercise/machine references, and missing machine-update rows.
   Continue provenance/next-set prefill fixes, progression completeness, consistent
   recovery reads, durable rest reconciliation, sync ownership, and native profiling.
+
+## Local-write validation follow-up — 2026-11-07
+
+- Full-app goal remains active; same worktree and `FrankieBiz/mojarra` branch.
+- Store rejects mutations of missing/closed workouts, missing exercise/gym/machine
+  references, supplied set-plan IDs that mismatch session/exercise/equipment, and
+  machines outside a known workout gym. Nil-gym legacy sessions retain equipment
+  provenance; archives do not invalidate already-existing references.
+- Equipment updates accept optional expected session/exercise IDs; coordinator
+  supplies them to detect plan reparenting by another writer. Missing/reparented
+  plan rows and ignored writes leave exercise state unchanged. Rejected logging
+  leaves drafts unlogged with no record claims/rest requests.
+- Every session/plan/set insert and equipment/finish update requires exactly one
+  affected row, catching silent `RAISE(IGNORE)` operations. Atomic plan startup
+  also rolls back when its second plan insert is ignored rather than thrown.
+- Validation is inside existing write transactions before record queries. Session
+  lookup selects only gym and `finishedAt IS NULL`; exercise/machine lookups select
+  IDs. Avoid notes/date decoding per tap. Initial plan references are deduplicated.
+- Owned paths: Store `LoggerStore.swift`, `SessionCoordinator.swift`; Store tests
+  `LoggerStoreTests.swift`, `SessionCoordinatorTests.swift`; loading doc; handoff.
+- Seventeen initial failure scenarios verified red against baseline, then green
+  with typed errors. Added stale-coordinator and missing-reference checks and
+  extended startup rollback injection to both ABORT and IGNORE. All pass.
+- Final verification: `make check` passed: 90 Swift files, 172 Core tests, 70 Store
+  tests in five local suites, seven query-plan checks. Project generation matched
+  committed project/scheme. Expanded Store run passed 120 tests in twelve suites.
+- Expanded run used the installed checker via `runpy.run_path` as in the previous
+  handoff, adding `RecordDetectionTests.swift`, `MachineChangeTests.swift`,
+  `MachineStatePersistenceTests.swift`, `GymSelectionTests.swift`, `GymStoreTests.swift`,
+  and `SessionDivergenceTests.swift` to `test.__globals__['STORE_TESTS']`. No installed
+  tooling edits. Its default printed scope still says five suites; actual Swift
+  Testing output confirms twelve. Default `make check` still covers five.
+- No failed implementation attempts. Review tightened session validation from
+  full-row decoding to a minimal projection, followed by fresh full/expanded gates.
+- No new schema constraints or migrations; replication's direct SQL remains
+  tolerant. Offline multi-device logging/finish conflicts still need a policy.
+- Remaining work: machine provenance and cross-machine next-set prefill, progression
+  history limits, consistent recovery reads, numeric/import validation and command
+  retry identity, historical v1 upgrades/debug erasure, durable rest and sync
+  ownership, native app/widget builds, and Release iPhone loading/hitch measurements.
+  Next concrete code step: reproduce the Core next-set prefill taking a logged
+  load from machine A after switching to machine B, then preserve per-set machine
+  provenance through live logging and recovery.

@@ -40,18 +40,20 @@ struct SessionCoordinatorTests {
 
   // MARK: - Starting
 
-  @Test("A failed plan insert leaves no partial workout or exercise rows")
-  func failedStartRollsBackPlan() throws {
+  @Test("A failed or ignored plan insert leaves no partial workout or exercise rows",
+        arguments: ["ABORT", "IGNORE"])
+  func failedStartRollsBackPlan(failure: String) throws {
     let database = try migratedDatabase()
     let store = LoggerStore(database: database)
     let exercise = try seedExercise(database)
     // Reject the second plan row after the first has been inserted. This also
     // covers failures occurring during the write, after startup reads succeeded.
+    let rejection = failure == "IGNORE" ? "RAISE(IGNORE)" : "RAISE(ABORT, 'injected plan failure')"
     try database.write { db in
       try db.execute(sql: """
         CREATE TEMP TRIGGER fail_second_plan BEFORE INSERT ON sessionExercises
         WHEN NEW.position = 1 BEGIN
-          SELECT RAISE(ABORT, 'injected plan failure');
+          SELECT \(rejection);
         END
         """)
     }
@@ -185,6 +187,102 @@ struct SessionCoordinatorTests {
 
   // MARK: - Logging order
 
+  @Test("A stale plan cannot half-apply an equipment change",
+        arguments: ["deleted", "ignored", "session", "exercise", "closed"])
+  func stalePlanLeavesMachineStateUntouched(context: String) throws {
+    let database = try migratedDatabase()
+    let store = LoggerStore(database: database)
+    let exercise = try seedExercise(database)
+    let gyms = GymStore(database: database)
+    let gym = try gyms.createGym(name: "Gym")
+    let machine = try gyms.createMachine(at: gym, name: "Press")
+    let live = try SessionCoordinator.start(
+      store: store, gymID: gym,
+      plan: [PlannedExercise(exerciseID: exercise, exerciseName: "Press")], now: { self.start }
+    )
+    let plan = try #require(try store.sessionExercises(in: live.sessionID).first)
+    let before = live.exercises
+    let expected: LoggerStoreError
+    switch context {
+    case "deleted":
+      try database.write { db in
+        try db.execute(sql: "DELETE FROM sessionExercises WHERE id = ?", arguments: [plan.id.uuidString.lowercased()])
+      }
+      expected = .sessionExerciseNotFound
+    case "ignored":
+      try database.write { db in
+        try db.execute(sql: "CREATE TEMP TRIGGER ignore_machine BEFORE UPDATE ON sessionExercises BEGIN SELECT RAISE(IGNORE); END")
+      }
+      expected = .writeNotApplied
+    case "session":
+      let other = try store.startSession(gymID: gym, at: start)
+      try database.write { db in
+        try db.execute(sql: "UPDATE sessionExercises SET sessionID = ? WHERE id = ?",
+                       arguments: [other.rawValue.uuidString.lowercased(), plan.id.uuidString.lowercased()])
+      }
+      expected = .sessionExerciseMismatch
+    case "exercise":
+      let other = try seedExercise(database, name: "Curl")
+      try database.write { db in
+        try db.execute(sql: "UPDATE sessionExercises SET exerciseID = ? WHERE id = ?",
+                       arguments: [other.rawValue.uuidString.lowercased(), plan.id.uuidString.lowercased()])
+      }
+      expected = .sessionExerciseMismatch
+    default:
+      try store.finishSession(live.sessionID, at: start.addingTimeInterval(600))
+      expected = .sessionClosed
+    }
+    #expect(!live.changeMachine(to: machine, machineName: "Press", inExercise: before[0].id))
+    #expect(live.lastError as? LoggerStoreError == expected)
+    #expect(live.exercises == before)
+    let savedMachine = try database.read { db in
+      try SessionExercise.where { $0.id.eq(plan.id) }.fetchOne(db)?.machineID
+    }
+    #expect(savedMachine == nil)
+  }
+
+  @Test("A workout or plan changed by another writer cannot claim a saved set",
+        arguments: ["closed", "plan", "machine"])
+  func staleLoggingContextDoesNotClaimSet(context: String) throws {
+    let database = try migratedDatabase()
+    let store = LoggerStore(database: database)
+    let exercise = try seedExercise(database)
+    let gyms = GymStore(database: database)
+    let gym = try gyms.createGym(name: "Gym")
+    let machine = try gyms.createMachine(at: gym, name: "Press")
+    let spy = RestSpy()
+    let live = try SessionCoordinator.start(
+      store: store, gymID: gym,
+      plan: [PlannedExercise(exerciseID: exercise, exerciseName: "Press")],
+      now: { self.start }, restAfterSet: .seconds(60),
+      onStartRest: { spy.requests.append(($0, $1)) }
+    )
+    let plan = try #require(try store.sessionExercises(in: live.sessionID).first)
+    let expected: LoggerStoreError
+    if context == "closed" {
+      try store.finishSession(live.sessionID, at: start.addingTimeInterval(600))
+      #expect(!live.addExercise(exerciseID: exercise, exerciseName: "Press"))
+      #expect(live.exercises.count == 1)
+      expected = .sessionClosed
+    } else if context == "plan" {
+      try database.write { db in
+        try db.execute(sql: "DELETE FROM sessionExercises WHERE id = ?", arguments: [plan.id.uuidString.lowercased()])
+      }
+      expected = .sessionExerciseNotFound
+    } else {
+      try store.setSessionExerciseMachine(rowID: plan.id, machineID: machine)
+      expected = .sessionExerciseMismatch
+    }
+    let state = live.exercises[0]
+    live.exercises[0].slots[0].draft = SetEntryDraft(weightKg: 100, reps: 8)
+    #expect(!live.logSet(slotID: state.slots[0].id, inExercise: state.id))
+    #expect(live.lastError as? LoggerStoreError == expected)
+    #expect(!live.exercises[0].slots[0].isLogged)
+    #expect(live.lastRecords.isEmpty)
+    #expect(spy.requests.isEmpty)
+    #expect(try store.sets(in: live.sessionID).isEmpty)
+  }
+
   @Test("All-time record claims retain benchmarks older than a thousand sets",
         arguments: PersonalRecordKind.allCases)
   func recordsKeepOlderBenchmarks(kind: PersonalRecordKind) throws {
@@ -287,9 +385,9 @@ struct SessionCoordinatorTests {
     let reads = sql.indices.filter { sql[$0].hasPrefix("SELECT") }
     let readsInsideSave = reads.allSatisfy { $0 > begin && $0 < commit }
     #expect(readsInsideSave)
-    // An empty history needs one benchmark probe; warm-ups need none. Both
-    // paths read one scalar maximum to assign the next set ordinal.
-    #expect(reads.count == (isWarmup ? 1 : 2))
+    // Three primary-key reads validate session, exercise, and plan. Empty
+    // history needs one benchmark probe; warm-ups skip it. Both read one ordinal.
+    #expect(reads.count == (isWarmup ? 4 : 5))
   }
 
   @Test("Unreadable record history suppresses claims while a valid new set still saves")
