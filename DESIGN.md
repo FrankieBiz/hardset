@@ -24,6 +24,12 @@ a second implementation.
   components only after a successful read. Actual
   failures use the existing retry message; cancellation is silent and never clears
   content. Only the latest requested snapshot may replace visible content.
+- Startup: show a native progress indicator while opening/migrating the database
+  and constructing the sync engine. Publish the workout UI only after the whole
+  resource set succeeds. Failure uses the existing empty-state component with an
+  explicit native retry button; use background, section spacing and minimum tap
+  target tokens. A disappearing scene does not restart or cancel process-owned
+  preparation. Startup introduces no custom motion or color-only feedback.
 - Motion: the current shared tokens define no custom animations. Snapshot loading
   adds none, so reduced-motion users get the same immediate state feedback. If
   custom motion is introduced, first add shared fast 100–150 ms, medium 150–250 ms,

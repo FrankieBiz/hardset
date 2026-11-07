@@ -7,9 +7,27 @@ import SQLiteData
 // these declarations are pure. Isolating them to the main actor would both mislead and
 // force every caller -- including the test suite -- to hop actors for no reason.
 public nonisolated enum HardsetDatabase {
+  /// Keep this entire value for the app's lifetime, including across scene changes.
+  /// The engine's SQL functions must remain alive for writes on this writer.
+  public nonisolated struct Resources: Sendable {
+    public let database: any DatabaseWriter
+    public let syncEngine: SyncEngine
+  }
+
+  /// Blocking preparation for `AppStartup`'s dedicated queue. Publish neither
+  /// resource until opening, migrations, and engine construction all succeed.
+  public static func prepareForLaunch(containerIdentifier: String? = nil) throws -> Resources {
+    let database = try open(containerIdentifier: containerIdentifier)
+    let engine = try makeSyncEngine(
+      for: database, delegate: HardsetSyncDelegate(), containerIdentifier: containerIdentifier
+    )
+    return Resources(database: database, syncEngine: engine)
+  }
+
   /// Opens the on-disk database and runs migrations.
   ///
-  /// Must be called exactly once per process, from `App.init()`.
+  /// The app calls this through `AppStartup`, once per preparation attempt.
+  /// Only a failed attempt may be retried; never reopen a live resource set.
   public static func open(containerIdentifier: String? = nil) throws -> any DatabaseWriter {
     var configuration = Configuration()
     // Required for ON DELETE CASCADE / SET NULL to actually fire.

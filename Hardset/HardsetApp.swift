@@ -2,61 +2,70 @@ import HardsetAlarm
 import HardsetCore
 import HardsetFeature
 import HardsetStore
+import HardsetUI
 import SQLiteData
 import SwiftUI
 
-/// The app target, deliberately thin.
-///
-/// Everything with behaviour worth testing lives in `Packages/HardsetKit`, which builds and tests
-/// on the host with `swift test`. This file cannot be compiled from a sandboxed command line — the
-/// Swift macro plugin server does not survive it — so it is kept to wiring that has no logic to
-/// get wrong: open the database, install the account-change delegate, hand `RestTimerController`'s
-/// methods to the feature layer, and show the root view.
-///
-/// Anything added here that a test could cover belongs in the package instead.
+/// The app owns startup resources across all scenes. Database failures keep the
+/// workout UI behind an explicit retry state instead of an unintended fallback.
 @main
+@MainActor
 struct HardsetApp: App {
-  /// Held for the process lifetime. `SyncEngine` retains its delegate strongly and the delegate
-  /// deliberately holds no reference back, so ownership lives here.
-  @State private var syncDelegate = HardsetSyncDelegate()
+  @State private var startup = AppStartup {
+    try HardsetDatabase.prepareForLaunch()
+  }
   /// The AlarmKit-backed rest timer. iOS-only, which is exactly why the feature layer takes its
   /// methods as closures rather than importing it.
   @State private var restTimer = RestTimerController()
 
-  init() {
-    // Exactly once per process. `prepareDependencies` is the supported place to install the
-    // default database, and calling it more than once is a programmer error.
-    prepareDependencies { dependencies in
-      do {
-        dependencies.defaultDatabase = try HardsetDatabase.open()
-      } catch {
-        // Deliberately not a `fatalError`. A launch that cannot open the store should still start
-        // so the user can be told, rather than shown a crash.
-        assertionFailure("Could not open the Hardset database: \(error)")
-      }
-    }
-  }
-
   var body: some Scene {
     WindowGroup {
-      RootView(syncDelegate: syncDelegate, restTimer: restTimer)
+      StartupView(startup: startup, restTimer: restTimer)
     }
   }
 }
 
-private struct RootView: View {
-  let syncDelegate: HardsetSyncDelegate
+@MainActor
+private struct StartupView: View {
+  let startup: AppStartup<HardsetDatabase.Resources>
   let restTimer: RestTimerController
 
-  /// Retained for the process lifetime, and that is load-bearing rather than tidy.
-  ///
-  /// `SyncEngine` installs triggers on every synchronized table that call an instance method of
-  /// its own, held weakly. Letting it deallocate leaves those triggers in place with nothing
-  /// behind them, and every subsequent write to a synchronized table throws
-  /// `_DatabaseFunctionDeallocated` -- no gyms, no machines, no sessions, no sets.
-  @State private var syncEngine: SyncEngine?
+  var body: some View {
+    Group {
+      if let resources = startup.resources {
+        RootView(database: resources.database, restTimer: restTimer)
+      } else if startup.lastError != nil {
+        VStack(spacing: Tokens.Spacing.section) {
+          HardsetEmptyState(
+            title: "Could not open Hardset",
+            detail: "Try again to open your workouts.",
+            systemImage: "exclamationmark.triangle"
+          )
+          Button {
+            Task { await startup.retry() }
+          } label: {
+            Text("Try again")
+              .frame(minHeight: Tokens.minimumTapTarget)
+          }
+          .buttonStyle(.borderedProminent)
+        }
+        .padding(Tokens.Spacing.section)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Tokens.Color.background)
+      } else {
+        ProgressView("Opening your workouts")
+          .frame(maxWidth: .infinity, maxHeight: .infinity)
+          .background(Tokens.Color.background)
+      }
+    }
+    .task { await startup.start() }
+  }
+}
 
-  @Dependency(\.defaultDatabase) private var database
+@MainActor
+private struct RootView: View {
+  let database: any DatabaseWriter
+  let restTimer: RestTimerController
 
   var body: some View {
     HardsetRootView(
@@ -83,15 +92,5 @@ private struct RootView: View {
       // per-exercise setting; until then the timer is started explicitly or not at all.
       restAfterSet: nil
     )
-    .task {
-      // Sync starts after the UI exists, so a CloudKit hiccup cannot block launch.
-      do {
-        syncEngine = try HardsetDatabase.makeSyncEngine(for: database, delegate: syncDelegate)
-      } catch {
-        // A schema the SyncEngine rejects is a programmer error caught by `SchemaTests`, not
-        // something a user can act on — so run local-only rather than crash.
-        assertionFailure("SyncEngine rejected the schema: \(String(describing: error))")
-      }
-    }
   }
 }

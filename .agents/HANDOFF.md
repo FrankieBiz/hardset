@@ -499,3 +499,59 @@ The requested architectural review is documented. No production Swift source or 
   environment is needed before release-quality whole-app validation. Other pending
   work: chart limits/tie order, incomplete-plan recovery, provenance, numeric/retry
   identity, durable rest and account gating. Goal remains active.
+
+
+### 2026-11-07 19:43 UTC — Own and gate process startup resources
+
+- Objective: move blocking opening/migrations off MainActor, retain exactly one live
+  writer/engine bundle across scenes and surface startup failure without a fallback.
+  Prior turn was verified progress (de26319). Existing worktree
+  `/home/frankbiz/orca/workspaces/hardset/mojarra`, branch FrankieBiz/mojarra; clean at
+  start. No subagents used. No migration/schema/path or account-policy change.
+- Owned paths: new Store/AppStartup.swift and StoreTests/AppStartupTests.swift,
+  Store/Database.swift, Hardset/HardsetApp.swift, DESIGN.md, docs/LOADING_PERFORMANCE.md,
+  this handoff. Generated Xcode project is untouched.
+- Baseline: actual migrator invoked from MainActor prevented a queued MainActor job
+  from running inside a bounded test callback; extended Debug failed exactly that
+  availability assertion. New controller executes blocking preparation on a private
+  serial DispatchQueue and passes. Only test probes use semaphores; production does
+  not block the actor or cooperative executor waiting on a semaphore.
+- AppStartup<Resources> is MainActor @Observable, owns one in-flight task and the
+  completed resource set. Concurrent callers share it, caller/scene cancellation
+  doesn't cancel app-owned initialization, successful resources stay retained, failed
+  attempts expose no resources and require explicit retry. Attempt IDs prevent late
+  old waiters from changing new state. Escaped dependency context is restored on
+  queue (tested with preview context) to avoid accidentally opening a live store.
+- HardsetDatabase.prepareForLaunch returns a Sendable Resources value retaining both
+  database and SyncEngine; existing mandatory delegate stays installed and retained
+  by engine. App owns controller in @State above WindowGroup. No view task recreates
+  a live engine. Explicit writer injection replaces App's only defaultDatabase usage;
+  rg confirms no @Fetch/argumentless fetch/execute/defaultDatabase consumers elsewhere
+  in app sources. Pinned SQLiteData source confirms unconfigured dependency supplies
+  blank in-memory writer; earlier assertionFailure could leave that path active.
+- App now shows progress and a token-based explicit retry UI before exposing root.
+  Engine-construction failure also gates readiness rather than running a partially
+  prepared writer. This waits for construction, not network sync. No custom motion;
+  reduced-motion behavior immediate. Retry label has44pt minimum target token.
+- Controller tests: real migration/main-actor availability; overlapping callers with
+  one canceled; error/no-resources/explicit retry; resource identity and weak-reference
+  lifetime; preview dependency propagation. Extended Debug passed86 tests/6 suites.
+  Expected red baseline only, no failed implementation attempts.
+- Final make check passed:94 parsed files,177 Core tests/23 suites,81 default Store
+  tests/5 suites,8 query-plan cases. Project/scheme regeneration identical and diff
+  clean. Default checker omits AppStartupTests; expanded suite now adds it to prior
+  15 portable files. Final expanded Release passed172 tests/18 suites (16 portable
+  test files), via established runpy wrapper with AppStartupTests.swift appended.
+- Linux fully compiles/runs AppStartup and migrator/controller tests; Database.swift,
+  SyncSetup.swift and the App are Apple-dependent and only syntax checked. Native
+  app/widget build, actual CloudKit construction/entitlements, partial-engine failure
+  retry, scene restoration/function lifetime, accessibility/responsiveness and Release
+  device launch/frame measurements remain unverified. Do not claim native build or
+  phone launch improvement. SyncEngine's Sendable conformance and initializer shape
+  were checked against pinned source, not an Apple compilation.
+- Next concrete step: measure post-gate HardsetRootView .task work, which still uses
+  synchronous CatalogSeeder.seed, SessionCoordinator.resume and refreshGyms, swallowing
+  seed/recovery errors with try?. Establish safe async/bootstrap state before allowing
+  a new workout if recovery failed. Other broad-goal work remains chart limits/order,
+  incomplete-plan recovery/provenance, numeric/retry identity, durable rest/account
+  gating, and native/device validation. Goal remains active.

@@ -472,15 +472,69 @@ responsive appearance, and mid-range-device frame/load measurements remain
 unverified. Synchronous app initialization, catalog/recovery and picker paths are
 separate remaining loading work; this milestone does not establish launch time.
 
+## App-owned startup resources — 2026-11-07
+
+`HardsetApp.init` opened and migrated SQLite synchronously. Its failure path used
+`assertionFailure` and continued without installing the intended default database;
+SQLiteData's unconfigured dependency supplies a blank in-memory writer. The app's
+actual data APIs already accept explicit writers. A separate RootView task owned
+the sync engine and constructed it on each execution, even though the engine's
+SQL functions must remain alive for the lifetime of its writer.
+
+`AppStartup<Resources>` now owns one preparation attempt and the successful
+resource set at the App level, shared across scenes. Blocking preparation runs on
+a dedicated serial queue, with captured dependency context restored there so
+preview/test context does not silently change. The app explicitly passes the
+prepared writer to its feature environment. `HardsetDatabase.prepareForLaunch`
+bundles that writer with its retained SyncEngine, including the existing mandatory
+account delegate. The bundle is published only after opening, migrations and
+engine construction all succeed. This waits for local resource construction,
+not CloudKit network synchronization.
+
+Concurrent start callers share one in-flight task; disappearing/canceled scene
+callers do not cancel this process-owned work. A completed resource set cannot be
+replaced by another appearance or retry. Failure exposes no resources, stores the
+error, and permits another attempt only through explicit retry. Attempt IDs keep
+older waiters from disturbing a newer attempt. The app shows native progress or
+an explicit retry state before the workout UI, using existing tokens/components
+and a native button with the minimum target inside its label. There is no custom
+motion; reduced-motion behavior stays immediate. No database is erased or replaced
+as a fallback. Sync construction failure now gates the workout UI instead of
+asserting and proceeding with potentially incomplete engine setup.
+
+The portable baseline ran the actual migrator from MainActor and failed the
+availability probe: a job queued to MainActor could not run while migration
+waited. The same migration through AppStartup passes. Tests also cover shared
+startup with canceled callers, failure/no-resource/explicit retry behavior,
+resource identity and lifetime, and preservation of preview dependencies across
+the queue boundary. These validate controller behavior and real SQLite migration,
+not Apple sync construction or measured phone launch latency.
+
+Verification: final `make check` passed (94 Swift files, 177 Core tests, 81 default
+Store tests, eight query-plan cases). Explicit Debug with AppStartupTests passed
+86 tests in six suites. Expanded Release Store passed all sixteen portable files
+(172 tests in eighteen suites). Project/scheme regeneration was identical. The
+installed default Linux selection omits the new tests, so use the expanded run to
+execute them.
+
+The app and Database.swift wiring require a native build and CloudKit integration
+run; Linux syntax checks do not compile those files against Apple frameworks.
+Permission/entitlement failures, failure injection after partial SyncEngine setup,
+scene restoration and actual engine/function lifetime must be verified there.
+Synchronous catalog seeding, workout recovery and gym loading after this gate
+remain subsequent work. First useful-screen timing still requires Release iPhone
+measurements, including migration cost for multi-year databases.
+
 ## Remaining app-wide work
 
 - Capture Release cold/warm launch, first usable workout, resume, picker, history,
   progression, and volume timings on iPhone, with small and multi-year databases.
   Record median/tail latency, main-thread hangs, memory, and device/OS/build details
   before setting defensible loading budgets.
-- Audit synchronous reads in feature `.task`/refresh handlers and database opening
-  in `HardsetApp.init`; profile then move measured blocking work off the main actor
-  with cancellation and consistent snapshot semantics.
+- Audit remaining synchronous catalog/recovery/gym/picker loading and post-read
+  analysis on the main actor. Profile before moving additional CPU work, preserve
+  cancellation and consistent snapshot semantics, and validate the new startup
+  owner with Apple frameworks and real scene/account transitions.
 - Measure first-launch index creation and ongoing set-write/storage overhead.
 - Address progression-chart row limits/order, machine provenance,
   and retry/concurrent-command identity from
