@@ -145,3 +145,23 @@ spring are dropped and only the fill or opacity changes, instantly or with `Moti
 place of shrinking text, one combined accessibility element per set row with named actions, and
 Reduce Motion honoured in every animation. Native verification of resolved colours, hit regions,
 and Dynamic Type layouts happens on the Mac; see `docs/MAC-VERIFICATION.md`.
+||||||| 33d2b09
+
+## Loading and startup
+
+Behaviour first recorded alongside the snapshot loading work, drawn here with this system's
+components rather than native spinners.
+
+- Keep readable content on screen during a refresh. A screen's first read shows its header and a
+  quiet loading line (`HardsetLoadingState`), never a spinner, and never an empty state before a
+  read has succeeded. Only a successful read shows the empty or data components.
+- Failures use the screen's honest retry message, in a scroll view so pull-to-refresh works.
+  Cancellation is silent and never clears content, and only the latest requested snapshot may
+  replace what is visible (`SnapshotLoader`).
+- Startup: while the database opens and migrates and the sync engine is built, show the startup
+  screen on the app canvas with a quiet line of status. Publish the workout interface only after
+  the whole resource set succeeds. A failure uses `HardsetEmptyState` with an explicit retry
+  action in `HardsetButtonStyle(.primary)`. A disappearing scene does not restart or cancel
+  process-owned preparation.
+- Neither adds motion or colour-only feedback, so Reduce Motion users see the same immediate
+  state changes.

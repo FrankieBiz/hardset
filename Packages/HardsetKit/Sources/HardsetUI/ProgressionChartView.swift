@@ -218,6 +218,9 @@ public struct ProgressionChartView: View {
     .chartForegroundStyleScale(domain: names, range: colours)
     .chartSymbolScale(domain: names, range: shapes)
     .chartLegend(.hidden)
+    // The newest point sat on the plot's trailing edge, leaving its date label no room, so it
+    // collapsed to an ellipsis. Inset both ends so the first and last dates read in full.
+    .chartXScale(range: .plotDimension(startPadding: 12, endPadding: 28))
     .chartXAxis {
       // Four labels at most: with more, the last date crowded the plot's edge and truncated to "…".
       AxisMarks(values: .automatic(desiredCount: 4)) { _ in

@@ -1,7 +1,7 @@
 import Foundation
 import SQLiteData
 
-/// The entire v1 schema, as one migration, written before any UI exists.
+/// The frozen v1 schema and additive forward migrations.
 ///
 /// Why one migration and why now: CloudKit's production schema is additive-only, and
 /// SQLiteData additionally forbids -- permanently -- removing columns, renaming columns,
@@ -76,11 +76,8 @@ public nonisolated enum HardsetMigrations {
   public static func migrator() -> DatabaseMigrator {
     var migrator = DatabaseMigrator()
 
-    // Only ever safe before the first release. Once a build is in anyone's hands this
-    // must be gone, or a schema tweak silently destroys their history.
-    #if DEBUG
-      migrator.eraseDatabaseOnSchemaChange = true
-    #endif
+    // Preserve training data in every configuration. Historical schema differences
+    // are repaired explicitly below; they must never trigger automatic erasure.
 
     migrator.registerMigration("v1") { db in
       // MARK: Exercises
@@ -379,6 +376,44 @@ public nonisolated enum HardsetMigrations {
         CREATE INDEX "loggedSets_on_workingReps"
           ON "loggedSets"("exerciseID", "machineID", "reps", "weightKg" DESC)
           WHERE NOT "isWarmup"
+        """
+      )
+      .execute(db)
+    }
+
+    // These columns were added by editing v1 in 33c1038. A database already
+    // marked v1 never reran that migration. Repair both original and partially
+    // repaired databases without rebuilding tables or inferring old plan IDs.
+    migrator.registerMigration("v5_legacyV1Columns") { db in
+      let exerciseColumns = try db.columns(in: "exercises")
+      if !exerciseColumns.contains(where: { $0.name == "curatedName" }) {
+        try #sql(
+          """
+          ALTER TABLE "exercises" ADD COLUMN "curatedName"
+            TEXT NOT NULL ON CONFLICT REPLACE DEFAULT ''
+          """
+        )
+        .execute(db)
+      }
+      let setColumns = try db.columns(in: "loggedSets")
+      if !setColumns.contains(where: { $0.name == "sessionExerciseID" }) {
+        try #sql(
+          """
+          ALTER TABLE "loggedSets" ADD COLUMN "sessionExerciseID" TEXT
+          """
+        )
+        .execute(db)
+      }
+    }
+
+    // Finished history must not be scanned when launch finds no workout to
+    // resume. Keep this local, non-unique index small by indexing open rows only.
+    migrator.registerMigration("v6_openSessionLookup") { db in
+      try #sql(
+        """
+        CREATE INDEX "sessions_on_openStartedAt"
+          ON "sessions"("finishedAt", "startedAt" DESC)
+          WHERE "finishedAt" IS NULL
         """
       )
       .execute(db)

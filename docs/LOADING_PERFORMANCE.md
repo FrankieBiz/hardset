@@ -256,22 +256,291 @@ tests across twelve suites. Project/scheme regeneration remained identical.
 The direct lookup removes reverse row searching from the common append path;
 no device latency or frame-time improvement has been measured.
 
+## Verified legacy-schema repair milestone — 2026-11-07
+
+Git history confirms that `33c1038` added `exercises.curatedName` and
+`loggedSets.sessionExerciseID` by editing v1 after the original schema in
+`c1677fb`. Databases already marked v1 skipped those additions. The default
+debug migrator then erased historical databases when it detected that difference;
+release-style migration left the missing columns unrepaired.
+
+Automatic schema erasure is disabled in all configurations. The new additive
+`v5_legacyV1Columns` migration checks each column independently and adds only
+what is missing. Earlier migration bodies are unchanged. Existing values,
+indexes, table identities, and foreign keys remain intact. Old sets keep a null
+plan-row hint when none was recorded; the migration does not guess their block.
+If repair fails on an unsupported schema, its DDL rolls back and unrelated
+records remain present.
+
+An empty previous catalogue name now means unknown provenance. Seeding preserves
+nonempty stored names in that case while updating catalogue-owned metadata.
+Names with known provenance still receive normal three-way rename handling.
+This conservatively preserves older names that cannot be distinguished from
+user edits, including untracked historical catalogue spellings.
+
+The frozen fixture embeds all thirteen original SQL statements independently
+of current migrations, with comments/indentation removed. Its SHA256 is
+`b681497419b5997112503cb59f121c573a248d5c4b3b9e2e3dad26af13f8680c`;
+a source comparison against the historical commit confirmed the match. Sixteen
+file-backed variants cover neither/either/both columns present, v1/v4 migration
+markers, and default/release-style policy. Tests compare every original value
+across all ten application tables, close/reopen and migrate again, read history,
+resume the actual workout coordinator, log a new linked set, check foreign keys, and seed twice without losing names,
+notes, or archives. Failed-repair rollback and erasure-policy tests also pass.
+
+`make check` passed: 90 Swift files, 177 Core tests, 76 Store tests across five
+local suites, and seven query-plan checks. Project/scheme regeneration matched.
+Release verification also passed 177 Core tests and 154 Store tests across all
+fourteen portable Store test files (sixteen suites). These are Linux package
+builds; CloudKit, AlarmKit, SwiftUI, app/widget compilation, and device behavior
+remain outside this verification.
+The SQL microbenchmark mirrors conditional column-add guards on its fresh
+fixture; native migrator tests establish the actual upgrade behavior.
+Disabling debug erasure also removes GRDB's temporary schema-reconstruction
+database from normal debug migration checks. App launch timing and native
+CloudKit-backed upgrades still require device/Apple-platform verification.
+
+## Verified recovery-snapshot milestone — 2026-11-07
+
+Recovery previously read the open session, plan metadata, logged sets, and prior
+performance through four independent database read transactions. A deterministic
+two-connection WAL test committed a movement/load/history change after plan
+metadata was fetched. The old loader then combined movement A's plan with the
+new 900 kg set and 200 kg history, describing neither committed database version.
+
+`LoggerStore.recoverySnapshot` now gathers all recovery inputs inside one
+`database.read` closure. Connection-scoped helpers share the existing query
+implementations with the public read APIs, avoiding nested or reentrant writer
+reads. The connection remains inside the closure; the coordinator receives an
+immutable, Sendable value bundle and constructs its state after the read ends.
+No query limits, reconstruction rules, public read APIs, or migrations changed.
+
+The regression test now returns the coherent earlier version: movement A,
+100 kg logged, and 80 kg history. Its independent writer demonstrably commits
+during the load, and the next recovery sees the complete newer version:
+movement B, 900 kg logged, and 300 kg history. A trace test measures one read
+transaction instead of four. Both tests were run against the original loader
+and failed for the expected interleaving/transaction-count defects, then passed.
+
+This provides consistency at the read snapshot. It does not freeze the database
+after returning or silently replace drafts when a later write arrives; local
+write-context validation still protects subsequent saves. It reduces transaction
+and queue-entry overhead without adding database queries. Device loading latency
+has not been measured.
+
+`make check` passed: 90 Swift files, 177 Core tests, 78 Store tests in five local
+suites, and seven query-plan checks. Expanded Release Store verification passed
+156 tests in sixteen suites (all fourteen portable test files). Project/scheme
+regeneration remained identical. CloudKit-backed interleavings, native app/widget
+builds, and actual iPhone loading behavior remain outside these Linux checks.
+
+## Open-workout lookup without scanning completed history
+
+Launch/recovery asks for the newest session with `finishedAt IS NULL`. The old
+`startedAt` index satisfied ordering but scanned completed workouts to establish
+that none was open. The regression fixture now includes 5,000 finished sessions
+and explicitly checks this expected-empty result. Before the fix, the plan gate
+failed with `SCAN sessions USING INDEX sessions_on_startedAt`.
+
+Additive migration `v6_openSessionLookup` creates the non-unique partial index
+`sessions_on_openStartedAt` on `(finishedAt, startedAt DESC)` for rows where
+`finishedAt IS NULL`. SQLite can search the null key and return the newest open
+row without sorting. Finished sessions occupy no entries in this index; earlier
+migrations and workout rows remain unchanged. Index creation still examines the
+existing sessions once during migration, so this does not eliminate upgrade cost.
+
+On the deterministic local fixture, the median of five warm absent-workout reads
+changed from 0.481 ms to 0.001 ms, with a `SEARCH` plan. This measures the SQLite
+lookup only, not app launch or iPhone latency. The native Store regression traces
+and explains the actual generated query and checks newest-open selection,
+finishing to reveal an older open workout, no-open results, and a subsequent new
+workout. Against the original schema, all four query-plan checks failed while
+functional assertions passed; with the migration, all pass. Upgrade tests now
+cover v1 through v5 and verify row preservation and non-unique indexes.
+
+`make check` passed: 90 Swift files, 177 Core tests, 79 Store tests in five local
+suites, and eight query-plan cases. Expanded Release Store verification passed
+157 tests in sixteen suites (all fourteen portable test files). Project/scheme
+regeneration was identical.
+
+## Consistent volume reports — 2026-11-07
+
+`VolumeStore.report` previously loaded date-window sets and current exercise
+attribution in separate read transactions. A deterministic test with two real
+SQLite WAL connections now reproduces the consequence: an independent writer
+moves four bench sets outside the window and archives the exercise between the
+two reads. The old report showed four unattributed sets, although the complete
+older version contained four attributed chest sets and the newer version had
+zero sets in the window. Both the report-equality test and a transaction trace
+failed before the fix (two reads instead of one).
+
+The report now reads both inputs inside one `database.read` closure using
+connection-scoped helpers shared with the existing public input APIs. It builds
+the attribution index and computes volume after the read ends. The original SQL,
+date boundaries, warm-up handling, and archived/unreadable-attribution policies
+are preserved. The regression returns the coherent older report while the writer
+commits; its next load sees zero sets, proving the update was actually applied.
+There are no sleeps, mocked writer behavior, additional queries, or migrations.
+
+This removes one transaction/queue entry and prevents mixed reports. It does not
+measure main-thread responsiveness or phone loading latency; `WeeklyVolumeScreen`
+still calls this synchronous API from its load handler. Scheduling and cancellation
+need their own measured follow-up. Snapshot consistency also does not freeze data
+after the method returns or make attribution historical: later loads still use
+current stored attribution.
+
+Verification: `make check` passed (90 Swift files, 177 Core tests, 79 Store tests,
+eight query-plan cases). The default Linux Store selection omits VolumeStoreTests,
+so these regressions were run explicitly: 90 tests in six suites passed in Debug,
+then all fourteen portable Store files passed in Release (159 tests, sixteen
+suites). Project/scheme regeneration remained identical. Native app/widget and
+CloudKit execution, plus physical-device loading/frame measurements, are pending.
+
+## Consistent progression history — 2026-11-07
+
+`ProgressionStore.history` previously read working sets and machine names in
+separate transactions. A test with two file-backed SQLite WAL connections
+reproduces an atomic edit of a 100 kg set and its machine name: the old loader
+returned 100 kg under the new name although the committed newer version contained
+200 kg. The original history-equality check and transaction-count check both
+failed; the free-weight variant already used only one transaction.
+
+The loader now fetches samples and names within one read snapshot, using shared
+connection-scoped helpers for its existing public input APIs. Machine IDs are
+deduplicated from the samples; free-weight/empty history skips the names query.
+Chart grouping and machine-change analysis remain outside the read closure. The
+SQL filtering/order, 2,000-set limit, per-machine grouping and label fallbacks
+remain unchanged. This prevents mixed snapshots and removes one transaction/queue
+entry for machine history without adding queries. It does not establish phone
+latency or fix the separately tracked chart-limit/tie-order issues.
+
+The regression verifies the independent writer actually committed, the current
+load matches the complete earlier history, and a later load sees both the new
+200 kg load and renamed station. It uses no sleeps or mocked database writes.
+`make check` passed: 90 Swift files, 177 Core tests, 81 Store tests in five suites,
+and eight query-plan cases. Expanded Release Store passed all fourteen portable
+test files (161 tests in sixteen suites). Project/scheme regeneration remained
+identical. Native builds, CloudKit execution and device timings remain pending.
+
+## Suspend screen database waits — 2026-11-07
+
+History, progression, and weekly-volume screens called synchronous Store APIs from
+MainActor `.task` and refresh handlers. A portable runtime probe schedules a
+MainActor job from a real GRDB query callback. With the synchronous path, that job
+cannot execute until the database wait ends; all three cases failed the
+availability assertion. This measures executor availability, not iPhone frame
+latency. The test uses a bounded semaphore wait only inside the synthetic probe;
+production code contains no semaphore or detached task.
+
+The three stores now offer explicitly named async loading APIs backed by GRDB's
+cancellable async `read`, sharing the existing connection helpers. Each complete
+load still uses one read snapshot and returns the same values as its synchronous
+reference. Public stores have compiler-checked Sendable conformance through their
+DatabaseWriter field. No unchecked annotations, new dependencies or migrations.
+The caller suspends for database work under the project's Swift 6.2 isolation
+settings; adding `async` alone to the old synchronous body would not provide this.
+Volume/progression analysis after the read still runs on the caller's actor; its
+CPU cost needs profiling before a separate executor change.
+
+A shared MainActor `@Observable SnapshotLoader` owns screen results and cancels a
+previous read when a newer request begins. It propagates caller cancellation to
+the active task, drops stale successes/errors, silently preserves visible content
+on cancellation, and surfaces actual failures with the existing retry flow. The
+three screens await it from appearance and refresh tasks. History rows are mapped
+once per successful load. Initial reads show the native progress indicator before
+empty/data content; refresh preserves readable content. No custom animation was
+added, so reduced-motion behavior is unchanged. `DESIGN.md` records the existing
+tokens and these states because no design document previously existed.
+
+The main-actor availability probe passes on the async path. Tests also verify
+async/sync result equality and read counts, already-canceled loads issue no SELECT,
+active-query cancellation leaves the connection usable, old successes/failures
+cannot replace newer content, and cancellation reaches an operation even when it
+ignores cancellation until it returns. Failure/retry and silent CancellationError
+behavior are covered. Tests use continuations for overlap control, without sleeps.
+
+Final verification: `make check` passed (92 Swift files, 177 Core tests, 81 default
+Store tests and eight query-plan cases). Explicit Debug with SnapshotLoadingTests
+passed 87 tests in six suites. Expanded Release Store passed all fifteen portable
+test files (167 tests in seventeen suites). Project/scheme regeneration was
+identical. The default Linux test selection omits SnapshotLoadingTests, so the
+expanded run is required to execute these regressions.
+
+SwiftUI source is syntax-checked on Linux, not compiled or rendered with an Apple
+SDK. Native navigation, keyboard/VoiceOver, refresh and dismissal behavior,
+responsive appearance, and mid-range-device frame/load measurements remain
+unverified. Synchronous app initialization, catalog/recovery and picker paths are
+separate remaining loading work; this milestone does not establish launch time.
+
+## App-owned startup resources — 2026-11-07
+
+`HardsetApp.init` opened and migrated SQLite synchronously. Its failure path used
+`assertionFailure` and continued without installing the intended default database;
+SQLiteData's unconfigured dependency supplies a blank in-memory writer. The app's
+actual data APIs already accept explicit writers. A separate RootView task owned
+the sync engine and constructed it on each execution, even though the engine's
+SQL functions must remain alive for the lifetime of its writer.
+
+`AppStartup<Resources>` now owns one preparation attempt and the successful
+resource set at the App level, shared across scenes. Blocking preparation runs on
+a dedicated serial queue, with captured dependency context restored there so
+preview/test context does not silently change. The app explicitly passes the
+prepared writer to its feature environment. `HardsetDatabase.prepareForLaunch`
+bundles that writer with its retained SyncEngine, including the existing mandatory
+account delegate. The bundle is published only after opening, migrations and
+engine construction all succeed. This waits for local resource construction,
+not CloudKit network synchronization.
+
+Concurrent start callers share one in-flight task; disappearing/canceled scene
+callers do not cancel this process-owned work. A completed resource set cannot be
+replaced by another appearance or retry. Failure exposes no resources, stores the
+error, and permits another attempt only through explicit retry. Attempt IDs keep
+older waiters from disturbing a newer attempt. The app shows native progress or
+an explicit retry state before the workout UI, using existing tokens/components
+and a native button with the minimum target inside its label. There is no custom
+motion; reduced-motion behavior stays immediate. No database is erased or replaced
+as a fallback. Sync construction failure now gates the workout UI instead of
+asserting and proceeding with potentially incomplete engine setup.
+
+The portable baseline ran the actual migrator from MainActor and failed the
+availability probe: a job queued to MainActor could not run while migration
+waited. The same migration through AppStartup passes. Tests also cover shared
+startup with canceled callers, failure/no-resource/explicit retry behavior,
+resource identity and lifetime, and preservation of preview dependencies across
+the queue boundary. These validate controller behavior and real SQLite migration,
+not Apple sync construction or measured phone launch latency.
+
+Verification: final `make check` passed (94 Swift files, 177 Core tests, 81 default
+Store tests, eight query-plan cases). Explicit Debug with AppStartupTests passed
+86 tests in six suites. Expanded Release Store passed all sixteen portable files
+(172 tests in eighteen suites). Project/scheme regeneration was identical. The
+installed default Linux selection omits the new tests, so use the expanded run to
+execute them.
+
+The app and Database.swift wiring require a native build and CloudKit integration
+run; Linux syntax checks do not compile those files against Apple frameworks.
+Permission/entitlement failures, failure injection after partial SyncEngine setup,
+scene restoration and actual engine/function lifetime must be verified there.
+Synchronous catalog seeding, workout recovery and gym loading after this gate
+remain subsequent work. First useful-screen timing still requires Release iPhone
+measurements, including migration cost for multi-year databases.
+
 ## Remaining app-wide work
 
 - Capture Release cold/warm launch, first usable workout, resume, picker, history,
   progression, and volume timings on iPhone, with small and multi-year databases.
   Record median/tail latency, main-thread hangs, memory, and device/OS/build details
   before setting defensible loading budgets.
-- Audit synchronous reads in feature `.task`/refresh handlers and database opening
-  in `HardsetApp.init`; profile then move measured blocking work off the main actor
-  with cancellation and consistent snapshot semantics.
+- Audit remaining synchronous catalog/recovery/gym/picker loading and post-read
+  analysis on the main actor. Profile before moving additional CPU work, preserve
+  cancellation and consistent snapshot semantics, and validate the new startup
+  owner with Apple frameworks and real scene/account transitions.
 - Measure first-launch index creation and ongoing set-write/storage overhead.
-- Address progression-chart row limits, machine provenance, consistent recovery
-  reads, and retry/concurrent-command identity from
+- Address progression-chart row limits/order, machine provenance,
+  and retry/concurrent-command identity from
   `CORE_STORE_ARCHITECTURE_REVIEW.md`; do not trade correctness for smaller reads.
-- Verify earliest shipped v1 fixtures: this index migration does not repair
-  historical edits to v1 columns or debug schema-erasure behavior identified in
-  the architectural review.
+- Verify repaired historical schemas with native CloudKit metadatabases, sync
+  triggers, account transitions, and the full app launch/recovery flow.
 - Complete native app/widget compilation and physical-device checks, including
   restoration, rest reconciliation, sync ownership, and accessibility behavior.
 

@@ -384,6 +384,45 @@ struct LoggerStoreTests {
     #expect(timeline.duration == .seconds(3600))
   }
 
+  @Test("Open-workout lookup searches only open sessions through finish and reopen")
+  func openSessionUsesPartialIndex() throws {
+    let database = try migratedDatabase()
+    let store = LoggerStore(database: database)
+    // Multiple open rows can arrive through sync. A newer finished row must
+    // never mask them, and finishing the newest open row reveals the older one.
+    let older = try store.startSession(at: start)
+    let newer = try store.startSession(at: start.addingTimeInterval(60))
+    let finished = try store.startSession(at: start.addingTimeInterval(120))
+    try store.finishSession(finished, at: start.addingTimeInterval(180))
+    let statements = Mutex<[String]>([])
+    try database.writeWithoutTransaction { db in
+      db.trace { event in
+        if case .statement(let statement) = event, statement.sql.hasPrefix("SELECT") {
+          statements.withLock { $0.append(statement.expandedSQL) }
+        }
+      }
+    }
+    #expect(try store.openSession()?.id == newer)
+    try store.finishSession(newer, at: start.addingTimeInterval(240))
+    #expect(try store.openSession()?.id == older)
+    try store.finishSession(older, at: start.addingTimeInterval(300))
+    #expect(try store.openSession() == nil)
+    let reopened = try store.startSession(at: start.addingTimeInterval(360))
+    #expect(try store.openSession()?.id == reopened)
+    let queries = statements.withLock { $0.filter {
+      $0.contains("FROM \"sessions\"") && $0.contains("ORDER BY")
+    } }
+    #expect(queries.count == 4)
+    try database.read { db in
+      for query in queries {
+        let plan = try Row.fetchAll(db, sql: "EXPLAIN QUERY PLAN " + query)
+          .compactMap { $0["detail"] as String? }
+        #expect(plan.contains { $0.contains("SEARCH sessions USING INDEX sessions_on_openStartedAt") })
+        #expect(!plan.contains { $0.contains("SCAN ") || $0.contains("TEMP B-TREE") })
+      }
+    }
+  }
+
   @Test("An open session has no duration rather than a growing one")
   func openSessionHasNoDuration() throws {
     let database = try migratedDatabase()

@@ -71,11 +71,12 @@ public nonisolated struct CatalogSeeder {
           // rename on the next launch. So: adopt the new name only when the stored one is still
           // exactly what the catalogue last shipped.
           //
-          // An empty `curatedName` means a row written before this column existed, which can
-          // only predate any rename UI -- so it counts as untouched.
+          // An empty `curatedName` has unknown provenance. A nonempty stored name
+          // may be a user edit, so preserve it. Blank legacy rows can take the
+          // catalogue name; subsequent seeds still use the usual three-way merge.
           let storedName = existing?.name ?? ""
           let lastCurated = existing?.curatedName ?? ""
-          let userRenamedIt = !lastCurated.isEmpty && storedName != lastCurated
+          let userRenamedIt = storedName != lastCurated
           try Exercise
             .where { $0.id.eq(uuid) }
             .update {

@@ -10,9 +10,9 @@ import SwiftUI
 /// "No workouts yet" for the instant before the list arrives would be a small lie.
 @MainActor
 public struct HistoryScreen: View {
-  @State private var rows: [HistoryRow] = []
-  @State private var loadFailed = false
-  @State private var hasLoaded = false
+  /// Owns the read. A newer request cancels an older one, and a cancelled or stale completion
+  /// never replaces what is on screen.
+  @State private var snapshot = SnapshotLoader<[HistoryRow]>()
 
   private let store: HistoryStore
   private let unit: WeightUnit
@@ -29,7 +29,7 @@ public struct HistoryScreen: View {
 
   public var body: some View {
     Group {
-      if loadFailed {
+      if snapshot.loadFailed {
         // Scrollable so the pull-to-refresh the message promises actually works.
         ScrollView {
           VStack(alignment: .leading, spacing: Tokens.Spacing.section) {
@@ -44,7 +44,7 @@ public struct HistoryScreen: View {
           .frame(maxWidth: .infinity, alignment: .leading)
         }
         .background(Tokens.Color.background)
-      } else if hasLoaded {
+      } else if let rows = snapshot.value {
         HistoryView(
           rows: rows,
           unit: unit,
@@ -59,13 +59,16 @@ public struct HistoryScreen: View {
         .background(Tokens.Color.background)
       }
     }
-    .task { load() }
-    .refreshable { load() }
+    .task { await load() }
+    .refreshable { await load() }
   }
 
-  private func load() {
-    do {
-      rows = try store.recentSessions(limit: Self.limit).map { summary in
+  private func load() async {
+    let store = store
+    let limit = Self.limit
+    await snapshot.load { @MainActor in
+      let summaries = try await store.loadRecentSessions(limit: limit)
+      return summaries.map { summary in
         HistoryRow(
           id: summary.id,
           title: summary.title,
@@ -76,11 +79,6 @@ public struct HistoryScreen: View {
           hasImplausibleDuration: summary.hasImplausibleDuration
         )
       }
-      loadFailed = false
-    } catch {
-      rows = []
-      loadFailed = true
     }
-    hasLoaded = true
   }
 }

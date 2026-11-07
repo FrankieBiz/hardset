@@ -2,6 +2,7 @@ import Foundation
 import GRDB
 import HardsetCore
 import SQLiteData
+import Synchronization
 import Testing
 
 @testable import HardsetStore
@@ -55,6 +56,87 @@ struct ProgressionStoreTests {
       )
     }
     try store.finishSession(id, at: date.addingTimeInterval(3600))
+  }
+
+  @Test("History reads samples and labels in one transaction", arguments: [false, true])
+  func historyUsesOneRead(withMachine: Bool) throws {
+    let (database, logger, progression, exercise, gym) = try fixture()
+    let equipment = withMachine ? try machine(database, gym, "Press") : nil
+    try session(logger, exercise, equipment, sets: [(100, 8)], at: now)
+    let statements = Mutex<[String]>([])
+    try database.writeWithoutTransaction { db in
+      db.trace { event in
+        if case .statement(let statement) = event {
+          statements.withLock { $0.append(statement.sql) }
+        }
+      }
+    }
+    let history = try progression.history(for: exercise)
+    #expect(history.series.count == 1)
+    let begins = statements.withLock { $0.filter { $0.hasPrefix("BEGIN") }.count }
+    #expect(begins == 1)
+    let labelQueries = statements.withLock { $0.filter { $0.contains("FROM \"machines\"") }.count }
+    #expect(labelQueries == (withMachine ? 1 : 0))
+  }
+
+  @Test("A concurrent edit cannot mix progression loads with later machine labels")
+  func historyHasConsistentSnapshot() throws {
+    let directory = FileManager.default.temporaryDirectory
+      .appendingPathComponent("hardset-progression-\(UUID())")
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: directory) }
+    let path = directory.appendingPathComponent("history.sqlite").path
+    var configuration = Configuration()
+    configuration.foreignKeysEnabled = true
+    let reader = try DatabaseQueue(path: path, configuration: configuration)
+    defer { try? reader.close() }
+    try reader.writeWithoutTransaction { db in try db.execute(sql: "PRAGMA journal_mode = WAL") }
+    try HardsetMigrations.migrator().migrate(reader)
+    let writer = try DatabaseQueue(path: path, configuration: configuration)
+    defer { try? writer.close() }
+    let exercise = ExerciseID()
+    let gym = GymID()
+    try reader.write { db in
+      try Exercise.insert { Exercise.Draft(id: exercise.rawValue, name: "Press") }.execute(db)
+      try Gym.insert { Gym.Draft(id: gym.rawValue, name: "Gym") }.execute(db)
+    }
+    let equipment = try machine(reader, gym, "Original station")
+    try session(LoggerStore(database: reader), exercise, equipment, sets: [(100, 8)], at: now)
+    let progression = ProgressionStore(database: reader)
+    let before = try progression.history(for: exercise)
+    #expect(before.machineNames[equipment] == "Original station")
+    #expect(before.series.first?.points.first?.heaviestLoadKg == 100)
+    let fired = Mutex(false)
+    let writeError = Mutex<String?>(nil)
+    try reader.writeWithoutTransaction { db in
+      db.trace(options: .profile) { event in
+        guard case .profile(let statement, _) = event,
+          statement.sql.contains("FROM \"loggedSets\"")
+        else { return }
+        let shouldWrite = fired.withLock { fired in
+          if fired { return false }
+          fired = true
+          return true
+        }
+        guard shouldWrite else { return }
+        do {
+          try writer.write { other in
+            try #sql("UPDATE loggedSets SET weightKg = 200 WHERE exerciseID = \(exercise.rawValue)").execute(other)
+            try #sql("UPDATE machines SET name = 'Renamed station' WHERE id = \(equipment.rawValue)").execute(other)
+          }
+        } catch {
+          writeError.withLock { $0 = String(describing: error) }
+        }
+      }
+    }
+    let during = try progression.history(for: exercise)
+    #expect(fired.withLock { $0 })
+    #expect(writeError.withLock { $0 } == nil)
+    #expect(during == before)
+    // A subsequent load sees the whole committed edit, not cached old history.
+    let after = try progression.history(for: exercise)
+    #expect(after.machineNames[equipment] == "Renamed station")
+    #expect(after.series.first?.points.first?.heaviestLoadKg == 200)
   }
 
   /// The differentiator, end to end: two machines stay two lines.

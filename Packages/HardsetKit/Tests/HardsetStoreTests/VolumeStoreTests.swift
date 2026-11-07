@@ -2,6 +2,7 @@ import Foundation
 import GRDB
 import HardsetCore
 import SQLiteData
+import Synchronization
 import Testing
 
 @testable import HardsetStore
@@ -43,6 +44,81 @@ struct VolumeStoreTests {
         isWarmup: isWarmup, at: date.addingTimeInterval(Double(index) * 60)
       )
     }
+  }
+
+  @Test("A volume report reads its inputs in one transaction")
+  func reportUsesOneRead() throws {
+    let (database, _, volume) = try seeded()
+    let statements = Mutex<[String]>([])
+    try database.writeWithoutTransaction { db in
+      db.trace { event in
+        if case .statement(let statement) = event {
+          statements.withLock { $0.append(statement.sql) }
+        }
+      }
+    }
+    _ = try volume.rollingWeek(endingAt: now)
+    let begins = statements.withLock { $0.filter { $0.hasPrefix("BEGIN") }.count }
+    #expect(begins == 1)
+  }
+
+  @Test("A concurrent update cannot mix volume sets with later attribution")
+  func reportHasConsistentSnapshot() throws {
+    let directory = FileManager.default.temporaryDirectory
+      .appendingPathComponent("hardset-volume-\(UUID())")
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: directory) }
+    let path = directory.appendingPathComponent("history.sqlite").path
+    var configuration = Configuration()
+    configuration.foreignKeysEnabled = true
+    let reader = try DatabaseQueue(path: path, configuration: configuration)
+    defer { try? reader.close() }
+    try reader.writeWithoutTransaction { db in try db.execute(sql: "PRAGMA journal_mode = WAL") }
+    try HardsetMigrations.migrator().migrate(reader)
+    let writer = try DatabaseQueue(path: path, configuration: configuration)
+    defer { try? writer.close() }
+    try CatalogSeeder(database: reader).seed(now: now)
+    let logger = LoggerStore(database: reader)
+    let volume = VolumeStore(database: reader)
+    let bench = try exerciseID(reader, slug: "barbell-bench-press")
+    let session = try logger.startSession(at: now.addingTimeInterval(-3600))
+    try log(logger, session, bench, sets: 4, at: now.addingTimeInterval(-3600))
+    let before = try volume.rollingWeek(endingAt: now)
+    #expect(before.hardSets == 4)
+    #expect(before.sets(for: .chest) == 4)
+    let fired = Mutex(false)
+    let writeError = Mutex<String?>(nil)
+    let later = now.addingTimeInterval(60)
+    try reader.writeWithoutTransaction { db in
+      db.trace(options: .profile) { event in
+        guard case .profile(let statement, _) = event,
+          statement.sql.contains("FROM \"loggedSets\"")
+        else { return }
+        let shouldWrite = fired.withLock { fired in
+          if fired { return false }
+          fired = true
+          return true
+        }
+        guard shouldWrite else { return }
+        do {
+          // Commit on a separate WAL connection after the first input is read.
+          // The complete newer version has no sets in the requested window.
+          try writer.write { other in
+            try #sql("UPDATE loggedSets SET completedAt = \(later)").execute(other)
+            try #sql("UPDATE exercises SET isArchived = 1 WHERE id = \(bench.rawValue)").execute(other)
+          }
+        } catch {
+          writeError.withLock { $0 = String(describing: error) }
+        }
+      }
+    }
+    let during = try volume.rollingWeek(endingAt: now)
+    #expect(fired.withLock { $0 })
+    #expect(writeError.withLock { $0 } == nil)
+    #expect(during == before)
+    let after = try volume.rollingWeek(endingAt: now)
+    #expect(after.hardSets == 0)
+    #expect(after.unattributedHardSets == 0)
   }
 
   @Test("Fractional credit reaches the report through the database")

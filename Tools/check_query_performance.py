@@ -6,6 +6,7 @@ informational; plan shape and unchanged results are the regression gates.
 """
 
 import argparse
+from datetime import datetime, timedelta
 from pathlib import Path
 import re
 import sqlite3
@@ -17,6 +18,10 @@ MIGRATIONS = ROOT / "Packages/HardsetKit/Sources/HardsetStore/Migrations.swift"
 
 # Same predicates and ordering as VolumeStore, ProgressionStore and LoggerStore.
 QUERIES = {
+    "open workout (absent)": (
+        'SELECT * FROM sessions WHERE finishedAt IS NULL ORDER BY startedAt DESC LIMIT 1',
+        (),
+    ),
     "rolling volume": (
         'SELECT * FROM loggedSets WHERE completedAt >= ? AND completedAt < ? ORDER BY completedAt',
         ("2026-10-28", "2026-11-04"),
@@ -56,6 +61,19 @@ def statements(source):
     return blocks
 
 
+def apply_migration_sql(db, source):
+    for statement in statements(source):
+        # v5 conditionally repairs legacy columns. Fresh v1 already includes
+        # them; mirror those metadata guards for this literal-SQL benchmark.
+        # Native Store tests execute the real migrator on all legacy variants.
+        addition = re.search(r'ALTER TABLE "(\w+)" ADD COLUMN "(\w+)"', statement)
+        if addition:
+            table, column = addition.groups()
+            if column in {row[1] for row in db.execute(f'PRAGMA table_info("{table}")')}:
+                continue
+        db.execute(statement)
+
+
 def measure(db, query, arguments):
     plan = [row[3] for row in db.execute("EXPLAIN QUERY PLAN " + query, arguments)]
     timings = []
@@ -77,10 +95,14 @@ def main():
     db = sqlite3.connect(":memory:")
     db.execute("PRAGMA foreign_keys = ON")
     db.create_function("uuid", 0, lambda: "fixture-default-id")
-    for statement in statements(baseline):
-        db.execute(statement)
+    apply_migration_sql(db, baseline)
     db.executemany('INSERT INTO exercises (id) VALUES (?)', [(f"exercise-{i}",) for i in range(50)])
-    db.executemany('INSERT INTO sessions (id) VALUES (?)', [(f"session-{i}",) for i in range(5000)])
+    db.executemany(
+        'INSERT INTO sessions (id, startedAt, finishedAt) VALUES (?, ?, ?)',
+        [(f"session-{i}", (datetime(2012, 1, 1) + timedelta(days=i)).isoformat(),
+          (datetime(2012, 1, 1, 1) + timedelta(days=i)).isoformat()) for i in range(5000)],
+    )
+    assert db.execute('SELECT count(*) FROM sessions WHERE finishedAt IS NULL').fetchone()[0] == 0
     db.executemany(
         'INSERT INTO loggedSets (id, sessionID, exerciseID, setOrdinal, weightKg, reps, isWarmup, completedAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
         ((f"set-{i}", f"session-{i // 20}", f"exercise-{(i // 4) % 50}", i % 20,
@@ -93,15 +115,17 @@ def main():
     )
     before = {name: measure(db, *query) for name, query in QUERIES.items()}
     if upgrade:
-        for statement in statements(upgrade):
-            db.execute(statement)
+        apply_migration_sql(db, upgrade)
     failures = []
     for name, query in QUERIES.items():
         rows, elapsed, plan = measure(db, *query)
         old_rows, old_elapsed, old_plan = before[name]
         # Ordering ties are deliberately unspecified by the Store API.
         assert sorted(rows) == sorted(old_rows), f"{name}: results changed"
-        assert rows, f"{name}: empty fixture cannot verify a loading query"
+        if name == "open workout (absent)":
+            assert rows == [], "Finished history must not resume a workout"
+        else:
+            assert rows, f"{name}: empty fixture cannot verify a loading query"
         print(f"{name}: {old_elapsed:.3f} -> {elapsed:.3f} ms ({len(rows)} rows)")
         print(f"  before: {'; '.join(old_plan)}")
         print(f"  after:  {'; '.join(plan)}")

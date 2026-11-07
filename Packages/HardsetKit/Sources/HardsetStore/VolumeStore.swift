@@ -4,10 +4,10 @@ import SQLiteData
 
 /// Reads the sets and the attribution a volume report needs.
 ///
-/// Two queries, both bounded by a date window, and then pure arithmetic in `VolumeAnalyzer`. The
-/// counting itself has no database handle, so a volume figure cannot depend on when it was asked
-/// for — which is what makes the report reproducible from the same window.
-public nonisolated struct VolumeStore {
+/// Date-window sets and current exercise attribution are read from one database snapshot,
+/// followed by pure arithmetic in `VolumeAnalyzer`. A concurrent edit cannot mix sets from
+/// before that edit with attribution from after it.
+public nonisolated struct VolumeStore: Sendable {
   private let database: any DatabaseWriter
 
   public init(database: any DatabaseWriter) {
@@ -20,12 +20,7 @@ public nonisolated struct VolumeStore {
   /// when two adjacent weeks are compared, which shows up as a phantom set in both.
   public func countableSets(from: Date, to: Date) throws -> [CountableSet] {
     try database.read { db in
-      try LoggedSet
-        .where { $0.completedAt >= from }
-        .where { $0.completedAt < to }
-        .order { $0.completedAt }
-        .fetchAll(db)
-        .map { CountableSet(exerciseID: ExerciseID(rawValue: $0.exerciseID), isWarmup: $0.isWarmup) }
+      try Self.readCountableSets(from: from, to: to, in: db)
     }
   }
 
@@ -37,17 +32,52 @@ public nonisolated struct VolumeStore {
   /// zero — the distinction the report is built on.
   public func attributionIndex() throws -> AttributionIndex {
     let entries = try database.read { db in
-      try Exercise.where { !$0.isArchived }.fetchAll(db).map(CatalogEntry.init(row:))
+      try Self.readAttributionEntries(in: db)
     }
     return AttributionIndex(entries: entries)
   }
 
-  /// The report for one window.
+  /// The report for one window, using a consistent snapshot for both inputs.
   public func report(from: Date, to: Date) throws -> MuscleVolumeReport {
-    VolumeAnalyzer.report(
-      sets: try countableSets(from: from, to: to),
-      attribution: try attributionIndex()
+    let (sets, entries) = try database.read { db in
+      (
+        try Self.readCountableSets(from: from, to: to, in: db),
+        try Self.readAttributionEntries(in: db)
+      )
+    }
+    return VolumeAnalyzer.report(
+      sets: sets,
+      attribution: AttributionIndex(entries: entries)
     )
+  }
+
+  /// Suspends the caller while GRDB reads one consistent, cancellable snapshot.
+  public func loadRollingWeek(endingAt now: Date) async throws -> MuscleVolumeReport {
+    try Task.checkCancellation()
+    let from = now.addingTimeInterval(-7 * 86_400)
+    let (sets, entries) = try await database.read { db in
+      (
+        try Self.readCountableSets(from: from, to: now, in: db),
+        try Self.readAttributionEntries(in: db)
+      )
+    }
+    try Task.checkCancellation()
+    return VolumeAnalyzer.report(sets: sets, attribution: AttributionIndex(entries: entries))
+  }
+
+  private static func readCountableSets(from: Date, to: Date, in db: Database) throws
+    -> [CountableSet]
+  {
+    try LoggedSet
+      .where { $0.completedAt >= from }
+      .where { $0.completedAt < to }
+      .order { $0.completedAt }
+      .fetchAll(db)
+      .map { CountableSet(exerciseID: ExerciseID(rawValue: $0.exerciseID), isWarmup: $0.isWarmup) }
+  }
+
+  private static func readAttributionEntries(in db: Database) throws -> [CatalogEntry] {
+    try Exercise.where { !$0.isArchived }.fetchAll(db).map(CatalogEntry.init(row:))
   }
 
   /// The report for the seven days ending at `now`.
@@ -62,7 +92,7 @@ public nonisolated struct VolumeStore {
 }
 
 /// Reads load history for one exercise, per machine.
-public nonisolated struct ProgressionStore {
+public nonisolated struct ProgressionStore: Sendable {
   private let database: any DatabaseWriter
 
   public init(database: any DatabaseWriter) {
@@ -77,22 +107,7 @@ public nonisolated struct ProgressionStore {
     -> [ProgressionSample]
   {
     try database.read { db in
-      try LoggedSet
-        .where { $0.exerciseID.eq(exerciseID.rawValue) }
-        .where { !$0.isWarmup }
-        .order { $0.completedAt.desc() }
-        .limit(limit)
-        .fetchAll(db)
-        .reversed()
-        .map {
-          ProgressionSample(
-            sessionID: SessionID(rawValue: $0.sessionID),
-            machineID: $0.machineID.map(MachineID.init(rawValue:)),
-            weightKg: $0.weightKg,
-            reps: $0.reps,
-            completedAt: $0.completedAt
-          )
-        }
+      try Self.readSamples(for: exerciseID, limit: limit, in: db)
     }
   }
 
@@ -100,22 +115,75 @@ public nonisolated struct ProgressionStore {
   /// series is labelled generically rather than dropped — the sets were still performed.
   public func machineNames(_ ids: [MachineID]) throws -> [MachineID: String] {
     guard !ids.isEmpty else { return [:] }
-    let raws = ids.map(\.rawValue)
     return try database.read { db in
-      try Machine
-        .where { $0.id.in(raws) }
-        .fetchAll(db)
-        .reduce(into: [MachineID: String]()) { $0[MachineID(rawValue: $1.id)] = $1.name }
+      try Self.readMachineNames(ids, in: db)
     }
   }
 
-  /// Everything a load-history chart needs for one exercise.
+  /// Everything a load-history chart needs, read from one consistent snapshot.
   public func history(for exerciseID: ExerciseID) throws -> ProgressionHistory {
-    let samples = try samples(for: exerciseID)
+    let (samples, names) = try database.read { db in
+      try Self.readHistoryInputs(for: exerciseID, in: db)
+    }
+    return Self.analyze(samples: samples, names: names, exerciseID: exerciseID)
+  }
+
+  /// Suspends the caller while GRDB reads samples and labels in one snapshot.
+  public func loadHistory(for exerciseID: ExerciseID) async throws -> ProgressionHistory {
+    try Task.checkCancellation()
+    let (samples, names) = try await database.read { db in
+      try Self.readHistoryInputs(for: exerciseID, in: db)
+    }
+    try Task.checkCancellation()
+    return Self.analyze(samples: samples, names: names, exerciseID: exerciseID)
+  }
+
+  private static func readHistoryInputs(for exerciseID: ExerciseID, in db: Database) throws
+    -> ([ProgressionSample], [MachineID: String])
+  {
+    let samples = try readSamples(for: exerciseID, limit: 2_000, in: db)
+    let ids = Array(Set(samples.compactMap(\.machineID)))
+    return (samples, try readMachineNames(ids, in: db))
+  }
+
+  private static func analyze(
+    samples: [ProgressionSample], names: [MachineID: String], exerciseID: ExerciseID
+  ) -> ProgressionHistory {
     let series = ProgressionAnalyzer.series(from: samples, exerciseID: exerciseID)
     let changes = ProgressionAnalyzer.machineChanges(from: samples)
-    let names = try machineNames(series.compactMap(\.key.machineID))
     return ProgressionHistory(series: series, machineChanges: changes, machineNames: names)
+  }
+
+  private static func readSamples(for exerciseID: ExerciseID, limit: Int, in db: Database) throws
+    -> [ProgressionSample]
+  {
+    try LoggedSet
+      .where { $0.exerciseID.eq(exerciseID.rawValue) }
+      .where { !$0.isWarmup }
+      .order { $0.completedAt.desc() }
+      .limit(limit)
+      .fetchAll(db)
+      .reversed()
+      .map {
+        ProgressionSample(
+          sessionID: SessionID(rawValue: $0.sessionID),
+          machineID: $0.machineID.map(MachineID.init(rawValue:)),
+          weightKg: $0.weightKg,
+          reps: $0.reps,
+          completedAt: $0.completedAt
+        )
+      }
+  }
+
+  private static func readMachineNames(_ ids: [MachineID], in db: Database) throws
+    -> [MachineID: String]
+  {
+    guard !ids.isEmpty else { return [:] }
+    let raws = ids.map(\.rawValue)
+    return try Machine
+      .where { $0.id.in(raws) }
+      .fetchAll(db)
+      .reduce(into: [MachineID: String]()) { $0[MachineID(rawValue: $1.id)] = $1.name }
   }
 }
 
@@ -173,7 +241,7 @@ public nonisolated struct SessionSummary: Hashable, Sendable, Identifiable {
 }
 
 /// Reads finished sessions for the history screen.
-public nonisolated struct HistoryStore {
+public nonisolated struct HistoryStore: Sendable {
   private let database: any DatabaseWriter
 
   public init(database: any DatabaseWriter) {
@@ -185,46 +253,56 @@ public nonisolated struct HistoryStore {
   /// Open sessions are excluded: an unfinished workout belongs in the recovery path, not in
   /// history, and showing it with no duration invites the reader to think it lasted zero minutes.
   public func recentSessions(limit: Int = 50) throws -> [SessionSummary] {
-    try database.read { db in
-      let sessions = try Session
-        .where { $0.finishedAt.isNot(nil) }
-        .order { $0.startedAt.desc() }
-        .limit(limit)
+    try database.read { db in try Self.readRecentSessions(limit: limit, in: db) }
+  }
+
+  /// Suspends the caller while GRDB reads the history snapshot and summaries.
+  public func loadRecentSessions(limit: Int = 50) async throws -> [SessionSummary] {
+    try Task.checkCancellation()
+    let rows = try await database.read { db in try Self.readRecentSessions(limit: limit, in: db) }
+    try Task.checkCancellation()
+    return rows
+  }
+
+  private static func readRecentSessions(limit: Int, in db: Database) throws -> [SessionSummary] {
+    let sessions = try Session
+      .where { $0.finishedAt.isNot(nil) }
+      .order { $0.startedAt.desc() }
+      .limit(limit)
+      .fetchAll(db)
+    guard !sessions.isEmpty else { return [] }
+
+    let sessionIDs = sessions.map(\.id)
+    let sets = try LoggedSet
+      .where { $0.sessionID.in(sessionIDs) }
+      .order { $0.setOrdinal }
+      .fetchAll(db)
+
+    let exerciseIDs = Array(Set(sets.map(\.exerciseID)))
+    let names = exerciseIDs.isEmpty
+      ? [:]
+      : try Exercise
+        .where { $0.id.in(exerciseIDs) }
         .fetchAll(db)
-      guard !sessions.isEmpty else { return [] }
+        .reduce(into: [UUID: String]()) { $0[$1.id] = $1.name }
 
-      let sessionIDs = sessions.map(\.id)
-      let sets = try LoggedSet
-        .where { $0.sessionID.in(sessionIDs) }
-        .order { $0.setOrdinal }
-        .fetchAll(db)
+    let setsBySession = Dictionary(grouping: sets, by: \.sessionID)
 
-      let exerciseIDs = Array(Set(sets.map(\.exerciseID)))
-      let names = exerciseIDs.isEmpty
-        ? [:]
-        : try Exercise
-          .where { $0.id.in(exerciseIDs) }
-          .fetchAll(db)
-          .reduce(into: [UUID: String]()) { $0[$1.id] = $1.name }
-
-      let setsBySession = Dictionary(grouping: sets, by: \.sessionID)
-
-      return sessions.map { session in
-        let own = setsBySession[session.id] ?? []
-        var seen = Set<UUID>()
-        var ordered: [String] = []
-        for set in own where !seen.contains(set.exerciseID) {
-          seen.insert(set.exerciseID)
-          ordered.append(names[set.exerciseID] ?? "Unknown movement")
-        }
-        return SessionSummary(
-          id: SessionID(rawValue: session.id),
-          title: session.title,
-          timeline: SessionTimeline(startedAt: session.startedAt, finishedAt: session.finishedAt),
-          exerciseNames: ordered,
-          volume: Self.volume(of: own)
-        )
+    return sessions.map { session in
+      let own = setsBySession[session.id] ?? []
+      var seen = Set<UUID>()
+      var ordered: [String] = []
+      for set in own where !seen.contains(set.exerciseID) {
+        seen.insert(set.exerciseID)
+        ordered.append(names[set.exerciseID] ?? "Unknown movement")
       }
+      return SessionSummary(
+        id: SessionID(rawValue: session.id),
+        title: session.title,
+        timeline: SessionTimeline(startedAt: session.startedAt, finishedAt: session.finishedAt),
+        exerciseNames: ordered,
+        volume: Self.volume(of: own)
+      )
     }
   }
 
