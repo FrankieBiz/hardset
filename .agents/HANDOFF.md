@@ -602,3 +602,24 @@ The requested architectural review is documented. No production Swift source or 
   a new workout if recovery failed. Other broad-goal work remains chart limits/order,
   incomplete-plan recovery/provenance, numeric/retry identity, durable rest/account
   gating, and native/device validation. Goal remains active.
+
+## UI design-system elevation, verification update — 2026-11-07
+
+- Branch `FrankieBiz/ui-elevation-overhaul` is now pushed (feature branch only, not `main`) so
+  `.github/workflows/ios-ui.yml` can compile it on a GitHub `macos-26` runner with Xcode 26.6.
+  Public repository, so the runner minutes are free.
+- Verified by CI (runs 42421852965 and 42423502965): HardsetKit builds for the macOS host; the app
+  and widget build for the iOS Simulator; 13 snapshot tests render every screen to PNG
+  (artifact `hardset-ios-ui`). The first run found two real compile errors, both fixed: GRDB's
+  `Configuration` shadowing `ButtonStyle.Configuration` in HardsetFeature, and a non-exhaustive
+  `LoggerStoreError` switch after main added validation cases.
+- Visual review of the renders found and fixed: "22.0 lb" machine steps, a header glyph
+  overflowing its circle at accessibility sizes, truncating machine chip and rest caption there,
+  a truncated last chart date, untitled history rows repeating their date, and undersized keypad
+  adjusters. The stray end-lines on outlined capsules are an artefact of the layer renderer:
+  `ImageRenderer` draws them cleanly.
+- The renderer cannot draw Liquid Glass, so the tab bar, workout accessory and prominent toolbar
+  buttons still need a look on a simulator or device. Hit regions and glare are device-only.
+- Merged `origin/main` (snapshot loading, startup ownership) rather than rebasing a pushed branch.
+  Main's `SnapshotLoader` logic is kept as is; its startup screen now uses the design system.
+- Interim app icon added (`Tools/render_interim_icon.py`); the final icon is still the user's call.
