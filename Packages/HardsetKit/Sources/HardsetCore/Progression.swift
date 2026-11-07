@@ -108,13 +108,21 @@ public struct MachineChange: Hashable, Sendable, Identifiable {
 
   /// The sentence the chart must show. Deliberately refuses to characterise the change as progress
   /// or regression, because across a machine switch it is neither.
-  public var explanation: String {
+  ///
+  /// Stated in kilograms, the canonical unit. Screens use `explanation(in:)` with the lifter's own
+  /// unit, so the sentence agrees with the chart it sits under.
+  public var explanation: String { explanation(in: .kilograms) }
+
+  /// The same sentence, with the load difference converted to `unit` and rounded to a tenth.
+  public func explanation(in unit: WeightUnit) -> String {
     let direction = heaviestLoadDeltaKg >= 0 ? "higher" : "lower"
-    let magnitude = abs(heaviestLoadDeltaKg)
-    guard magnitude > 0 else {
+    // Rounded before the zero check, so a difference too small to show is stated as a match
+    // rather than printed as "0 kg higher".
+    let shown = (unit.fromKilograms(abs(heaviestLoadDeltaKg)) * 10).rounded() / 10
+    guard shown > 0 else {
       return "You changed machines here. The load happened to match, which is a coincidence, not a comparison."
     }
-    return "You changed machines here. The load is \(Self.format(magnitude)) kg \(direction), which is a difference between the machines rather than a change in strength."
+    return "You changed machines here. The load is \(Self.format(shown)) \(unit.abbreviation) \(direction), which is a difference between the machines rather than a change in strength."
   }
 
   static func format(_ value: Double) -> String {
