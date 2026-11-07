@@ -220,13 +220,15 @@ public struct ProgressionChartView: View {
     .chartLegend(.hidden)
     // The newest point sat on the plot's trailing edge, leaving its date label no room, so it
     // collapsed to an ellipsis. Inset both ends so the first and last dates read in full.
-    .chartXScale(range: .plotDimension(startPadding: 12, endPadding: 28))
+    .chartXScale(range: .plotDimension(startPadding: 16, endPadding: 32))
     .chartXAxis {
-      // Four labels at most: with more, the last date crowded the plot's edge and truncated to "…".
+      // Four labels at most, each centred under its tick. Charts starts a date label at its tick
+      // by default, so the newest date needed its whole width past the last tick and truncated to
+      // "Nov…"; centred, it needs half, which the scale's end padding provides.
       AxisMarks(values: .automatic(desiredCount: 4)) { _ in
         AxisGridLine(stroke: StrokeStyle(lineWidth: gridWidth))
           .foregroundStyle(grid)
-        AxisValueLabel()
+        AxisValueLabel(anchor: .top)
           .font(axisFont)
           .foregroundStyle(axisText)
       }
