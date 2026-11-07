@@ -1,31 +1,33 @@
 # Mac verification: design-system pass
 
 Linux can parse Swift and run the Core and Store suites, but it cannot compile SwiftUI, Charts,
-WidgetKit, ActivityKit or AlarmKit, resolve dynamic colours, or measure hit regions. Everything in
-this list is therefore unverified until it passes on a Mac with Xcode 26 and an iOS 26.1 simulator
-or device. Nothing here has been compiled.
+WidgetKit, ActivityKit or AlarmKit. The `iOS build and screens` workflow
+(`.github/workflows/ios-ui.yml`) now does that on a GitHub macOS runner with Xcode 26.6 for every
+push to a `FrankieBiz/**` branch. It also renders every screen to PNG through
+`HardsetUISnapshotTests` and uploads the images as the `hardset-ios-ui` artifact. What that run
+has proven is ticked below; the rest still needs a Mac, a device, or both.
 
 ## 1. Build gates
 
-- [ ] `xcodebuild -scheme Hardset -destination 'platform=iOS Simulator,name=iPhone 17' build`
-      succeeds with zero errors and zero new warnings under Swift 6 strict concurrency.
-- [ ] `swift build` of `HardsetKit` for macOS succeeds (HardsetUI and HardsetFeature must still
-      build on the host; iOS-only modifiers are behind `#if os(iOS)`).
-- [ ] The widget extension builds. `HardsetWidgetBundle.swift` reads
-      `AlarmPresentationState.Mode.Countdown.totalCountdownDuration`; confirm that property exists
-      on `Countdown` (it is already used on `Paused`). If it does not, drop the progress bar rather
-      than computing the interval from `Date()`.
-- [ ] `DesignTokens.swift`: the `UIColor` and `NSColor` dynamic providers call a `nonisolated`
-      helper because HardsetUI defaults to `MainActor`; confirm no isolation diagnostics.
-- [ ] `SetRowView.swift`: `onGeometryChange(for:of:action:)` measuring the keypad compiles in the
-      Swift 6 language mode.
-- [ ] Watch item, expected to pass: several HardsetUI value types satisfy `Identifiable` with a
-      computed `id` under default `MainActor` isolation (`HardsetSegment`, `StatLedger.Item`,
-      `SetRowField`, `NumericPad.Key`, `ExercisePickerView.MuscleSection`, `HistoryView.MonthGroup`,
-      `ProgressionChartView.SeriesInput` and `PlottedSeries`). The same pattern compiled in the
-      build recorded at `e5aff33`. If Xcode instead reports "main actor-isolated property 'id'
-      cannot be used to satisfy nonisolated requirement", mark the type `nonisolated` (as
-      `SettingsSheet`'s `Disclosure` already is); do not change the identities.
+- [x] The app and widget build for the iOS Simulator (`xcodebuild -project Hardset.xcodeproj
+      -scheme Hardset -destination 'generic/platform=iOS Simulator' build`) under Swift 6 strict
+      concurrency. Verified by CI run 42421852965, after fixing two errors the first run found
+      (a GRDB `Configuration` shadowing `ButtonStyle.Configuration` in HardsetFeature, and a
+      non-exhaustive `LoggerStoreError` switch).
+- [x] `swift build` of `HardsetKit` for the macOS host succeeds, so iOS-only modifiers are
+      correctly guarded. Same run.
+- [x] The widget compiles, including `AlarmPresentationState.Mode.Countdown.totalCountdownDuration`.
+- [x] The dynamic-colour providers, `onGeometryChange`, and the computed-`id` `Identifiable`
+      types compile with no isolation errors.
+- [ ] A signed build on a Mac with the real CloudKit and AlarmKit entitlements; CI builds unsigned.
+- [ ] The app target's own `HardsetTests` do not compile: `AppSmokeTests` calls `RootView()`,
+      which is `private` and takes `syncDelegate:` and `restTimer:`. This predates the design pass.
+
+## 1a. What the rendered screens cannot show
+
+The snapshot suite draws through Core Animation without an app host, which cannot render Liquid
+Glass. The tab bar, the workout accessory, and prominent toolbar buttons such as Settings' "Done"
+appear unstyled or veiled in those images. Check them on a simulator or device instead.
 
 ## 2. Visual checks, per appearance
 
