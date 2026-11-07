@@ -68,12 +68,32 @@ jobs:
           ls -la ../../snapshots
           grep -q "TEST SUCCEEDED" ../../snapshot-test.log
 
+      # The real app, launched and driven by HardsetUITests: system-composited screenshots (glass
+      # included) and Apple's accessibility audit of each screen. Signed to run locally rather than
+      # unsigned, so the iCloud entitlements stay embedded and the sync engine can be created.
+      - name: Drive the real app on the iOS Simulator
+        env:
+          TEST_RUNNER_HARDSET_UI_SHOT_DIR: ${{ github.workspace }}/app-screens
+        run: |
+          set -o pipefail
+          mkdir -p app-screens
+          xcodebuild test \
+            -project Hardset.xcodeproj -scheme Hardset \
+            -destination 'platform=iOS Simulator,name=iPhone 17,OS=latest' \
+            -only-testing:HardsetTests -only-testing:HardsetUITests \
+            -skipMacroValidation -skipPackagePluginValidation \
+            CODE_SIGN_IDENTITY=- CODE_SIGN_STYLE=Manual DEVELOPMENT_TEAM= \
+            2>&1 | tee ui-test.log | grep -E "error:|Test [Cc]ase|TEST (SUCCEEDED|FAILED)|Executed" || true
+          ls -la app-screens
+          grep -q "TEST SUCCEEDED" ui-test.log
+
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         if: always()
         with:
           name: hardset-ios-ui
           path: |
             snapshots/
+            app-screens/
             *.log
           if-no-files-found: warn
           retention-days: 14
