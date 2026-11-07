@@ -37,6 +37,10 @@ QUERIES = {
         'SELECT * FROM sessionExercises WHERE sessionID = ? ORDER BY position',
         ("session-100",),
     ),
+    "snapshot heaviest": (
+        'SELECT * FROM loggedSets WHERE exerciseID = ? AND machineID IS NULL AND NOT isWarmup AND sessionID IS NOT ? ORDER BY weightKg DESC, reps DESC, completedAt DESC, id DESC LIMIT 1',
+        ("exercise-3", "session-100"),
+    ),
 }
 
 

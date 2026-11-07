@@ -64,10 +64,20 @@ public struct PriorPerformanceSnapshot: Hashable, Sendable {
   ) -> (performance: PriorPerformance, wasOtherMachine: Bool)? {
     if let exact = byKey[key] { return (exact, false) }
     guard key.machineID != nil else { return nil }
-    let sameExercise = byKey.values
-      .filter { $0.key.exerciseID == key.exerciseID }
-      .sorted { ($0.heaviestSet?.completedAt ?? .distantPast) > ($1.heaviestSet?.completedAt ?? .distantPast) }
-    guard let nearest = sameExercise.first else { return nil }
+    var nearest: PriorPerformance?
+    var nearestDate = Date.distantPast
+    for performance in byKey.values where performance.key.exerciseID == key.exerciseID {
+      // A personal best may be years old. Recency comes from the latest
+      // session's sets, regardless of which session supplied the benchmark.
+      guard let latest = performance.lastSets.lazy.map(\.completedAt).max() else { continue }
+      let machine = performance.key.machineID?.rawValue.uuidString ?? ""
+      let currentMachine = nearest?.key.machineID?.rawValue.uuidString ?? ""
+      if nearest == nil || latest > nearestDate || (latest == nearestDate && machine < currentMachine) {
+        nearest = performance
+        nearestDate = latest
+      }
+    }
+    guard let nearest else { return nil }
     return (nearest, true)
   }
 

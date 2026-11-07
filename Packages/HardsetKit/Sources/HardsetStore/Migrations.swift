@@ -358,6 +358,20 @@ public nonisolated enum HardsetMigrations {
       .execute(db)
     }
 
+    // Order all-time benchmarks in the index instead of sorting/decoding a
+    // capped recent history. Non-unique and local; no synchronized shape changes.
+    migrator.registerMigration("v3_historyBenchmarks") { db in
+      try #sql(
+        """
+        CREATE INDEX "loggedSets_on_workingBenchmark"
+          ON "loggedSets"("exerciseID", "machineID", "weightKg" DESC,
+                          "reps" DESC, "completedAt" DESC, "id" DESC, "sessionID")
+          WHERE NOT "isWarmup"
+        """
+      )
+      .execute(db)
+    }
+
     return migrator
   }
 }

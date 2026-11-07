@@ -2,6 +2,7 @@ import Foundation
 import GRDB
 import HardsetCore
 import SQLiteData
+import Synchronization
 import Testing
 
 @testable import HardsetStore
@@ -198,6 +199,153 @@ struct LoggerStoreTests {
   }
 
   // MARK: - The hoisted read
+
+  /// Insert a large history in one fixture transaction, without timing hundreds
+  /// of unrelated logging writes in the history-selection regression tests.
+  private func seedWorkingSets(
+    _ database: any DatabaseWriter,
+    session: SessionID,
+    exercise: ExerciseID,
+    weights: [Double],
+    machineID: MachineID? = nil,
+    at date: Date
+  ) throws {
+    try database.write { db in
+      for (ordinal, weight) in weights.enumerated() {
+        try LoggedSet.insert {
+          LoggedSet.Draft(
+            sessionID: session.rawValue, exerciseID: exercise.rawValue,
+            machineID: machineID?.rawValue,
+            setOrdinal: ordinal, weightKg: weight, reps: 8,
+            completedAt: date.addingTimeInterval(Double(ordinal))
+          )
+        }
+        .execute(db)
+      }
+    }
+  }
+
+  @Test("A frequently trained movement cannot hide another movement's prior session")
+  func snapshotDoesNotStarveAnExercise() throws {
+    let database = try migratedDatabase()
+    let store = LoggerStore(database: database)
+    let quiet = try seedExercise(database, name: "Curl")
+    let busy = try seedExercise(database, name: "Press")
+    let old = try store.startSession(at: start)
+    try seedWorkingSets(database, session: old, exercise: quiet, weights: [25, 30], at: start)
+    let recent = try store.startSession(at: start.addingTimeInterval(1000))
+    try seedWorkingSets(database, session: recent, exercise: busy,
+                        weights: Array(repeating: 50, count: 501), at: start.addingTimeInterval(1000))
+    let key = ProgressionKey(exerciseID: quiet)
+    let snapshot = try store.priorPerformanceSnapshot(
+      for: [ProgressionKey(exerciseID: busy), key], asOf: start.addingTimeInterval(2000)
+    )
+    #expect(snapshot.prior(for: key)?.lastSets.map(\.weightKg) == [25, 30])
+  }
+
+  @Test("A busy machine cannot hide another machine's exact-key history")
+  func snapshotDoesNotStarveAMachine() throws {
+    let database = try migratedDatabase()
+    let store = LoggerStore(database: database)
+    let exercise = try seedExercise(database)
+    let gym = try seedGym(database)
+    let quiet = try seedMachine(database, gym: gym, name: "Quiet machine")
+    let busy = try seedMachine(database, gym: gym, name: "Busy machine")
+    let old = try store.startSession(at: start)
+    try seedWorkingSets(database, session: old, exercise: exercise,
+                        weights: [80, 85], machineID: quiet, at: start)
+    let recent = try store.startSession(at: start.addingTimeInterval(1000))
+    try seedWorkingSets(database, session: recent, exercise: exercise,
+                        weights: Array(repeating: 50, count: 501), machineID: busy,
+                        at: start.addingTimeInterval(1000))
+    let key = ProgressionKey(exerciseID: exercise, machineID: quiet)
+    let snapshot = try store.priorPerformanceSnapshot(for: [key], asOf: start.addingTimeInterval(2000))
+    #expect(snapshot.prior(for: key)?.lastSets.map(\.weightKg) == [80, 85])
+    #expect(snapshot.prior(for: key)?.heaviestSet?.weightKg == 85)
+  }
+
+  @Test("Snapshot selection keeps the complete latest session beyond the old row cap")
+  func snapshotKeepsCompleteSession() throws {
+    let database = try migratedDatabase()
+    let store = LoggerStore(database: database)
+    let exercise = try seedExercise(database)
+    let session = try store.startSession(at: start)
+    let weights = (0..<501).map { Double($0) }
+    try seedWorkingSets(database, session: session, exercise: exercise, weights: weights, at: start)
+    let key = ProgressionKey(exerciseID: exercise)
+    let snapshot = try store.priorPerformanceSnapshot(for: [key], asOf: start.addingTimeInterval(1000))
+    #expect(snapshot.prior(for: key)?.lastSets.map(\.weightKg) == weights)
+  }
+
+  @Test("The heaviest snapshot set comes from all history rather than the latest row window")
+  func snapshotKeepsOlderBest() throws {
+    let database = try migratedDatabase()
+    let store = LoggerStore(database: database)
+    let exercise = try seedExercise(database)
+    let old = try store.startSession(at: start)
+    try seedWorkingSets(database, session: old, exercise: exercise, weights: [150], at: start)
+    let recent = try store.startSession(at: start.addingTimeInterval(1000))
+    try seedWorkingSets(database, session: recent, exercise: exercise,
+                        weights: Array(repeating: 50, count: 501), at: start.addingTimeInterval(1000))
+    let key = ProgressionKey(exerciseID: exercise)
+    let snapshot = try store.priorPerformanceSnapshot(for: [key], asOf: start.addingTimeInterval(2000))
+    #expect(snapshot.prior(for: key)?.heaviestSet?.weightKg == 150)
+  }
+
+  @Test("An excluded live session cannot consume the prior-history row budget")
+  func excludedSessionDoesNotHideHistory() throws {
+    let database = try migratedDatabase()
+    let store = LoggerStore(database: database)
+    let exercise = try seedExercise(database)
+    let old = try store.startSession(at: start)
+    try seedWorkingSets(database, session: old, exercise: exercise, weights: [90, 95], at: start)
+    let live = try store.startSession(at: start.addingTimeInterval(1000))
+    try seedWorkingSets(database, session: live, exercise: exercise,
+                        weights: Array(repeating: 50, count: 501), at: start.addingTimeInterval(1000))
+    let key = ProgressionKey(exerciseID: exercise)
+    let snapshot = try store.priorPerformanceSnapshot(
+      for: [key], excluding: live, asOf: start.addingTimeInterval(2000)
+    )
+    #expect(snapshot.prior(for: key)?.lastSets.map(\.weightKg) == [90, 95])
+    #expect(snapshot.prior(for: key)?.heaviestSet?.weightKg == 95)
+  }
+
+  @Test("The real snapshot benchmark query uses its index without sorting history")
+  func snapshotBenchmarkUsesIndex() throws {
+    let database = try migratedDatabase()
+    let store = LoggerStore(database: database)
+    let exercise = try seedExercise(database)
+    let session = try store.startSession(at: start)
+    try seedWorkingSets(database, session: session, exercise: exercise, weights: [100, 50], at: start)
+    let statements = Mutex<[String]>([])
+    try database.writeWithoutTransaction { db in
+      db.trace { event in
+        if case .statement(let statement) = event, statement.sql.hasPrefix("SELECT") {
+          // Expanded SQL stays inside this fixture test to replay its actual
+          // bound query through EXPLAIN; it is never logged by production code.
+          statements.withLock { $0.append(statement.expandedSQL) }
+        }
+      }
+    }
+    let snapshot = try store.priorPerformanceSnapshot(
+      for: [ProgressionKey(exerciseID: exercise)], asOf: start
+    )
+    #expect(snapshot.count == 1)
+    let benchmarkSQL = try #require(statements.withLock { statements in
+      statements.first { sql in
+        guard let order = sql.range(of: "ORDER BY") else { return false }
+        return sql[order.upperBound...].contains("weightKg")
+      }
+    })
+    let plan = try database.read { db in
+      try Row.fetchAll(db, sql: "EXPLAIN QUERY PLAN " + benchmarkSQL)
+        .compactMap { $0["detail"] as String? }
+    }
+    let usesBenchmarkIndex = plan.contains { $0.contains("loggedSets_on_workingBenchmark") }
+    let sortsHistory = plan.contains { $0.contains("TEMP B-TREE") }
+    #expect(usesBenchmarkIndex)
+    #expect(!sortsHistory)
+  }
 
   @Test("Prefill comes from the most recent session's sets, in performed order")
   func snapshotPrefillsFromLastSession() throws {

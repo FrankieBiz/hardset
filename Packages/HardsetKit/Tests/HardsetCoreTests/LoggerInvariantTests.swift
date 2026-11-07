@@ -95,4 +95,29 @@ struct LoggerInvariantTests {
     let exact = try #require(snapshot.priorAllowingOtherMachines(for: otherKey))
     #expect(!exact.wasOtherMachine)
   }
+
+  @Test("Other-machine history is chosen by latest performance, not the date of its best set")
+  func fallbackUsesLatestPerformance() throws {
+    let recentlyUsed = ProgressionKey(exerciseID: exercise, machineID: MachineID())
+    let previouslyUsed = ProgressionKey(exerciseID: exercise, machineID: MachineID())
+    let snapshot = PriorPerformanceSnapshot(
+      entries: [
+        recentlyUsed: PriorPerformance(
+          key: recentlyUsed,
+          lastSets: [PriorSetRecord(weightKg: 50, reps: 8, completedAt: now)],
+          heaviestSet: PriorSetRecord(weightKg: 100, reps: 8, completedAt: now.addingTimeInterval(-1000))
+        ),
+        previouslyUsed: PriorPerformance(
+          key: previouslyUsed,
+          lastSets: [PriorSetRecord(weightKg: 70, reps: 8, completedAt: now.addingTimeInterval(-100))],
+          heaviestSet: PriorSetRecord(weightKg: 70, reps: 8, completedAt: now.addingTimeInterval(-100))
+        ),
+      ],
+      capturedAt: now
+    )
+    let asked = ProgressionKey(exerciseID: exercise, machineID: machine)
+    let result = try #require(snapshot.priorAllowingOtherMachines(for: asked))
+    #expect(result.performance.key == recentlyUsed)
+    #expect(result.wasOtherMachine)
+  }
 }

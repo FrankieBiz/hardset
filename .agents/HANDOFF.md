@@ -85,3 +85,38 @@ The requested architectural review is documented. No production Swift source or 
   safety; durable rest/sync ownership. Next independent code step: reproduce the
   global 500-row snapshot starvation and replace its incomplete history selection
   with complete latest-session data and complete record benchmarks.
+
+## Complete prior-performance follow-up — 2026-11-07
+
+- Objective/worktree/branch unchanged; full-app goal remains active.
+- Replaced `priorPerformanceSnapshot`'s shared 500-row sample with per-exercise
+  equipment discovery and complete latest-session sets/all-time heaviest sets per
+  equipment key, all within one read transaction. Excludes the live session in SQL
+  before every selection; preserves free-weight and machine histories/warm-up filtering.
+- Removed the unused `rowLimit` argument; `asOf` remains a capture stamp. Snapshot
+  holds no database handle and is still loaded only at explicit session events.
+- Added `v3_historyBenchmarks`, a non-unique working-set partial index. Native test
+  verifies the actual emitted benchmark SQL uses it without sorting. Large-fixture
+  single-query measurement: 0.375 to 0.003 ms; no whole-snapshot/device speed claim.
+- Fixed Core fallback recency to use latest-session timestamps rather than the
+  all-time-best date; stable machine-ID ties and exact-key precedence preserved.
+- Changed paths: Core `PriorPerformance.swift`; Store `LoggerStore.swift` and
+  `Migrations.swift`; Core `LoggerInvariantTests.swift`; Store `LoggerStoreTests.swift`
+  and `HistoryStoreTests.swift`; query benchmark; loading document; this handoff.
+- Five Store semantic regressions were verified red against the original loader,
+  then green after restoration. Core recency regression likewise verified red/green.
+  Upgrade/reopen test now covers both current v1 and v2 schemas.
+- Verification: `make check` passed: 90 files, 172 Core tests, 56 Store tests in
+  five local suites, six query-plan checks. Project/scheme generation identical.
+- Implementation trap: a multiline `guard let latest = query.order { ... }`
+  parsed its trailing closure as a guard body. Hoist the query result into a local
+  before `guard let latest`; that compiled and passed. No repeated blind attempts.
+- Limits: equipment discovery still walks indexed exercise history; three queries
+  per equipment key follow it. Device latency/memory and index-write/storage cost
+  remain unmeasured. Native integration and historically edited-v1 upgrades unverified.
+- Next code step: replace the coordinator's capped 1,000-row record-detection read
+  with compact complete benchmarks (heaviest, reps-at-candidate-load, evaluable e1RM),
+  preserving save-before-claim behavior and suppressing claims when history fails.
+  Remaining broader work includes machine prefill provenance, recovery consistency,
+  local-write validation, rest persistence/reconciliation, sync ownership, and native
+  Release performance traces. See loading document and architectural review.

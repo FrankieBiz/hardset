@@ -320,72 +320,68 @@ public nonisolated struct LoggerStore {
 
   // MARK: - The one hoisted read
 
-  /// Reads every exercise's history in a single query and returns it as an immutable value.
+  /// Loads complete latest-session sets and an all-time heaviest set per machine.
   ///
-  /// This is the whole of invariant 3. `PriorPerformanceSnapshot` holds no database handle,
-  /// so once the logger has one it *cannot* query again per render even by mistake. The
-  /// reference app instead ran three unbounded fetches per exercise inside a `ForEach` body
-  /// while a 1 Hz timer invalidated the list — roughly thirty queries a second.
+  /// Selection runs inside one database read transaction. Only the latest session's
+  /// rows and one benchmark row are decoded per key; older sets remain in SQLite.
+  /// There is no shared row cap: a busy exercise or the session being recovered
+  /// cannot consume another exercise's history budget.
+  ///
+  /// `PriorPerformanceSnapshot` holds no database handle, so the logger still does
+  /// zero database work per render. Other-machine entries are retained for the
+  /// explicitly labelled fallback supported by the snapshot.
   ///
   /// - Parameters:
   ///   - keys: The exercise/machine pairs on today's plan.
-  ///   - excluding: A session to ignore, normally the one being logged. Without this, a
-  ///     recovered session would suggest values from its own sets.
-  ///   - asOf: Stamped onto the snapshot so staleness is visible rather than assumed.
-  ///   - rowLimit: Hard bound on rows examined, so history size cannot slow session start.
+  ///   - excluding: A session to ignore, normally the one being logged. Applied
+  ///     in SQL before selecting machines, latest sessions, or benchmarks.
+  ///   - asOf: A capture timestamp, not a historical cutoff.
   public func priorPerformanceSnapshot(
     for keys: [ProgressionKey],
     excluding excludedSession: SessionID? = nil,
-    asOf: Date,
-    rowLimit: Int = 500
+    asOf: Date
   ) throws -> PriorPerformanceSnapshot {
     guard !keys.isEmpty else { return .empty(capturedAt: asOf) }
-
-    let exerciseIDs = Array(Set(keys.map(\.exerciseID.rawValue)))
+    let exerciseIDs = Set(keys.map(\.exerciseID.rawValue))
     let excluded = excludedSession?.rawValue
 
-    // One query. Warm-ups are excluded here rather than filtered later: a warm-up load must
-    // never pre-fill a working set, and doing it in SQL keeps the row budget honest.
-    let rows: [LoggedSet] = try database.read { db in
-      try LoggedSet
-        .where { $0.exerciseID.in(exerciseIDs) }
-        .where { !$0.isWarmup }
-        .order { $0.completedAt.desc() }
-        .limit(rowLimit)
-        .fetchAll(db)
-    }
+    return try database.read { db in
+      var entries: [ProgressionKey: PriorPerformance] = [:]
+      for exerciseID in exerciseIDs {
+        let history = LoggedSet
+          .where { $0.exerciseID.eq(exerciseID) }
+          .where { !$0.isWarmup }
+          .where { #sql("\($0.sessionID) IS NOT \(excluded)", as: Bool.self) }
+        // Discover only equipment identifiers, rather than decoding every prior
+        // set. DISTINCT uses the exercise/machine index and includes free weights.
+        let machineIDs = try history.distinct().select(\.machineID).fetchAll(db)
+        for machineID in machineIDs {
+          let exact = history.where { $0.machineID.is(machineID) }
+          let latest = try exact
+            .order { ($0.completedAt.desc(), $0.id.desc()) }
+            .limit(1)
+            .fetchOne(db)
+          guard let latest else { continue }
 
-    var grouped: [ProgressionKey: [LoggedSet]] = [:]
-    for row in rows where row.sessionID != excluded {
-      let key = ProgressionKey(
-        exerciseID: ExerciseID(rawValue: row.exerciseID),
-        machineID: row.machineID.map(MachineID.init(rawValue:))
-      )
-      grouped[key, default: []].append(row)
-    }
-
-    var entries: [ProgressionKey: PriorPerformance] = [:]
-    for (key, rowsForKey) in grouped {
-      // `rows` arrived newest-first, so the first element identifies the most recent
-      // session this key was trained in.
-      guard let mostRecentSession = rowsForKey.first?.sessionID else { continue }
-      let lastSets = rowsForKey
-        .filter { $0.sessionID == mostRecentSession }
-        .sorted { $0.setOrdinal < $1.setOrdinal }
-        .map(Self.record(from:))
-
-      // Heaviest ever seen within the examined window. Ties break toward more reps, since
-      // the same load for more reps is the better set.
-      let heaviest = rowsForKey
-        .max { lhs, rhs in
-          (lhs.weightKg, lhs.reps) < (rhs.weightKg, rhs.reps)
+          let lastSets = try exact
+            .where { $0.sessionID.eq(latest.sessionID) }
+            .order { ($0.setOrdinal, $0.completedAt, $0.id) }
+            .fetchAll(db)
+            .map(Self.record(from:))
+          let heaviest = try exact
+            .order { ($0.weightKg.desc(), $0.reps.desc(), $0.completedAt.desc(), $0.id.desc()) }
+            .limit(1)
+            .fetchOne(db)
+            .map(Self.record(from:))
+          let key = ProgressionKey(
+            exerciseID: ExerciseID(rawValue: exerciseID),
+            machineID: machineID.map(MachineID.init(rawValue:))
+          )
+          entries[key] = PriorPerformance(key: key, lastSets: lastSets, heaviestSet: heaviest)
         }
-        .map(Self.record(from:))
-
-      entries[key] = PriorPerformance(key: key, lastSets: lastSets, heaviestSet: heaviest)
+      }
+      return PriorPerformanceSnapshot(entries: entries, capturedAt: asOf)
     }
-
-    return PriorPerformanceSnapshot(entries: entries, capturedAt: asOf)
   }
 
   private static func record(from row: LoggedSet) -> PriorSetRecord {

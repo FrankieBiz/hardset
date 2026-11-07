@@ -82,6 +82,52 @@ movement after failed add preparation, and passing existing recovery/logging tes
 Verification: `make check` passed (90 Swift files, 171 Core tests, 50 Store tests,
 and the query-plan gate). Project regeneration remains byte-identical.
 
+## Verified prior-performance milestone — 2026-11-07
+
+The shared 500-row snapshot window is removed. `LoggerStore` discovers equipment
+IDs for each requested exercise, selects the newest working-set session per
+equipment key, loads that whole session, and separately selects its all-time
+heaviest working set. The excluded live session is filtered in SQL in every
+selection. All queries run inside one database read transaction, and the result
+remains an immutable snapshot with no database handle.
+
+This uses one identifier query per exercise plus three queries per equipment
+key, instead of decoding a shared recent sample. It decodes only the latest
+session's sets and one benchmark row per key, without truncating either less-used
+equipment or unusually large sessions. Identifier discovery still visits the
+requested exercise's indexed history; this is not a claim of constant-time
+loading for arbitrary history size. Duplicate requested exercises are deduplicated.
+`asOf` remains the capture timestamp rather than a historical cutoff. The unused
+public `rowLimit` parameter is removed because it cannot express complete history.
+
+`v3_historyBenchmarks` adds a non-unique partial index for working-set benchmark
+ordering. A native test captures the actual StructuredQueries-generated benchmark
+SQL and verifies that it uses this index without a temporary sort. The separate
+100,000-set SQL microbenchmark measured 0.375 ms before the loading indexes versus
+0.003 ms after for that single selection. This does not measure the complete
+snapshot operation or iPhone session-start latency.
+
+Other-machine fallback now selects by the latest session's performance date,
+rather than the date of the machine's heaviest set, using a linear selection
+with stable machine-ID tie-breaking. Exact machine matches still take precedence.
+The existing other-machine assumption flag is preserved; provenance/prefill
+policy improvements remain separate work.
+
+Five Store regressions failed against the original loader: starvation across
+exercises, starvation across machines, truncated latest sessions, missing older
+bests, and live-session exclusion consuming the row budget. All pass now, along
+with existing warm-up/machine-separation tests. A Core regression also reproduced
+and fixed the fallback recency error. Upgrade/reopen tests cover both current v1
+and v2 databases; they do not cover the historically different v1 schemas.
+
+Acceptance: complete latest-session sets and all-time heaviest sets per equipment,
+SQL exclusion before selection, preserved warm-up/machine separation, indexed
+benchmark reads, correct fallback recency, and passing upgrade/reopen checks.
+`make check` passed: 90 Swift files parsed, 172 Core tests, 56 Store tests across
+five local suites, and six large-fixture query-plan checks. Project/scheme
+regeneration is byte-identical. SwiftUI, CloudKit, AlarmKit and device performance
+remain outside these Linux checks.
+
 ## Remaining app-wide work
 
 - Capture Release cold/warm launch, first usable workout, resume, picker, history,
@@ -92,8 +138,9 @@ and the query-plan gate). Project regeneration remains byte-identical.
   in `HardsetApp.init`; profile then move measured blocking work off the main actor
   with cancellation and consistent snapshot semantics.
 - Measure first-launch index creation and ongoing set-write/storage overhead.
-- Address complete prior-performance/record queries, global history row limits,
-  machine provenance, consistent recovery reads, and write validation from
+- Address complete record-detection queries (the tap path still reads a capped
+  1,000-set sample), progression-chart row limits, machine provenance, consistent
+  recovery reads, and write validation from
   `CORE_STORE_ARCHITECTURE_REVIEW.md`; do not trade correctness for smaller reads.
 - Verify earliest shipped v1 fixtures: this index migration does not repair
   historical edits to v1 columns or debug schema-erasure behavior identified in
