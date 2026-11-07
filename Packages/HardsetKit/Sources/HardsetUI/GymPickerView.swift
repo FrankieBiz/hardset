@@ -1,12 +1,15 @@
-import Foundation
+import HardsetCore
 import SwiftUI
 
 /// A gym location option for the gym picker, keeping HardsetUI free of storage types.
+///
+/// Identified by `GymID` rather than a bare `UUID`, so a machine or session identifier cannot be
+/// handed in by mistake. `GymID` lives in HardsetCore, which this target already depends on.
 public struct GymOption: Hashable, Sendable, Identifiable {
-  public let id: UUID
+  public let id: GymID
   public let name: String
 
-  public init(id: UUID, name: String) {
+  public init(id: GymID, name: String) {
     self.id = id
     self.name = name
   }
@@ -14,20 +17,23 @@ public struct GymOption: Hashable, Sendable, Identifiable {
 
 /// Picks the physical training facility for the current workout.
 ///
-/// Sets where the workout happens, enabling per-machine tracking. Built with the dark-slate
-/// card aesthetic, 56 pt selection rows, clear guidance, and direct gym creation.
+/// Sets where the workout happens, enabling per-machine tracking. Saved gyms are 56 pt selection
+/// rows under a sentence-case label; "Not recorded" stays a real choice beneath them, because
+/// training somewhere unsaved is a true answer; and adding a gym is a plainly styled action rather
+/// than a row pretending to be one. A failed save appears as an error banner at the top, where it
+/// cannot be scrolled past.
 public struct GymPickerView: View {
   private let gyms: [GymOption]
-  private let selected: UUID?
-  private let onSelect: (UUID?) -> Void
+  private let selected: GymID?
+  private let onSelect: (GymID?) -> Void
   private let onAddGym: () -> Void
   private let errorMessage: String?
 
   public init(
     gyms: [GymOption],
-    selected: UUID?,
+    selected: GymID?,
     errorMessage: String? = nil,
-    onSelect: @escaping (UUID?) -> Void,
+    onSelect: @escaping (GymID?) -> Void,
     onAddGym: @escaping () -> Void
   ) {
     self.gyms = gyms
@@ -39,86 +45,58 @@ public struct GymPickerView: View {
 
   public var body: some View {
     ScrollView {
-      VStack(alignment: .leading, spacing: Tokens.Spacing.loose) {
-        // Explanatory banner
-        VStack(alignment: .leading, spacing: Tokens.Spacing.tight) {
-          Text("Where are you training?")
-            .font(Tokens.Text.labelEmphasis)
-            .foregroundStyle(Tokens.Color.textPrimary)
-
-          if let errorMessage {
-            Text(errorMessage)
-              .font(Tokens.Text.caption)
-              .foregroundStyle(Tokens.Color.certainty(.low))
-          } else {
-            Text("Loads are tracked per machine, and machines belong to a gym.")
-              .font(Tokens.Text.caption)
-              .foregroundStyle(Tokens.Color.textSecondary)
+      VStack(alignment: .leading, spacing: Tokens.Spacing.section) {
+        VStack(alignment: .leading, spacing: Tokens.Spacing.regular) {
+          if let errorMessage, !errorMessage.isEmpty {
+            HardsetBanner(.error, message: errorMessage)
           }
-        }
-        .padding(.horizontal, Tokens.Spacing.loose)
-        .padding(.top, Tokens.Spacing.regular)
 
-        // Gym list
+          Text("Loads are tracked per machine, and machines belong to a gym.")
+            .font(Tokens.Text.label)
+            .foregroundStyle(Tokens.Color.textSecondary)
+            .fixedSize(horizontal: false, vertical: true)
+        }
+
         if !gyms.isEmpty {
           VStack(alignment: .leading, spacing: Tokens.Spacing.snug) {
-            Text("SAVED GYMS")
-              .font(Tokens.Text.sectionHeader)
-              .foregroundStyle(Tokens.Color.textSecondary)
-              .padding(.horizontal, Tokens.Spacing.loose)
+            SectionLabel("Saved gyms", count: gyms.count)
 
-            VStack(spacing: Tokens.Spacing.snug) {
-              ForEach(gyms) { gym in
-                SelectionRow(
-                  title: gym.name,
-                  leadingIcon: "mappin.and.ellipse",
-                  isSelected: selected == gym.id,
-                  action: { onSelect(gym.id) }
-                )
-              }
+            ForEach(gyms) { gym in
+              SelectionRow(
+                title: gym.name,
+                leadingIcon: "mappin.and.ellipse",
+                isSelected: selected == gym.id,
+                action: { onSelect(gym.id) }
+              )
             }
-            .padding(.horizontal, Tokens.Spacing.loose)
           }
         }
 
-        // Secondary & Actions section
         VStack(alignment: .leading, spacing: Tokens.Spacing.snug) {
-          Text("OPTIONS")
-            .font(Tokens.Text.sectionHeader)
-            .foregroundStyle(Tokens.Color.textSecondary)
-            .padding(.horizontal, Tokens.Spacing.loose)
+          SectionLabel(gyms.isEmpty ? "No saved gyms yet" : "Somewhere else")
 
-          VStack(spacing: Tokens.Spacing.snug) {
-            SelectionRow(
-              title: "Not recorded",
-              subtitle: "Train without equipment tagging",
-              leadingIcon: "slash.circle",
-              isSelected: selected == nil,
-              action: { onSelect(nil) }
-            )
+          SelectionRow(
+            title: "Not recorded",
+            subtitle: "Sets are logged without a machine",
+            leadingIcon: "slash.circle",
+            isSelected: selected == nil,
+            action: { onSelect(nil) }
+          )
 
-            Button(action: onAddGym) {
-              HStack(spacing: Tokens.Spacing.regular) {
-                Image(systemName: "plus.circle.fill")
-                  .font(.system(size: 18, weight: .semibold))
-                  .foregroundStyle(Tokens.Color.accent)
-
-                Text("Add a gym")
-                  .font(Tokens.Text.rowTitle.weight(.medium))
-                  .foregroundStyle(Tokens.Color.accent)
-
-                Spacer()
-              }
-              .padding(.horizontal, Tokens.Spacing.regular)
-              .frame(minHeight: Tokens.loggerTapTarget)
-              .contentShape(Rectangle())
-              .hardsetCard(cornerRadius: Tokens.Radius.control)
+          Button(action: onAddGym) {
+            Label {
+              Text("Add a gym")
+            } icon: {
+              Image(systemName: "plus")
+                .foregroundStyle(Tokens.Color.accent)
             }
-            .buttonStyle(.plain)
           }
-          .padding(.horizontal, Tokens.Spacing.loose)
+          .buttonStyle(HardsetButtonStyle(.secondary, size: .logger))
+          .padding(.top, Tokens.Spacing.tight)
         }
       }
+      .padding(.horizontal, Tokens.Spacing.loose)
+      .padding(.top, Tokens.Spacing.regular)
       .padding(.bottom, Tokens.Spacing.section)
     }
     .background(Tokens.Color.background)
@@ -126,15 +104,42 @@ public struct GymPickerView: View {
 }
 
 #if DEBUG
-  #Preview("Gym Picker") {
-    GymPickerView(
-      gyms: [
-        GymOption(id: UUID(), name: "Metroflex Gym"),
-        GymOption(id: UUID(), name: "Equinox Hudson Yards"),
-      ],
-      selected: nil,
-      onSelect: { _ in },
-      onAddGym: {}
+  private struct GymPickerHarness: View {
+    let gyms: [GymOption]
+    let errorMessage: String?
+    @State private var selected: GymID?
+
+    init(gyms: [GymOption], errorMessage: String? = nil) {
+      self.gyms = gyms
+      self.errorMessage = errorMessage
+      self._selected = State(initialValue: gyms.first?.id)
+    }
+
+    var body: some View {
+      NavigationStack {
+        GymPickerView(
+          gyms: gyms,
+          selected: selected,
+          errorMessage: errorMessage,
+          onSelect: { selected = $0 },
+          onAddGym: {}
+        )
+        .hardsetNavigationTitle("Where are you training?")
+      }
+    }
+  }
+
+  #Preview("Gym picker") {
+    GymPickerHarness(gyms: [
+      GymOption(id: GymID(), name: "Metroflex Gym"),
+      GymOption(id: GymID(), name: "Equinox Hudson Yards"),
+    ])
+  }
+
+  #Preview("Gym picker, save failed") {
+    GymPickerHarness(
+      gyms: [],
+      errorMessage: "Iron Temple could not be saved. The database is read-only."
     )
   }
 #endif

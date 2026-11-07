@@ -71,12 +71,18 @@ public struct LiveSessionScreen: View {
   private let catalog: CatalogSeeder?
   private let gyms: GymStore?
   private let progression: ProgressionStore?
+  private let gymName: String?
+  private let onShowSettings: (() -> Void)?
   private let onFinished: () -> Void
 
   /// - Parameter catalog: Supplies the picker. Passing `nil` hides the add-movement affordance
   ///   entirely rather than showing a button that opens an empty list.
   /// - Parameter gyms: Supplies the machine picker. Passing `nil`, or running a session with no
   ///   gym, hides the machine affordance — the same rule as the catalogue.
+  /// - Parameter gymName: Shown under the screen's title, so the lifter can see which gym's
+  ///   machines the chips are offering. `nil` reads "No gym recorded".
+  /// - Parameter onShowSettings: Puts the settings button in the header, so the unit can be
+  ///   changed mid-workout as it could be from the start screen.
   public init(
     coordinator: SessionCoordinator,
     unit: WeightUnit,
@@ -84,6 +90,8 @@ public struct LiveSessionScreen: View {
     catalog: CatalogSeeder? = nil,
     gyms: GymStore? = nil,
     progression: ProgressionStore? = nil,
+    gymName: String? = nil,
+    onShowSettings: (() -> Void)? = nil,
     onFinished: @escaping () -> Void = {}
   ) {
     self._coordinator = State(initialValue: coordinator)
@@ -92,6 +100,8 @@ public struct LiveSessionScreen: View {
     self.catalog = catalog
     self.gyms = gyms
     self.progression = progression
+    self.gymName = gymName
+    self.onShowSettings = onShowSettings
     self.onFinished = onFinished
   }
 
@@ -101,6 +111,8 @@ public struct LiveSessionScreen: View {
     SessionView(
       exercises: $bindable.exercises,
       unit: unit,
+      title: "Workout",
+      gymName: gymName,
       restState: hooks.state(),
       restMetadata: restMetadata,
       errorMessage: errorMessage,
@@ -119,6 +131,7 @@ public struct LiveSessionScreen: View {
       // without one there is nothing honest to put in the list.
       onSelectMachine: canPickMachines ? { machineTarget = MachineTarget(id: $0) } : nil,
       onShowHistory: progression == nil ? nil : { historyTarget = MachineTarget(id: $0) },
+      onShowSettings: onShowSettings,
       onFinish: finish
     )
     .sheet(isPresented: $isPickerPresented) {
@@ -131,10 +144,7 @@ public struct LiveSessionScreen: View {
           isPickerPresented = false
           pickerQuery = ""
         }
-        .navigationTitle("Add movement")
-        #if os(iOS)
-          .navigationBarTitleDisplayMode(.inline)
-        #endif
+        .hardsetNavigationTitle("Add movement")
         .toolbar {
           ToolbarItem(placement: .cancellationAction) {
             Button("Done") {
@@ -164,10 +174,7 @@ public struct LiveSessionScreen: View {
           },
           onAddMachine: { isAddingMachine = true }
         )
-        .navigationTitle("Machine")
-        #if os(iOS)
-          .navigationBarTitleDisplayMode(.inline)
-        #endif
+        .hardsetNavigationTitle("Machine")
         .toolbar {
           ToolbarItem(placement: .cancellationAction) {
             Button("Cancel") { machineTarget = nil }

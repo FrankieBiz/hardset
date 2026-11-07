@@ -121,7 +121,23 @@ spring are dropped and only the fill or opacity changes, instantly or with `Moti
 - **Ledger** (`StatLedger`): a row of labelled figures separated by hairlines, used for session
   totals.
 - **Empty and loading states**: explain what is missing and what to do next; loading is a quiet
-  line of text, not a spinner.
+  line of text, not a spinner. An empty slot is drawn with a dashed outline, the app's one mark
+  for "nothing here yet": the empty-state socket, the "Add movement" slot, a warm-up's ordinal,
+  an incomplete set's log control, and the rule under "Not evaluated".
+- **Tags versus chips**: a chip can be tapped and wears the control border; a tag (modality,
+  "Recent", "Custom", an untrained muscle) is filled only, so it never imitates a control.
+- **Selection** (`SelectionRow`, `SelectionCardButtonStyle`, `SelectionIndicator`): selected
+  choices take the accent ring and `accentSurface`, and the trailing indicator swaps an empty
+  ring for a filled check, so the choice is carried by shape as well as colour.
+- **Text entry** (`entryFieldChrome`): raised fill, control border, and a 2 pt accent ring that
+  fades in on focus. Used by the search field and the name entry sheet.
+- **Set log control**: four states, never confused: incomplete (dashed, disabled), ready
+  (accent outline), next up (accent fill), logged (success fill, the stamp).
+- **Volume bars**: square-ended gauges scaled to the week's own maximum, never to a target.
+  Modelled muscles are solid accent; muscles that are counted but not modelled are hollow (accent
+  outline on `accentSurface`) and say so in words beside the bar.
+- **Charts**: one series per machine with its own colour and point symbol, a custom legend in app
+  type, and machine changes as 2 pt dashed `warning` rules.
 
 ## Accessibility floor
 

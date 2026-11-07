@@ -9,6 +9,9 @@ import SwiftUI
 /// to merge machines: a single line through two different leg presses draws progress the lifter did
 /// not make. Reaching it from the live session matters as much as the chart itself — "how have I
 /// been doing on this" is a question asked while standing at the machine, not at a desk.
+///
+/// Presented in a sheet that keeps its navigation bar for the caller's Done button, so the title
+/// is drawn by `hardsetNavigationTitle` in the app's own type rather than by the stock bar.
 @MainActor
 public struct ExerciseProgressScreen: View {
   @State private var history: ProgressionHistory?
@@ -34,29 +37,32 @@ public struct ExerciseProgressScreen: View {
 
   public var body: some View {
     ScrollView {
-      if loadFailed {
-        VStack {
-          Spacer(minLength: Tokens.Spacing.loose)
+      Group {
+        if loadFailed {
           HardsetEmptyState(
             title: "Could not read this history",
             detail: "Your logged sets are safe. Pull down to try again.",
             systemImage: "exclamationmark.triangle"
           )
-          Spacer(minLength: Tokens.Spacing.loose)
+        } else if history != nil {
+          ProgressionChartView(
+            series: seriesInputs,
+            machineChanges: history?.machineChanges ?? [],
+            unit: unit,
+            onExplain: { isShowingMethodology = true }
+          )
+        } else {
+          // Until the first read lands, say so. The chart's "No history yet" would be a claim
+          // about the lifter's training made before the history was even read.
+          HardsetLoadingState("Reading this history…")
         }
-        .padding(.top, Tokens.Spacing.section)
-      } else {
-        ProgressionChartView(
-          series: seriesInputs,
-          machineChanges: history?.machineChanges ?? [],
-          unit: unit,
-          onExplain: { isShowingMethodology = true }
-        )
-        .padding(.horizontal, Tokens.Spacing.regular)
       }
+      .padding(.horizontal, Tokens.Spacing.loose)
+      .padding(.top, Tokens.Spacing.loose)
+      .padding(.bottom, Tokens.Spacing.block)
     }
     .background(Tokens.Color.background)
-    .navigationTitle(exerciseName)
+    .hardsetNavigationTitle(exerciseName)
     .task { load() }
     .refreshable { load() }
     .sheet(isPresented: $isShowingMethodology) {

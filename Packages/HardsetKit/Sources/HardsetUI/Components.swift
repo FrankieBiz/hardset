@@ -212,7 +212,10 @@ public struct HardsetChip: View {
 // MARK: - Segmented control
 
 /// One option in a `HardsetSegmentedControl`.
-public struct HardsetSegment<Value: Hashable>: Identifiable {
+///
+/// `nonisolated` so its computed `id` satisfies `Identifiable` without depending on isolated
+/// conformance inference, as `SettingsSheet`'s `Disclosure` does.
+public nonisolated struct HardsetSegment<Value: Hashable>: Identifiable {
   public let title: String
   public let value: Value
   public var id: Value { value }

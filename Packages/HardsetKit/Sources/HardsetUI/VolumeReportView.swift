@@ -12,37 +12,54 @@ import SwiftUI
 /// That is also why the empty muscles get their own section rather than a red bar. A muscle at
 /// zero is a fact the user can act on; a muscle at four sets being called insufficient is a claim
 /// this app has no basis for.
+///
+/// When given a `title`, the view draws its own `ScreenHeader` as the first thing in its scroll
+/// content, because the tab that hosts it hides the stock navigation bar.
 public struct VolumeReportView: View {
   private let report: MuscleVolumeReport
   private let excludedFromGaps: Set<Muscle>
+  private let title: String?
+  private let subtitle: String?
   private let onExplainCounting: (() -> Void)?
 
   public init(
     report: MuscleVolumeReport,
     excludedFromGaps: Set<Muscle> = [],
+    title: String? = nil,
+    subtitle: String? = nil,
     onExplainCounting: (() -> Void)? = nil
   ) {
     self.report = report
     self.excludedFromGaps = excludedFromGaps
+    self.title = title
+    self.subtitle = subtitle
     self.onExplainCounting = onExplainCounting
   }
 
   public var body: some View {
     ScrollView {
       VStack(alignment: .leading, spacing: Tokens.Spacing.section) {
-        header
-        if report.hardSets == 0 {
-          HardsetEmptyState(
-            title: "Nothing logged this week",
-            detail: "Sets per muscle appear here once you log a workout.",
-            systemImage: "chart.bar"
-          )
-        } else {
-          trainedSection
-          gapsSection
+        if let title {
+          ScreenHeader(title, subtitle: subtitle)
         }
+        VStack(alignment: .leading, spacing: Tokens.Spacing.section) {
+          if report.hardSets == 0 {
+            HardsetEmptyState(
+              title: "Nothing logged this week",
+              detail: "Sets per muscle appear here once you log a workout.",
+              systemImage: "chart.bar"
+            )
+          } else {
+            header
+            trainedSection(trained)
+            gapsSection
+          }
+        }
+        .padding(.horizontal, Tokens.Spacing.loose)
       }
-      .padding(Tokens.Spacing.regular)
+      .padding(.top, title == nil ? Tokens.Spacing.loose : 0)
+      .padding(.bottom, Tokens.Spacing.block)
+      .frame(maxWidth: .infinity, alignment: .leading)
     }
     .background(Tokens.Color.background)
   }
@@ -50,60 +67,74 @@ public struct VolumeReportView: View {
   // MARK: - Header
 
   private var header: some View {
-    VStack(alignment: .leading, spacing: Tokens.Spacing.snug) {
-      Text("^[\(report.hardSets) working set](inflect: true) this week")
-        .font(Tokens.Text.readout)
-        .monospacedDigit()
+    VStack(alignment: .leading, spacing: Tokens.Spacing.regular) {
+      // The total is exact even when the per-muscle figures are not: unattributed sets are still
+      // working sets, they just cannot be credited to a muscle. So no "≥" here.
+      HStack(alignment: .firstTextBaseline, spacing: Tokens.Spacing.snug) {
+        Text(report.hardSets, format: .number)
+          .font(Tokens.Text.hero)
+          .foregroundStyle(Tokens.Color.textPrimary)
+        Text(report.hardSets == 1 ? "working set this week" : "working sets this week")
+          .font(Tokens.Text.unit)
+          .foregroundStyle(Tokens.Color.textSecondary)
+          .fixedSize(horizontal: false, vertical: true)
+      }
+      .accessibilityElement(children: .ignore)
+      .accessibilityLabel(Text("^[\(report.hardSets) working set](inflect: true) this week"))
 
       // The lower-bound statement is not a footnote. If some sets could not be attributed, every
       // number below is a floor, and saying so is the whole point of the coverage field.
       if report.isLowerBound {
-        Label {
-          Text(
-            "\(report.unattributedHardSets) of those are on exercises with no muscles recorded, "
-              + "so every count below is at least this much — not exactly this much."
-          )
-        } icon: {
-          Image(systemName: "exclamationmark.circle")
-        }
-        .font(Tokens.Text.caption)
-        .foregroundStyle(Tokens.Color.certainty(.low))
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(Tokens.Spacing.regular)
-        .background(Tokens.Color.surface, in: RoundedRectangle(cornerRadius: Tokens.Radius.card))
+        HardsetBanner(
+          .caveat,
+          title: "Counts below are lower bounds",
+          message: Self.lowerBoundMessage(unattributed: report.unattributedHardSets)
+        )
       }
 
       if let onExplainCounting {
         Button(action: onExplainCounting) {
-          HStack(spacing: Tokens.Spacing.tight) {
-            Image(systemName: "questionmark.circle")
-            Text("How sets are counted")
-          }
-          .font(Tokens.Text.caption)
-          .foregroundStyle(Tokens.Color.accent)
+          Label("How sets are counted", systemImage: "questionmark.circle")
         }
-        .buttonStyle(.plain)
-        .frame(minHeight: Tokens.minimumTapTarget)
+        .buttonStyle(HardsetButtonStyle(.quiet, fullWidth: false))
+        // The quiet style insets its label; pulling it back aligns the words with the content
+        // edge while the full 44 pt region stays tappable.
+        .padding(.leading, -Tokens.Spacing.snug)
       }
     }
   }
 
+  static func lowerBoundMessage(unattributed: Int) -> String {
+    let lead =
+      unattributed == 1
+      ? "1 of those is on an exercise with no muscles recorded"
+      : "\(unattributed) of those are on exercises with no muscles recorded"
+    return lead + ", so every count below is at least this much — not exactly this much."
+  }
+
   // MARK: - Trained
 
-  private var trainedSection: some View {
-    VStack(alignment: .leading, spacing: Tokens.Spacing.snug) {
-      Text("Where the work went")
-        .font(Tokens.Text.label.weight(.semibold))
-
-      // No goal line, so the scale is the report's own maximum. Stated in the caption rather than
-      // left for the user to assume it means something absolute.
-      Text("Bars are relative to your biggest muscle this week. There is no target line, because no weekly set target is established.")
-        .font(Tokens.Text.caption)
-        .foregroundStyle(Tokens.Color.textSecondary)
-
-      ForEach(trained, id: \.muscle) { row in
-        bar(for: row)
+  private func trainedSection(_ rows: [Row]) -> some View {
+    let maxSets = max(rows.first?.sets ?? 1, 1)
+    return VStack(alignment: .leading, spacing: Tokens.Spacing.regular) {
+      VStack(alignment: .leading, spacing: Tokens.Spacing.tight) {
+        SectionLabel("Where the work went", count: rows.count)
+        // No goal line, so the scale is the report's own maximum. Stated in the caption rather than
+        // left for the user to assume it means something absolute.
+        Text("Bars are relative to your biggest muscle this week. There is no target line, because no weekly set target is established.")
+          .font(Tokens.Text.caption)
+          .foregroundStyle(Tokens.Color.textSecondary)
+          .fixedSize(horizontal: false, vertical: true)
       }
+
+      VStack(alignment: .leading, spacing: Tokens.Spacing.loose) {
+        ForEach(rows, id: \.muscle) { row in
+          bar(for: row, maxSets: maxSets)
+        }
+      }
+      .padding(Tokens.Spacing.loose)
+      .frame(maxWidth: .infinity, alignment: .leading)
+      .hardsetCard()
     }
   }
 
@@ -119,45 +150,68 @@ public struct VolumeReportView: View {
       .sorted { $0.sets > $1.sets }
   }
 
-  private var maxSets: Double {
-    max(trained.first?.sets ?? 1, 1)
+  private func bar(for row: Row, maxSets: Double) -> some View {
+    let name = ExercisePickerView.displayName(MuscleKey(row.muscle))
+    // A muscle outside the studied corpus gets a quieter claim, because the count means less.
+    let isCounted = row.muscle.tier == .counted
+    // The "≥" is load-bearing, not decorative.
+    let value = (report.isLowerBound ? "≥ " : "") + Self.format(row.sets)
+    let spoken: String =
+      "\(name), \(report.isLowerBound ? "at least " : "")\(Self.format(row.sets)) sets"
+      + (isCounted ? ", counted, not modelled" : "")
+
+    return VStack(alignment: .leading, spacing: Tokens.Spacing.snug) {
+      HStack(alignment: .firstTextBaseline, spacing: Tokens.Spacing.snug) {
+        VStack(alignment: .leading, spacing: Tokens.Spacing.hairline) {
+          Text(name)
+            .font(Tokens.Text.label)
+            .foregroundStyle(Tokens.Color.textPrimary)
+          if isCounted {
+            Text("Counted, not modelled")
+              .font(Tokens.Text.caption)
+              .foregroundStyle(Tokens.Color.textSecondary)
+          }
+        }
+        Spacer(minLength: Tokens.Spacing.snug)
+        Text(value)
+          .font(Tokens.Text.figure)
+          .foregroundStyle(Tokens.Color.textPrimary)
+      }
+      track(fraction: CGFloat(row.sets / maxSets), isCounted: isCounted)
+    }
+    .accessibilityElement(children: .combine)
+    .accessibilityLabel(spoken)
   }
 
-  private func bar(for row: Row) -> some View {
-    VStack(alignment: .leading, spacing: Tokens.Spacing.hairline) {
-      HStack(alignment: .firstTextBaseline) {
-        Text(ExercisePickerView.displayName(MuscleKey(row.muscle)))
-          .font(Tokens.Text.label)
-        Spacer(minLength: Tokens.Spacing.snug)
-        // The "≥" is load-bearing, not decorative.
-        Text("\(report.isLowerBound ? "≥ " : "")\(Self.format(row.sets))")
-          .font(Tokens.Text.label)
-          .monospacedDigit()
-          .foregroundStyle(Tokens.Color.textSecondary)
-      }
-      GeometryReader { proxy in
-        ZStack(alignment: .leading) {
-          RoundedRectangle(cornerRadius: 4)
-            .fill(Tokens.Color.surface)
-          RoundedRectangle(cornerRadius: 4)
-            .fill(Tokens.Color.accent)
-            .frame(width: max(2, proxy.size.width * row.sets / maxSets))
+  /// The bar itself: a raised track with a readout-cyan fill, square-ended like a gauge.
+  ///
+  /// A modelled muscle's fill is solid. A counted one is drawn hollow -- a cyan outline over the
+  /// accent tint -- so the weaker claim reads as weaker without a second hue, and certainly without
+  /// an evaluative one. The words "Counted, not modelled" carry the same meaning beside it.
+  private func track(fraction: CGFloat, isCounted: Bool) -> some View {
+    GeometryReader { proxy in
+      ZStack(alignment: .leading) {
+        Rectangle()
+          .fill(Tokens.Color.surfaceRaised)
+        Group {
+          if isCounted {
+            Rectangle()
+              .fill(Tokens.Color.accentSurface)
+              .overlay(
+                Rectangle()
+                  .strokeBorder(Tokens.Color.accent, lineWidth: Tokens.Stroke.hairline)
+              )
+          } else {
+            Rectangle()
+              .fill(Tokens.Color.accent)
+          }
         }
-      }
-      .frame(height: 10)
-      // A muscle outside the studied corpus gets a quieter claim, because the count means less.
-      if row.muscle.tier == .counted {
-        Text("counted, not modelled")
-          .font(Tokens.Text.caption)
-          .foregroundStyle(Tokens.Color.textSecondary)
+        // Never narrower than the bar is tall, so the smallest real count is still a visible mark.
+        .frame(width: max(Tokens.Spacing.snug, proxy.size.width * fraction))
       }
     }
-    .padding(.vertical, Tokens.Spacing.tight)
-    .accessibilityElement(children: .combine)
-    .accessibilityLabel(
-      "\(ExercisePickerView.displayName(MuscleKey(row.muscle))), "
-        + "\(report.isLowerBound ? "at least " : "")\(Self.format(row.sets)) sets"
-    )
+    .frame(height: Tokens.Spacing.snug)
+    .accessibilityHidden(true)
   }
 
   // MARK: - Gaps
@@ -166,24 +220,38 @@ public struct VolumeReportView: View {
     let gaps = report.untrainedMuscles(excluding: excludedFromGaps)
     return Group {
       if !gaps.isEmpty {
-        VStack(alignment: .leading, spacing: Tokens.Spacing.snug) {
-          Text("Nothing logged for")
-            .font(Tokens.Text.label.weight(.semibold))
-          // A gap is a fact, not a verdict. No "you should", no red.
-          Text("These had no sets this week. Whether that matters depends on your plan.")
-            .font(Tokens.Text.caption)
-            .foregroundStyle(Tokens.Color.textSecondary)
+        VStack(alignment: .leading, spacing: Tokens.Spacing.regular) {
+          VStack(alignment: .leading, spacing: Tokens.Spacing.tight) {
+            SectionLabel("Nothing logged for", count: gaps.count)
+            // A gap is a fact, not a verdict. No "you should", no red. When some sets could not be
+            // attributed, "no sets" would overclaim: the muscle may have been trained by one of them.
+            Text(
+              report.isLowerBound
+                ? "No sets were credited to these this week. Some sets could not be attributed to "
+                  + "a muscle, so any of these may still have been trained."
+                : "These had no sets this week. Whether that matters depends on your plan."
+            )
+              .font(Tokens.Text.caption)
+              .foregroundStyle(Tokens.Color.textSecondary)
+              .fixedSize(horizontal: false, vertical: true)
+          }
 
+          // Tags, not chips: a fill and no control border, because none of them does anything
+          // when tapped and none of them should look as if it might.
           FlowLayout(spacing: Tokens.Spacing.snug) {
             ForEach(gaps, id: \.self) { muscle in
               Text(ExercisePickerView.displayName(MuscleKey(muscle)))
-                .font(Tokens.Text.caption)
+                .font(Tokens.Text.caption.weight(.medium))
+                .foregroundStyle(Tokens.Color.textSecondary)
                 .padding(.horizontal, Tokens.Spacing.snug)
                 .padding(.vertical, Tokens.Spacing.tight)
-                .background(Tokens.Color.surface, in: Capsule())
-                .foregroundStyle(Tokens.Color.textSecondary)
+                .background(
+                  Tokens.Color.surfaceRaised,
+                  in: RoundedRectangle(cornerRadius: Tokens.Radius.control / 2)
+                )
             }
           }
+          .accessibilityElement(children: .combine)
         }
       }
     }
@@ -254,7 +322,30 @@ struct FlowLayout: Layout {
         setsTouchingGroup: [.chest: 12, .back: 14, .legs: 11, .arms: 12, .shoulders: 6]
       ),
       excludedFromGaps: ExerciseCatalog.unauthoredDirectTokens,
+      title: "This week",
+      subtitle: "Last 7 days",
       onExplainCounting: {}
+    )
+  }
+
+  #Preview("Fully attributed, no header") {
+    VolumeReportView(
+      report: MuscleVolumeReport(
+        fractionalSets: [MuscleKey(.chest): 1],
+        hardSets: 1,
+        unattributedHardSets: 0,
+        setsTouchingGroup: [.chest: 1]
+      )
+    )
+  }
+
+  #Preview("Nothing logged") {
+    VolumeReportView(
+      report: MuscleVolumeReport(
+        fractionalSets: [:], hardSets: 0, unattributedHardSets: 0, setsTouchingGroup: [:]
+      ),
+      title: "This week",
+      subtitle: "Last 7 days"
     )
   }
 #endif

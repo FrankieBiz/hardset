@@ -14,6 +14,8 @@ import SwiftUI
 public struct SessionView: View {
   @Binding private var exercises: [ExerciseLogState]
   private let unit: WeightUnit
+  private let title: String?
+  private let gymName: String?
   private let restState: RestTimerState
   private let restMetadata: RestMetadata?
   private let errorMessage: String?
@@ -25,11 +27,24 @@ public struct SessionView: View {
   private let onAddExercise: (() -> Void)?
   private let onSelectMachine: ((UUID) -> Void)?
   private let onShowHistory: ((UUID) -> Void)?
+  private let onShowSettings: (() -> Void)?
   private let onFinish: () -> Void
 
+  /// Finishing closes the session for good, so it takes a second, deliberate tap. The first tap
+  /// only asks; a lifter brushing the button with a chalky thumb loses nothing.
+  @State private var isConfirmingFinish = false
+  @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+  /// - Parameter title: Draws a screen header when present. The live session passes "Workout";
+  ///   previews and embedded uses can leave it out.
+  /// - Parameter gymName: The header's context line. `nil` says no gym is recorded, which is
+  ///   also why the machine chips are absent.
+  /// - Parameter onShowSettings: Puts a settings button in the header.
   public init(
     exercises: Binding<[ExerciseLogState]>,
     unit: WeightUnit,
+    title: String? = nil,
+    gymName: String? = nil,
     restState: RestTimerState = .idle,
     restMetadata: RestMetadata? = nil,
     errorMessage: String? = nil,
@@ -41,10 +56,13 @@ public struct SessionView: View {
     onAddExercise: (() -> Void)? = nil,
     onSelectMachine: ((UUID) -> Void)? = nil,
     onShowHistory: ((UUID) -> Void)? = nil,
+    onShowSettings: (() -> Void)? = nil,
     onFinish: @escaping () -> Void = {}
   ) {
     self._exercises = exercises
     self.unit = unit
+    self.title = title
+    self.gymName = gymName
     self.restState = restState
     self.restMetadata = restMetadata
     self.errorMessage = errorMessage
@@ -56,47 +74,30 @@ public struct SessionView: View {
     self.onAddExercise = onAddExercise
     self.onSelectMachine = onSelectMachine
     self.onShowHistory = onShowHistory
+    self.onShowSettings = onShowSettings
     self.onFinish = onFinish
   }
 
   public var body: some View {
     ScrollView {
-      LazyVStack(spacing: Tokens.Spacing.regular) {
+      LazyVStack(alignment: .leading, spacing: Tokens.Spacing.regular) {
+        if let title {
+          header(title: title)
+            .padding(.bottom, Tokens.Spacing.snug)
+        }
+
         if let errorMessage {
           // A failed write is stated, not swallowed. The row it belongs to is still unlogged,
           // so the user can retry rather than discovering the gap days later.
-          Label(errorMessage, systemImage: "exclamationmark.triangle.fill")
-            .font(Tokens.Text.label)
-            .foregroundStyle(Tokens.Color.error)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(Tokens.Spacing.regular)
-            .background(Tokens.Color.surface, in: RoundedRectangle(cornerRadius: Tokens.Radius.card))
+          HardsetBanner(.error, message: errorMessage)
             .padding(.horizontal, Tokens.Spacing.regular)
+            .transition(.opacity)
         }
 
         if !records.isEmpty {
-          // Each record names what it beat, so the claim is checkable rather than a bare "PR!".
-          VStack(alignment: .leading, spacing: Tokens.Spacing.tight) {
-            ForEach(records) { record in
-              Label {
-                VStack(alignment: .leading, spacing: 0) {
-                  Text(record.kind.label)
-                    .font(Tokens.Text.label.weight(.semibold))
-                  Text(Self.describe(record))
-                    .font(Tokens.Text.caption)
-                    .foregroundStyle(Tokens.Color.textSecondary)
-                }
-              } icon: {
-                Image(systemName: "trophy")
-              }
-              .foregroundStyle(Tokens.Color.pr)
-            }
-          }
-          .frame(maxWidth: .infinity, alignment: .leading)
-          .padding(Tokens.Spacing.regular)
-          .background(Tokens.Color.surface, in: RoundedRectangle(cornerRadius: Tokens.Radius.card))
-          .padding(.horizontal, Tokens.Spacing.regular)
-          .accessibilityElement(children: .combine)
+          recordsCard
+            .padding(.horizontal, Tokens.Spacing.regular)
+            .transition(.opacity)
         }
 
         ForEach($exercises) { $exercise in
@@ -111,27 +112,12 @@ public struct SessionView: View {
               { show(exercise.id) }
             }
           )
-          .background(Tokens.Color.surface.opacity(0.4), in: RoundedRectangle(cornerRadius: Tokens.Radius.card))
-          .padding(.horizontal, Tokens.Spacing.snug)
-        }
-
-        if let onAddExercise {
-          Button(action: onAddExercise) {
-            Label("Add movement", systemImage: "plus")
-              .font(Tokens.Text.label)
-              .frame(maxWidth: .infinity, minHeight: Tokens.loggerTapTarget)
-          }
-          .buttonStyle(.plain)
-          .foregroundStyle(Tokens.Color.accent)
-          .background(
-            Tokens.Color.surface,
-            in: RoundedRectangle(cornerRadius: Tokens.Radius.control)
-          )
           .padding(.horizontal, Tokens.Spacing.regular)
         }
 
         // An empty workout says so, and says what to do about it, rather than rendering a bare
-        // "Finish" button under nothing.
+        // "Finish" button under nothing. When it is empty, the empty state carries the add action,
+        // so the dashed slot below is not drawn twice.
         if exercises.isEmpty {
           HardsetEmptyState(
             title: "Nothing added yet",
@@ -140,16 +126,30 @@ public struct SessionView: View {
             actionTitle: onAddExercise == nil ? nil : "Add movement",
             action: onAddExercise
           )
+        } else if let onAddExercise {
+          addMovementSlot(action: onAddExercise)
+            .padding(.horizontal, Tokens.Spacing.regular)
         }
 
         summary
+          .padding(.horizontal, Tokens.Spacing.regular)
+          .padding(.top, Tokens.Spacing.section)
       }
-      .padding(.vertical, Tokens.Spacing.regular)
-      // Room for the rest bar so the last row is never trapped underneath it.
-      .safeAreaPadding(.bottom, restState == .idle ? 0 : 72)
+      .padding(.bottom, Tokens.Spacing.section)
+      .animation(
+        Tokens.Motion.adaptive(Tokens.Motion.reveal, reduceMotion: reduceMotion),
+        value: errorMessage
+      )
+      .animation(
+        Tokens.Motion.adaptive(Tokens.Motion.reveal, reduceMotion: reduceMotion),
+        value: records.map(\.kind)
+      )
     }
     .background(Tokens.Color.background)
-    .safeAreaInset(edge: .bottom) {
+    // The inset measures the rest bar and reserves exactly its height, so the last row is never
+    // trapped underneath it. A guessed 72 pt allowance used to sit on top of this and was wrong as
+    // soon as the bar wrapped onto two lines.
+    .safeAreaInset(edge: .bottom, spacing: 0) {
       RestBarView(
         state: restState,
         metadata: restMetadata,
@@ -160,25 +160,100 @@ public struct SessionView: View {
     }
   }
 
+  private func header(title: String) -> some View {
+    ScreenHeader(title, subtitle: gymName ?? "No gym recorded") {
+      if let onShowSettings {
+        HeaderIconButton(
+          systemImage: "gearshape", accessibilityLabel: "Settings", action: onShowSettings
+        )
+      }
+    }
+  }
+
+  /// Records from the set just logged. Each one names what it beat, so the claim is checkable
+  /// rather than a bare "PR!", and an estimated maximum carries its certainty beside it.
+  private var recordsCard: some View {
+    VStack(alignment: .leading, spacing: Tokens.Spacing.regular) {
+      ForEach(records) { record in
+        HStack(alignment: .firstTextBaseline, spacing: Tokens.Spacing.regular) {
+          Image(systemName: "trophy.fill")
+            .font(Tokens.Text.headline)
+            .foregroundStyle(Tokens.Color.pr)
+            .accessibilityHidden(true)
+          VStack(alignment: .leading, spacing: Tokens.Spacing.tight) {
+            Text(record.kind.label)
+              .font(Tokens.Text.headline)
+              .foregroundStyle(Tokens.Color.pr)
+            Text(Self.describe(record, unit: unit))
+              .font(Tokens.Text.provenance)
+              .foregroundStyle(Tokens.Color.textPrimary)
+              .fixedSize(horizontal: false, vertical: true)
+            if record.kind == .estimatedOneRepMax {
+              CertaintyBadge(
+                level: .moderate,
+                methodology: ProgressionAnalyzer.source.methodology,
+                citation: ProgressionAnalyzer.source.validRange
+              )
+            }
+          }
+          .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .accessibilityElement(children: .combine)
+      }
+    }
+    .padding(Tokens.Spacing.regular)
+    .background(Tokens.Color.prSurface, in: RoundedRectangle(cornerRadius: Tokens.Radius.card))
+    .overlay(
+      RoundedRectangle(cornerRadius: Tokens.Radius.card)
+        .strokeBorder(Tokens.Color.pr.opacity(0.35), lineWidth: Tokens.Stroke.hairline)
+    )
+  }
+
+  /// The place the next movement goes. Dashed, like every empty slot in the app.
+  private func addMovementSlot(action: @escaping () -> Void) -> some View {
+    let shape = RoundedRectangle(cornerRadius: Tokens.Radius.card)
+    return Button(action: action) {
+      Label("Add movement", systemImage: "plus")
+        .font(Tokens.Text.headline)
+        .foregroundStyle(Tokens.Color.accent)
+        .frame(maxWidth: .infinity, minHeight: Tokens.loggerTapTarget)
+        .contentShape(shape)
+        .overlay(
+          shape.strokeBorder(
+            Tokens.Color.controlBorder,
+            style: StrokeStyle(lineWidth: Tokens.Stroke.hairline, dash: [5, 4])
+          )
+        )
+    }
+    .buttonStyle(.plain)
+  }
+
   /// Spells out the comparison. An estimated-1RM record says it is an estimate, because
   /// guideline 1.4.1 is about not presenting an estimate as a measurement.
-  static func describe(_ record: PersonalRecord) -> String {
+  ///
+  /// Written in the unit the lifter reads everything else in. Hard-coding "kg" here told a lifter
+  /// training in pounds that they had set a record of 102 kg, a number they never saw anywhere.
+  static func describe(_ record: PersonalRecord, unit: WeightUnit = .kilograms) -> String {
+    let weight = "\(Self.trim(unit.fromKilograms(record.weightKg))) \(unit.abbreviation)"
+    let previousWeight = record.previousWeightKg.map {
+      "\(Self.trim(unit.fromKilograms($0))) \(unit.abbreviation)"
+    }
     switch record.kind {
     case .heaviestLoad:
-      if let previous = record.previousWeightKg {
-        return "\(Self.trim(record.weightKg)) kg, up from \(Self.trim(previous)) kg"
+      if let previousWeight {
+        return "\(weight), up from \(previousWeight)"
       }
-      return "\(Self.trim(record.weightKg)) kg"
+      return weight
     case .repsAtLoad:
       if let previousReps = record.previousReps {
-        return "\(record.reps) reps at \(Self.trim(record.weightKg)) kg, up from \(previousReps)"
+        return "\(record.reps) reps at \(weight), up from \(previousReps)"
       }
-      return "\(record.reps) reps at \(Self.trim(record.weightKg)) kg"
+      return "\(record.reps) reps at \(weight)"
     case .estimatedOneRepMax:
-      if let previous = record.previousWeightKg {
-        return "estimated, up from about \(Self.trim(previous)) kg"
+      if let previousWeight {
+        return "Estimated, up from about \(previousWeight)"
       }
-      return "estimated"
+      return "Estimated"
     }
   }
 
@@ -186,26 +261,84 @@ public struct SessionView: View {
     value == value.rounded() ? String(Int(value)) : String(format: "%.1f", value)
   }
 
+  /// The session's totals, then the way out of it.
   private var summary: some View {
-    VStack(spacing: Tokens.Spacing.snug) {
-      Text(volumeDescription)
-        .font(Tokens.Text.caption)
-        .foregroundStyle(Tokens.Color.textSecondary)
-        .monospacedDigit()
-      Button(action: onFinish) {
-        Text("Finish workout")
-          .font(Tokens.Text.label.weight(.semibold))
-          .frame(maxWidth: .infinity, minHeight: Tokens.loggerTapTarget)
+    let volume = SessionVolume(exercises: exercises)
+    return VStack(alignment: .leading, spacing: Tokens.Spacing.loose) {
+      VStack(alignment: .leading, spacing: Tokens.Spacing.regular) {
+        SectionLabel("This workout")
+        if volume.isEmpty {
+          Text("No sets logged yet")
+            .font(Tokens.Text.label)
+            .foregroundStyle(Tokens.Color.textSecondary)
+        } else {
+          StatLedger(ledgerItems(volume))
+        }
       }
-      .buttonStyle(.plain)
-      .foregroundStyle(Tokens.Color.accent)
-      .background(
-        Tokens.Color.surface,
-        in: RoundedRectangle(cornerRadius: Tokens.Radius.control)
+      .padding(Tokens.Spacing.regular)
+      .frame(maxWidth: .infinity, alignment: .leading)
+      .hardsetCard()
+      .accessibilityElement(children: .combine)
+      .accessibilityLabel(volumeDescription)
+
+      finishControls
+    }
+  }
+
+  @ViewBuilder private var finishControls: some View {
+    if isConfirmingFinish {
+      VStack(alignment: .leading, spacing: Tokens.Spacing.regular) {
+        Text("Finish this workout? Sets you have not logged are not saved.")
+          .font(Tokens.Text.provenance)
+          .foregroundStyle(Tokens.Color.textPrimary)
+          .fixedSize(horizontal: false, vertical: true)
+        HStack(spacing: Tokens.Spacing.snug) {
+          Button("Keep training") {
+            setConfirming(false)
+          }
+          .buttonStyle(HardsetButtonStyle(.secondary, size: .logger))
+          Button("Finish") {
+            setConfirming(false)
+            onFinish()
+          }
+          .buttonStyle(HardsetButtonStyle(.primary, size: .logger))
+        }
+      }
+      .transition(.opacity)
+    } else {
+      Button {
+        setConfirming(true)
+      } label: {
+        Label("Finish workout", systemImage: "flag.checkered")
+      }
+      .buttonStyle(HardsetButtonStyle(.secondary, size: .logger))
+      .transition(.opacity)
+    }
+  }
+
+  private func setConfirming(_ value: Bool) {
+    withAnimation(Tokens.Motion.adaptive(Tokens.Motion.state, reduceMotion: reduceMotion)) {
+      isConfirmingFinish = value
+    }
+  }
+
+  private func ledgerItems(_ volume: SessionVolume) -> [StatLedger.Item] {
+    var items = [
+      StatLedger.Item(label: "Working sets", value: String(volume.workingSets)),
+      StatLedger.Item(label: "Reps", value: String(volume.reps)),
+    ]
+    if volume.volumeKg > 0 {
+      let displayed = Int(unit.fromKilograms(volume.volumeKg).rounded())
+      items.append(
+        StatLedger.Item(
+          label: "Volume", value: displayed.formatted(.number), unit: unit.abbreviation
+        )
       )
     }
-    .padding(.horizontal, Tokens.Spacing.regular)
-    .padding(.top, Tokens.Spacing.snug)
+    if volume.warmupSets > 0 {
+      items.append(StatLedger.Item(label: "Warm-ups", value: String(volume.warmupSets)))
+    }
+    return items
   }
 
   /// Counted by `SessionVolume`, which is tested. The rules that matter — unlogged rows and
@@ -223,7 +356,7 @@ public struct SessionView: View {
       parts.append("\(Int(displayed.rounded())) \(unit.abbreviation) volume")
     }
     if volume.warmupSets > 0 { parts.append("\(volume.warmupSets) warm-up") }
-    return parts.joined(separator: " · ")
+    return parts.joined(separator: ", ")
   }
 }
 
@@ -263,6 +396,8 @@ public struct SessionView: View {
         SessionView(
           exercises: $exercises,
           unit: .kilograms,
+          title: "Workout",
+          gymName: "Metroflex Gym",
           restState: .running(endsAt: Date().addingTimeInterval(96)),
           restMetadata: RestMetadata(
             exerciseName: "Leg Press", setOrdinal: 1, plannedSets: 2,
@@ -271,7 +406,11 @@ public struct SessionView: View {
           onLogSet: { stateID, slot in
             guard let index = exercises.firstIndex(where: { $0.id == stateID }) else { return }
             exercises[index].markLogged(slotID: slot.id, setID: SetID())
-          }
+          },
+          onAddExercise: {},
+          onSelectMachine: { _ in },
+          onShowHistory: { _ in },
+          onShowSettings: {}
         )
       }
     }

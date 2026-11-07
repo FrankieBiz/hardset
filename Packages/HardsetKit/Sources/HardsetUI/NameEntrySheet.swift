@@ -10,6 +10,10 @@ import SwiftUI
 /// Here the text is owned by this view and delivered as a parameter, so there is no cross-boundary
 /// read to get wrong. It also affords what an alert cannot: the confirm button is disabled until
 /// there is something to save, and the keyboard is up on appear.
+///
+/// Laid out by hand rather than as a stock `Form`: one field in the same outline as the search
+/// field, the note under it, and the confirm action as a full-width 56 pt button in the content,
+/// where a thumb reaches it, instead of a small word in the navigation bar.
 public struct NameEntrySheet: View {
   private let title: String
   private let prompt: String
@@ -43,36 +47,58 @@ public struct NameEntrySheet: View {
 
   public var body: some View {
     NavigationStack {
-      Form {
-        Section {
-          TextField(prompt, text: $name)
-            .focused($isFocused)
-            .submitLabel(.done)
-            .onSubmit(confirm)
-            .listRowBackground(Tokens.Color.surface)
-        } footer: {
-          if let footnote {
-            Text(footnote)
-              .foregroundStyle(Tokens.Color.textSecondary)
+      ScrollView {
+        VStack(alignment: .leading, spacing: Tokens.Spacing.loose) {
+          VStack(alignment: .leading, spacing: Tokens.Spacing.snug) {
+            nameField
+
+            if let footnote, !footnote.isEmpty {
+              Text(footnote)
+                .font(Tokens.Text.caption)
+                .foregroundStyle(Tokens.Color.textSecondary)
+                .fixedSize(horizontal: false, vertical: true)
+            }
           }
+
+          Button(action: confirm) {
+            Text(confirmLabel)
+          }
+          .buttonStyle(HardsetButtonStyle(.primary, size: .logger))
+          // Nothing to save is not an error worth explaining; the button simply waits.
+          .disabled(trimmed.isEmpty)
         }
+        .padding(.horizontal, Tokens.Spacing.loose)
+        .padding(.top, Tokens.Spacing.loose)
+        .padding(.bottom, Tokens.Spacing.section)
       }
-      .scrollContentBackground(.hidden)
+      .scrollBounceBehavior(.basedOnSize)
       .background(Tokens.Color.background)
-      .navigationTitle(title)
+      .hardsetNavigationTitle(title)
       .toolbar {
         ToolbarItem(placement: .cancellationAction) {
           Button("Cancel", action: onCancel)
-        }
-        ToolbarItem(placement: .confirmationAction) {
-          Button(confirmLabel, action: confirm)
-            // Nothing to save is not an error worth explaining; the button simply waits.
-            .disabled(trimmed.isEmpty)
         }
       }
       .onAppear { isFocused = true }
     }
     .presentationDetents([.medium])
+  }
+
+  private var nameField: some View {
+    TextField(text: $name, prompt: Text(prompt).foregroundStyle(Tokens.Color.textSecondary)) {
+      Text(prompt)
+    }
+    .font(Tokens.Text.label)
+    .foregroundStyle(Tokens.Color.textPrimary)
+    .tint(Tokens.Color.accent)
+    .focused($isFocused)
+    .submitLabel(.done)
+    .onSubmit(confirm)
+    .padding(.horizontal, Tokens.Spacing.regular)
+    .padding(.vertical, Tokens.Spacing.snug)
+    .frame(maxWidth: .infinity, minHeight: Tokens.loggerTapTarget, alignment: .leading)
+    .entryFieldChrome(isFocused: isFocused)
+    .onTapGesture { isFocused = true }
   }
 
   private func confirm() {
@@ -90,5 +116,16 @@ public struct NameEntrySheet: View {
       onConfirm: { _ in },
       onCancel: {}
     )
+    .hardsetSheet()
+  }
+
+  #Preview("Name entry, no footnote") {
+    NameEntrySheet(
+      title: "Add a gym",
+      prompt: "Name",
+      onConfirm: { _ in },
+      onCancel: {}
+    )
+    .hardsetSheet()
   }
 #endif

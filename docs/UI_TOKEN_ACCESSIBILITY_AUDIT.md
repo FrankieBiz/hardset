@@ -184,3 +184,16 @@ Contrast was calculated with the WCAG sRGB transfer function (`c / 12.92` throug
 `make check` passed: 86 Swift files parsed with zero failures, 167 Core tests in 22 suites, and 45 Store tests in five local suites. The Store gate loads the official SQLite UUID extension and excludes CloudKit wiring. `git diff --check` also passed. The project generator was not rerun for this documentation change; the existing handoff records generator reproducibility drift.
 
 Linux verification cannot compile SwiftUI or inspect native hit testing, trait resolution, ambient-light performance, or the rendered app. No Core, Store, schema, concurrency, or database-render behavior changes are part of this audit.
+
+## Implementation status — 2026-11-07
+
+Implemented in the design-system pass on `FrankieBiz/snapper` (see `DESIGN.md`). Linux checks only; native verification is listed in `docs/MAC-VERIFICATION.md`.
+
+- Opaque foreground roles, tinted state surfaces, `controlBorder`, and Increase Contrast resolution now live in `DesignTokens.swift` as hex literals resolved from the trait collection. The accent is no longer the asset blue: readout cyan `#00515E` light / `#5ED3E6` dark. `Tools/check_contrast.py` (run by `make check`) verifies 172 pairs: 7:1 text on every surface in all four appearances, 3:1 control boundaries, 4.5:1 on momentary pressed fills.
+- `certainty(_:)` returns the measured roles (high → success, moderate → pr, low → warning, unevaluated → textSecondary).
+- Typography follows the proposed upgrade: body labels, footnote captions, callout `provenance` and `unit`, and condensed tabular figures (`setEntry` Title 2, `readout` Title, `hero` Large Title). The set row no longer uses `minimumScaleFactor(0.6)` and stacks at accessibility sizes instead.
+- Keypad adjusters are 56 pt keys; the keypad sheet is sized from its measured content inside a scroll view instead of a fixed 370 pt detent.
+- Targets are laid out inside button labels for the certainty badge, assumption chip, exercise-name history button, machine chip, chart explanation, and every new control.
+- The rest bar switches between one and two lines with `ViewThatFits`, keeps every control at 56 pt, and no longer combines its controls into one VoiceOver element. The guessed 72 pt bottom padding is gone; the safe-area inset measures the bar.
+- Chart series use explicit measured colours plus distinct point symbols and a custom legend; machine-change rules are 2 pt dashed in the warning role.
+- Not yet verified: resolved colours on device, hit regions with the Accessibility Inspector, Dynamic Type layouts, and glare.
