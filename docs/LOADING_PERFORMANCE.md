@@ -217,6 +217,45 @@ committed files. No synchronized schema or migration changed. These local comman
 checks do not define conflict resolution between devices that logged/finished
 independently while offline; native sync/device validation remains outstanding.
 
+## Verified next-set provenance milestone — 2026-11-07
+
+The normal live machine-switch guard already existed. Recovery bypassed it:
+the Store-to-Core adapter omitted each logged set's machine ID, and Core assigned
+nil IDs to the currently selected machine. This could make a 100 kg set performed
+elsewhere become the next suggestion on equipment whose actual history was
+30 kg. The adapter now forwards each saved machine ID and completion timestamp,
+and Core preserves nil equipment IDs without assigning another machine.
+
+Each exercise state captures its most recently saved working-set values per
+progression key. Initialization, ordered recovery, and successful log events own
+that data; warm-ups do not replace it. Appending a set reads that key directly
+when available, so it follows save order even when rows were logged out of
+display order. Later draft changes cannot rewrite the captured prefill values.
+Repeated log callbacks leave the saved set ID/equipment unchanged, and the
+equipment setter is confined to the Core file. Future successful edit/undo
+commands must explicitly refresh this captured data.
+
+The coordinator captures the completion instant once and uses it for both the
+Store write and Core's saved-value record. Recovery forwards the stored instant.
+Direct legacy Core callers retain the old epoch default when no timestamp is
+supplied; the app's Store path always supplies its saved timestamp. Recovery
+ordering uses ordinal, completion time, and set ID, formatting UUIDs only for
+ties. No additional database queries or migrations were introduced.
+
+Regression tests were run against original sources and reproduced nil-ID
+reassignment, wrong post-recovery machine suggestions, display-order prefill,
+repeated-callback relabelling, draft edits changing next-set values, and lost
+completion timestamps. Tests now preserve both nil and named equipment through
+live/recovered flows, save order, working-set values, warm-up exclusion, and
+returning to earlier equipment. Existing labelled other-machine history borrowing
+and history-based remaining planned rows retain their behavior.
+
+`make check` passed: 90 Swift files, 177 Core tests, 72 Store tests across five
+local suites, and seven query-plan checks. The expanded Store run passed 122
+tests across twelve suites. Project/scheme regeneration remained identical.
+The direct lookup removes reverse row searching from the common append path;
+no device latency or frame-time improvement has been measured.
+
 ## Remaining app-wide work
 
 - Capture Release cold/warm launch, first usable workout, resume, picker, history,

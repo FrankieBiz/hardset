@@ -207,3 +207,49 @@ The requested architectural review is documented. No production Swift source or 
   Next concrete code step: reproduce the Core next-set prefill taking a logged
   load from machine A after switching to machine B, then preserve per-set machine
   provenance through live logging and recovery.
+
+## Next-set provenance follow-up — 2026-11-07
+
+- Full-app objective remains active; same worktree/branch.
+- Actual baseline already guarded normal live appends by logged machine ID. Do
+  not redo that fix. The broken path was recovery: coordinator omitted saved
+  machine IDs, and Core's `logged.machineID ?? currentMachine` invented provenance.
+- Recovery now forwards saved machine IDs/timestamps and preserves nil IDs. Core
+  captures each equipment key's latest successfully saved working-set values,
+  updated by initialization, ordered reconstruction, and successful mark events.
+  Appends use that keyed value, respecting save order rather than display order.
+  Warm-ups skip it; later draft edits cannot change the captured values.
+- Duplicate mark callbacks preserve the saved ID/machine. `loggedMachineID` is
+  publicly readable with a file-confined setter. Existing constructor access remains.
+- Coordinator captures `now()` once per save and forwards the same timestamp to
+  Store/Core. Recovery order has ordinal/time/ID tie-breaking, with UUID string
+  formatting only for ties. No new SQL or migrations.
+- Core's direct legacy call defaults still use the prior epoch timestamp when
+  no instant is supplied; production Store paths pass the actual saved instant.
+  Captured per-key values are session-local prefill data, never an all-time PR source.
+  Future edit/undo persistence commands must refresh this data explicitly.
+- Owned paths: Core `ExerciseLogState.swift`; Store `SessionCoordinator.swift`;
+  Core tests `ExerciseLogStateTests.swift`/`ResumeTests.swift`; Store
+  `SessionRecoveryTests.swift`; loading doc; handoff.
+- Red/green verified against original Core/Coordinator sources: nil equipment
+  reassignment, named/nil equipment drift after recovery, out-of-display-order
+  saves, repeated mark relabelling, mutable draft prefill, and lost timestamps.
+  Return-to-equipment/warm-up behavior also tested. Original sources temporarily
+  restored only from snapshots of owned files; fixed sources restored in `finally`
+  and full verification rerun. No failed implementation attempts.
+- Verification: `make check` passed: 90 files, 177 Core tests, 72 Store tests in
+  five suites, seven query-plan checks. Expanded run (same six extra test files
+  as previous handoff) passed 122 Store tests in twelve suites. Project/scheme
+  regeneration identical; diff whitespace check passed. Native app/device tests
+  and actual loading/frame-time measurements remain unverified on Linux.
+- Labelled other-machine borrowing policy and history-based remaining planned
+  rows are unchanged. Default borrowing still needs the broader provenance/UX audit.
+- Inspected current `ProgressionAnalyzer.machineChanges`: session/machine grouping
+  is already implemented; older review wording about grouping only by session is
+  stale. Ordering ties and same-session revisits still warrant explicit requirements
+  and tests before changing its semantics.
+- Next high-priority independent step: verify historical v1 schema fixtures and
+  implement additive repair migrations without debug schema erasure. Remaining
+  work includes progression limits/order, consistent recovery reads, numeric/import
+  validation and command retry identity, durable rest/sync ownership, native
+  app/widget compilation, and Release iPhone launch/loading/hitch measurements.

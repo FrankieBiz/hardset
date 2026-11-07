@@ -101,6 +101,82 @@ struct ExerciseLogStateTests {
 
   // MARK: - Progress through the exercise
 
+  @Test("Next-set prefill follows save order when rows are logged out of display order")
+  func appendUsesMostRecentlySavedRow() {
+    var state = ExerciseLogState.build(
+      exerciseID: exercise, machineID: machine, exerciseName: "Press",
+      snapshot: .empty(capturedAt: now), plannedSets: 2
+    )
+    state.slots[1].draft = SetEntryDraft(weightKg: 150, reps: 6)
+    state.markLogged(slotID: state.slots[1].id, setID: SetID())
+    state.slots[0].draft = SetEntryDraft(weightKg: 120, reps: 8)
+    state.markLogged(slotID: state.slots[0].id, setID: SetID())
+    state.appendSlot()
+    #expect(state.slots[2].draft.weightKg == 120)
+    #expect(state.slots[2].draft.reps == 8)
+  }
+
+  @Test("Editing a displayed logged draft cannot rewrite the values used for next-set prefill")
+  func appendUsesCapturedLoggedValues() {
+    var state = ExerciseLogState.build(
+      exerciseID: exercise, machineID: machine, exerciseName: "Press",
+      snapshot: .empty(capturedAt: now)
+    )
+    state.slots[0].draft = SetEntryDraft(weightKg: 100, reps: 8)
+    state.markLogged(slotID: state.slots[0].id, setID: SetID())
+    state.slots[0].draft = SetEntryDraft(weightKg: 999, reps: 1)
+    state.appendSlot()
+    #expect(state.slots[1].draft.weightKg == 100)
+    #expect(state.slots[1].draft.reps == 8)
+  }
+
+  @Test("Returning to equipment reuses its own latest working set and skips warm-ups")
+  func rememberedLoadsStayPerEquipment() {
+    var state = ExerciseLogState.build(
+      exerciseID: exercise, exerciseName: "Press", snapshot: .empty(capturedAt: now)
+    )
+    let equipment: [MachineID?] = [machine, nil, otherMachine]
+    let weights = [100.0, 20.0, 50.0]
+    for (index, machineID) in equipment.enumerated() {
+      state.changeMachine(to: machineID, machineName: nil, machineIncrementKg: nil, prior: nil)
+      state.appendSlot()
+      let slot = state.slots.count - 1
+      state.slots[slot].draft = SetEntryDraft(weightKg: weights[index], reps: 8)
+      state.markLogged(slotID: state.slots[slot].id, setID: SetID())
+    }
+    for (index, machineID) in equipment.enumerated() {
+      state.changeMachine(to: machineID, machineName: nil, machineIncrementKg: nil, prior: nil)
+      state.appendSlot()
+      #expect(state.slots.last?.draft.weightKg == weights[index])
+    }
+    let warmup = state.slots.count - 1
+    state.slots[warmup].isWarmup = true
+    state.slots[warmup].draft = SetEntryDraft(weightKg: 5, reps: 15)
+    state.markLogged(slotID: state.slots[warmup].id, setID: SetID())
+    state.appendSlot()
+    #expect(state.slots.last?.draft.weightKg == 50)
+  }
+
+  @Test("A repeated logged callback cannot move a written set to another machine")
+  func repeatedMarkPreservesEquipment() {
+    let key = ProgressionKey(exerciseID: exercise, machineID: otherMachine)
+    let prior = PriorPerformance(key: key,
+      lastSets: [PriorSetRecord(weightKg: 30, reps: 10, completedAt: now)], heaviestSet: nil)
+    var state = ExerciseLogState.build(
+      exerciseID: exercise, machineID: machine, exerciseName: "Press",
+      snapshot: .empty(capturedAt: now)
+    )
+    let original = SetID()
+    state.slots[0].draft = SetEntryDraft(weightKg: 100, reps: 8)
+    state.markLogged(slotID: state.slots[0].id, setID: original)
+    state.changeMachine(to: otherMachine, machineName: "Other press", machineIncrementKg: nil, prior: prior)
+    state.markLogged(slotID: state.slots[0].id, setID: SetID())
+    #expect(state.slots[0].loggedSetID == original)
+    #expect(state.slots[0].loggedMachineID == machine)
+    state.appendSlot()
+    #expect(state.slots[1].draft.weightKg == 30)
+  }
+
   @Test("The next unlogged row is what the log control acts on")
   func nextUnloggedSlot() throws {
     let key = ProgressionKey(exerciseID: exercise, machineID: machine)

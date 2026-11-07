@@ -53,6 +53,67 @@ struct SessionRecoveryTests {
     #expect(try SessionCoordinator.resume(store: store, now: { self.start }) == nil)
   }
 
+  @Test("Next-set equipment provenance agrees before and after recovery",
+        arguments: [false, true])
+  func recoveryPreservesNextSetEquipment(startedOnMachine: Bool) throws {
+    let database = try migratedDatabase()
+    let store = LoggerStore(database: database)
+    let exercise = try seedExercise(database, "Press")
+    let (gym, currentMachine) = try seedGymAndMachine(database, machine: "Current press")
+    let otherMachine = try GymStore(database: database).createMachine(at: gym, name: "Other press")
+    let originalMachine = startedOnMachine ? otherMachine : nil
+    let past = try store.startSession(gymID: gym, at: start.addingTimeInterval(-1000))
+    _ = try store.logSet(sessionID: past, exerciseID: exercise, machineID: currentMachine,
+                         draft: SetEntryDraft(weightKg: 30, reps: 10), at: start.addingTimeInterval(-900))
+    try store.finishSession(past, at: start.addingTimeInterval(-500))
+    let live = try SessionCoordinator.start(
+      store: store, gymID: gym,
+      plan: [PlannedExercise(exerciseID: exercise, machineID: originalMachine,
+                            exerciseName: "Press", plannedSets: 1)], now: { self.start }
+    )
+    let state = live.exercises[0]
+    live.exercises[0].slots[0].draft = SetEntryDraft(weightKg: 100, reps: 8)
+    #expect(live.logSet(slotID: state.slots[0].id, inExercise: state.id))
+    #expect(live.changeMachine(to: currentMachine, machineName: "Current press", inExercise: state.id))
+    live.addSet(inExercise: state.id)
+    #expect(live.exercises[0].slots.last?.draft.weightKg == 30)
+    let recovered = try #require(try SessionCoordinator.resume(store: store, now: { self.start }))
+    #expect(recovered.exercises[0].slots[0].loggedMachineID == originalMachine)
+    recovered.addSet(inExercise: recovered.exercises[0].id)
+    #expect(recovered.exercises[0].slots.last?.draft.weightKg == 30)
+    let written = try store.sets(in: live.sessionID)
+    #expect(written.map(\.machineID) == [originalMachine])
+  }
+
+  @Test("Save order and timestamps drive next-set prefill through recovery")
+  func recoveryPreservesLatestSavedValues() throws {
+    let database = try migratedDatabase()
+    let store = LoggerStore(database: database)
+    let exercise = try seedExercise(database, "Press")
+    let (gym, machine) = try seedGymAndMachine(database, machine: "Press")
+    var clock = start
+    let live = try SessionCoordinator.start(
+      store: store, gymID: gym,
+      plan: [PlannedExercise(exerciseID: exercise, machineID: machine,
+                            exerciseName: "Press", plannedSets: 2)], now: { clock }
+    )
+    let state = live.exercises[0]
+    live.exercises[0].slots[1].draft = SetEntryDraft(weightKg: 150, reps: 6)
+    #expect(live.logSet(slotID: state.slots[1].id, inExercise: state.id))
+    clock = start.addingTimeInterval(60)
+    live.exercises[0].slots[0].draft = SetEntryDraft(weightKg: 120, reps: 8)
+    #expect(live.logSet(slotID: state.slots[0].id, inExercise: state.id))
+    live.addSet(inExercise: state.id)
+    #expect(live.exercises[0].slots.last?.draft.weightKg == 120)
+    #expect(live.exercises[0].slots.last?.draft.suggestion?.completedAt == clock)
+    let recovered = try #require(try SessionCoordinator.resume(store: store, now: { clock }))
+    recovered.addSet(inExercise: recovered.exercises[0].id)
+    #expect(recovered.exercises[0].slots.last?.draft.weightKg == 120)
+    #expect(recovered.exercises[0].slots.last?.draft.suggestion?.completedAt == clock)
+    let saved = try store.sets(in: live.sessionID)
+    #expect(saved.map(\.weightKg) == [150, 120])
+  }
+
   @Test("A killed session comes back with its written sets already ticked")
   func recoversWrittenSets() throws {
     let database = try migratedDatabase()

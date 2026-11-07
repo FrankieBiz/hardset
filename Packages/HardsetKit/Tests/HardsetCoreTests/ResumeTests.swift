@@ -9,6 +9,18 @@ struct ResumeTests {
   let exercise = ExerciseID()
   let machine = MachineID()
 
+  @Test("A recovered nil equipment ID is preserved rather than assigned to the current machine")
+  func recoveryDoesNotInventMachine() {
+    var state = ExerciseLogState.resume(
+      exerciseID: exercise, machineID: machine, exerciseName: "Press",
+      loggedSets: [.init(setID: SetID(), weightKg: 100, reps: 8, isWarmup: false, machineID: nil)],
+      snapshot: snapshot(sets: [(30, 10)]), plannedSets: 1
+    )
+    #expect(state.slots[0].loggedMachineID == nil)
+    state.appendSlot()
+    #expect(state.slots[1].draft.weightKg == 30)
+  }
+
   private func snapshot(sets: [(Double, Int)]) -> PriorPerformanceSnapshot {
     let key = ProgressionKey(exerciseID: exercise, machineID: machine)
     let records = sets.map { PriorSetRecord(weightKg: $0.0, reps: $0.1, completedAt: now) }

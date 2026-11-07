@@ -197,10 +197,15 @@ public final class SessionCoordinator {
         own += orphans
       }
       let logged = own
-        .sorted { $0.setOrdinal < $1.setOrdinal }
+        .sorted {
+          if $0.setOrdinal != $1.setOrdinal { return $0.setOrdinal < $1.setOrdinal }
+          if $0.completedAt != $1.completedAt { return $0.completedAt < $1.completedAt }
+          return $0.id.rawValue.uuidString < $1.id.rawValue.uuidString
+        }
         .map {
           ExerciseLogState.LoggedSetSummary(
-            setID: $0.id, weightKg: $0.weightKg, reps: $0.reps, isWarmup: $0.isWarmup
+            setID: $0.id, weightKg: $0.weightKg, reps: $0.reps, isWarmup: $0.isWarmup,
+            machineID: $0.machineID, completedAt: $0.completedAt
           )
         }
       let state = ExerciseLogState.resume(
@@ -323,6 +328,7 @@ public final class SessionCoordinator {
     do {
       // The Store compares complete benchmarks before insertion, within the save
       // transaction. Claims are returned only after the transaction commits.
+      let completedAt = now()
       let saved = try store.logSet(
         sessionID: sessionID,
         exerciseID: exercise.exerciseID,
@@ -336,9 +342,9 @@ public final class SessionCoordinator {
         setOrdinal: nil,
         isWarmup: slot.isWarmup,
         recordIncrement: exercise.machineIncrementKg,
-        at: now()
+        at: completedAt
       )
-      exercises[exerciseIndex].markLogged(slotID: slotID, setID: saved.setID)
+      exercises[exerciseIndex].markLogged(slotID: slotID, setID: saved.setID, completedAt: completedAt)
       lastError = nil
 
       // Records are announced only after a successful write, for the same reason the check mark

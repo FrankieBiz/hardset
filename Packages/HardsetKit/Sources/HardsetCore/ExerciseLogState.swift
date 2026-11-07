@@ -9,7 +9,7 @@ public struct SetSlot: Hashable, Sendable, Identifiable {
   /// re-loggable; it is not removed, because the user still wants to see what they did.
   public var loggedSetID: SetID?
   /// The equipment on which this set was completed, preventing cross-machine load bleeding.
-  public var loggedMachineID: MachineID?
+  public fileprivate(set) var loggedMachineID: MachineID?
 
   public init(
     id: UUID = UUID(),
@@ -57,6 +57,9 @@ public struct ExerciseLogState: Hashable, Sendable, Identifiable {
   public private(set) var priorNote: String?
 
   private var prior: PriorPerformance?
+  /// Updated only from successful log events or reconstruction of persisted sets.
+  /// The values are captured at that event; editing a draft cannot rewrite them.
+  private var lastLoggedByKey: [ProgressionKey: PriorSetRecord] = [:]
 
   public init(
     id: UUID = UUID(),
@@ -78,6 +81,7 @@ public struct ExerciseLogState: Hashable, Sendable, Identifiable {
     self.prior = prior
     self.priorNote = priorNote
     self.slots = slots
+    for slot in slots { rememberLogged(slot) }
   }
 
   /// Builds an exercise's rows from a snapshot taken at session start.
@@ -136,19 +140,22 @@ public struct ExerciseLogState: Hashable, Sendable, Identifiable {
     public let reps: Int
     public let isWarmup: Bool
     public let machineID: MachineID?
+    public let completedAt: Date
 
     public init(
       setID: SetID,
       weightKg: Double,
       reps: Int,
       isWarmup: Bool,
-      machineID: MachineID? = nil
+      machineID: MachineID? = nil,
+      completedAt: Date = Date(timeIntervalSince1970: 0)
     ) {
       self.setID = setID
       self.weightKg = weightKg
       self.reps = reps
       self.isWarmup = isWarmup
       self.machineID = machineID
+      self.completedAt = completedAt
     }
   }
 
@@ -185,13 +192,17 @@ public struct ExerciseLogState: Hashable, Sendable, Identifiable {
     )
 
     // Written sets replace the opening rows, in the order they were performed.
-    var slots: [SetSlot] = loggedSets.map { logged in
-      SetSlot(
+    var slots: [SetSlot] = []
+    slots.reserveCapacity(loggedSets.count)
+    for logged in loggedSets {
+      let slot = SetSlot(
         draft: SetEntryDraft(weightKg: logged.weightKg, reps: logged.reps),
         isWarmup: logged.isWarmup,
         loggedSetID: logged.setID,
-        loggedMachineID: logged.machineID ?? machineID
+        loggedMachineID: logged.machineID
       )
+      slots.append(slot)
+      state.rememberLogged(slot, completedAt: logged.completedAt)
     }
 
     // Then however many the plan still expects, prefilled but open. If more was performed than
@@ -241,9 +252,13 @@ public struct ExerciseLogState: Hashable, Sendable, Identifiable {
   /// last week: after logging 100 × 8, the next row opens at 100 × 8. Only when nothing has
   /// been logged yet does this fall back to history.
   public mutating func appendSlot(isWarmup: Bool = false) {
-    let workingIndex = slots.count { !$0.isWarmup }
-    let suggestion: PriorSetRecord? =
-      lastLoggedRecord() ?? prior?.suggestion(forSetIndex: isWarmup ? slots.count : workingIndex)
+    let suggestion: PriorSetRecord?
+    if let logged = lastLoggedByKey[progressionKey] {
+      suggestion = logged
+    } else {
+      let workingIndex = slots.count { !$0.isWarmup }
+      suggestion = prior?.suggestion(forSetIndex: isWarmup ? slots.count : workingIndex)
+    }
     slots.append(SetSlot(draft: SetEntryDraft(suggestion: suggestion), isWarmup: isWarmup))
   }
 
@@ -278,25 +293,24 @@ public struct ExerciseLogState: Hashable, Sendable, Identifiable {
 
   /// Marks a row written. Ignores an unknown id rather than trapping — a stale callback from
   /// a dismissed view should not crash a workout.
-  public mutating func markLogged(slotID: UUID, setID: SetID) {
-    guard let index = slots.firstIndex(where: { $0.id == slotID }) else { return }
+  public mutating func markLogged(
+    slotID: UUID, setID: SetID, completedAt: Date = Date(timeIntervalSince1970: 0)
+  ) {
+    guard let index = slots.firstIndex(where: { $0.id == slotID }), !slots[index].isLogged else { return }
     slots[index].loggedSetID = setID
     slots[index].loggedMachineID = self.machineID
+    rememberLogged(slots[index], completedAt: completedAt)
   }
 
-  /// The most recent values actually written on this machine in this session, used to seed the next row.
-  /// Warm-ups are skipped: a warm-up load must not become a working-set suggestion.
-  private func lastLoggedRecord() -> PriorSetRecord? {
-    for slot in slots.reversed() where slot.isLogged && !slot.isWarmup {
-      guard slot.loggedMachineID == self.machineID else { continue }
-      if let resolved = slot.draft.resolved() {
-        return PriorSetRecord(
-          weightKg: resolved.weightKg,
-          reps: resolved.reps,
-          completedAt: Date(timeIntervalSince1970: 0)
-        )
-      }
-    }
-    return nil
+  /// Calls arrive in persistence order, independently of the row's display index.
+  /// Recovery supplies the saved order and equipment, including a nil equipment ID.
+  private mutating func rememberLogged(
+    _ slot: SetSlot, completedAt: Date = Date(timeIntervalSince1970: 0)
+  ) {
+    guard slot.isLogged, !slot.isWarmup, let resolved = slot.draft.resolved() else { return }
+    let key = ProgressionKey(exerciseID: exerciseID, machineID: slot.loggedMachineID)
+    lastLoggedByKey[key] = PriorSetRecord(
+      weightKg: resolved.weightKg, reps: resolved.reps, completedAt: completedAt
+    )
   }
 }
