@@ -35,27 +35,22 @@ private struct StartupView: View {
       if let resources = startup.resources {
         RootView(database: resources.database, restTimer: restTimer)
       } else if startup.lastError != nil {
-        VStack(spacing: Tokens.Spacing.section) {
-          HardsetEmptyState(
-            title: "Could not open Hardset",
-            detail: "Try again to open your workouts.",
-            systemImage: "exclamationmark.triangle"
-          )
-          Button {
-            Task { await startup.retry() }
-          } label: {
-            Text("Try again")
-              .frame(minHeight: Tokens.minimumTapTarget)
-          }
-          .buttonStyle(.borderedProminent)
-        }
-        .padding(Tokens.Spacing.section)
+        // The design system's empty state and primary button, not the stock bordered one, so the
+        // first screen a lifter might ever see already looks like the rest of the app.
+        HardsetEmptyState(
+          title: "Could not open Hardset",
+          detail: "Try again to open your workouts.",
+          systemImage: "exclamationmark.triangle",
+          actionTitle: "Try again",
+          actionSystemImage: "arrow.clockwise",
+          action: { Task { await startup.retry() } }
+        )
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Tokens.Color.background)
       } else {
-        ProgressView("Opening your workouts")
-          .frame(maxWidth: .infinity, maxHeight: .infinity)
-          .background(Tokens.Color.background)
+        // A quiet line on the launch canvas rather than a spinner: opening usually takes a moment,
+        // and the screen should not flash a busy indicator on every launch.
+        HardsetLoadingState("Opening your workouts…")
       }
     }
     .task { await startup.start() }

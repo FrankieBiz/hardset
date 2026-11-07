@@ -13,19 +13,24 @@ public struct HardsetEmptyState: View {
   private let detail: String?
   private let systemImage: String
   private let actionTitle: String?
+  private let actionSystemImage: String
   private let action: (() -> Void)?
 
+  /// - Parameter actionSystemImage: The action's symbol. A plus by default, because most empty
+  ///   states are filled by adding something; a retry passes `arrow.clockwise`.
   public init(
     title: String,
     detail: String? = nil,
     systemImage: String,
     actionTitle: String? = nil,
+    actionSystemImage: String = "plus",
     action: (() -> Void)? = nil
   ) {
     self.title = title
     self.detail = detail
     self.systemImage = systemImage
     self.actionTitle = actionTitle
+    self.actionSystemImage = actionSystemImage
     self.action = action
   }
 
@@ -67,7 +72,7 @@ public struct HardsetEmptyState: View {
 
       if let actionTitle, let action {
         Button(action: action) {
-          Label(actionTitle, systemImage: "plus")
+          Label(actionTitle, systemImage: actionSystemImage)
         }
         .buttonStyle(HardsetButtonStyle(.primary, fullWidth: false))
       }

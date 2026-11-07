@@ -169,6 +169,26 @@
       }
     }
 
+    /// The app target's startup states, rebuilt from the same components: it cannot be rendered
+    /// from this package directly.
+    @Test func startupStates() async throws {
+      try await Snapshot.capture("startup-failed-dark") {
+        HardsetEmptyState(
+          title: "Could not open Hardset",
+          detail: "Try again to open your workouts.",
+          systemImage: "exclamationmark.triangle",
+          actionTitle: "Try again",
+          actionSystemImage: "arrow.clockwise",
+          action: {}
+        )
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Tokens.Color.background)
+      }
+      try await Snapshot.capture("startup-opening-light", style: .light) {
+        HardsetLoadingState("Opening your workouts…")
+      }
+    }
+
     @Test func components() async throws {
       try await Snapshot.capture("components-dark") { Fixtures.gallery() }
       try await Snapshot.capture("components-light", style: .light) { Fixtures.gallery() }
