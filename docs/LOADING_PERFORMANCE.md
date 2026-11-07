@@ -256,6 +256,50 @@ tests across twelve suites. Project/scheme regeneration remained identical.
 The direct lookup removes reverse row searching from the common append path;
 no device latency or frame-time improvement has been measured.
 
+## Verified legacy-schema repair milestone — 2026-11-07
+
+Git history confirms that `33c1038` added `exercises.curatedName` and
+`loggedSets.sessionExerciseID` by editing v1 after the original schema in
+`c1677fb`. Databases already marked v1 skipped those additions. The default
+debug migrator then erased historical databases when it detected that difference;
+release-style migration left the missing columns unrepaired.
+
+Automatic schema erasure is disabled in all configurations. The new additive
+`v5_legacyV1Columns` migration checks each column independently and adds only
+what is missing. Earlier migration bodies are unchanged. Existing values,
+indexes, table identities, and foreign keys remain intact. Old sets keep a null
+plan-row hint when none was recorded; the migration does not guess their block.
+If repair fails on an unsupported schema, its DDL rolls back and unrelated
+records remain present.
+
+An empty previous catalogue name now means unknown provenance. Seeding preserves
+nonempty stored names in that case while updating catalogue-owned metadata.
+Names with known provenance still receive normal three-way rename handling.
+This conservatively preserves older names that cannot be distinguished from
+user edits, including untracked historical catalogue spellings.
+
+The frozen fixture embeds all thirteen original SQL statements independently
+of current migrations, with comments/indentation removed. Its SHA256 is
+`b681497419b5997112503cb59f121c573a248d5c4b3b9e2e3dad26af13f8680c`;
+a source comparison against the historical commit confirmed the match. Sixteen
+file-backed variants cover neither/either/both columns present, v1/v4 migration
+markers, and default/release-style policy. Tests compare every original value
+across all ten application tables, close/reopen and migrate again, read history,
+resume the actual workout coordinator, log a new linked set, check foreign keys, and seed twice without losing names,
+notes, or archives. Failed-repair rollback and erasure-policy tests also pass.
+
+`make check` passed: 90 Swift files, 177 Core tests, 76 Store tests across five
+local suites, and seven query-plan checks. Project/scheme regeneration matched.
+Release verification also passed 177 Core tests and 154 Store tests across all
+fourteen portable Store test files (sixteen suites). These are Linux package
+builds; CloudKit, AlarmKit, SwiftUI, app/widget compilation, and device behavior
+remain outside this verification.
+The SQL microbenchmark mirrors conditional column-add guards on its fresh
+fixture; native migrator tests establish the actual upgrade behavior.
+Disabling debug erasure also removes GRDB's temporary schema-reconstruction
+database from normal debug migration checks. App launch timing and native
+CloudKit-backed upgrades still require device/Apple-platform verification.
+
 ## Remaining app-wide work
 
 - Capture Release cold/warm launch, first usable workout, resume, picker, history,
@@ -269,9 +313,8 @@ no device latency or frame-time improvement has been measured.
 - Address progression-chart row limits, machine provenance, consistent recovery
   reads, and retry/concurrent-command identity from
   `CORE_STORE_ARCHITECTURE_REVIEW.md`; do not trade correctness for smaller reads.
-- Verify earliest shipped v1 fixtures: this index migration does not repair
-  historical edits to v1 columns or debug schema-erasure behavior identified in
-  the architectural review.
+- Verify repaired historical schemas with native CloudKit metadatabases, sync
+  triggers, account transitions, and the full app launch/recovery flow.
 - Complete native app/widget compilation and physical-device checks, including
   restoration, rest reconciliation, sync ownership, and accessibility behavior.
 

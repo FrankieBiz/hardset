@@ -56,6 +56,19 @@ def statements(source):
     return blocks
 
 
+def apply_migration_sql(db, source):
+    for statement in statements(source):
+        # v5 conditionally repairs legacy columns. Fresh v1 already includes
+        # them; mirror those metadata guards for this literal-SQL benchmark.
+        # Native Store tests execute the real migrator on all legacy variants.
+        addition = re.search(r'ALTER TABLE "(\w+)" ADD COLUMN "(\w+)"', statement)
+        if addition:
+            table, column = addition.groups()
+            if column in {row[1] for row in db.execute(f'PRAGMA table_info("{table}")')}:
+                continue
+        db.execute(statement)
+
+
 def measure(db, query, arguments):
     plan = [row[3] for row in db.execute("EXPLAIN QUERY PLAN " + query, arguments)]
     timings = []
@@ -77,8 +90,7 @@ def main():
     db = sqlite3.connect(":memory:")
     db.execute("PRAGMA foreign_keys = ON")
     db.create_function("uuid", 0, lambda: "fixture-default-id")
-    for statement in statements(baseline):
-        db.execute(statement)
+    apply_migration_sql(db, baseline)
     db.executemany('INSERT INTO exercises (id) VALUES (?)', [(f"exercise-{i}",) for i in range(50)])
     db.executemany('INSERT INTO sessions (id) VALUES (?)', [(f"session-{i}",) for i in range(5000)])
     db.executemany(
@@ -93,8 +105,7 @@ def main():
     )
     before = {name: measure(db, *query) for name, query in QUERIES.items()}
     if upgrade:
-        for statement in statements(upgrade):
-            db.execute(statement)
+        apply_migration_sql(db, upgrade)
     failures = []
     for name, query in QUERIES.items():
         rows, elapsed, plan = measure(db, *query)

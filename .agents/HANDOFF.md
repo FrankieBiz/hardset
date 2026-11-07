@@ -253,3 +253,52 @@ The requested architectural review is documented. No production Swift source or 
   work includes progression limits/order, consistent recovery reads, numeric/import
   validation and command retry identity, durable rest/sync ownership, native
   app/widget compilation, and Release iPhone launch/loading/hitch measurements.
+
+## Legacy-schema repair follow-up — 2026-11-07
+
+- Full-app goal stays active, same worktree and `FrankieBiz/mojarra` branch.
+- Verified historical diff: `33c1038` edited v1 to add `curatedName` and
+  `sessionExerciseID`; original `c1677fb` databases already marked v1 missed both.
+  Debug erasure discarded records; release-style upgrades left columns missing.
+- Removed automatic erasure in all configurations. Added conditional additive
+  `v5_legacyV1Columns`; prior migration bodies remain unchanged. Preserves existing
+  column values, skips columns already present, and leaves old plan hints null.
+- Seeder now preserves nonempty names with unknown previous-curated-name metadata.
+  Known-provenance catalogue corrections still use normal three-way merging;
+  unknown historical spellings are conservatively preserved along with user edits.
+- Owned paths: Store `Migrations.swift`, `CatalogSeeder.swift`; Store
+  `HistoryStoreTests.swift`; `Tools/check_query_performance.py`; loading doc; handoff.
+- Frozen original SQL fixture embeds thirteen statements from `c1677fb`, independent
+  of current migrations. Verified normalized SQL equality against git history;
+  SHA256 `b681497419b5997112503cb59f121c573a248d5c4b3b9e2e3dad26af13f8680c`.
+- Sixteen file-backed variants cover missing/either/both columns, v1/v4 markers,
+  default/release-style policies. Compare every old value in all ten app tables,
+  close/reopen/migrate again, read history, resume coordinator (load/equipment/step/
+  plan count), log a new linked set, check FKs, and seed twice preserving names,
+  notes, and archives. Unsupported missing-table repair rolls back its first
+  column addition and migration marker while preserving unrelated rows.
+- Baseline regressions verified: debug data loss, missing columns, and unknown-name
+  clobbering. First baseline test run hit an unchecked array access after expected
+  fixture erasure; replaced it with required-row assertions. Rerun reported the
+  expected data-loss/missing-column/name failures cleanly; fixed code passed.
+- Verification: `make check` passed (90 Swift files, 177 Core tests, 76 Store tests
+  in five suites, seven query-plan checks). Release Core passed 177 tests;
+  expanded Release Store passed 154 tests across sixteen suites. Project/scheme
+  regeneration identical; frozen fixture comparison and whitespace checks passed.
+- Release commands used the installed checker's `runpy` entry as before, wrapping
+  `run_logged` to add `--configuration release` after `swift test` and write
+  `core-release.log`/`store-release.log` in the existing workspace cache. Expanded
+  Store adds prior six files plus `CatalogSeederTests.swift`, `CatalogRenameTests.swift`,
+  `VolumeStoreTests.swift` (all fourteen portable test files). No installed tooling
+  edits. Its fixed printed "five suites" scope is stale for expanded runs; actual
+  Swift Testing output confirms sixteen. Initial Release dependency build took
+  242 seconds; final incremental run 21 seconds. Logs are under
+  `/home/frankbiz/.cache/hardset-check/workspaces/0cbdfb12da0f/`.
+- SQL performance harness now mirrors conditional ADD COLUMN guards; actual native
+  migrator tests remain the upgrade authority. No data-table rebuilds or resets.
+- Remaining: native CloudKit-metadatabase/trigger upgrades, app/widget/AlarmKit/UI
+  builds and behavior, actual iPhone loading/frame timings, async startup ownership,
+  consistent recovery reads, progression limits/order, numeric/import validation,
+  command retry identity, durable rest and sync ownership/account gating.
+  Next independent code step: make recovery's session/plan/sets/history reads one
+  consistent database snapshot and reproduce a concurrent-update interleaving.
