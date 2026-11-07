@@ -307,6 +307,7 @@ public final class SessionCoordinator {
   /// populates `lastError`.
   @discardableResult
   public func logSet(slotID: UUID, inExercise exerciseStateID: UUID) -> Bool {
+    lastRecords = []
     guard
       let exerciseIndex = exercises.firstIndex(where: { $0.id == exerciseStateID }),
       let slotIndex = exercises[exerciseIndex].slots.firstIndex(where: { $0.id == slotID })
@@ -320,12 +321,9 @@ public final class SessionCoordinator {
     guard !slot.isLogged else { return true }
 
     do {
-      // Read history BEFORE writing. Querying afterwards would include the set being tested, so
-      // a new best would be compared against itself and could never win.
-      let priorHistory =
-        (try? store.completedSets(for: exercise.progressionKey)) ?? []
-
-      let setID = try store.logSet(
+      // The Store compares complete benchmarks before insertion, within the save
+      // transaction. Claims are returned only after the transaction commits.
+      let saved = try store.logSet(
         sessionID: sessionID,
         exerciseID: exercise.exerciseID,
         machineID: exercise.machineID,
@@ -337,24 +335,15 @@ public final class SessionCoordinator {
         // slots are renumbered, so a slot-index ordinal reissues one that is already taken.
         setOrdinal: nil,
         isWarmup: slot.isWarmup,
+        recordIncrement: exercise.machineIncrementKg,
         at: now()
       )
-      exercises[exerciseIndex].markLogged(slotID: slotID, setID: setID)
+      exercises[exerciseIndex].markLogged(slotID: slotID, setID: saved.setID)
       lastError = nil
 
       // Records are announced only after a successful write, for the same reason the check mark
       // is: a celebration for a set that was not saved is worse than no celebration.
-      if let resolved = slot.draft.resolved() {
-        lastRecords = PersonalRecordDetector.records(
-          for: .init(
-            weightKg: resolved.weightKg, reps: resolved.reps, isWarmup: slot.isWarmup
-          ),
-          history: priorHistory,
-          increment: exercise.machineIncrementKg
-        )
-      } else {
-        lastRecords = []
-      }
+      lastRecords = saved.records
 
       // Warm-ups do not start a rest timer: the user is still warming up.
       if let restAfterSet, !slot.isWarmup {

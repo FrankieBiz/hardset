@@ -120,3 +120,47 @@ The requested architectural review is documented. No production Swift source or 
   Remaining broader work includes machine prefill provenance, recovery consistency,
   local-write validation, rest persistence/reconciliation, sync ownership, and native
   Release performance traces. See loading document and architectural review.
+
+## Complete record comparisons follow-up — 2026-11-07
+
+- Full-app objective stays active, same worktree/branch.
+- Production logging no longer calls capped `completedSets`. Store's internal
+  log overload selects at most 14 actual all-time comparison sets before insertion
+  inside the same write transaction, then returns claims only after commit.
+  The public SetID-only API delegates without collecting comparisons.
+- Comparisons preserve heaviest weight, highest reps within Core's exact load
+  tolerance, and best eligible weight at each estimable rep count. Core retains
+  the formula/eligibility constants; shared tolerance prevents divergent filters.
+- Added `v4_recordComparisons` with partial non-unique rep/load index; previous
+  migrations unchanged. Scalar SQL MAX replaces the per-tap ordinal row array.
+- Coordinator clears stale records on each log attempt. Failed saves cannot
+  publish comparisons or start rest; a malformed historical date suppresses
+  claims while the valid new set can still save.
+- Owned paths: Core `PersonalRecords.swift`; Store `LoggerStore.swift`,
+  `Migrations.swift`, `SessionCoordinator.swift`; Store tests `LoggerStoreTests`,
+  `SessionCoordinatorTests`, `HistoryStoreTests`; query benchmark; loading doc;
+  this handoff.
+- Red/green: all three record kinds were falsely claimed beyond the 1,000-row cap;
+  a failed save retained a stale previous celebration. Fixed and verified.
+  Differential checks cover 65 candidates and require genuine records of every
+  kind. Native SQL tracing verifies atomicity, warm-up read skipping, and all
+  twelve indexed rep queries. Upgrade/reopen tests cover current v1/v2/v3.
+- Verification: `make check` passed: 90 files, 172 Core tests, 62 Store tests in
+  five local suites, seven SQL-plan checks. Project/scheme generation identical.
+  Supplemental Store run including existing `RecordDetectionTests.swift` passed
+  72 tests in six suites. Used `runpy.run_path` on installed
+  `/home/frankbiz/.local/share/hardset-tooling/checks/hardset_check.py`, appended
+  `('RecordDetectionTests.swift',)` in `test.__globals__['STORE_TESTS']`, and invoked
+  `main()` with argv `['hardset-check', 'store']`. No installed tooling was edited.
+- Test development: the initial emitted-SQL test filter assumed no parentheses
+  around the reps column. Two runs (the second with a targeted fixture SQL trace)
+  identified the real form `("loggedSets"."reps") = (12)`. Corrected the filter,
+  removed `[DEBUG-record-sql]` instrumentation, and passed the full gate.
+- Limits: native app/widget, CloudKit, AlarmKit, physical-device timing, whole-tap
+  latency, index write/storage costs, and historically different v1 upgrades remain
+  unverified. Single indexed rep query measured 0.241 -> 0.003 ms on Linux;
+  do not present this as a total logging or launch latency improvement.
+- Next concrete code work: validate local writes against closed/missing sessions,
+  mismatched plan/exercise/machine references, and missing machine-update rows.
+  Continue provenance/next-set prefill fixes, progression completeness, consistent
+  recovery reads, durable rest reconciliation, sync ownership, and native profiling.

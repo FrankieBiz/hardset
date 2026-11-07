@@ -138,6 +138,75 @@ struct LoggerStoreTests {
 
   // MARK: - Duration
 
+  @Test("Compact record comparisons agree with complete-history detection across load and rep boundaries")
+  func compactRecordsMatchFullHistory() throws {
+    let database = try migratedDatabase()
+    let store = LoggerStore(database: database)
+    let exercise = try seedExercise(database)
+    let session = try store.startSession(at: start)
+    let weights: [Double] = [0, 50, 99.99, 99.995, 100, 100.005, 100.01, 100.015, 110, 999, 1000, 1001]
+    let historicalReps = [12, 12, 8, 8, 8, 9, 10, 7, 1, 13, 20, 1]
+    try database.write { db in
+      for (ordinal, weight) in weights.enumerated() {
+        try LoggedSet.insert {
+          LoggedSet.Draft(sessionID: session.rawValue, exerciseID: exercise.rawValue,
+                         setOrdinal: ordinal, weightKg: weight, reps: historicalReps[ordinal],
+                         completedAt: self.start)
+        }.execute(db)
+      }
+    }
+    let key = ProgressionKey(exerciseID: exercise)
+    var observedKinds = Set<PersonalRecordKind>()
+    for weight in weights + [1100] {
+      for reps in [1, 8, 12, 13, 21] {
+        let history = try store.completedSets(for: key, limit: Int.max)
+        let candidate = PersonalRecordDetector.Candidate(weightKg: weight, reps: reps)
+        let expected = PersonalRecordDetector.records(for: candidate, history: history, increment: 2.5)
+        let saved = try store.logSet(
+          sessionID: session, exerciseID: exercise,
+          draft: SetEntryDraft(weightKg: weight, reps: reps),
+          recordIncrement: 2.5, at: start.addingTimeInterval(100)
+        )
+        #expect(saved.records == expected, "Mismatch at \(weight) kg × \(reps)")
+        observedKinds.formUnion(expected.map(\.kind))
+      }
+    }
+    #expect(observedKinds == Set(PersonalRecordKind.allCases))
+  }
+
+  @Test("Real record-comparison point queries use the rep index without sorting history")
+  func recordPointQueriesUseIndex() throws {
+    let database = try migratedDatabase()
+    let store = LoggerStore(database: database)
+    let exercise = try seedExercise(database)
+    let session = try store.startSession(at: start)
+    _ = try store.logSet(sessionID: session, exerciseID: exercise,
+                         draft: SetEntryDraft(weightKg: 100, reps: 8), at: start)
+    let statements = Mutex<[String]>([])
+    try database.writeWithoutTransaction { db in
+      db.trace { event in
+        if case .statement(let statement) = event, statement.sql.hasPrefix("SELECT") {
+          statements.withLock { $0.append(statement.expandedSQL) }
+        }
+      }
+    }
+    _ = try store.logSet(sessionID: session, exerciseID: exercise,
+                         draft: SetEntryDraft(weightKg: 110, reps: 8),
+                         recordIncrement: nil, at: start.addingTimeInterval(60))
+    let pointQueries = statements.withLock { $0.filter { $0.contains("\"reps\") =") } }
+    #expect(pointQueries.count == StrengthMath.maximumEstimableReps)
+    try database.read { db in
+      for query in pointQueries {
+        let plan = try Row.fetchAll(db, sql: "EXPLAIN QUERY PLAN " + query)
+          .compactMap { $0["detail"] as String? }
+        let usesRepIndex = plan.contains { $0.contains("loggedSets_on_workingReps") }
+        let sortsHistory = plan.contains { $0.contains("TEMP B-TREE") }
+        #expect(usesRepIndex)
+        #expect(!sortsHistory)
+      }
+    }
+  }
+
   @Test("Finishing stores an instant, and duration is derived from the two instants")
   func finishDerivesDuration() throws {
     let database = try migratedDatabase()

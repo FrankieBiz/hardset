@@ -137,22 +137,54 @@ public nonisolated struct LoggerStore {
     rpe: Double? = nil,
     at completedAt: Date
   ) throws -> SetID {
+    try logSet(
+      sessionID: sessionID, exerciseID: exerciseID, machineID: machineID,
+      sessionExerciseID: sessionExerciseID, draft: draft, setOrdinal: setOrdinal,
+      isWarmup: isWarmup, rpe: rpe, recordIncrement: nil, detectingRecords: false,
+      at: completedAt
+    ).setID
+  }
+
+  /// Selects all-time comparisons and saves under the same write transaction.
+  /// History-read failures suppress claims; the set save is still attempted.
+  func logSet(
+    sessionID: SessionID,
+    exerciseID: ExerciseID,
+    machineID: MachineID? = nil,
+    sessionExerciseID: UUID? = nil,
+    draft: SetEntryDraft,
+    setOrdinal: Int? = nil,
+    isWarmup: Bool = false,
+    rpe: Double? = nil,
+    recordIncrement: Double?,
+    detectingRecords: Bool = true,
+    at completedAt: Date
+  ) throws -> (setID: SetID, records: [PersonalRecord]) {
     guard let resolved = draft.resolved() else {
       throw LoggerStoreError.incompleteSet
     }
     let id = SetID()
+    var records: [PersonalRecord] = []
     try database.write { db in
+      if detectingRecords, !isWarmup {
+        let candidate = PersonalRecordDetector.Candidate(weightKg: resolved.weightKg, reps: resolved.reps)
+        let key = ProgressionKey(exerciseID: exerciseID, machineID: machineID)
+        // These are real representative sets, not a recent sample. A failed
+        // comparison read cannot justify a claim, but must not lose a workout.
+        if let history = try? Self.recordComparisonSets(in: db, for: key, candidate: candidate) {
+          records = PersonalRecordDetector.records(for: candidate, history: history, increment: recordIncrement)
+        }
+      }
       // Derived inside the write, so two sets logged in quick succession cannot collide.
       let ordinal: Int
       if let setOrdinal {
         ordinal = setOrdinal
       } else {
-        let existing = try LoggedSet
+        let existing: Int? = try LoggedSet
           .where { $0.sessionID.eq(sessionID.rawValue) }
           .where { $0.exerciseID.eq(exerciseID.rawValue) }
-          .fetchAll(db)
-          .map(\.setOrdinal)
-          .max()
+          .select { $0.setOrdinal.max() }
+          .fetchOne(db) ?? nil
         ordinal = (existing ?? -1) + 1
       }
       try LoggedSet.insert {
@@ -172,7 +204,52 @@ public nonisolated struct LoggerStore {
       }
       .execute(db)
     }
-    return id
+    return (id, records)
+  }
+
+  /// At most 14 actual sets preserve every comparison the Core detector makes:
+  /// all-time load, reps near the candidate load, and the best load at each
+  /// estimable rep count. The estimate formula remains solely in HardsetCore.
+  private static func recordComparisonSets(
+    in db: Database,
+    for key: ProgressionKey,
+    candidate: PersonalRecordDetector.Candidate
+  ) throws -> [PriorSetRecord] {
+    let machineID = key.machineID?.rawValue
+    let history = LoggedSet
+      .where { $0.exerciseID.eq(key.exerciseID.rawValue) }
+      .where { $0.machineID.is(machineID) }
+      .where { !$0.isWarmup }
+    var comparisons: [PriorSetRecord] = []
+    let heaviest = try history
+      .order { ($0.weightKg.desc(), $0.reps.desc(), $0.completedAt.desc(), $0.id.desc()) }
+      .limit(1).fetchOne(db)
+    guard let heaviest else { return [] }
+    comparisons.append(record(from: heaviest))
+
+    let tolerance = PersonalRecordDetector.loadMatchingTolerance
+    // Widen the indexed interval by one representable value. The exact abs
+    // predicate preserves the detector's floating-point boundary semantics.
+    let lower = (candidate.weightKg - tolerance).nextDown
+    let upper = (candidate.weightKg + tolerance).nextUp
+    let mostReps = try history
+      .where { $0.weightKg >= lower && $0.weightKg <= upper }
+      .where { #sql("abs(\($0.weightKg) - \(candidate.weightKg)) < \(tolerance)", as: Bool.self) }
+      .order { $0.reps.desc() }
+      .limit(1).fetchOne(db)
+    if let mostReps { comparisons.append(record(from: mostReps)) }
+
+    if StrengthMath.estimatedOneRepMax(weightKg: candidate.weightKg, reps: candidate.reps).value != nil {
+      for reps in 1...StrengthMath.maximumEstimableReps {
+        let bestAtReps = try history
+          .where { $0.reps.eq(reps) }
+          .where { $0.weightKg > 0 && $0.weightKg <= StrengthMath.implausibleWeightKg }
+          .order { $0.weightKg.desc() }
+          .limit(1).fetchOne(db)
+        if let bestAtReps { comparisons.append(record(from: bestAtReps)) }
+      }
+    }
+    return comparisons
   }
 
   /// Stack increments for the given machines, keyed by id.
@@ -286,11 +363,11 @@ public nonisolated struct LoggerStore {
     }
   }
 
-  /// Every completed working set for one exercise-and-machine, newest first.
+  /// Recent completed working sets for one exercise-and-machine, newest first.
   ///
-  /// Used for record detection, which needs the all-time best rather than the most recent
-  /// session. Warm-ups are excluded in SQL: a heavy warm-up is not a record and not a benchmark.
-  /// Bounded, so a lifter with years of history does not pay for it on the tap path.
+  /// A bounded browsing API, not an all-time record source. Record detection uses
+  /// compact complete comparisons in the logging transaction instead. Warm-ups
+  /// are excluded in SQL.
   public func completedSets(
     for key: ProgressionKey,
     limit: Int = 1_000

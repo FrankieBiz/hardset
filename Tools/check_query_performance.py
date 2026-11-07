@@ -41,6 +41,10 @@ QUERIES = {
         'SELECT * FROM loggedSets WHERE exerciseID = ? AND machineID IS NULL AND NOT isWarmup AND sessionID IS NOT ? ORDER BY weightKg DESC, reps DESC, completedAt DESC, id DESC LIMIT 1',
         ("exercise-3", "session-100"),
     ),
+    "record best at reps": (
+        'SELECT * FROM loggedSets WHERE exerciseID = ? AND machineID IS NULL AND NOT isWarmup AND reps = ? AND weightKg > 0 AND weightKg <= ? ORDER BY weightKg DESC LIMIT 1',
+        ("exercise-3", 8, 1000),
+    ),
 }
 
 

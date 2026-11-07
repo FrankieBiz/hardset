@@ -19,7 +19,7 @@ struct HistoryStoreTests {
   }
 
   @Test("Loading indexes upgrade existing databases without changing workout rows",
-        arguments: ["v1", "v2_loadingIndexes"])
+        arguments: ["v1", "v2_loadingIndexes", "v3_historyBenchmarks"])
   func loadingIndexUpgrade(from baseline: String) throws {
     let queue = try DatabaseQueue()
     let migrator = HardsetMigrations.migrator()
@@ -43,6 +43,7 @@ struct HistoryStoreTests {
         "loggedSets_on_exerciseID_machineID_completedAt", "loggedSets_on_sessionID_setOrdinal",
         "sessionExercises_on_sessionID_position",
         "loggedSets_on_workingBenchmark",
+        "loggedSets_on_workingReps",
       ] {
         #expect(indexes.contains(name), "Missing loading index: \(name)")
         let isUnique = try Bool.fetchOne(db, sql: "SELECT \"unique\" FROM pragma_index_list('loggedSets') WHERE name = ?", arguments: [name])

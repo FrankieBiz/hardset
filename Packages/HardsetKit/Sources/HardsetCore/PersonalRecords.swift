@@ -65,6 +65,8 @@ public struct PersonalRecord: Sendable, Hashable, Identifiable {
 public enum PersonalRecordDetector {
   /// Minimum relative improvement before a heavier load counts.
   public static let relativeThreshold = 0.025
+  /// Matching tolerance shared with the Store's indexed comparison selection.
+  public static let loadMatchingTolerance = 0.01
 
   /// A completed set being tested.
   public struct Candidate: Sendable, Hashable {
@@ -84,6 +86,9 @@ public enum PersonalRecordDetector {
   /// - Parameters:
   ///   - history: Every previously completed working set for the same exercise-and-machine.
   ///     Warm-ups should not be included; they are not records and not benchmarks.
+  ///     A compact selection is equivalent when it preserves the all-time heaviest
+  ///     set, best reps at the candidate load, and best evaluable load at each rep
+  ///     count. An arbitrary recent sample cannot justify an all-time claim.
   ///   - increment: The smallest step the equipment actually moves in, so a record on a 5 kg
   ///     stack needs a genuine 5 kg rather than a rounding artefact.
   public static func records(
@@ -114,7 +119,7 @@ public enum PersonalRecordDetector {
     }
 
     // Most reps at this exact load.
-    let atSameLoad = history.filter { abs($0.weightKg - candidate.weightKg) < 0.01 }
+    let atSameLoad = history.filter { abs($0.weightKg - candidate.weightKg) < loadMatchingTolerance }
     if let bestReps = atSameLoad.map(\.reps).max(), candidate.reps > bestReps {
       records.append(
         PersonalRecord(

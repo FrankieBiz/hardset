@@ -128,6 +128,53 @@ five local suites, and six large-fixture query-plan checks. Project/scheme
 regeneration is byte-identical. SwiftUI, CloudKit, AlarmKit and device performance
 remain outside these Linux checks.
 
+## Verified record-detection milestone — 2026-11-07
+
+Logging no longer uses the most recent 1,000 sets as an all-time record source.
+Within the set's write transaction, Store selects at most fourteen actual
+comparison sets: the heaviest working set, the most reps within the candidate
+load tolerance, and the heaviest eligible load at each of the twelve estimable
+rep counts. For a fixed rep count the estimate is monotonic in load, so these
+representatives preserve all three comparisons made by the existing Core
+detector. The estimate formula and eligibility constants remain in Core.
+
+The load-tolerance predicate is shared with Core. The SQL weight interval is
+widened by one representable value before applying the exact absolute-difference
+predicate, preserving floating-point behavior at the tolerance boundary.
+`v4_recordComparisons` adds a non-unique partial index for rep/load point queries;
+v1 through v3 remain intact. Warm-ups skip record reads, and empty history stops
+after the initial benchmark probe. Set-ordinal assignment now reads one SQL
+maximum instead of decoding all earlier sets in the exercise.
+
+Comparison reads occur before insertion under the same write transaction, so
+another writer cannot insert a competing benchmark between comparison and save.
+The coordinator publishes returned claims only after commit, and clears old
+claims on each log attempt. A failed save leaves no checkmark or new rest timer.
+A comparison decoding error suppresses claims and still attempts the set save;
+an unreadable old date was tested while a new valid set saved successfully.
+`completedSets` remains a bounded browsing API and is no longer called by the
+production record-detection path.
+
+Tests reproduced false heaviest-load, reps-at-load, and estimated-max claims
+when their real benchmarks predated a thousand newer sets. They now pass.
+A separate failed-save test reproduced a stale prior celebration and now passes.
+Differential tests compare compact selection with complete-history detection
+across 65 sequential candidates, including tolerance boundaries, zero load,
+eligible/ineligible rep counts, and estimate weight boundaries. The test requires
+genuine records in all three categories rather than accepting only empty results.
+SQL tracing verifies comparison reads share the save transaction, and native
+query-plan checks verify all twelve emitted rep queries use the new index without
+sorting history.
+
+`make check` passed: 90 Swift files parsed, 172 Core tests, 62 Store tests across
+five local suites, and seven query-plan checks. A supplemental run adding the
+existing `RecordDetectionTests.swift` passed 72 Store tests across six suites;
+that file remains outside the installed checker's default five-suite list.
+Upgrade/reopen tests pass from current v1, v2, and v3 databases. Project/scheme
+regeneration is byte-identical. The single best-at-reps SQL query measured
+0.241 ms before loading indexes versus 0.003 ms after in the 100,000-set fixture;
+this does not measure total logging latency or device performance.
+
 ## Remaining app-wide work
 
 - Capture Release cold/warm launch, first usable workout, resume, picker, history,
@@ -138,9 +185,8 @@ remain outside these Linux checks.
   in `HardsetApp.init`; profile then move measured blocking work off the main actor
   with cancellation and consistent snapshot semantics.
 - Measure first-launch index creation and ongoing set-write/storage overhead.
-- Address complete record-detection queries (the tap path still reads a capped
-  1,000-set sample), progression-chart row limits, machine provenance, consistent
-  recovery reads, and write validation from
+- Address progression-chart row limits, machine provenance, consistent recovery
+  reads, and write validation from
   `CORE_STORE_ARCHITECTURE_REVIEW.md`; do not trade correctness for smaller reads.
 - Verify earliest shipped v1 fixtures: this index migration does not repair
   historical edits to v1 columns or debug schema-erasure behavior identified in

@@ -185,6 +185,139 @@ struct SessionCoordinatorTests {
 
   // MARK: - Logging order
 
+  @Test("All-time record claims retain benchmarks older than a thousand sets",
+        arguments: PersonalRecordKind.allCases)
+  func recordsKeepOlderBenchmarks(kind: PersonalRecordKind) throws {
+    let database = try migratedDatabase()
+    let store = LoggerStore(database: database)
+    let exercise = try seedExercise(database)
+    let past = try store.startSession(at: start.addingTimeInterval(-10000))
+    let oldWeight: Double = kind == .heaviestLoad ? 200 : 100
+    let recentWeight: Double = kind == .repsAtLoad ? 100 : 50
+    try database.write { db in
+      try LoggedSet.insert {
+        LoggedSet.Draft(sessionID: past.rawValue, exerciseID: exercise.rawValue,
+                       weightKg: oldWeight, reps: 12, completedAt: self.start.addingTimeInterval(-10000))
+      }.execute(db)
+      for ordinal in 1...1001 {
+        try LoggedSet.insert {
+          LoggedSet.Draft(sessionID: past.rawValue, exerciseID: exercise.rawValue,
+                         setOrdinal: ordinal, weightKg: recentWeight, reps: 5,
+                         completedAt: self.start.addingTimeInterval(Double(ordinal) - 9000))
+        }.execute(db)
+      }
+    }
+    try store.finishSession(past, at: start.addingTimeInterval(-1000))
+    let live = try SessionCoordinator.start(
+      store: store,
+      plan: [PlannedExercise(exerciseID: exercise, exerciseName: "Leg Press")],
+      now: { self.start }
+    )
+    let state = live.exercises[0]
+    live.exercises[0].slots[0].draft = SetEntryDraft(
+      weightKg: kind == .repsAtLoad ? 100 : 110, reps: kind == .repsAtLoad ? 10 : 3
+    )
+    let logged = live.logSet(slotID: state.slots[0].id, inExercise: state.id)
+    #expect(logged)
+    let claimed = live.lastRecords.contains { $0.kind == kind }
+    #expect(!claimed)
+  }
+
+  @Test("A failed set save cannot publish a new record or leave the previous celebration visible")
+  func failedSaveDoesNotAnnounceRecords() throws {
+    let database = try migratedDatabase()
+    let store = LoggerStore(database: database)
+    let exercise = try seedExercise(database)
+    let previous = try store.startSession(at: start.addingTimeInterval(-1000))
+    _ = try store.logSet(sessionID: previous, exerciseID: exercise,
+                         draft: SetEntryDraft(weightKg: 90, reps: 8), at: start.addingTimeInterval(-900))
+    try store.finishSession(previous, at: start.addingTimeInterval(-500))
+    let spy = RestSpy()
+    let live = try SessionCoordinator.start(
+      store: store,
+      plan: [PlannedExercise(exerciseID: exercise, exerciseName: "Leg Press", plannedSets: 2)],
+      now: { self.start }, restAfterSet: .seconds(60),
+      onStartRest: { spy.requests.append(($0, $1)) }
+    )
+    let state = live.exercises[0]
+    live.exercises[0].slots[0].draft = SetEntryDraft(weightKg: 100, reps: 8)
+    #expect(live.logSet(slotID: state.slots[0].id, inExercise: state.id))
+    #expect(!live.lastRecords.isEmpty)
+    try database.write { db in
+      try db.execute(sql: """
+        CREATE TEMP TRIGGER refuse_set BEFORE INSERT ON loggedSets BEGIN
+          SELECT RAISE(ABORT, 'injected set save failure');
+        END
+        """)
+    }
+    live.exercises[0].slots[1].draft = SetEntryDraft(weightKg: 110, reps: 8)
+    #expect(!live.logSet(slotID: state.slots[1].id, inExercise: state.id))
+    #expect(live.lastRecords.isEmpty)
+    #expect(!live.exercises[0].slots[1].isLogged)
+    #expect(live.lastError != nil)
+    #expect(spy.requests.count == 1)
+    #expect(try store.sets(in: live.sessionID).count == 1)
+  }
+
+  @Test("Record comparison reads and the set save share one transaction",
+        arguments: [false, true])
+  func comparisonsShareSaveTransaction(isWarmup: Bool) throws {
+    let database = try migratedDatabase()
+    let store = LoggerStore(database: database)
+    let exercise = try seedExercise(database)
+    let live = try SessionCoordinator.start(
+      store: store, plan: [PlannedExercise(exerciseID: exercise, exerciseName: "Press")],
+      now: { self.start }
+    )
+    let state = live.exercises[0]
+    live.exercises[0].slots[0].draft = SetEntryDraft(weightKg: 100, reps: 8)
+    live.exercises[0].slots[0].isWarmup = isWarmup
+    let statements = Mutex<[String]>([])
+    try database.writeWithoutTransaction { db in
+      db.trace { event in
+        if case .statement(let statement) = event {
+          statements.withLock { $0.append(statement.sql) }
+        }
+      }
+    }
+    #expect(live.logSet(slotID: state.slots[0].id, inExercise: state.id))
+    let sql = statements.withLock { $0 }
+    let begin = try #require(sql.firstIndex { $0.hasPrefix("BEGIN IMMEDIATE") })
+    let commit = try #require(sql.lastIndex { $0 == "COMMIT TRANSACTION" || $0 == "COMMIT" })
+    let reads = sql.indices.filter { sql[$0].hasPrefix("SELECT") }
+    let readsInsideSave = reads.allSatisfy { $0 > begin && $0 < commit }
+    #expect(readsInsideSave)
+    // An empty history needs one benchmark probe; warm-ups need none. Both
+    // paths read one scalar maximum to assign the next set ordinal.
+    #expect(reads.count == (isWarmup ? 1 : 2))
+  }
+
+  @Test("Unreadable record history suppresses claims while a valid new set still saves")
+  func unreadableRecordHistoryDoesNotLoseSet() throws {
+    let database = try migratedDatabase()
+    let store = LoggerStore(database: database)
+    let exercise = try seedExercise(database)
+    let past = try store.startSession(at: start.addingTimeInterval(-1000))
+    _ = try store.logSet(sessionID: past, exerciseID: exercise,
+                         draft: SetEntryDraft(weightKg: 100, reps: 8), at: start.addingTimeInterval(-900))
+    let live = try SessionCoordinator.start(
+      store: store, plan: [PlannedExercise(exerciseID: exercise, exerciseName: "Press")],
+      now: { self.start }
+    )
+    // A bad imported date makes full comparison-row decoding fail. The new
+    // set and its scalar ordinal lookup remain independently readable/writable.
+    try database.write { db in
+      try db.execute(sql: "UPDATE loggedSets SET completedAt = 'unreadable' WHERE sessionID = ?",
+                     arguments: [past.rawValue.uuidString.lowercased()])
+    }
+    let state = live.exercises[0]
+    live.exercises[0].slots[0].draft = SetEntryDraft(weightKg: 110, reps: 8)
+    #expect(live.logSet(slotID: state.slots[0].id, inExercise: state.id))
+    #expect(live.lastRecords.isEmpty)
+    #expect(live.exercises[0].slots[0].isLogged)
+    #expect(try store.sets(in: live.sessionID).count == 1)
+  }
+
   @Test("A successful write marks the row and requests rest")
   func successMarksAndRests() throws {
     let database = try migratedDatabase()

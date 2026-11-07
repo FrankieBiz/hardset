@@ -372,6 +372,18 @@ public nonisolated enum HardsetMigrations {
       .execute(db)
     }
 
+    migrator.registerMigration("v4_recordComparisons") { db in
+      // Bounded point lookups for the best evaluable load at each rep count.
+      try #sql(
+        """
+        CREATE INDEX "loggedSets_on_workingReps"
+          ON "loggedSets"("exerciseID", "machineID", "reps", "weightKg" DESC)
+          WHERE NOT "isWarmup"
+        """
+      )
+      .execute(db)
+    }
+
     return migrator
   }
 }
