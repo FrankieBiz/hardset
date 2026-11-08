@@ -82,10 +82,20 @@ jobs:
             -destination 'platform=iOS Simulator,name=iPhone 17,OS=latest' \
             -only-testing:HardsetTests -only-testing:HardsetUITests \
             -skipMacroValidation -skipPackagePluginValidation \
+            -resultBundlePath app-screens/ui-tests.xcresult \
             CODE_SIGN_IDENTITY=- CODE_SIGN_STYLE=Manual DEVELOPMENT_TEAM= \
             2>&1 | tee ui-test.log | grep -E "error:|Test [Cc]ase|TEST (SUCCEEDED|FAILED)|Executed" || true
           ls -la app-screens
           grep -q "TEST SUCCEEDED" ui-test.log
+
+      # When the app dies under test, its crash report is the only explanation. Simulator crashes
+      # land in the host's DiagnosticReports.
+      - name: Collect crash reports
+        if: always()
+        run: |
+          mkdir -p app-screens/crashes
+          find "$HOME/Library/Logs/DiagnosticReports" -name 'Hardset*' -exec cp {} app-screens/crashes/ \; 2>/dev/null || true
+          ls -la app-screens/crashes
 
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         if: always()
