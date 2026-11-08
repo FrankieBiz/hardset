@@ -4,20 +4,21 @@
 
 SWIFT := $(shell which swift)
 PY := python3
+CHECK := $(PY) Tools/hardset_check.py
 
 check: ## Run honest Linux checks across all targets (parse syntax, Core suite, Store suite, query indexes, palette contrast)
-	hardset-check all
+	$(CHECK) all
 	$(PY) Tools/check_query_performance.py --require-indexes
 	$(PY) Tools/check_contrast.py
 
 check-core: ## Run HardsetCore unit test suite
-	hardset-check core
+	$(CHECK) core
 
 check-store: ## Run HardsetStore test suite (with SQLite UUID support)
-	hardset-check store
+	$(CHECK) store
 
 check-parse: ## Parse Swift syntax across all repository files
-	hardset-check parse
+	$(CHECK) parse
 
 check-contrast: ## Verify the HardsetUI palette meets DESIGN.md's 7:1 text and 3:1 control floors
 	$(PY) Tools/check_contrast.py

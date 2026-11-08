@@ -126,12 +126,18 @@ public struct SetRowView: View {
     .animation(Tokens.Motion.adaptive(Tokens.Motion.state, reduceMotion: reduceMotion), value: isLogged)
     .accessibilityElement(children: .combine)
     .accessibilityLabel(spokenLabel)
-    .accessibilityHint(draft.isLoggable ? "Double tap to log this set." : "Enter a weight and reps to log.")
-    .accessibilityAction(named: Text("Log set")) {
-      if draft.isLoggable && !isLogged { onLog() }
+    .accessibilityHint(isLogged ? "This set is saved." : (draft.isLoggable ? "Double tap to log this set." : "Enter a weight and reps to log."))
+    .accessibilityActions {
+      if !isLogged {
+        Button("Log set") { if draft.isLoggable { onLog() } }
+        Button("Edit weight") { beginEditing(.weight) }
+        Button("Edit reps") { beginEditing(.reps) }
+        if let step = machineIncrementKg, step.isFinite, step > 0 {
+          Button("Increase load by one machine step") { adjustLoad(by: step) }
+          Button("Decrease load by one machine step") { adjustLoad(by: -step) }
+        }
+      }
     }
-    .accessibilityAction(named: Text("Edit weight")) { beginEditing(.weight) }
-    .accessibilityAction(named: Text("Edit reps")) { beginEditing(.reps) }
     .sheet(item: $editing) { field in
       padSheet(for: field)
     }
@@ -139,8 +145,20 @@ public struct SetRowView: View {
     // suffix switched to "kg" while the number stayed in pounds, so a 60 kg set read "132.28 kg".
     // Editing that row would then have written 132.28 kg to storage — a wrong number the user
     // never typed. The draft is canonical kilograms, so reseeding from it is always correct.
-    .onChange(of: unit) { reseedBuffers() }
-    .onChange(of: draft) { if editing == nil { reseedBuffers() } }
+    .onChange(of: unit) { editing = nil; reseedBuffers() }
+    .onChange(of: isLogged) { if isLogged { editing = nil; reseedBuffers() } }
+    .onChange(of: draft) {
+      let bufferWeight = weightBuffer.value.map(unit.toKilograms)
+      let bufferReps = repsBuffer.value.map { Int($0) }
+      let loadChanged: Bool
+      if let saved = draft.weightKg, let displayed = bufferWeight {
+        loadChanged = abs(saved - displayed) > unit.toKilograms(0.005) + 1e-10
+      } else { loadChanged = draft.weightKg != bufferWeight }
+      if editing == nil || loadChanged || draft.reps != bufferReps {
+        editing = nil
+        reseedBuffers()
+      }
+    }
   }
 
   // MARK: - Layouts
@@ -211,16 +229,20 @@ public struct SetRowView: View {
 
   private func loadAdjustment(_ delta: Double) -> some View {
     let label = "\(delta < 0 ? "−" : "+")\(unit.fromKilograms(abs(delta)).formatted(.number.precision(.fractionLength(0...2)))) \(unit.abbreviation)"
-    return Button(label) {
-      guard let current = draft.weightKg else { return }
-      let updated = max(0, current + delta)
-      guard updated.isFinite else { return }
-      draft.weightKg = updated
-    }
+    return Button(label) { adjustLoad(by: delta) }
     .buttonStyle(HardsetButtonStyle(.secondary, size: .logger, fullWidth: true))
     .disabled(draft.weightKg == nil || (delta < 0 && draft.weightKg == 0))
     .accessibilityLabel("\(delta < 0 ? "Decrease" : "Increase") load by \(unit.fromKilograms(abs(delta)).formatted()) \(unit.abbreviation)")
     .sensoryFeedback(.selection, trigger: draft.weightKg)
+  }
+
+  private func adjustLoad(by delta: Double) {
+    guard !isLogged, let current = draft.weightKg else { return }
+    let updated = max(0, current + delta)
+    guard updated.isFinite else { return }
+    editing = nil
+    draft.weightKg = updated
+    reseedBuffers()
   }
 
   // MARK: - Pieces
@@ -383,8 +405,8 @@ public struct SetRowView: View {
   private func padSheet(for field: SetRowField) -> some View {
     let binding: Binding<NumericEntryBuffer> =
       field == .weight
-      ? Binding(get: { weightBuffer }, set: { weightBuffer = $0; pushToDraft() })
-      : Binding(get: { repsBuffer }, set: { repsBuffer = $0; pushToDraft() })
+      ? Binding(get: { weightBuffer }, set: { weightBuffer = $0; pushToDraft(.weight) })
+      : Binding(get: { repsBuffer }, set: { repsBuffer = $0; pushToDraft(.reps) })
 
     return ScrollView {
       NumericPad(
@@ -433,12 +455,15 @@ public struct SetRowView: View {
     editing = field
   }
 
-  /// Writes both buffers into the draft, converting display units back to canonical
-  /// kilograms. There is no `?? 0` here and there must never be one: an empty buffer's value
-  /// is `nil`, which makes the row not loggable, which is the correct outcome.
-  private func pushToDraft() {
-    draft.weightKg = weightBuffer.value.map(unit.toKilograms)
-    draft.reps = repsBuffer.value.map { Int($0) }
+  /// Writes only the field being edited. Editing reps must never round-trip an untouched
+  /// canonical load through a rounded pounds display. There is no `?? 0` here: an empty
+  /// buffer stays nil and cannot make a row loggable.
+  private func pushToDraft(_ field: SetRowField) {
+    guard !isLogged else { return }
+    switch field {
+    case .weight: draft.weightKg = weightBuffer.value.map(unit.toKilograms)
+    case .reps: draft.reps = repsBuffer.value.flatMap { Int(exactly: $0) }
+    }
   }
 
   private var spokenLabel: String {

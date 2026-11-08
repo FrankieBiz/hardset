@@ -45,7 +45,7 @@ jobs:
         run: |
           set -o pipefail
           swift test --package-path Packages/HardsetKit \
-            --filter 'CSVDocumentTests|SetCommandTests|DataTransferTests|RestJournalTests|ReceiptStoreTests|DeviceHealthStoreTests' \
+            --filter 'CSVDocumentTests|SetCommandTests|DataTransferTests|RestJournalTests|ReceiptStoreTests|DeviceHealthStoreTests|MachineIncrementTests|ProgressionStoreTests' \
             2>&1 | tee portable-feature-tests.log | tail -50
 
       - name: Build the app and widget for the iOS Simulator

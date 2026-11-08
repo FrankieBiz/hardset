@@ -107,6 +107,20 @@ public enum RestAlarmService {
     }
   }
 
+  /// OS stop/expiry changes drive reconciliation without a polling timer.
+  public static var updates: AsyncStream<Void> {
+    AsyncStream { continuation in
+      let task = Task {
+        for await _ in AlarmManager.shared.alarmUpdates {
+          guard !Task.isCancelled else { break }
+          continuation.yield(())
+        }
+        continuation.finish()
+      }
+      continuation.onTermination = { _ in task.cancel() }
+    }
+  }
+
   public static func contains(id: UUID) throws -> Bool {
     try AlarmManager.shared.alarms.contains { $0.id == id }
   }

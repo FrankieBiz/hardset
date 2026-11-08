@@ -58,7 +58,10 @@ private struct StartupView: View {
     .onChange(of: startup.resources != nil, initial: true) {
       guard let resources = startup.resources else { return }
       let journal = RestJournal(database: resources.database)
-      restTimer.configure(checkpoint: resources.restCheckpoint, save: journal.save)
+      switch resources.restCheckpoint {
+      case .success(let checkpoint): restTimer.configure(checkpoint: checkpoint, save: journal.save)
+      case .failure(let error): restTimer.configureRecoveryFailure(error, restore: journal.load, save: journal.save)
+      }
       timerReady = true
     }
   }

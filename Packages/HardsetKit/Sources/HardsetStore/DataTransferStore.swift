@@ -58,7 +58,7 @@ public nonisolated struct DataTransferStore: Sendable {
         let session = UUID()
         try Session.insert {
           Session.Draft(id: session, title: workout.title,
-            notes: "Imported from \(preview.source) • Unevaluated Machine",
+            notes: "Imported from \(preview.source) • Unevaluated Machine. \(preview.interpretation)",
             startedAt: workout.startedAt, finishedAt: workout.finishedAt)
         }.execute(db)
         var plans: [String: UUID] = [:]

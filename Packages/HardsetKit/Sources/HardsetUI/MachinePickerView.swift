@@ -29,6 +29,7 @@ public struct MachinePickerView: View {
   private let selected: MachineID?
   private let unit: WeightUnit
   private let onSelect: (MachineID?) -> Void
+  private let onEditIncrement: ((MachineID) -> Void)?
   private let onAddMachine: (() -> Void)?
 
   public init(
@@ -37,13 +38,15 @@ public struct MachinePickerView: View {
     selected: MachineID?,
     unit: WeightUnit = .kilograms,
     onSelect: @escaping (MachineID?) -> Void,
-    onAddMachine: (() -> Void)? = nil
+    onAddMachine: (() -> Void)? = nil,
+    onEditIncrement: ((MachineID) -> Void)? = nil
   ) {
     self.recent = recent
     self.others = others
     self.selected = selected
     self.unit = unit
     self.onSelect = onSelect
+    self.onEditIncrement = onEditIncrement
     self.onAddMachine = onAddMachine
   }
 
@@ -75,6 +78,11 @@ public struct MachinePickerView: View {
 
         if !others.isEmpty {
           machineSection("Also at this gym", options: others)
+        }
+
+        if let selected, let onEditIncrement {
+          Button("Set this machine’s load step") { onEditIncrement(selected) }
+            .buttonStyle(HardsetButtonStyle(.secondary, size: .logger))
         }
 
         VStack(alignment: .leading, spacing: Tokens.Spacing.snug) {

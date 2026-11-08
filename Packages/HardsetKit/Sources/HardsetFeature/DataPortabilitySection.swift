@@ -45,6 +45,7 @@ struct DataPortabilitySection: View {
         Text("\(preview.sessions.count) workouts · \(preview.setCount) sets from \(preview.source)")
           .font(Tokens.Text.headline)
           .foregroundStyle(Tokens.Color.textPrimary)
+        Text(preview.interpretation).font(Tokens.Text.provenance).foregroundStyle(Tokens.Color.textSecondary)
         Text("Imported • Unevaluated Machine. Imported movements stay separate from your machine-specific history. Set times are unavailable and will be grouped at workout start. The original file is retained locally for duplicate detection and export.")
           .font(Tokens.Text.provenance)
           .foregroundStyle(Tokens.Color.textSecondary)

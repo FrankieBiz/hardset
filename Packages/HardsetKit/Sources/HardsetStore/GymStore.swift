@@ -100,6 +100,7 @@ public nonisolated struct GymStore: Sendable {
     stackIncrementKg: Double? = nil,
     now: Date = Date()
   ) throws -> MachineID {
+    try Self.validateIncrement(stackIncrementKg)
     let id = MachineID()
     try database.write { db in
       try Machine.insert {
@@ -112,6 +113,20 @@ public nonisolated struct GymStore: Sendable {
       .execute(db)
     }
     return id
+  }
+
+  /// Validate and persist before any logger state adopts the equipment constraint.
+  public func setStackIncrement(_ incrementKg: Double?, for id: MachineID, at gymID: GymID) throws {
+    try Self.validateIncrement(incrementKg)
+    try database.write { db in
+      try Machine.where { $0.id.eq(id.rawValue) && $0.gymID.eq(gymID.rawValue) && !$0.isArchived }
+        .update { $0.stackIncrementKg = #bind(incrementKg) }.execute(db)
+      guard db.changesCount == 1 else { throw MachineProfileError.machineUnavailable }
+    }
+  }
+
+  private static func validateIncrement(_ increment: Double?) throws {
+    if let increment, !increment.isFinite || increment <= 0 { throw MachineProfileError.invalidIncrement }
   }
 
   public func archiveMachine(_ id: MachineID) throws {
@@ -202,4 +217,8 @@ extension GymStore {
 public nonisolated struct GymSelection: Hashable, Sendable {
   public let options: [GymRecord]
   public let lastUsed: GymID?
+}
+
+public nonisolated enum MachineProfileError: Error, Equatable, Sendable {
+  case invalidIncrement, machineUnavailable
 }

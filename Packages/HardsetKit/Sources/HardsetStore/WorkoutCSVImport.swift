@@ -5,6 +5,7 @@ import HardsetCore
 public nonisolated struct WorkoutImportPreview: Sendable {
   public let source: String
   public let sessions: [Workout]
+  public let interpretation: String
   public let originalCSV: String
   public var setCount: Int { sessions.reduce(0) { $0 + $1.sets.count } }
 
@@ -105,7 +106,9 @@ public nonisolated enum WorkoutCSVImport {
         sessions.append(.init(title: title, startedAt: start, finishedAt: end, sets: [set]))
       }
     }
-    return .init(source: hevy ? "Hevy" : "Strong", sessions: sessions, originalCSV: text)
+    return .init(source: hevy ? "Hevy" : "Strong", sessions: sessions,
+      interpretation: "Unitless Strong loads interpreted as \(strongUnit.abbreviation). Dates without an offset interpreted in \(timeZone.identifier).",
+      originalCSV: text)
   }
 
   private static func date(_ text: String, timeZone: TimeZone) -> Date? {

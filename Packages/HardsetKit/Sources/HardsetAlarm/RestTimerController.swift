@@ -15,20 +15,31 @@ public final class RestTimerController {
   private var checkpoint = RestCheckpoint()
   private var save: ((RestCheckpoint) throws -> Void)?
   private var reconciliation: Task<Void, Never>?
+  private var observation: Task<Void, Never>?
   private var generation = 0
   private var configured = false
+  private var restore: (() throws -> RestCheckpoint)?
+  private var pendingTransition: (RestTimerState, RestMetadata?)?
 
   public init(operations: RestAlarmOperations = .live) { self.operations = operations }
 
-  /// Called once after the app opens its live writer. A failed journal read gates the
-  /// root screen, so it cannot silently replace a durable timer with a fresh idle one.
+  /// Called once after the app opens its live writer. A failed journal read blocks
+  /// timer commands until retry, while the saved workouts remain accessible.
   public func configure(checkpoint: RestCheckpoint, save: @escaping (RestCheckpoint) throws -> Void) {
     guard !configured else { return }
     configured = true
+    restore = nil
     self.save = save
     self.checkpoint = checkpoint
     state = checkpoint.state
     metadata = checkpoint.metadata
+    let updates = operations.updates()
+    observation = Task { [weak self] in
+      for await _ in updates {
+        guard let self else { return }
+        self.reconcile()
+      }
+    }
     reconcile()
   }
 
@@ -53,7 +64,25 @@ public final class RestTimerController {
   }
 
   public func cancel() { transition(to: .idle, metadata: nil) }
-  public func retry() { reconcile() }
+  public func configureRecoveryFailure(_ error: any Error,
+    restore: @escaping () throws -> RestCheckpoint, save: @escaping (RestCheckpoint) throws -> Void) {
+    guard !configured else { return }
+    self.restore = restore
+    self.save = save
+    lastError = error
+  }
+
+  public func retry() {
+    if let restore {
+      do {
+        let recovered = try restore()
+        guard let save else { return }
+        configure(checkpoint: recovered, save: save)
+      } catch { lastError = error }
+    } else if let pendingTransition {
+      transition(to: pendingTransition.0, metadata: pendingTransition.1)
+    } else { reconcile() }
+  }
 
   public func waitForReconciliation() async { await reconciliation?.value }
 
@@ -63,15 +92,19 @@ public final class RestTimerController {
     let updated = RestCheckpoint(state: state, metadata: metadata,
       alarmID: state.isRunning ? UUID() : nil, retiredAlarmIDs: Array(Set(retired)))
     do {
-      guard let save else { throw RestControllerError.journalUnavailable }
+      guard configured, let save else { throw RestControllerError.journalUnavailable }
       try save(updated)
+      pendingTransition = nil
       checkpoint = updated
       self.state = state
       self.metadata = metadata
       generation += 1
       lastError = nil
       reconcile()
-    } catch { lastError = error }
+    } catch {
+      if configured { pendingTransition = (state, metadata) }
+      lastError = error
+    }
   }
 
   private func reconcile() {
@@ -96,25 +129,38 @@ public final class RestTimerController {
         }
         if revision != generation { continue }
         let cleaned = RestCheckpoint(state: desired.state, metadata: desired.metadata,
-          alarmID: desired.alarmID, retiredAlarmIDs: [])
+          alarmID: desired.alarmID, scheduledAlarmID: desired.scheduledAlarmID, retiredAlarmIDs: [])
         try save?(cleaned)
         checkpoint = cleaned
         if case .running(let end) = desired.state, let id = desired.alarmID, let metadata = desired.metadata {
+          let exists = try operations.contains(id)
+          // Once an OS acknowledgement is durable, a missing alarm means it was stopped
+          // or removed. Do not resurrect a rest the user dismissed on the Lock Screen.
+          if desired.scheduledAlarmID == id, !exists {
+            transition(to: .idle, metadata: nil)
+            if revision != generation { continue }
+            return
+          }
           let remaining = end.timeIntervalSinceNow
           if remaining > 0 {
             if !operations.isAuthorized() {
               guard try await operations.requestAuthorization() else { throw RestControllerError.authorizationDenied }
               if revision != generation { continue }
             }
-            guard end > Date.now else { lastError = nil; return }
+            guard end > Date.now else { if pendingTransition == nil { lastError = nil }; return }
             // Relaunch keeps an existing alarm. A fresh request uses its already-journalled ID.
-            if try !operations.contains(id) {
+            if !exists {
               try await operations.schedule(id, .seconds(max(0, end.timeIntervalSinceNow)), metadata)
             }
+            if revision != generation { continue }
+            let acknowledged = RestCheckpoint(state: desired.state, metadata: desired.metadata,
+              alarmID: id, scheduledAlarmID: id, retiredAlarmIDs: [])
+            try save?(acknowledged)
+            checkpoint = acknowledged
           }
         }
         if revision != generation { continue }
-        lastError = nil
+        if pendingTransition == nil { lastError = nil }
         return
       } catch {
         if revision != generation { continue }
@@ -128,6 +174,7 @@ public final class RestTimerController {
 /// Injectable OS boundary for deterministic scheduling, cancellation and relaunch tests.
 @MainActor
 public struct RestAlarmOperations {
+  public let updates: () -> AsyncStream<Void>
   public let contains: (UUID) throws -> Bool
   public let cancel: (UUID) throws -> Void
   public let isAuthorized: () -> Bool
@@ -136,7 +183,9 @@ public struct RestAlarmOperations {
 
   public init(contains: @escaping (UUID) throws -> Bool, cancel: @escaping (UUID) throws -> Void,
     isAuthorized: @escaping () -> Bool, requestAuthorization: @escaping () async throws -> Bool,
-    schedule: @escaping (UUID, Duration, RestMetadata) async throws -> Void) {
+    schedule: @escaping (UUID, Duration, RestMetadata) async throws -> Void,
+    updates: @escaping () -> AsyncStream<Void> = { AsyncStream { $0.finish() } }) {
+    self.updates = updates
     self.contains = contains; self.cancel = cancel; self.isAuthorized = isAuthorized
     self.requestAuthorization = requestAuthorization; self.schedule = schedule
   }
@@ -146,7 +195,7 @@ public struct RestAlarmOperations {
       isAuthorized: { RestAlarmService.isAuthorized }, requestAuthorization: { try await RestAlarmService.requestAuthorization() },
       schedule: { id, duration, metadata in
         try await RestAlarmService.schedule(.init(id: id, duration: duration, metadata: metadata))
-      })
+      }, updates: { RestAlarmService.updates })
   }
 }
 

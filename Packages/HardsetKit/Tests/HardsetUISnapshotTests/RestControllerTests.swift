@@ -22,6 +22,44 @@ struct RestControllerTests {
     #expect(spy.scheduled.isEmpty)
   }
 
+  @Test("A failed mutation can retry its intended state")
+  func retryFailedWrite() async {
+    let spy = AlarmSpy()
+    let controller = RestTimerController(operations: spy.operations)
+    var fail = false
+    var saved: RestCheckpoint?
+    controller.configure(checkpoint: .init(), save: { value in
+      if fail { throw ProbeError.diskFull }
+      saved = value
+    })
+    await controller.waitForReconciliation()
+    fail = true
+    controller.start(duration: .seconds(120), metadata: metadata)
+    #expect(controller.state == .idle)
+    fail = false
+    controller.retry()
+    await controller.waitForReconciliation()
+    #expect(controller.state.isRunning)
+    #expect(saved?.state == controller.state)
+    #expect(spy.scheduled.count == 1)
+  }
+
+  @Test("Failed recovery blocks timer commands and later restores the saved state")
+  func retryRecovery() async {
+    let spy = AlarmSpy()
+    let controller = RestTimerController(operations: spy.operations)
+    let recovered = RestCheckpoint(state: .paused(remaining: .seconds(45)), metadata: metadata)
+    controller.configureRecoveryFailure(ProbeError.diskFull, restore: { recovered }, save: { _ in })
+    controller.start(duration: .seconds(120), metadata: metadata)
+    #expect(controller.lastError != nil)
+    #expect(controller.state == .idle)
+    #expect(spy.scheduled.isEmpty)
+    controller.retry()
+    await controller.waitForReconciliation()
+    #expect(controller.state == recovered.state)
+    #expect(controller.lastError == nil)
+  }
+
   @Test("A late schedule is canceled before the newest deadline is scheduled")
   func lateSchedule() async throws {
     let spy = AlarmSpy()
@@ -62,6 +100,20 @@ struct RestControllerTests {
     #expect(spy.active == [current])
     #expect(spy.scheduled.isEmpty)
     #expect(saved?.retiredAlarmIDs.isEmpty == true)
+  }
+
+  @Test("A previously acknowledged alarm stopped by the OS is not resurrected")
+  func stoppedBySystem() async {
+    let spy = AlarmSpy()
+    let id = UUID()
+    let controller = RestTimerController(operations: spy.operations)
+    var saved: RestCheckpoint?
+    controller.configure(checkpoint: .init(state: .running(endsAt: Date().addingTimeInterval(120)),
+      metadata: metadata, alarmID: id, scheduledAlarmID: id), save: { saved = $0 })
+    await controller.waitForReconciliation()
+    #expect(controller.state == .idle)
+    #expect(saved?.state == .idle)
+    #expect(spy.scheduled.isEmpty)
   }
 
   @Test("Pause survives relaunch without scheduling an OS countdown")

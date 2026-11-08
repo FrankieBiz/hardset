@@ -291,6 +291,11 @@ public struct ExerciseLogState: Hashable, Sendable, Identifiable {
     }
   }
 
+  /// Adopt an explicitly saved equipment constraint without re-prefilling any draft.
+  public mutating func updateMachineIncrement(_ incrementKg: Double?) {
+    machineIncrementKg = incrementKg
+  }
+
   /// Marks a row written. Ignores an unknown id rather than trapping — a stale callback from
   /// a dismissed view should not crash a workout.
   public mutating func markLogged(

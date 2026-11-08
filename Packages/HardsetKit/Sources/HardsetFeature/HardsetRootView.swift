@@ -89,6 +89,20 @@ public struct HardsetRootView: View {
   private var coordinator: SessionCoordinator? { model.coordinator }
 
   public var body: some View {
+    rootContent
+      .safeAreaInset(edge: .top) {
+        if hooks.hasError() {
+          VStack(spacing: Tokens.Spacing.snug) {
+            Text("Rest timer could not be recovered, saved or scheduled. Your workouts remain saved.")
+              .font(Tokens.Text.provenance).foregroundStyle(Tokens.Color.error)
+            Button("Retry rest timer", action: hooks.retry).buttonStyle(HardsetButtonStyle(.secondary))
+          }
+          .padding(Tokens.Spacing.regular).background(Tokens.Color.background)
+        }
+      }
+  }
+
+  @ViewBuilder private var rootContent: some View {
     Group {
       if model.isReady {
         tabs

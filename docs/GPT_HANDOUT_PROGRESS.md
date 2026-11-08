@@ -26,10 +26,10 @@ Acceptance criteria:
 | 1: Machine awareness | Existing exercise × machine keys retained. Receipt records use same-machine comparisons only. Imported movements use separate exercise identities and never seed a native machine benchmark. |
 | 1: Persistence | Existing atomic logging, recovery, no-erasure migrations and explicit account-change delegate retained. Stable set command IDs cover lost acknowledgements; conflicting payloads are rejected. |
 | 2: Package architecture | Existing targets preserved. `HardsetHealth` adds a platform seam for HealthKit; Core stays Foundation-only. Store owns portable Health persistence. Xcode project remains generated. |
-| 3: Invariants | No stored session duration or ticking countdown. New rest checkpoint contains the existing enum and absolute deadlines. New tables are local-only, introduced in v7/v8; no applied migration rewritten. |
+| 3: Invariants | No stored session duration or ticking countdown. New rest checkpoint contains the existing enum and absolute deadlines. New tables are local-only, introduced in v7/v8, with a local chart-order index in v9; no applied migration rewritten. |
 | 4: Gym-floor UI | Machine-increment inline load controls use canonical kilograms; keypad remains available for large edits. Logged values cannot be edited. Machine changes refresh idle display buffers. Existing first-key replacement behavior is retained. |
 | 5: Hardset Ledger | History opens a saved-set receipt with equipment labels, same-machine PRs, text sharing and a dark rendered image. Unknown/imported equipment produces no machine PR claims. Long receipts use text to avoid unbounded bitmap allocation. |
-| 5: Strong/Hevy migration | Settings provides UTF-8 CSV selection, explicit Strong unit context, validated preview and atomic import. Original timestamps/duration are retained; unavailable set completion times are disclosed as grouped at workout start. Exact-file repeat imports are refused on the same device. |
+| 5: Strong/Hevy migration | Settings provides UTF-8 CSV selection, explicit Strong unit context, validated preview and atomic import. Original timestamps/duration are retained; unavailable set completion times are disclosed as grouped at workout start. Supported loads are0–10,000 in the source unit and reps1–999; out-of-range rows are rejected. Exact-file repeat imports are refused on the same device. |
 | 5: Apple polish | Existing AlarmKit/Live Activity seam retained; rest journal and reconciliation added, along with explicit duration choices and visible retry. Native selection haptics confirm load adjustments. Apple Health read/write is opt-in in Settings. |
 | 5: Monetization | StoreKit non-consumable purchase/restore, verified entitlements, pending/canceled/error states and storefront price. Only the new deep muscle map checks access; existing gyms, logging, history, CSV import and every export remain free. No subscription. |
 | 6: Collaboration | No diagrams or attribution trailers. Existing architectural comments and test guarantees retained. New migration tests account for tables that did not exist in historical fixtures. |
@@ -77,16 +77,31 @@ cannot establish them:
   Health reads, exported workout retry behavior, pending/refunded purchases and
   purchase restoration in an Apple sandbox/TestFlight lane.
 - Confirm physical-device AlarmKit authorization, process death, Focus, background
-  scheduling, lock-screen pause/resume and expiry, plus two-account CloudKit retention.
+  scheduling, lock-screen stop/expiry and app pause/resume, plus two-account CloudKit retention.
 - Measure Release startup, logging and frame timings on a representative device;
   “zero latency” is a design aim, not a timing claim proven by these changes.
 
 ## Verification commands
 
 - `make check`
-- Expanded portable Store runner: exact-source copies, all portable test files,
-  pinned dependencies and official SQLite UUID extension. This session's wrapper is
-  `/tmp/hardset-extended-zoanthid.py`; it does not modify the installed checker.
+- `make check` now uses repository-owned `Tools/hardset_check.py`, selecting every
+  portable Store test automatically. Four named suites requiring the Apple-only
+  Database/SyncSetup implementations remain explicitly excluded on Linux. It reuses
+  the installed pinned toolchain/official UUID support (`HARDSET_TOOLING_ROOT` can
+  select its location). The installed global checker was not changed.
 - `python3 Tools/generate_project.py` and `git diff --check`
 - `.github/workflows/ios-ui.yml`: macOS package compile, new feature storage tests,
   iOS Simulator app/widget build, app test and screen/AlarmKit-controller suites.
+
+- Pause and resume are app commands so the journal commits before changing OS state.
+  The Lock Screen does not expose a daemon-only pause button that would bypass that
+  journal. A failed rest-journal read blocks only timer commands and exposes retry;
+  the training log and exports remain accessible. Failed mutations retain their
+  intended state for an explicit retry.
+- A machine’s load step can be entered or cleared from its picker. Saving it updates
+  active equipment constraints without re-prefilling drafts or changing saved loads.
+- Scheduling acknowledgement is durable. OS change notifications reconcile stop and
+  expiry; a previously acknowledged alarm that disappears is not recreated. A pending
+  unacknowledged request remains retryable after a process crash.
+- An unchanged displayed load step retains its original canonical precision. Reps-only
+  edits do not round-trip the untouched load through a rounded pounds display.

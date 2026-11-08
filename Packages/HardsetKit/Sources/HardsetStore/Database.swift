@@ -13,7 +13,7 @@ public nonisolated enum HardsetDatabase {
   public nonisolated struct Resources: Sendable {
     public let database: any DatabaseWriter
     public let syncEngine: SyncEngine
-    public let restCheckpoint: RestCheckpoint
+    public let restCheckpoint: Result<RestCheckpoint, any Error>
   }
 
   /// Blocking preparation for `AppStartup`'s dedicated queue. Publish neither
@@ -23,7 +23,7 @@ public nonisolated enum HardsetDatabase {
     let engine = try makeSyncEngine(
       for: database, delegate: HardsetSyncDelegate(), containerIdentifier: containerIdentifier
     )
-    return Resources(database: database, syncEngine: engine, restCheckpoint: try RestJournal(database: database).load())
+    return Resources(database: database, syncEngine: engine, restCheckpoint: Result { try RestJournal(database: database).load() })
   }
 
   /// Opens the on-disk database and runs migrations.

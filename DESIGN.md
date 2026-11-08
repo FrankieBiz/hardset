@@ -194,3 +194,8 @@ components rather than native spinners.
   columns at ordinary sizes and one at accessibility sizes. Unknown attribution
   keeps the lower-bound caveat; counted-only muscle tokens retain that disclosure.
   No new colour, radius, typography or motion token is introduced.
+- The machine picker’s load-step editor uses the existing numeric pad and an explicit
+  Save action. Blank means unknown. Changing a saved step preserves all current draft
+  values; logger VoiceOver actions expose the same one-step adjustments as the buttons.
+- Rest recovery failure appears above every tab and prevents new timer commands until
+  recovery succeeds. It does not block the workout database, personal history or export.

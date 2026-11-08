@@ -60,6 +60,7 @@ public struct RestTimerHooks {
 @MainActor
 public struct LiveSessionScreen: View {
   @State private var coordinator: SessionCoordinator
+  @State private var editingIncrement: MachineOption?
   @State private var restMetadata: RestMetadata?
   @State private var isPickerPresented = false
   /// Set when finishing failed and the session is still open, so the user is told rather than
@@ -151,16 +152,6 @@ public struct LiveSessionScreen: View {
       onShowSettings: onShowSettings,
       onFinish: finish
     )
-    .safeAreaInset(edge: .top) {
-      if hooks.hasError() {
-        VStack(spacing: Tokens.Spacing.snug) {
-          Text("Rest timer could not be saved or scheduled. Your logged sets are saved.")
-            .font(Tokens.Text.provenance).foregroundStyle(Tokens.Color.error)
-          Button("Retry rest timer", action: hooks.retry).buttonStyle(HardsetButtonStyle(.secondary))
-        }
-        .padding(Tokens.Spacing.regular).background(Tokens.Color.background)
-      }
-    }
     .sheet(isPresented: $isPickerPresented) {
       NavigationStack {
         ExercisePickerView(
@@ -199,13 +190,32 @@ public struct LiveSessionScreen: View {
             selectMachine(machineID, forExercise: target)
             machineTarget = nil
           },
-          onAddMachine: { isAddingMachine = true }
+          onAddMachine: { isAddingMachine = true },
+          onEditIncrement: { id in
+            editingIncrement = (machineOptions.recent + machineOptions.others).first { $0.id == id }
+          }
         )
         .hardsetNavigationTitle("Machine")
         .toolbar {
           ToolbarItem(placement: .cancellationAction) {
             Button("Cancel") { machineTarget = nil }
           }
+        }
+        .sheet(item: $editingIncrement) { machine in
+          LoadStepSheet(machineName: machine.displayName, incrementKg: machine.stackIncrementKg, unit: unit,
+            onSave: { increment in
+              guard let gyms, let gymID = coordinator.gymID else { return false }
+              do {
+                try gyms.setStackIncrement(increment, for: machine.id, at: gymID)
+                for index in coordinator.exercises.indices where coordinator.exercises[index].machineID == machine.id {
+                  coordinator.exercises[index].updateMachineIncrement(increment)
+                }
+                refreshMachines(forExercise: target)
+                editingIncrement = nil
+                return true
+              } catch { return false }
+            }, onCancel: { editingIncrement = nil })
+          .hardsetSheet()
         }
         // Named on the spot rather than in a setup flow, because the lifter is standing at the
         // machine right now and will not be later.

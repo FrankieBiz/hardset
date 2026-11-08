@@ -38,6 +38,12 @@
       }
     }
 
+    @Test func machineLoadStep() async throws {
+      try await Snapshot.capture("machine-step-pounds-375", size: Snapshot.narrow) {
+        LoadStepSheet(machineName: "Cybex Leg Press", incrementKg: 2.5, unit: .pounds, onSave: { _ in true }, onCancel: {})
+      }
+    }
+
     @Test func deepMuscleMap() async throws {
       let report = MuscleVolumeReport(fractionalSets: [MuscleKey(.chest): 8, MuscleKey(.triceps): 4],
         hardSets: 10, unattributedHardSets: 2, setsTouchingGroup: [:])

@@ -49,6 +49,7 @@ struct HealthSettingsSection: View {
           .font(Tokens.Text.provenance).foregroundStyle(Tokens.Color.error)
       }
     }
+    .onChange(of: unit) { bodyMass = "" }
   }
 }
 #endif
