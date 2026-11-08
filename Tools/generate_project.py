@@ -24,7 +24,7 @@ def oid(name):
 BUNDLE_ID = os.environ.get("HARDSET_BUNDLE_ID", "com.francisbisignano.hardset")
 IOS_MIN = "26.1"
 SWIFT_VERSION = "6.0"
-DEVELOPMENT_TEAM = os.environ.get("DEVELOPMENT_TEAM", "DG7KBJLSJ3")
+DEVELOPMENT_TEAM = os.environ.get("DEVELOPMENT_TEAM", "26XMKJFG8P")
 
 APP, WIDGET, TESTS = "Hardset", "HardsetWidget", "HardsetTests"
 # Drives the real app on the simulator: screenshots of every screen, including the system-drawn
