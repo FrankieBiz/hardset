@@ -738,3 +738,7 @@ The requested architectural review is documented. No production Swift source or 
   real device timing/interaction/accessibility checks. Native compile/render evidence
   above supersedes earlier blanket Apple-build-pending notes for this exact code;
   it does not prove signed CloudKit or AlarmKit behavior or physical-device performance.
+
+Ongoing after root integration: app-test coverage repair on branch
+`FrankieBiz/verify-app-smoke`; see [.agents/handoffs/app-smoke.md](handoffs/app-smoke.md).
+Main7acda12's repeat native run is42430194445; root code's native run42429147943 passed.
