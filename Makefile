@@ -1,6 +1,6 @@
 # Hardset Hypertrophy Logger — Multi-Model Orchestration & Verification Makefile
 .DEFAULT_GOAL := help
-.PHONY: check check-core check-store check-parse check-contrast project orchestrate-probe orchestrate-stats test help
+.PHONY: check check-core check-store check-parse check-contrast project install orchestrate-probe orchestrate-stats test help
 
 SWIFT := $(shell which swift)
 PY := python3
@@ -10,6 +10,9 @@ check: ## Run honest Linux checks across all targets (parse syntax, Core suite, 
 	$(CHECK) all
 	$(PY) Tools/check_query_performance.py --require-indexes
 	$(PY) Tools/check_contrast.py
+
+install: ## Build, sign, install, and launch Hardset on connected iPhone or Simulator (macOS)
+	./Tools/install_device.sh
 
 check-core: ## Run HardsetCore unit test suite
 	$(CHECK) core
