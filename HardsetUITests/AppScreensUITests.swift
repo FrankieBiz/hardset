@@ -160,6 +160,8 @@ final class AppScreensUITests: XCTestCase {
   /// again once the app is up -- a running app follows a live change.
   @MainActor
   private func launch(_ app: XCUIApplication, appearance: XCUIDevice.Appearance) {
+    // Keeps the app's stderr, so a runtime trap's message survives for CI to collect.
+    app.launchEnvironment["HARDSET_CAPTURE_STDERR"] = "1"
     XCUIDevice.shared.appearance = appearance
     Thread.sleep(forTimeInterval: 2)
     app.launch()

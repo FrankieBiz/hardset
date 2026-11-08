@@ -18,6 +18,19 @@ struct HardsetApp: App {
   /// methods as closures rather than importing it.
   @State private var restTimer = RestTimerController()
 
+  init() {
+    #if DEBUG
+      // For the UI tests only: a Swift runtime trap prints its reason to stderr, which a launched
+      // app does not keep. With this set, stderr goes to a file in the app's own temporary
+      // directory, where CI collects it. Absent in release builds.
+      if ProcessInfo.processInfo.environment["HARDSET_CAPTURE_STDERR"] == "1" {
+        let path = FileManager.default.temporaryDirectory.appendingPathComponent("stderr.log").path
+        let descriptor = open(path, O_WRONLY | O_CREAT | O_APPEND, 0o644)
+        if descriptor >= 0 { dup2(descriptor, STDERR_FILENO) }
+      }
+    #endif
+  }
+
   var body: some Scene {
     WindowGroup {
       StartupView(startup: startup, restTimer: restTimer)
