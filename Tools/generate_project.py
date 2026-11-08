@@ -24,6 +24,7 @@ def oid(name):
 BUNDLE_ID = "com.hardset.app"
 IOS_MIN = "26.1"
 SWIFT_VERSION = "6.0"
+DEVELOPMENT_TEAM = os.environ.get("DEVELOPMENT_TEAM", "DG7KBJLSJ3")
 
 APP, WIDGET, TESTS = "Hardset", "HardsetWidget", "HardsetTests"
 # Drives the real app on the simulator: screenshots of every screen, including the system-drawn
@@ -59,6 +60,7 @@ def build_settings(target):
         "SWIFT_EMIT_LOC_STRINGS": "YES",
         "TARGETED_DEVICE_FAMILY": "1",
         "CODE_SIGN_STYLE": "Automatic",
+        "DEVELOPMENT_TEAM": DEVELOPMENT_TEAM,
         "CURRENT_PROJECT_VERSION": "1",
         "MARKETING_VERSION": "1.0",
     }
