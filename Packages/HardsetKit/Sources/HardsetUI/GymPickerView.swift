@@ -124,7 +124,7 @@ public struct GymPickerView: View {
           onSelect: { selected = $0 },
           onAddGym: {}
         )
-        .hardsetNavigationTitle("Where are you training?")
+        .hardsetNavigationTitle("Choose a gym")
       }
     }
   }

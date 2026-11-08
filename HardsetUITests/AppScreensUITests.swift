@@ -77,7 +77,12 @@ final class AppScreensUITests: XCTestCase {
     capture(app, "13-keypad-weight")
     audit(app, screen: "keypad")
     app.buttons["Next field"].tap()
+    // The same keypad, retargeted: its display now names reps.
+    let repsDisplay = app.descendants(matching: .any)
+      .matching(NSPredicate(format: "label BEGINSWITH 'Reps'")).firstMatch
+    XCTAssertTrue(repsDisplay.waitForExistence(timeout: 3))
     app.buttons["8"].tap()
+    capture(app, "13b-keypad-reps")
     app.buttons["Done"].tap()
     row.coordinate(withNormalizedOffset: CGVector(dx: 0.93, dy: 0.5)).tap()
     capture(app, "14-session-logged")
@@ -155,18 +160,14 @@ final class AppScreensUITests: XCTestCase {
 
   // MARK: - Helpers
 
-  /// The appearance switch reaches the system asynchronously: set once before launch, the first
-  /// run's "dark" screenshots still came out light. So it is set, given time to settle, and set
-  /// again once the app is up -- a running app follows a live change.
+  /// Launches the app. Appearance is set by CI with `simctl ui` around separate passes, because
+  /// `XCUIDevice.appearance` did not reach the system on the runner: every "dark" screenshot came
+  /// out light. The parameter names which pass a test belongs to.
   @MainActor
   private func launch(_ app: XCUIApplication, appearance: XCUIDevice.Appearance) {
     // Keeps the app's stderr, so a runtime trap's message survives for CI to collect.
     app.launchEnvironment["HARDSET_CAPTURE_STDERR"] = "1"
-    XCUIDevice.shared.appearance = appearance
-    Thread.sleep(forTimeInterval: 2)
     app.launch()
-    XCUIDevice.shared.appearance = appearance
-    Thread.sleep(forTimeInterval: 2)
   }
 
   /// Waits for the start screen, and when it does not come, says what is showing instead.

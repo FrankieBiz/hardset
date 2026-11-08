@@ -152,7 +152,7 @@
             onSelect: { _ in },
             onAddGym: {}
           )
-          .hardsetNavigationTitle("Where are you training?")
+          .hardsetNavigationTitle("Choose a gym")
         }
       }
       try await Snapshot.capture("name-entry-dark", size: Snapshot.short) {

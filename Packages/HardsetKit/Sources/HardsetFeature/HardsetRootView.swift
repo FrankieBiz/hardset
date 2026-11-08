@@ -434,7 +434,7 @@ public struct HardsetRootView: View {
         },
         onAddGym: { isAddingGym = true }
       )
-      .hardsetNavigationTitle("Where are you training?")
+      .hardsetNavigationTitle("Choose a gym")
       .toolbar {
         ToolbarItem(placement: .confirmationAction) {
           Button("Done") { isChoosingGym = false }

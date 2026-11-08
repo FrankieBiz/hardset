@@ -95,20 +95,29 @@ jobs:
             --predicate 'process == "Hardset" OR eventMessage CONTAINS[c] "hardset"' \
             > app-screens/app-log.txt 2>&1 &
           LOG_PID=$!
-          xcodebuild test \
-            -project Hardset.xcodeproj -scheme Hardset \
-            -destination "id=$UDID" \
-            -only-testing:HardsetTests -only-testing:HardsetUITests \
+          COMMON="-project Hardset.xcodeproj -scheme Hardset -destination id=$UDID -derivedDataPath dd \
             -skipMacroValidation -skipPackagePluginValidation \
-            -resultBundlePath app-screens/ui-tests.xcresult \
-            CODE_SIGN_IDENTITY=- CODE_SIGN_STYLE=Manual DEVELOPMENT_TEAM= \
+            CODE_SIGN_IDENTITY=- CODE_SIGN_STYLE=Manual DEVELOPMENT_TEAM="
+          xcodebuild build-for-testing $COMMON 2>&1 | tee ui-build.log | grep -E "error:|BUILD|TEST BUILD" || true
+          # Appearance is set on the device itself, around two passes: XCUIDevice.appearance did not
+          # reach the system on this runner.
+          xcrun simctl ui "$UDID" appearance dark
+          xcodebuild test-without-building $COMMON \
+            -only-testing:HardsetTests -only-testing:HardsetUITests \
+            -skip-testing:HardsetUITests/AppScreensUITests/testScreensInLightMode \
+            -resultBundlePath app-screens/ui-dark.xcresult \
             2>&1 | tee ui-test.log | grep -E "error:|Test [Cc]ase|TEST (SUCCEEDED|FAILED)|Executed" || true
+          xcrun simctl ui "$UDID" appearance light
+          xcodebuild test-without-building $COMMON \
+            -only-testing:HardsetUITests/AppScreensUITests/testScreensInLightMode \
+            -resultBundlePath app-screens/ui-light.xcresult \
+            2>&1 | tee ui-test-light.log | grep -E "error:|Test [Cc]ase|TEST (SUCCEEDED|FAILED)|Executed" || true
           kill "$LOG_PID" || true
           DATA=$(xcrun simctl get_app_container "$UDID" com.hardset.app data 2>/dev/null || true)
           [ -n "$DATA" ] && cp "$DATA/tmp/stderr.log" app-screens/app-stderr.txt 2>/dev/null || true
           cp -R "$HOME/Library/Developer/CoreSimulator/Devices/$UDID/data/Library/Logs/CrashReporter" app-screens/simulator-crashes 2>/dev/null || true
           ls -la app-screens
-          grep -q "TEST SUCCEEDED" ui-test.log
+          grep -q "TEST SUCCEEDED" ui-test.log && grep -q "TEST SUCCEEDED" ui-test-light.log
 
       # When the app dies under test, its crash report is the only explanation. Simulator crashes
       # land in the host's DiagnosticReports.

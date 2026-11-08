@@ -130,7 +130,11 @@ private struct NavigationTitleChrome: ViewModifier {
               .font(Tokens.Text.title)
               .foregroundStyle(Tokens.Color.textPrimary)
               .lineLimit(1)
+              .minimumScaleFactor(0.8)
               .accessibilityAddTraits(.isHeader)
+              // Bars cap their text size; the Large Content Viewer is how a bar title stays
+              // readable at accessibility sizes, as Apple's own bar items do.
+              .accessibilityShowsLargeContentViewer()
           }
         }
     #else
