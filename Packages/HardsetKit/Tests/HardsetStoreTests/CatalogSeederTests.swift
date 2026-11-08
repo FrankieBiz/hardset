@@ -58,6 +58,48 @@ struct CatalogSeederTests {
     #expect(try seeder.selectableExercises().count == 2)
   }
 
+  @Test("An unchanged catalogue performs no row updates", arguments: [false, true])
+  func unchangedSeedDoesNotWrite(asynchronous: Bool) async throws {
+    let database = try migratedDatabase()
+    let seeder = CatalogSeeder(database: database)
+    try seeder.seed(now: now)
+    // Include user-owned changes in the no-write contract, not just pristine seed rows.
+    try await database.write { db in
+      try db.execute(sql: "UPDATE exercises SET name = 'My movement', notes = 'Keep', isArchived = 1")
+      try db.execute(sql: "CREATE TABLE seedUpdates (id TEXT)")
+      try db.execute(sql: "CREATE TRIGGER auditSeed AFTER UPDATE ON exercises BEGIN INSERT INTO seedUpdates VALUES (NEW.id); END")
+    }
+    let inserted: Int
+    if asynchronous {
+      inserted = try await seeder.loadCatalog(now: now)
+    } else {
+      inserted = try seeder.seed(now: now)
+    }
+    #expect(inserted == 0)
+    let updates = try await database.read { db in
+      try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM seedUpdates")
+    }
+    #expect(updates == 0)
+  }
+
+  @Test("Each changed catalogue-owned field is repaired", arguments: [
+    "name = 'Old name', curatedName = 'Old name'",
+    "curatedName = 'Old name'", "catalogSlug = 'old-slug'", "isCurated = 0",
+    "modality = 'old-modality'", "primaryMuscle = 'old-muscle'", "secondaryMusclesJSON = '[]'",
+  ])
+  func changedFieldIsRepaired(assignment: String) throws {
+    let database = try migratedDatabase()
+    let seeder = CatalogSeeder(database: database)
+    try seeder.seed(sample, now: now)
+    let expected = try database.read { db in try Exercise.order { $0.id }.fetchAll(db) }
+    try database.write { db in
+      try db.execute(sql: "UPDATE exercises SET \(assignment)")
+    }
+    #expect(try seeder.seed(sample, now: now) == 0)
+    let actual = try database.read { db in try Exercise.order { $0.id }.fetchAll(db) }
+    #expect(actual == expected)
+  }
+
   /// A user's rename must survive every subsequent launch.
   @Test("Re-seeding does not overwrite a user's rename")
   func reseedPreservesRename() throws {

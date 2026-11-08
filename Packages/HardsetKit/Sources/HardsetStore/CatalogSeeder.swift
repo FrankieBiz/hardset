@@ -12,7 +12,7 @@ import SQLiteData
 /// It is also **non-destructive**. A user who renames or archives a curated movement keeps that
 /// change: seeding refreshes only the fields the catalogue owns, and never resurrects something
 /// the user archived. Re-running it on every launch is therefore safe and is the intended usage.
-public nonisolated struct CatalogSeeder {
+public nonisolated struct CatalogSeeder: Sendable {
   private let database: any DatabaseWriter
 
   public init(database: any DatabaseWriter) {
@@ -27,69 +27,80 @@ public nonisolated struct CatalogSeeder {
   public func seed(_ catalogue: [CatalogExercise] = ExerciseCatalog.v1, now: Date = Date()) throws
     -> Int
   {
-    var inserted = 0
-    try database.write { db in
-      for entry in catalogue {
-        guard let uuid = entry.uuid else {
-          // A malformed literal is a programmer error, caught by `ExerciseCatalogTests`. Skipping is
-          // still better than trapping in a user's launch path.
-          continue
-        }
-        let existing = try Exercise.where { $0.id.eq(uuid) }.fetchOne(db)
-        // The object grammar, always. The previous reader was a bare `[String]` decode, which
-        // throws on the whole array for one non-string element and therefore returns []. A build
-        // shipped with that reader would see every object-grammar row as "no muscles at all",
-        // silently zeroing every indirect credit, permanently, for those installs.
-        let attributionJSON = MuscleColumn.encode(entry.contributions)
+    try database.write { db in try Self.seed(catalogue, now: now, in: db) }
+  }
 
-        if existing == nil {
-          try Exercise.insert {
-            Exercise.Draft(
-              id: uuid,
-              name: entry.name,
-              curatedName: entry.name,
-              catalogSlug: entry.slug,
-              isCurated: true,
-              modality: entry.modality.rawValue,
-              primaryMuscle: entry.primaryMuscle.rawValue,
-              secondaryMusclesJSON: attributionJSON,
-              notes: "",
-              isArchived: false,
-              createdAt: now
-            )
+  /// The same atomic, idempotent seed while the caller suspends for database work.
+  @discardableResult
+  public func loadCatalog(_ catalogue: [CatalogExercise] = ExerciseCatalog.v1, now: Date = Date())
+    async throws -> Int
+  {
+    try Task.checkCancellation()
+    return try await database.write { db in try Self.seed(catalogue, now: now, in: db) }
+  }
+
+  private static func seed(_ catalogue: [CatalogExercise], now: Date, in db: Database) throws -> Int {
+    var inserted = 0
+    for entry in catalogue {
+      guard let uuid = entry.uuid else {
+        // A malformed literal is a programmer error, caught by `ExerciseCatalogTests`. Skipping is
+        // still better than trapping in a user's launch path.
+        continue
+      }
+      let existing = try Exercise.where { $0.id.eq(uuid) }.fetchOne(db)
+      // The object grammar, always. The previous reader was a bare `[String]` decode, which
+      // throws on the whole array for one non-string element and therefore returns []. A build
+      // shipped with that reader would see every object-grammar row as "no muscles at all",
+      // silently zeroing every indirect credit, permanently, for those installs.
+      let attributionJSON = MuscleColumn.encode(entry.contributions)
+
+      if let existing {
+        // An UPDATE fires row triggers even when its values are identical. Skip it
+        // when the catalogue-owned fields and merged name already match.
+        // Only adopt a corrected name if the user kept the previous curated name.
+        // An empty curatedName has unknown provenance: preserve nonempty user names.
+        // Notes, archive state and creation time always remain user-owned.
+        let userRenamedIt = existing.name != existing.curatedName
+        let mergedName = userRenamedIt ? existing.name : entry.name
+        guard existing.name != mergedName
+          || existing.curatedName != entry.name
+          || existing.catalogSlug != entry.slug
+          || !existing.isCurated
+          || existing.modality != entry.modality.rawValue
+          || existing.primaryMuscle != entry.primaryMuscle.rawValue
+          || existing.secondaryMusclesJSON != attributionJSON
+        else { continue }
+
+        try Exercise
+          .where { $0.id.eq(uuid) }
+          .update {
+            if !userRenamedIt { $0.name = #bind(entry.name) }
+            $0.curatedName = #bind(entry.name)
+            $0.catalogSlug = #bind(entry.slug)
+            $0.isCurated = #bind(true)
+            $0.modality = #bind(entry.modality.rawValue)
+            $0.primaryMuscle = #bind(entry.primaryMuscle.rawValue)
+            $0.secondaryMusclesJSON = #bind(attributionJSON)
           }
           .execute(db)
-          inserted += 1
-        } else {
-          // Deliberately does not touch `notes` or `isArchived`: those are the user's, and
-          // overwriting them on every launch would silently undo their edits.
-          //
-          // `name` is a three-way merge rather than either extreme. Never writing it meant a
-          // curated correction could not reach any install that had already seeded, so two
-          // installs disagreed forever about what the same movement is called while their
-          // muscles and modality updated normally. Always writing it would erase a user's
-          // rename on the next launch. So: adopt the new name only when the stored one is still
-          // exactly what the catalogue last shipped.
-          //
-          // An empty `curatedName` has unknown provenance. A nonempty stored name
-          // may be a user edit, so preserve it. Blank legacy rows can take the
-          // catalogue name; subsequent seeds still use the usual three-way merge.
-          let storedName = existing?.name ?? ""
-          let lastCurated = existing?.curatedName ?? ""
-          let userRenamedIt = storedName != lastCurated
-          try Exercise
-            .where { $0.id.eq(uuid) }
-            .update {
-              if !userRenamedIt { $0.name = #bind(entry.name) }
-              $0.curatedName = #bind(entry.name)
-              $0.catalogSlug = #bind(entry.slug)
-              $0.isCurated = #bind(true)
-              $0.modality = #bind(entry.modality.rawValue)
-              $0.primaryMuscle = #bind(entry.primaryMuscle.rawValue)
-              $0.secondaryMusclesJSON = #bind(attributionJSON)
-            }
-            .execute(db)
+      } else {
+        try Exercise.insert {
+          Exercise.Draft(
+            id: uuid,
+            name: entry.name,
+            curatedName: entry.name,
+            catalogSlug: entry.slug,
+            isCurated: true,
+            modality: entry.modality.rawValue,
+            primaryMuscle: entry.primaryMuscle.rawValue,
+            secondaryMusclesJSON: attributionJSON,
+            notes: "",
+            isArchived: false,
+            createdAt: now
+          )
         }
+        .execute(db)
+        inserted += 1
       }
     }
     return inserted

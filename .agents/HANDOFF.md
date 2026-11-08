@@ -298,7 +298,6 @@ The requested architectural review is documented. No production Swift source or 
   gates first, then appearance, logger ergonomics at 375 pt, hit regions, glare).
   Open user decision: the app icon set has no image; the final icon is still the
   user's call.
-||||||| 33d2b09
 
 
 ## Legacy-schema repair follow-up — 2026-11-07
@@ -623,3 +622,128 @@ The requested architectural review is documented. No production Swift source or 
 - Merged `origin/main` (snapshot loading, startup ownership) rather than rebasing a pushed branch.
   Main's `SnapshotLoader` logic is kept as is; its startup screen now uses the design system.
 - Interim app icon added (`Tools/render_interim_icon.py`); the final icon is still the user's call.
+
+
+### 2026-11-08 00:12 UTC — Gate root readiness on async recovery
+
+- Objective: make catalog/recovery/gym startup waits asynchronous and prevent a
+  recovery error from masquerading as no workout. Previous turn was verified progress
+  (a8e6eb8). User later said a usage limit interrupted the session and requested
+  continuation; current authoritative status still contains only this milestone's
+  owned changes. Existing worktree `/home/frankbiz/orca/workspaces/hardset/mojarra`,
+  branch FrankieBiz/mojarra. No subagents used.
+- Owned paths: new Store/WorkoutRootModel.swift and StoreTests/WorkoutRootModelTests.swift;
+  Store/{CatalogSeeder,GymStore,LoggerStore,SessionCoordinator}.swift;
+  Feature/HardsetRootView.swift; DESIGN.md; docs/LOADING_PERFORMANCE.md; this handoff.
+- Baseline portable reproduction used the original root's real Store call sequence:
+  hidden plan table -> try? resume returns nil -> start inserts a second session.
+  Expected count1 failed with2. Actual catalog read on MainActor also failed its
+  availability probe. Native SwiftUI interaction is not claimed by these tests.
+- Shared DB helpers power cancellable async catalog seeding, recovery snapshot and
+  combined gym options/preselection. Sync APIs preserved; seed merge and recovery
+  reconstruction rules unchanged (reviewed whitespace-insensitive diff). Store
+  wrappers have compiler-checked Sendable. GymStore extension helper isolation needed
+  one compile correction: explicit nonisolated, because extension declarations picked
+  up module MainActor default. Keep that annotation; do not blindly remove it.
+- WorkoutRootModel owns coordinator/readiness/gym state. No start before all required
+  inputs succeed; no replacement while it owns a live workout. Required input failures
+  expose retry, not empty workout. Only finished coordinators can be cleared. Later
+  appearances do not reseed or resurrect a completed workout. Root view gates tabs
+  with native progress/retry, uses existing tokens and adds no motion.
+- Settled lifecycle decision: initial preparation is model-owned, shared by all
+  appearances, and survives cancellation of one caller. Do not regress to returning
+  early on isLoading with a caller-owned load: a new appearance could otherwise lose
+  its loader when the old caller is canceled. Child task is retained and cleared on
+  completion/failure. Report refreshes deliberately use different cancellation policy.
+- Gym options and last-used selection now share1 read. Initial trace:1 seed write +
+  1 recovery read +1 gym-selection read,3 transactions total; repeat appearance0.
+  A gym saved before a failed refresh is reported as saved plus a read failure.
+- Regression coverage: catalog/recovery/gym read failures, retry to the same saved
+  session, blocked starts before readiness/while live, logged-set+gym restoration,
+  guarded finish/clear/new start, overlapping and canceled appearance callers,
+  main-actor availability and transaction counts. Only probes use bounded semaphores;
+  no production semaphores or detached tasks. Extended Debug passed86 tests/6 suites.
+- Verification before interruption: make check passed96 parsed files,177 Core tests/
+  23 suites,81 default Store tests/5 suites,8 query-plan cases. Expanded Release now
+  17 portable files passed177 tests/19 suites; default checker omits new root test.
+  Project/scheme regeneration identical, diff/whitespace reviewed. Refreshing make
+  check after the interrupted session passed with the same counts before committing.
+  Expanded Release after resumption passed177 tests/19 suites (17 portable files);
+  source and test scope match the earlier passing run.
+- Native UI compilation/rendering, focus/VoiceOver, scene/background transitions,
+  CloudKit/AlarmKit/widget integration and iPhone loading/frame measurements remain
+  pending. Reconstruction CPU remains on MainActor. Readiness is point-in-time; no
+  cross-writer/device uniqueness claim. Missing-plan recovery and command/retry
+  identity remain separate. User-initiated gym writes/follow-up refresh still sync.
+- Next concrete performance work: measure repeated seeding of an unchanged catalog
+  (currently updates all existing curated rows, potentially causing avoidable sync
+  work) and absent last-used-gym lookup with years of nil-gym sessions. Then continue
+  picker loading, complete chart histories/tie order, incomplete-plan recovery,
+  provenance, numeric/retry identity, durable rest/account gating, and native/device
+  validation. Full app goal remains active.
+
+
+### Root-model integration after the interrupted session — 2026-11-08
+
+- Actual resumed branch is FrankieBiz/resume-workout-root-model, not the historical
+  mojarra branch above. Own commit cf55e74 succeeded, but direct push was rejected
+  safely because main advanced. Fetched and merged origin/main8422cd3 without
+  force/reset/rebase; preserve its design-system work, Core ordering fixes, icon,
+  app/widget changes, native workflow and snapshot suite.
+- Resolved RootView by retaining the remote UI and adapting its data ownership to
+  WorkoutRootModel. Kept the last-workout card/settings/accessory and cyan tint;
+  root loading/retry uses HardsetLoadingState/HardsetEmptyState's existing action.
+  Last-workout card now uses async HistoryStore through SnapshotLoader, preserving
+  optional-card error policy and rejecting stale overlapping refresh results.
+- DESIGN and handoff use main's current content plus this task's additions. Removed
+  pre-existing stray diff3 marker lines imported from main (33d2b09) in both docs.
+  No other remote work was dropped. Initial handoff-prefix merge assumption failed
+  because remote earlier notes changed; pivoted to main's full notes plus our new
+  entry. Conflict-marker and staged-whitespace scans are clean.
+- Combined make check passes:98 parsed files,179 Core tests/23 suites,81 default
+  Store tests/5 suites,8 query-plan cases and172 palette contrast pairs. Generated
+  project/scheme identical. Expanded Release Store after merge passed177 tests in
+  19 suites across17 portable files.
+- New authoritative evidence: existing PUBLIC repository CI run42426126904 passed
+  main8422cd3's native macOS package and iOS app/widget builds plus snapshot renders.
+  This does not validate the new root integration yet. Push the integration feature
+  branch to the existing iOS build and screens workflow; verify its native results
+  before advancing main. Actual device timings/account/signed-entitlement integration
+  remain pending even after unsigned native CI succeeds.
+
+
+### Native root integration verified — 2026-11-08
+
+- Feature branch FrankieBiz/resume-workout-root-model at924dd1f passed existing CI
+  run42429147943 (https://github.com/FrankieBiz/hardset/actions/runs/42429147943):
+  macOS package compile, unsigned iOS Simulator app/widget compile,14 screen tests.
+  Native artifacts downloaded outside repo to /tmp/hardset-root-ui-42429147943.
+  Inspected root-start-dark.png and root-start-light.png: loaded gym Metroflex and
+  expected2 working sets/16 reps/1200kg card in both, not a stuck loading state.
+  Renderer cannot reproduce Liquid Glass; light tab icons limitation predates this.
+- Latest combined make check:98 syntax files,179 Core tests/23 suites,81 selected
+  Store tests/5 suites,8 query cases,172 contrast pairs. Expanded Release Store177/
+  19 suites and Release Core179/23 suites passed. Generated project/scheme identical.
+- Follow-up probes outside source: unchanged CatalogSeeder.seed executes50 updates
+  with0 inserts, five warm runs18.0–20.7ms (no CloudKit); lastUsedGym absent across
+  50k nil-gym sessions4.4ms, scratch partial covering index0.0006ms. Probe Swift file
+  was deleted from checker workspace; no production fix yet. Logs warm-seed-probe.log
+  in checker cache. AppSmokeTests obsolete RootView() call confirmed in actual source;
+  not compiled/executed by current workflow (only-testing:HardsetUISnapshotTests).
+- Advancing main with the verified code plus these documentation-only records; main
+  workflow will run again. Fetch/inspect remote first and never force push. Current
+  remote last checked8422cd3, no new divergence. Source is identical to verified924dd1f.
+- Broad goal remains active. Prioritize test-target repair/native execution, avoidable
+  seed writes and nil-gym lookup, then remaining data/identity/rest/account issues and
+  real device timing/interaction/accessibility checks. Native compile/render evidence
+  above supersedes earlier blanket Apple-build-pending notes for this exact code;
+  it does not prove signed CloudKit or AlarmKit behavior or physical-device performance.
+
+### 2026-11-08 — warm catalogue updates
+
+See `.agents/handoffs/catalog-noop.md` for the current optimization, tests and native
+CI status. Main root-loading run42430194445 is green.
+
+Ongoing after root integration: app-test coverage repair on branch
+`FrankieBiz/verify-app-smoke`; see [.agents/handoffs/app-smoke.md](handoffs/app-smoke.md).
+Main7acda12's repeat native run is42430194445; root code's native run42429147943 passed.

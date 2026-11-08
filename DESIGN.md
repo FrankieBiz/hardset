@@ -145,7 +145,6 @@ spring are dropped and only the fill or opacity changes, instantly or with `Moti
 place of shrinking text, one combined accessibility element per set row with named actions, and
 Reduce Motion honoured in every animation. Native verification of resolved colours, hit regions,
 and Dynamic Type layouts happens on the Mac; see `docs/MAC-VERIFICATION.md`.
-||||||| 33d2b09
 
 ## Loading and startup
 
@@ -165,3 +164,10 @@ components rather than native spinners.
   process-owned preparation.
 - Neither adds motion or colour-only feedback, so Reduce Motion users see the same immediate
   state changes.
+
+- Root readiness: catalog, workout recovery and gym options must load successfully
+  before a new workout is offered. Use `HardsetLoadingState` and the existing
+  retry action on `HardsetEmptyState`; never present a recovery failure as an empty
+  workout. Appearance callers share model-owned preparation, so one disappearing
+  caller does not abandon recovery. Later appearances preserve live drafts and
+  finished-state transitions instead of replaying an old snapshot.

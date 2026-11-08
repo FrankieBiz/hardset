@@ -37,18 +37,14 @@ public struct HardsetEnvironment {
 /// the screen.
 @MainActor
 public struct HardsetRootView: View {
-  @State private var coordinator: SessionCoordinator?
+  @State private var model: WorkoutRootModel
   @State private var startFailed = false
-  /// Where the next workout will be. Preselected from the last one, changeable in one tap, and
-  /// allowed to stay nil — training somewhere new must not require setup first.
-  @State private var selectedGym: GymID?
-  @State private var gymOptions: [GymRecord] = []
   @State private var isChoosingGym = false
   @State private var isAddingGym = false
   @State private var isShowingSettings = false
   /// The newest finished workout, for the start screen. `nil` when there is none, and then the
   /// start screen shows nothing in its place rather than a placeholder that implies a history.
-  @State private var lastWorkout: SessionSummary?
+  @State private var lastWorkoutSnapshot = SnapshotLoader<[SessionSummary]>()
   /// Inferred from the device's locale on first launch rather than asked, and stored the moment the
   /// user disagrees. Kilograms remain the canonical storage unit either way — this only decides
   /// what is displayed and what typed numbers are read as.
@@ -63,7 +59,6 @@ public struct HardsetRootView: View {
   /// user's own choice wins.
   private let unitOverride: WeightUnit?
   private let hooks: RestTimerHooks
-  private let restAfterSet: Duration?
 
   public init(
     environment: HardsetEnvironment,
@@ -74,7 +69,10 @@ public struct HardsetRootView: View {
     self.environment = environment
     self.unitOverride = unit
     self.hooks = hooks
-    self.restAfterSet = restAfterSet
+    _model = State(initialValue: WorkoutRootModel(
+      logger: environment.logger, catalog: environment.catalog, gyms: environment.gyms,
+      restAfterSet: restAfterSet, onStartRest: { duration, metadata in hooks.start(duration, metadata) }
+    ))
   }
 
   /// What every screen displays in. One derivation, so no screen can disagree with another.
@@ -82,28 +80,34 @@ public struct HardsetRootView: View {
     unitOverride ?? (useImperial ? .pounds : .kilograms)
   }
 
+  private var coordinator: SessionCoordinator? { model.coordinator }
+
   public var body: some View {
-    tabs
-      // Readout cyan for tab selection, toolbar buttons and every system control underneath, in
-      // place of the stock blue: that blue measured 3.5:1 on the light background and is the
-      // colour of every other app.
-      .tint(Tokens.Color.accent)
-      .task {
-        // Seeding is idempotent and non-destructive, so running it every launch is the intended
-        // usage rather than something to guard with a flag that can drift from reality.
-        _ = try? environment.catalog.seed()
-        // A workout left open is offered back before anything else. Nothing is closed on the
-        // app's initiative.
-        if coordinator == nil {
-          coordinator = try? SessionCoordinator.resume(
-            store: environment.logger,
-            restAfterSet: restAfterSet,
-            onStartRest: { duration, metadata in hooks.start(duration, metadata) }
+    Group {
+      if model.isReady {
+        tabs
+      } else if model.lastError != nil {
+        ScrollView {
+          HardsetEmptyState(
+            title: "Could not load your workout",
+            detail: "Try again before starting a new workout.",
+            systemImage: "exclamationmark.triangle",
+            actionTitle: "Try again",
+            actionSystemImage: "arrow.clockwise",
+            action: { Task { await model.load() } }
           )
+          .padding(.top, Tokens.Spacing.block)
         }
-        refreshGyms()
-        refreshLastWorkout()
+        .background(Tokens.Color.background)
+      } else {
+        HardsetLoadingState("Loading your workout…")
       }
+    }
+    .tint(Tokens.Color.accent)
+    .task {
+      await model.load()
+      if model.isReady { await refreshLastWorkout() }
+    }
   }
 
   @ViewBuilder private var tabs: some View {
@@ -169,9 +173,9 @@ public struct HardsetRootView: View {
         gymName: gymName(for: coordinator.gymID) ?? (coordinator.gymID == nil ? nil : "Saved gym"),
         onShowSettings: { isShowingSettings = true },
         onFinished: {
-          self.coordinator = nil
+          model.clearFinishedWorkout()
           // The workout just finished is now the last one, so the start screen says so.
-          refreshLastWorkout()
+          Task { await refreshLastWorkout() }
         }
       )
       // The live session draws its own header, with the gym and the settings action. The title
@@ -304,13 +308,13 @@ public struct HardsetRootView: View {
   }
 
   private var selectedGymName: String? {
-    gymName(for: selectedGym)
+    gymName(for: model.selectedGym)
   }
 
   /// "Add" when there is nothing to choose from yet, "Choose" when there is. Asking someone to
   /// add a gym they already have would send them to the wrong button.
   private var gymInvitation: String {
-    gymOptions.isEmpty ? "Add a gym to track machines" : "Choose a gym to track machines"
+    model.gymOptions.isEmpty ? "Add a gym to track machines" : "Choose a gym to track machines"
   }
 
   private var gymCardAccessibilityLabel: String {
@@ -324,10 +328,12 @@ public struct HardsetRootView: View {
   /// has since been archived, so a header never names a place the app cannot show.
   private func gymName(for id: GymID?) -> String? {
     guard let id else { return nil }
-    return gymOptions.first { $0.id == id }?.name
+    return model.gymOptions.first { $0.id == id }?.name
   }
 
   // MARK: - Last workout
+
+  private var lastWorkout: SessionSummary? { lastWorkoutSnapshot.value?.first }
 
   /// The newest finished workout, as it was recorded.
   ///
@@ -425,11 +431,11 @@ public struct HardsetRootView: View {
   private var gymSheet: some View {
     NavigationStack {
       GymPickerView(
-        gyms: gymOptions.map { GymOption(id: $0.id, name: $0.name) },
-        selected: selectedGym,
+        gyms: model.gymOptions.map { GymOption(id: $0.id, name: $0.name) },
+        selected: model.selectedGym,
         errorMessage: gymError,
         onSelect: { id in
-          selectedGym = id
+          model.selectedGym = id
           isChoosingGym = false
         },
         onAddGym: { isAddingGym = true }
@@ -458,23 +464,12 @@ public struct HardsetRootView: View {
     }
   }
 
-  private func refreshGyms() {
-    gymOptions = (try? environment.gyms.gyms()) ?? []
-    // Preselected from behaviour, not from a stored setting that could disagree with reality.
-    if selectedGym == nil {
-      selectedGym = try? environment.gyms.lastUsedGym()
-    }
-    // A gym that has since been archived must not stay selected invisibly.
-    if let selectedGym, !gymOptions.contains(where: { $0.id == selectedGym }) {
-      self.selectedGym = nil
-    }
-  }
-
   /// `try?` deliberately, unlike the gym write below: this reads something optional to show, and a
   /// failure leaves the card absent rather than wrong. The history tab, which depends entirely on
   /// the same read, states its failure in full.
-  private func refreshLastWorkout() {
-    lastWorkout = (try? environment.history.recentSessions(limit: 1))?.first
+  private func refreshLastWorkout() async {
+    let store = environment.history
+    await lastWorkoutSnapshot.load { try await store.loadRecentSessions(limit: 1) }
   }
 
   /// Takes the name as an argument rather than reading it back out of state. The version that
@@ -482,30 +477,27 @@ public struct HardsetRootView: View {
   /// time, so no gym was ever created even though the field visibly held text.
   private func addGym(named name: String) {
     guard !name.isEmpty else { return }
+    let id: GymID
     do {
-      let id = try environment.gyms.createGym(name: name)
-      refreshGyms()
-      selectedGym = id
+      id = try environment.gyms.createGym(name: name)
+    } catch {
+      gymError = "\(name) could not be saved. \(error)"
+      return
+    }
+    model.selectedGym = id
+    do {
+      try model.refreshGyms()
       gymError = nil
       isChoosingGym = false
     } catch {
-      // Stated, not swallowed. The error text is included because there is nothing useful to say
-      // about a storage failure without it.
-      gymError = "\(name) could not be saved. \(error)"
+      // The write succeeded; a failed follow-up read must not claim it did not.
+      gymError = "The gym was saved, but its list could not be read."
     }
   }
 
   private func startEmptyWorkout() {
     do {
-      // An empty plan on purpose: the app does not invent a program, and there is no generator
-      // yet. Movements are added from the picker as the lifter goes.
-      coordinator = try SessionCoordinator.start(
-        store: environment.logger,
-        gymID: selectedGym,
-        plan: [],
-        restAfterSet: restAfterSet,
-        hooks: hooks
-      )
+      try model.startWorkout()
       startFailed = false
     } catch {
       startFailed = true

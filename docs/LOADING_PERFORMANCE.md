@@ -525,13 +525,132 @@ Synchronous catalog seeding, workout recovery and gym loading after this gate
 remain subsequent work. First useful-screen timing still requires Release iPhone
 measurements, including migration cost for multi-year databases.
 
+## Root preparation and recovery gate — 2026-11-07
+
+The root's appearance task synchronously seeded the catalog, swallowed recovery
+errors with `try?`, and synchronously loaded gym options. In the portable
+reproduction of that exact call pattern, an unreadable plan table made recovery
+look empty, so the new-start path inserted a second session over an existing
+unfinished workout. A real catalog query also blocked a queued MainActor job in
+the availability probe. Both assertions failed before the change. This reproduces
+the Store call sequence; it is not a native SwiftUI interaction test.
+
+`WorkoutRootModel` now owns readiness, recovered coordinator, gym options and
+selection. It awaits GRDB's async seed write, one complete recovery read, and one
+combined gym-options/preselection read. Connection helpers and recovery-state
+construction are shared with the synchronous APIs; catalog merge, machine
+provenance, session exclusion and date semantics are preserved. Database waits
+release MainActor; building actor-owned workout state remains on MainActor and
+still needs CPU profiling on device.
+
+The UI exposes progress or retry before offering the tabs. Failed required input
+loads publish no partial root and cannot be bypassed by calling `startWorkout`:
+the model enforces readiness and refuses another workout while it owns a live
+coordinator. Retry can recover the same saved session. Only a finished coordinator
+can be cleared; later appearances do not replay old recovery or discard drafts.
+Initial preparation is model-owned and shared among appearance callers. Canceling
+one caller does not cancel that job underneath another appearance. This differs
+intentionally from refreshable report snapshots, where superseded reads cancel.
+The job handle is released on completion, including failure.
+
+The probe measures three initial transactions (one seed write and two reads),
+with no additional reads/writes on another appearance. Tests cover catalog,
+recovery and gym-read failures; retry; logged-set and gym recovery; canceled
+callers; duplicate appearances; refusing premature/new duplicate starts; finishing
+and starting a later workout. The gym list and last-used preselection now share a
+single read snapshot. Initial root errors use existing components and tokens;
+there is no custom motion. A successful gym save followed by a failed refresh is
+reported as a saved gym with a read failure rather than an unsuccessful write.
+
+Verification: `make check` passed (96 Swift files, 177 Core tests, 81 default
+Store tests and eight query-plan cases). Explicit Debug with WorkoutRootModelTests
+passed 86 tests in six suites. Expanded Release Store passed all seventeen
+portable files (177 tests in nineteen suites). Project/scheme regeneration remained
+identical. The installed default selection omits this new test file, so the
+expanded run is required to execute its regressions.
+
+Readiness is point-in-time. It does not exclude a different writer/device starting
+a workout after this load, or solve the separately tracked missing-plan recovery
+and retry-identity issues. User-initiated gym writes and follow-up refresh still
+use synchronous APIs. Native root rendering, focus/VoiceOver, background/foreground
+and scene transitions, plus iPhone load/frame measurements, remain unverified.
+
+## Root integration with the current UI — 2026-11-08
+
+Remote main advanced during the interrupted session. The push guard rejected the
+old-base root commit, and the feature branch merged main8422cd3 without rewriting
+remote history. The merged RootView retains the current cyan design system,
+settings, workout headers/accessory, and last-workout card. Loading/retry uses the
+existing HardsetLoadingState and HardsetEmptyState action. The optional last-workout
+card now loads asynchronously through SnapshotLoader, retaining its absent-on-error
+policy and rejecting stale overlapping refreshes.
+
+CI run [42429147943](https://github.com/FrankieBiz/hardset/actions/runs/42429147943)
+passed for code commit924dd1f: macOS HardsetKit build, unsigned iOS Simulator app
+and widget build, and14 screen-render tests. Root-start light/dark artifacts were
+inspected: both reach loaded Metroflex Gym data and the expected two-set last-workout
+card. This proves the fixture reaches loaded UI; the renderer's800ms settling delay
+is not a device latency benchmark. Liquid Glass/tab-bar appearance remains limited
+by the renderer, as recorded in MAC-VERIFICATION.md.
+
+After integration, make check passed98 syntax files,179 Core tests/23 suites,
+81 default Store tests/5 suites,8 query cases and172 palette contrast pairs.
+Expanded Release Store passed177 tests/19 suites across17 portable files; Release
+Core passed179 tests/23 suites. Project/scheme regeneration stayed identical.
+Native signed entitlements, real account transitions, UI interaction/accessibility
+and physical-device cold/warm loading/frame measurements still need validation.
+
+Read-only follow-up measurements found that an unchanged catalog seed still issues
+50 UPDATE statements (five warm host runs about18–21ms, without CloudKit triggers).
+An absent last-used-gym query scans50,000 nil-gym sessions (about4.4ms in SQLite);
+a scratch partial covering index avoids that history traversal. These are measured
+next targets, not changes in the root-model code. AppSmokeTests also still references
+the obsolete private RootView() initializer and is outside the native workflow's
+selected screenshot suite; it must be repaired and executed separately.
+
+## Skip unchanged catalogue updates — 2026-11-08
+
+An unchanged launch previously executed50 exercise UPDATEs. A regression installs
+an SQLite row-update audit trigger after seeding and editing user-owned fields;
+it reproduced50 updates through both synchronous seed and async loadCatalog.
+The loader now compares all catalogue-owned fields and the existing three-way
+merged name inside its write transaction, skipping UPDATE when they match.
+Both paths now record zero updates. No catalog-version flag or persistent cache
+can hide later changes or missing rows. Notes, archive state and creation time
+remain untouched, and user renames retain the existing conditional assignment.
+
+Seven parameterized correction cases cover every compared field, including the
+curated-name merge. Expanded Release Store passes179 tests in19 suites across17
+portable files. make check passes98 syntax files,179 Core tests/23 suites,
+81 default Store tests/5 suites,8 query cases and172 contrast pairs. These new
+catalog regressions are outside the installed checker's default Store selection.
+
+A temporary Release probe ran ten warm loads against the actual CatalogSeeder
+and migrator in an in-memory DatabaseQueue, with identical pinned dependencies.
+Baseline commit7acda12 ranged7.58–9.62ms; changed code ranged7.55–8.21ms on Linux.
+The ranges overlap; this is modest host evidence, not an iPhone launch-time claim.
+The probe had no CloudKit tracking triggers and is outside the repository. Logs
+are catalog-benchmark-before.log and catalog-benchmark-after.log in the local
+hardset-check cache. The regression's audit trigger separately proves50 updates
+become zero; it does not measure network or CloudKit traffic.
+
+Native feature run [42431360543](https://github.com/FrankieBiz/hardset/actions/runs/42431360543)
+passed for commitc0f9bc4: macOS package, iOS Simulator app/widget and14 screen tests.
+App smoke repair run [42431117598](https://github.com/FrankieBiz/hardset/actions/runs/42431117598)
+passed one app test plus14 screen tests. CI now executes the app target and checks
+for a nonzero test count. Both sources are integrated locally; combined make check
+passes and project regeneration is identical. Remote main's documentation-only
+handout commit5887ceb is preserved. Main's earlier root-loading integration passed
+repeat run42430194445. The user selected Linux and simulator CI for now; signed
+account/device checks remain pending.
+
 ## Remaining app-wide work
 
 - Capture Release cold/warm launch, first usable workout, resume, picker, history,
   progression, and volume timings on iPhone, with small and multi-year databases.
   Record median/tail latency, main-thread hangs, memory, and device/OS/build details
   before setting defensible loading budgets.
-- Audit remaining synchronous catalog/recovery/gym/picker loading and post-read
+- Audit remaining synchronous picker and user-initiated gym loading, and post-read
   analysis on the main actor. Profile before moving additional CPU work, preserve
   cancellation and consistent snapshot semantics, and validate the new startup
   owner with Apple frameworks and real scene/account transitions.

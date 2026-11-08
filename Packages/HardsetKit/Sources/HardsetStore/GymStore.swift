@@ -44,7 +44,7 @@ public nonisolated struct MachineRecord: Hashable, Sendable, Identifiable {
 /// unreachable: the schema, the progression engine and the chart all key on a machine, but a user
 /// with no way to create one logs every set with `machineID == nil` and the whole differentiator
 /// is dead code.
-public nonisolated struct GymStore {
+public nonisolated struct GymStore: Sendable {
   private let database: any DatabaseWriter
 
   public init(database: any DatabaseWriter) {
@@ -166,16 +166,40 @@ extension GymStore {
   /// of the time and being asked every session is the kind of friction that makes people stop
   /// recording the machine at all. Learned from what was logged rather than stored as a
   /// preference, so there is no setting to go stale.
-  public func lastUsedGym() throws -> GymID? {
+  public nonisolated func lastUsedGym() throws -> GymID? {
     try database.read { db in
-      let row = try Session
-        .where { $0.gymID.isNot(nil) }
-        .order { $0.startedAt.desc() }
-        .fetchOne(db)
-      guard let raw = row?.gymID else { return nil }
-      // Archived gyms are not offered: the equipment list would be empty.
-      let live = try Gym.where { $0.id.eq(raw) }.where { !$0.isArchived }.fetchOne(db)
-      return live.map { GymID(rawValue: $0.id) }
+      try Self.readLastUsedGym(in: db)
     }
   }
+
+  /// Options and preselection from one database snapshot.
+  public nonisolated func selection() throws -> GymSelection {
+    try database.read { db in try Self.readSelection(in: db) }
+  }
+
+  public nonisolated func loadSelection() async throws -> GymSelection {
+    try Task.checkCancellation()
+    return try await database.read { db in try Self.readSelection(in: db) }
+  }
+
+  private nonisolated static func readSelection(in db: Database) throws -> GymSelection {
+    let options = try Gym.where { !$0.isArchived }.order { $0.name }.fetchAll(db).map(GymRecord.init(row:))
+    return GymSelection(options: options, lastUsed: try readLastUsedGym(in: db))
+  }
+
+  private nonisolated static func readLastUsedGym(in db: Database) throws -> GymID? {
+    let row = try Session
+      .where { $0.gymID.isNot(nil) }
+      .order { $0.startedAt.desc() }
+      .fetchOne(db)
+    guard let raw = row?.gymID else { return nil }
+    // Archived gyms are not offered: the equipment list would be empty.
+    let live = try Gym.where { $0.id.eq(raw) }.where { !$0.isArchived }.fetchOne(db)
+    return live.map { GymID(rawValue: $0.id) }
+  }
+}
+
+public nonisolated struct GymSelection: Hashable, Sendable {
+  public let options: [GymRecord]
+  public let lastUsed: GymID?
 }

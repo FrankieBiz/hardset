@@ -10,12 +10,9 @@ import Testing
 /// and links.
 @Suite("App target builds and links")
 struct AppSmokeTests {
-  /// Names the entry point rather than constructing a view. The root view is private to the app
-  /// file and takes the database and rest timer, so `RootView()` here stopped compiling when
-  /// startup gained its own resources; the target's purpose -- proving the graph builds and
-  /// links -- only needs the app type itself.
-  @Test("The app's entry point links")
-  func appEntryPointLinks() {
-    _ = HardsetApp.self
+  @Test("The app entry point is constructible")
+  @MainActor
+  func appEntryPointExists() {
+    _ = HardsetApp()
   }
 }

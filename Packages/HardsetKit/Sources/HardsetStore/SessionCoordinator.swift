@@ -152,6 +152,25 @@ public final class SessionCoordinator {
     onStartRest: @escaping (Duration, RestMetadata) -> Void = { _, _ in }
   ) throws -> SessionCoordinator? {
     guard let recovery = try store.recoverySnapshot(asOf: now()) else { return nil }
+    return restore(recovery, store: store, now: now, restAfterSet: restAfterSet, onStartRest: onStartRest)
+  }
+
+  /// Asynchronously reads the complete recovery snapshot, then builds actor-owned state.
+  public static func loadResume(
+    store: LoggerStore,
+    now: @escaping () -> Date = { Date() },
+    restAfterSet: Duration? = nil,
+    onStartRest: @escaping (Duration, RestMetadata) -> Void = { _, _ in }
+  ) async throws -> SessionCoordinator? {
+    guard let recovery = try await store.loadRecoverySnapshot(asOf: now()) else { return nil }
+    try Task.checkCancellation()
+    return restore(recovery, store: store, now: now, restAfterSet: restAfterSet, onStartRest: onStartRest)
+  }
+
+  private static func restore(
+    _ recovery: SessionRecoverySnapshot, store: LoggerStore, now: @escaping () -> Date,
+    restAfterSet: Duration?, onStartRest: @escaping (Duration, RestMetadata) -> Void
+  ) -> SessionCoordinator {
     let session = recovery.session
     let planned = recovery.planned
     let written = recovery.written
