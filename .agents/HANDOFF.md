@@ -738,3 +738,8 @@ The requested architectural review is documented. No production Swift source or 
   real device timing/interaction/accessibility checks. Native compile/render evidence
   above supersedes earlier blanket Apple-build-pending notes for this exact code;
   it does not prove signed CloudKit or AlarmKit behavior or physical-device performance.
+
+### 2026-11-08 — warm catalogue updates
+
+See `.agents/handoffs/catalog-noop.md` for the current optimization, tests and native
+CI status. Main root-loading run42430194445 is green.
