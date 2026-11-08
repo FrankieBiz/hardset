@@ -105,3 +105,16 @@
   read-only contrast, inline machine controls and single haptic. No test assertion
   removed or weakened. New native run must validate the integrated source and the
   newly inherited real-app journey/audit workflow before main advances.
+
+## Resume: real-app integration evidence
+
+- Integrated run 42442794846 passed builds, feature tests and screen/controller tests,
+  but the real-app workout test tapped Finish while its expanded inline confirmation
+  sat behind the floating workout accessory. Screenshot 15 and the event log show
+  no crash or startup failure: the workout remained active, causing the subsequent
+  light-mode test's start-screen expectation to fail as well.
+- The journey now swipes upward after expanding confirmation, bringing the actual
+  Finish button into view. Completion assertion and all later checks remain intact.
+- Apple audits also recorded existing Dynamic Type/clipping/description findings
+  and low-contrast lower-volume labels. These are recorded evidence, not a claim
+  that the entire app passes the manual accessibility tier.

@@ -91,6 +91,9 @@ final class AppScreensUITests: XCTestCase {
     let finish = app.buttons["Finish workout"]
     if finish.waitForExistence(timeout: 5) {
       finish.tap()
+      // Expanding the inline confirmation adds height below the summary. Bring its controls
+      // above the floating workout accessory before tapping, just as a lifter would scroll.
+      app.swipeUp()
       capture(app, "15-finish-confirm")
       app.buttons["Finish"].tap()
     }
