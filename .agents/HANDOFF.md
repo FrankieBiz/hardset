@@ -753,7 +753,9 @@ Main7acda12's repeat native run is42430194445; root code's native run42429147943
 Current work is isolated on `FrankieBiz/complete-gpt-handout-tasks` in `zoanthid`.
 See [.agents/handoffs/gpt-handout.md](handoffs/gpt-handout.md) and
 [the coverage record](../docs/GPT_HANDOUT_PROGRESS.md) for scope, limits and fresh
-verification. Native verification is pending for the new feature milestone.
+verification. Integrated native run42482223181 passed builds, feature/storage tests,
+screen/controller tests and all four real-app dark/light UI tests. External release
+configuration and physical-device validation remain documented separately.
 
 ## UI design-system elevation, real-app verification — 2026-11-08
 

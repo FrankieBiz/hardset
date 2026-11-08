@@ -105,3 +105,19 @@ cannot establish them:
   unacknowledged request remains retryable after a process crash.
 - An unchanged displayed load step retains its original canonical precision. Reps-only
   edits do not round-trip the untouched load through a rounded pounds display.
+
+## Completed implementation verification — 2026-11-08
+
+- `make check`: 181 Core tests in24 suites, 198 portable Store tests in25 suites,
+  124 Swift files parsed, eight indexed query plans and172 contrast pairs passed.
+- Native integrated source run [42482223181](https://github.com/FrankieBiz/hardset/actions/runs/42482223181)
+  passed the macOS package build, 30 feature tests, iOS app/widget build, app test,
+  25 screen/controller tests and four real-app UI tests in dark/light appearances.
+- Reviewed system-composited workout completion and light-mode artifacts. The
+  expanded finish confirmation requires scrolling above the floating accessory;
+  the real-app journey now performs that scroll before tapping Finish.
+- Apple audits remain evidence rather than a blanket accessibility certification:
+  system navigation text scaling, search-field clipping and other recorded findings
+  remain in the artifacts. Light start audit reported no issues. Physical-device
+  performance, signed service behavior and external release configuration above
+  remain unverified.

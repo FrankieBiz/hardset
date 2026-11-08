@@ -118,3 +118,19 @@
 - Apple audits also recorded existing Dynamic Type/clipping/description findings
   and low-contrast lower-volume labels. These are recorded evidence, not a claim
   that the entire app passes the manual accessibility tier.
+
+## Final implementation delivery — 2026-11-08
+
+- Integrated native run42482223181 SUCCESS for ebb322d. Mac package build,30
+  feature tests, app/widget build,1 app test,25 screen/controller tests and all4
+  real-app UI tests passed. Artifacts: /tmp/hardset-handout-42482223181.
+- Reviewed actual start screen after completion: saved workout,1 working set,
+  8 reps,800lb volume,37-second derived duration. Dark workout journey and light
+  relaunch pass. This resolves the earlier offscreen Finish test interaction.
+- Local make check passed181 Core/198 Store tests,124 syntax files,8 query plans
+  and172 contrast pairs. Generator deterministic; diff whitespace clean.
+- Remote main's added real-app handoff preserved alongside this task's handoff.
+  No source differences after the successful native run; final documentation only
+  records evidence and limitations. Push the final tree to main without force and
+  verify its native run. External App Store setup and signed/device gates remain
+  explicitly listed in docs/GPT_HANDOUT_PROGRESS.md; no purchase or paid service used.
