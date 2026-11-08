@@ -38,106 +38,134 @@ public struct HistoryRow: Hashable, Sendable, Identifiable {
 /// duration recomputed against the wall clock — and rendered them as personal bests. A session
 /// whose recorded span is longer than any real workout is shown with the span replaced by a
 /// caveat, because the honest thing to say is "we do not know how long this took", not "20 hours".
+///
+/// Sessions are grouped by month under pinned, sentence-case headers, so a long history stays
+/// navigable without a search field. Each row is a card led by a date block, the way a training
+/// log is read: which day, what was done, how much of it.
+///
+/// When given a `title`, the view draws its own `ScreenHeader` as the first thing in its scroll
+/// content, because the tab that hosts it hides the stock navigation bar. With no `subtitle`, the
+/// header says how many workouts are shown.
 public struct HistoryView: View {
   private let rows: [HistoryRow]
   private let unit: WeightUnit
+  private let title: String?
+  private let subtitle: String?
   private let onSelect: ((HistoryRow) -> Void)?
 
   public init(
     rows: [HistoryRow],
     unit: WeightUnit,
+    title: String? = nil,
+    subtitle: String? = nil,
     onSelect: ((HistoryRow) -> Void)? = nil
   ) {
     self.rows = rows
     self.unit = unit
+    self.title = title
+    self.subtitle = subtitle
     self.onSelect = onSelect
   }
 
   public var body: some View {
     if rows.isEmpty {
       ScrollView {
-        VStack {
-          Spacer(minLength: Tokens.Spacing.loose)
+        VStack(alignment: .leading, spacing: Tokens.Spacing.section) {
+          if let title {
+            ScreenHeader(title, subtitle: subtitle)
+          }
           HardsetEmptyState(
             title: "No workouts yet",
             detail: "Finished workouts appear here.",
             systemImage: "clock.arrow.circlepath"
           )
-          Spacer(minLength: Tokens.Spacing.loose)
         }
-        .padding(.top, Tokens.Spacing.section)
+        .padding(.top, title == nil ? Tokens.Spacing.section : 0)
+        .padding(.bottom, Tokens.Spacing.block)
+        .frame(maxWidth: .infinity, alignment: .leading)
       }
       .background(Tokens.Color.background)
     } else {
       ScrollView {
-        LazyVStack(spacing: Tokens.Spacing.snug) {
-          ForEach(rows) { row in
-            Button {
-              onSelect?(row)
-            } label: {
-              content(row)
-                .padding(Tokens.Spacing.regular)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .hardsetCard(cornerRadius: Tokens.Radius.control)
+        LazyVStack(alignment: .leading, spacing: Tokens.Spacing.snug, pinnedViews: [.sectionHeaders]) {
+          if let title {
+            ScreenHeader(title, subtitle: subtitle ?? Self.countText(rows.count))
+          }
+          ForEach(Self.monthGroups(rows)) { group in
+            Section {
+              ForEach(group.rows) { row in
+                card(for: row)
+                  .padding(.horizontal, Tokens.Spacing.loose)
+              }
+            } header: {
+              // Opaque, so rows scrolling under a pinned header never show through it.
+              SectionLabel(group.title, count: group.rows.count)
+                .padding(.horizontal, Tokens.Spacing.loose)
+                .padding(.top, Tokens.Spacing.loose)
+                .padding(.bottom, Tokens.Spacing.snug)
+                .background(Tokens.Color.background)
             }
-            .buttonStyle(.plain)
-            .disabled(onSelect == nil)
           }
         }
-        .padding(.horizontal, Tokens.Spacing.loose)
-        .padding(.vertical, Tokens.Spacing.regular)
+        .padding(.top, title == nil ? Tokens.Spacing.snug : 0)
+        .padding(.bottom, Tokens.Spacing.block)
       }
       .background(Tokens.Color.background)
     }
   }
 
-  private func content(_ row: HistoryRow) -> some View {
-    VStack(alignment: .leading, spacing: Tokens.Spacing.tight) {
-      HStack(alignment: .firstTextBaseline) {
-        Text(row.title.isEmpty ? Self.dateText(row.date) : row.title)
-          .font(Tokens.Text.label.weight(.semibold))
-        Spacer(minLength: Tokens.Spacing.snug)
-        durationLabel(row)
+  /// A selectable row is a button with a pressed state and a disclosure chevron. Without a
+  /// destination it is a plain card: it must not look, or behave, as if it might go somewhere.
+  @ViewBuilder private func card(for row: HistoryRow) -> some View {
+    if let onSelect {
+      Button {
+        onSelect(row)
+      } label: {
+        HistoryRowContent(row: row, unit: unit, showsDisclosure: true)
       }
-
-      if !row.title.isEmpty {
-        Text(Self.dateText(row.date))
-          .font(Tokens.Text.caption)
-          .foregroundStyle(Tokens.Color.textSecondary)
-      }
-
-      Text(Self.volumeText(row.volume, unit: unit))
-        .font(Tokens.Text.caption)
-        .foregroundStyle(Tokens.Color.textSecondary)
-        .monospacedDigit()
-
-      if !row.exerciseNames.isEmpty {
-        Text(row.exerciseNames.joined(separator: " · "))
-          .font(Tokens.Text.caption)
-          .foregroundStyle(Tokens.Color.textSecondary)
-          .lineLimit(2)
-      }
-    }
-    .padding(.vertical, Tokens.Spacing.tight)
-    .frame(minHeight: Tokens.minimumTapTarget, alignment: .leading)
-    .accessibilityElement(children: .combine)
-    .accessibilityLabel(Self.spokenLabel(row, unit: unit))
-  }
-
-  @ViewBuilder private func durationLabel(_ row: HistoryRow) -> some View {
-    if row.hasImplausibleDuration {
-      // The honest statement. A 20-hour span means the session was left open, not that it was
-      // trained through, so the number is withheld rather than displayed.
-      Label("Length unknown", systemImage: "exclamationmark.circle")
-        .font(Tokens.Text.caption)
-        .foregroundStyle(Tokens.Color.certainty(.low))
-    } else if let duration = row.duration {
-      Text(duration.clockString)
-        .font(Tokens.Text.caption)
-        .foregroundStyle(Tokens.Color.textSecondary)
-        .monospacedDigit()
+      .buttonStyle(HistoryRowButtonStyle())
+      .accessibilityLabel(Self.spokenLabel(row, unit: unit))
+    } else {
+      HistoryRowContent(row: row, unit: unit, showsDisclosure: false)
+        .hardsetCard(cornerRadius: Tokens.Radius.control)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(Self.spokenLabel(row, unit: unit))
     }
   }
+
+  // MARK: - Grouping
+
+  /// One calendar month of sessions, in the order the rows arrived. `nonisolated` for the same
+  /// reason as `HardsetSegment`: its `id` is computed.
+  nonisolated struct MonthGroup: Identifiable {
+    let start: Date
+    var rows: [HistoryRow]
+    var id: Date { start }
+
+    var title: String {
+      start.formatted(.dateTime.month(.wide).year())
+    }
+  }
+
+  /// Groups rows by the month they started in, keeping the caller's order within and between
+  /// months. Keyed on the month rather than on adjacency, so rows that arrive slightly out of order
+  /// cannot produce two sections for the same month.
+  static func monthGroups(_ rows: [HistoryRow], calendar: Calendar = .current) -> [MonthGroup] {
+    var order: [Date] = []
+    var buckets: [Date: [HistoryRow]] = [:]
+    for row in rows {
+      let start = calendar.dateInterval(of: .month, for: row.date)?.start ?? row.date
+      if buckets[start] == nil { order.append(start) }
+      buckets[start, default: []].append(row)
+    }
+    return order.map { MonthGroup(start: $0, rows: buckets[$0] ?? []) }
+  }
+
+  static func countText(_ count: Int) -> String {
+    count == 1 ? "1 workout" : "\(count) workouts, newest first"
+  }
+
+  // MARK: - Text
 
   static func dateText(_ date: Date) -> String {
     date.formatted(.dateTime.weekday(.abbreviated).day().month(.abbreviated))
@@ -145,7 +173,10 @@ public struct HistoryView: View {
 
   static func volumeText(_ volume: SessionVolume, unit: WeightUnit) -> String {
     guard !volume.isEmpty else { return "No sets" }
-    var parts = ["\(volume.workingSets) sets", "\(volume.reps) reps"]
+    var parts = [
+      volume.workingSets == 1 ? "1 set" : "\(volume.workingSets) sets",
+      volume.reps == 1 ? "1 rep" : "\(volume.reps) reps",
+    ]
     if volume.volumeKg > 0 {
       let displayed = unit.fromKilograms(volume.volumeKg)
       parts.append("\(Int(displayed.rounded())) \(unit.abbreviation)")
@@ -166,9 +197,204 @@ public struct HistoryView: View {
   }
 }
 
+// MARK: - Row
+
+/// The inside of a history card: a date block, then what was done and how much of it, with the
+/// session's length on the trailing edge.
+///
+/// At accessibility text sizes the date block moves above the details instead of squeezing them
+/// into a narrow column, and the length drops onto its own line.
+private struct HistoryRowContent: View {
+  let row: HistoryRow
+  let unit: WeightUnit
+  let showsDisclosure: Bool
+  @Environment(\.dynamicTypeSize) var dynamicTypeSize
+  /// Wide enough for a two-digit day and a three-letter weekday, and grows with the text.
+  @ScaledMetric(relativeTo: .title2) var dateColumnWidth: CGFloat = 44
+
+  var body: some View {
+    let isLarge = dynamicTypeSize.isAccessibilitySize
+    let layout =
+      isLarge
+      ? AnyLayout(VStackLayout(alignment: .leading, spacing: Tokens.Spacing.snug))
+      : AnyLayout(HStackLayout(alignment: .top, spacing: Tokens.Spacing.regular))
+
+    HStack(alignment: .center, spacing: Tokens.Spacing.regular) {
+      layout {
+        dateBlock(isLarge: isLarge)
+        details(isLarge: isLarge)
+      }
+      if showsDisclosure {
+        Image(systemName: "chevron.right")
+          .font(Tokens.Text.caption.weight(.semibold))
+          .foregroundStyle(Tokens.Color.textSecondary)
+          .accessibilityHidden(true)
+      }
+    }
+    .padding(Tokens.Spacing.regular)
+    .frame(maxWidth: .infinity, minHeight: Tokens.minimumTapTarget, alignment: .leading)
+  }
+
+  /// Day of the month in condensed figures over the abbreviated weekday, like a dated log page.
+  /// The month itself is the section header above.
+  @ViewBuilder private func dateBlock(isLarge: Bool) -> some View {
+    if isLarge {
+      HStack(alignment: .firstTextBaseline, spacing: Tokens.Spacing.snug) {
+        dayFigure
+        weekday
+      }
+    } else {
+      VStack(spacing: 0) {
+        dayFigure
+        weekday
+      }
+      .frame(minWidth: dateColumnWidth)
+    }
+  }
+
+  private var dayFigure: some View {
+    Text(row.date, format: .dateTime.day(.twoDigits))
+      .font(Tokens.Text.setEntry)
+      .foregroundStyle(Tokens.Color.textPrimary)
+  }
+
+  private var weekday: some View {
+    Text(row.date, format: .dateTime.weekday(.abbreviated))
+      .font(Tokens.Text.caption)
+      .foregroundStyle(Tokens.Color.textSecondary)
+  }
+
+  private func details(isLarge: Bool) -> some View {
+    VStack(alignment: .leading, spacing: Tokens.Spacing.snug) {
+      if isLarge {
+        titleText
+        durationLabel
+      } else {
+        HStack(alignment: .firstTextBaseline, spacing: Tokens.Spacing.snug) {
+          titleText
+          Spacer(minLength: Tokens.Spacing.snug)
+          durationLabel
+        }
+      }
+
+      figures
+
+      if !row.exerciseNames.isEmpty {
+        Text(row.exerciseNames.joined(separator: " · "))
+          .font(Tokens.Text.caption)
+          .foregroundStyle(Tokens.Color.textSecondary)
+          .lineLimit(2)
+      }
+    }
+    .frame(maxWidth: .infinity, alignment: .leading)
+  }
+
+  /// An untitled session reads "Workout": the date block beside it already says which day, and
+  /// repeating the date as the title said it twice.
+  private var titleText: some View {
+    Text(row.title.isEmpty ? "Workout" : row.title)
+      .font(Tokens.Text.headline)
+      .foregroundStyle(Tokens.Color.textPrimary)
+      .lineLimit(2)
+  }
+
+  /// Sets, reps and volume in the user's unit, as condensed figures with their units beside them.
+  /// Wraps rather than shrinks when the text is large.
+  @ViewBuilder private var figures: some View {
+    let volume = row.volume
+    if volume.isEmpty {
+      Text("No sets logged")
+        .font(Tokens.Text.caption)
+        .foregroundStyle(Tokens.Color.textSecondary)
+    } else {
+      FlowLayout(spacing: Tokens.Spacing.regular) {
+        figure(volume.workingSets.formatted(), volume.workingSets == 1 ? "set" : "sets")
+        figure(volume.reps.formatted(), volume.reps == 1 ? "rep" : "reps")
+        if volume.volumeKg > 0 {
+          figure(
+            Int(unit.fromKilograms(volume.volumeKg).rounded()).formatted(),
+            unit.abbreviation
+          )
+        }
+        if volume.warmupSets > 0 {
+          figure(volume.warmupSets.formatted(), "warm-up")
+        }
+      }
+    }
+  }
+
+  private func figure(_ value: String, _ label: String) -> some View {
+    HStack(alignment: .firstTextBaseline, spacing: Tokens.Spacing.tight) {
+      Text(value)
+        .font(Tokens.Text.figure)
+        .foregroundStyle(Tokens.Color.textPrimary)
+      Text(label)
+        .font(Tokens.Text.caption)
+        .foregroundStyle(Tokens.Color.textSecondary)
+    }
+  }
+
+  @ViewBuilder private var durationLabel: some View {
+    if row.hasImplausibleDuration {
+      // The honest statement. A 20-hour span means the session was left open, not that it was
+      // trained through, so the number is withheld rather than displayed.
+      Label("Length unknown", systemImage: "exclamationmark.circle")
+        .font(Tokens.Text.caption.weight(.semibold))
+        .foregroundStyle(Tokens.Color.warning)
+        .padding(.horizontal, Tokens.Spacing.snug)
+        .padding(.vertical, Tokens.Spacing.hairline)
+        .background(
+          Tokens.Color.warningSurface,
+          in: RoundedRectangle(cornerRadius: Tokens.Radius.control / 2)
+        )
+    } else if let duration = row.duration {
+      Text(duration.clockString)
+        .font(Tokens.Text.figure)
+        .foregroundStyle(Tokens.Color.textSecondary)
+    }
+  }
+}
+
+/// A selectable history card: the card's own fill, with the pressed fill faded in over it and the
+/// card pressed in slightly while the finger is down. Scale is dropped with Reduce Motion and the
+/// fill changes instantly.
+///
+/// The pressed fill is a layer whose opacity changes, rather than a colour that changes, so the
+/// only properties that animate are opacity and scale.
+private struct HistoryRowButtonStyle: ButtonStyle {
+  func makeBody(configuration: Configuration) -> some View {
+    HistoryRowButtonBody(configuration: configuration)
+  }
+}
+
+private struct HistoryRowButtonBody: View {
+  let configuration: ButtonStyleConfiguration
+  @Environment(\.accessibilityReduceMotion) var reduceMotion
+
+  var body: some View {
+    let shape = RoundedRectangle(cornerRadius: Tokens.Radius.control)
+    configuration.label
+      .background {
+        ZStack {
+          shape.fill(Tokens.Color.surface)
+          shape.fill(Tokens.Color.surfacePressed)
+            .opacity(configuration.isPressed ? 1 : 0)
+        }
+      }
+      .overlay(shape.strokeBorder(Tokens.Color.border, lineWidth: Tokens.Stroke.hairline))
+      .contentShape(shape)
+      .scaleEffect(configuration.isPressed && !reduceMotion ? 0.98 : 1)
+      .animation(
+        Tokens.Motion.adaptive(Tokens.Motion.press, reduceMotion: reduceMotion),
+        value: configuration.isPressed
+      )
+  }
+}
+
 #if DEBUG
   private struct HistoryPreviewHarness: View {
-    private let day = Date(timeIntervalSince1970: 15_000_000)
+    let selectable: Bool
+    let day = Date(timeIntervalSince1970: 15_000_000)
 
     var body: some View {
       HistoryView(
@@ -188,14 +414,31 @@ public struct HistoryView: View {
             volume: SessionVolume(workingSets: 8, warmupSets: 3, volumeKg: 11_200, reps: 64),
             hasImplausibleDuration: true
           ),
+          // Untitled, and a month earlier, so it falls under its own header.
+          HistoryRow(
+            id: SessionID(), title: "", date: day.addingTimeInterval(-2_678_400),
+            duration: .seconds(2_700),
+            exerciseNames: ["Lat Pulldown"],
+            volume: SessionVolume(workingSets: 4, warmupSets: 0, volumeKg: 2_100, reps: 40),
+            hasImplausibleDuration: false
+          ),
         ],
         unit: .kilograms,
-        onSelect: { _ in }
+        title: "History",
+        onSelect: selectable ? { _ in } : nil
       )
     }
   }
 
   #Preview("History") {
-    HistoryPreviewHarness()
+    HistoryPreviewHarness(selectable: false)
+  }
+
+  #Preview("History, selectable") {
+    HistoryPreviewHarness(selectable: true)
+  }
+
+  #Preview("No workouts") {
+    HistoryView(rows: [], unit: .pounds, title: "History")
   }
 #endif

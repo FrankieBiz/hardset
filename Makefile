@@ -1,13 +1,14 @@
 # Hardset Hypertrophy Logger — Multi-Model Orchestration & Verification Makefile
 .DEFAULT_GOAL := help
-.PHONY: check check-core check-store check-parse project orchestrate-probe orchestrate-stats test help
+.PHONY: check check-core check-store check-parse check-contrast project orchestrate-probe orchestrate-stats test help
 
 SWIFT := $(shell which swift)
 PY := python3
 
-check: ## Run honest Linux checks across all targets (parse syntax, Core suite, Store suite)
+check: ## Run honest Linux checks across all targets (parse syntax, Core suite, Store suite, query indexes, palette contrast)
 	hardset-check all
 	$(PY) Tools/check_query_performance.py --require-indexes
+	$(PY) Tools/check_contrast.py
 
 check-core: ## Run HardsetCore unit test suite
 	hardset-check core
@@ -17,6 +18,9 @@ check-store: ## Run HardsetStore test suite (with SQLite UUID support)
 
 check-parse: ## Parse Swift syntax across all repository files
 	hardset-check parse
+
+check-contrast: ## Verify the HardsetUI palette meets DESIGN.md's 7:1 text and 3:1 control floors
+	$(PY) Tools/check_contrast.py
 
 project: ## Regenerate Hardset.xcodeproj from Tools/generate_project.py
 	$(PY) Tools/generate_project.py

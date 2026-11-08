@@ -254,6 +254,52 @@ The requested architectural review is documented. No production Swift source or 
   validation and command retry identity, durable rest/sync ownership, native
   app/widget compilation, and Release iPhone launch/loading/hitch measurements.
 
+## UI design-system elevation follow-up — 2026-11-07
+
+- Objective: perfect and elevate the entire UI so no screen reads as a stock Apple
+  screen. Maintainer: FrankieBiz <frankabisignano@gmail.com>.
+- Worktree: `/home/frankbiz/orca/workspaces/hardset/snapper`; branch
+  `FrankieBiz/ui-elevation-overhaul`, rebased onto `origin/main` at `33d2b09`. Four
+  commits: design system foundation, unit-aware machine-change notes (Core), accent
+  and launch wiring (app target), and the screen-by-screen pass. Not pushed.
+- Settled decisions (see `DESIGN.md`): "calibrated instrument" direction; readout-cyan
+  accent `#00515E`/`#5ED3E6` replacing the asset blue; colour only for meaning; SF Pro
+  Condensed tabular figures and SF Expanded screen titles (system fonts only, no
+  resource bundle); every control has a fill or 3:1 border, tags never do; dashed
+  outline means "nothing here yet"; one spring (the log stamp); Reduce Motion
+  honoured everywhere. Tab roots draw their own `ScreenHeader` with the stock bar
+  hidden (`hardsetTabRoot()`); sheets use `hardsetNavigationTitle(_:)`.
+- Changed paths: all of `HardsetUI`, the Feature screens (root, live session,
+  settings, history, volume, progress), `HardsetWidgetBundle.swift`, `Progression.swift`
+  and `ProgressionTests.swift`, `AccentColor`/`LaunchBackground` colorsets, `Info.plist`,
+  `Tools/generate_project.py` (global accent setting), project file, `Makefile`,
+  `Tools/check_contrast.py`, `DESIGN.md`, `docs/MAC-VERIFICATION.md`, the audit doc.
+- Defects fixed on the way: a create-movement button that did nothing; `GymOption`
+  holding `UUID` while callers passed `GymID` (would not compile); warm-ups counted as
+  working sets in exercise progress; record banners and machine chips hard-coded to kg;
+  machine-change notes in kg (Core, tested); chart series merged when two machines
+  share a name; rest controls hidden from VoiceOver; keypad detent shorter than the
+  keypad; set row overflowing 375 pt phones; unreachable pull-to-refresh on error
+  states; false empty states before first load; gap copy overclaiming under lower
+  bounds; widget timer range able to invert; methodology sheet with no way to close.
+- Review: three implementation agents on disjoint files, then two independent
+  compile-plausibility reviews. Rejected with evidence: "computed `id` cannot satisfy
+  `Identifiable` under default MainActor" and "`.refreshable { load() }` needs await"
+  (both patterns compiled in the build recorded at `e5aff33`); hedged the three new
+  computed-id types with `nonisolated` anyway. Not adopted: replacing the conditional
+  `tabViewBottomAccessory` (pre-existing, documented, and it is what refreshes tabs
+  after a workout).
+- Verification on Linux: `make check` passed after rebase: 91 files parsed, 179 Core
+  tests, 72 Store tests in five suites, query-index gate, palette contrast (172 pairs:
+  7:1 text in four appearances, 3:1 control borders, 4.5:1 pressed fills). Project
+  regeneration has no drift; `git diff --check` clean. Nothing in HardsetUI,
+  HardsetFeature, the widget or the app has been compiled.
+- Next concrete step: on the Mac, work through `docs/MAC-VERIFICATION.md` (build
+  gates first, then appearance, logger ergonomics at 375 pt, hit regions, glare).
+  Open user decision: the app icon set has no image; the final icon is still the
+  user's call.
+
+
 ## Legacy-schema repair follow-up — 2026-11-07
 
 - Full-app goal stays active, same worktree and `FrankieBiz/mojarra` branch.
@@ -556,6 +602,27 @@ The requested architectural review is documented. No production Swift source or 
   incomplete-plan recovery/provenance, numeric/retry identity, durable rest/account
   gating, and native/device validation. Goal remains active.
 
+## UI design-system elevation, verification update — 2026-11-07
+
+- Branch `FrankieBiz/ui-elevation-overhaul` is now pushed (feature branch only, not `main`) so
+  `.github/workflows/ios-ui.yml` can compile it on a GitHub `macos-26` runner with Xcode 26.6.
+  Public repository, so the runner minutes are free.
+- Verified by CI (runs 42421852965 and 42423502965): HardsetKit builds for the macOS host; the app
+  and widget build for the iOS Simulator; 13 snapshot tests render every screen to PNG
+  (artifact `hardset-ios-ui`). The first run found two real compile errors, both fixed: GRDB's
+  `Configuration` shadowing `ButtonStyle.Configuration` in HardsetFeature, and a non-exhaustive
+  `LoggerStoreError` switch after main added validation cases.
+- Visual review of the renders found and fixed: "22.0 lb" machine steps, a header glyph
+  overflowing its circle at accessibility sizes, truncating machine chip and rest caption there,
+  a truncated last chart date, untitled history rows repeating their date, and undersized keypad
+  adjusters. The stray end-lines on outlined capsules are an artefact of the layer renderer:
+  `ImageRenderer` draws them cleanly.
+- The renderer cannot draw Liquid Glass, so the tab bar, workout accessory and prominent toolbar
+  buttons still need a look on a simulator or device. Hit regions and glare are device-only.
+- Merged `origin/main` (snapshot loading, startup ownership) rather than rebasing a pushed branch.
+  Main's `SnapshotLoader` logic is kept as is; its startup screen now uses the design system.
+- Interim app icon added (`Tools/render_interim_icon.py`); the final icon is still the user's call.
+
 
 ### 2026-11-08 00:12 UTC — Gate root readiness on async recovery
 
@@ -614,3 +681,32 @@ The requested architectural review is documented. No production Swift source or 
   picker loading, complete chart histories/tie order, incomplete-plan recovery,
   provenance, numeric/retry identity, durable rest/account gating, and native/device
   validation. Full app goal remains active.
+
+
+### Root-model integration after the interrupted session — 2026-11-08
+
+- Actual resumed branch is FrankieBiz/resume-workout-root-model, not the historical
+  mojarra branch above. Own commit cf55e74 succeeded, but direct push was rejected
+  safely because main advanced. Fetched and merged origin/main8422cd3 without
+  force/reset/rebase; preserve its design-system work, Core ordering fixes, icon,
+  app/widget changes, native workflow and snapshot suite.
+- Resolved RootView by retaining the remote UI and adapting its data ownership to
+  WorkoutRootModel. Kept the last-workout card/settings/accessory and cyan tint;
+  root loading/retry uses HardsetLoadingState/HardsetEmptyState's existing action.
+  Last-workout card now uses async HistoryStore through SnapshotLoader, preserving
+  optional-card error policy and rejecting stale overlapping refresh results.
+- DESIGN and handoff use main's current content plus this task's additions. Removed
+  pre-existing stray diff3 marker lines imported from main (33d2b09) in both docs.
+  No other remote work was dropped. Initial handoff-prefix merge assumption failed
+  because remote earlier notes changed; pivoted to main's full notes plus our new
+  entry. Conflict-marker and staged-whitespace scans are clean.
+- Combined make check passes:98 parsed files,179 Core tests/23 suites,81 default
+  Store tests/5 suites,8 query-plan cases and172 palette contrast pairs. Generated
+  project/scheme identical. Expanded Release Store after merge passed177 tests in
+  19 suites across17 portable files.
+- New authoritative evidence: existing PUBLIC repository CI run42426126904 passed
+  main8422cd3's native macOS package and iOS app/widget builds plus snapshot renders.
+  This does not validate the new root integration yet. Push the integration feature
+  branch to the existing iOS build and screens workflow; verify its native results
+  before advancing main. Actual device timings/account/signed-entitlement integration
+  remain pending even after unsigned native CI succeeds.

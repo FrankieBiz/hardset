@@ -10,17 +10,29 @@ import SwiftUI
 ///
 /// It edits a `NumericEntryBuffer` rather than a `Double`, which is what keeps "nothing typed"
 /// distinct from "zero" all the way to the database.
+///
+/// The pad shows the value it is editing in its own display, at the largest figure size in the
+/// app. The set row is still visible behind it, but a lifter typing between sets should not have
+/// to look past the keys to check what they typed.
 public struct NumericPad: View {
   @Binding private var buffer: NumericEntryBuffer
+  private let title: String?
+  private let unit: String?
   private let onDone: (() -> Void)?
   private let onNext: (() -> Void)?
 
+  /// - Parameter title: What is being edited, such as "Weight". `nil` hides the display.
+  /// - Parameter unit: Drawn beside the value in the display, such as "kg" or "reps".
   public init(
     buffer: Binding<NumericEntryBuffer>,
+    title: String? = nil,
+    unit: String? = nil,
     onDone: (() -> Void)? = nil,
     onNext: (() -> Void)? = nil
   ) {
     self._buffer = buffer
+    self.title = title
+    self.unit = unit
     self.onDone = onDone
     self.onNext = onNext
   }
@@ -42,9 +54,13 @@ public struct NumericPad: View {
 
   public var body: some View {
     VStack(spacing: Tokens.Spacing.snug) {
+      if let title {
+        display(title: title)
+      }
+
       adjustersRow
 
-      ForEach(Array(keys.enumerated()), id: \.offset) { _, row in
+      ForEach(keys, id: \.self) { row in
         HStack(spacing: Tokens.Spacing.snug) {
           ForEach(row) { key in
             keyButton(key)
@@ -53,10 +69,37 @@ public struct NumericPad: View {
       }
       footerActions
     }
-    .padding(Tokens.Spacing.regular)
+    .padding(.horizontal, Tokens.Spacing.regular)
+    .padding(.top, Tokens.Spacing.loose)
+    .padding(.bottom, Tokens.Spacing.regular)
     // Opaque, not glass. Glass cannot sample glass, and a translucent keypad over a dense set
     // grid is unreadable in a bright gym besides.
     .background(Tokens.Color.surface)
+  }
+
+  /// The value being typed, as large as anything in the app, with what it is and its unit.
+  private func display(title: String) -> some View {
+    HStack(alignment: .firstTextBaseline, spacing: Tokens.Spacing.snug) {
+      Text(title)
+        .font(Tokens.Text.sectionHeader)
+        .foregroundStyle(Tokens.Color.textSecondary)
+      Spacer(minLength: Tokens.Spacing.snug)
+      // An empty buffer shows an em dash, never "0": nothing typed is not a value.
+      Text(buffer.isEmpty ? "—" : buffer.displayText)
+        .font(Tokens.Text.hero)
+        .foregroundStyle(buffer.isEmpty ? Tokens.Color.textSecondary : Tokens.Color.textPrimary)
+        .lineLimit(1)
+      if let unit {
+        Text(unit)
+          .font(Tokens.Text.unit)
+          .foregroundStyle(Tokens.Color.textSecondary)
+      }
+    }
+    .padding(.horizontal, Tokens.Spacing.tight)
+    .accessibilityElement(children: .combine)
+    .accessibilityLabel(
+      "\(title), \(buffer.isEmpty ? "empty" : buffer.displayText)\(unit.map { " \($0)" } ?? "")"
+    )
   }
 
   private var adjustersRow: some View {
@@ -65,16 +108,15 @@ public struct NumericPad: View {
         Button {
           buffer.adjust(by: delta)
         } label: {
-          Text(delta > 0 ? "+\(formatDelta(delta))" : formatDelta(delta))
-            .font(Tokens.Text.caption.weight(.medium))
-            .foregroundStyle(Tokens.Color.textPrimary)
-            .frame(maxWidth: .infinity, minHeight: 36)
-            .contentShape(Rectangle())
+          // A real minus sign, not a hyphen: at this size the difference is visible, and a
+          // hyphen next to a plus reads as a dash.
+          Text(delta > 0 ? "+\(formatDelta(delta))" : "−\(formatDelta(-delta))")
+            .font(Tokens.Text.setEntry)
+            .foregroundStyle(Tokens.Color.accent)
         }
-        .buttonStyle(.plain)
-        .background(
-          Tokens.Color.background,
-          in: RoundedRectangle(cornerRadius: Tokens.Radius.control)
+        .buttonStyle(HardsetKeyStyle())
+        .accessibilityLabel(
+          delta > 0 ? "Add \(formatDelta(delta))" : "Subtract \(formatDelta(-delta))"
         )
       }
     }
@@ -86,47 +128,22 @@ public struct NumericPad: View {
 
   @ViewBuilder
   private var footerActions: some View {
-    if onNext != nil && onDone != nil {
+    if let onDone, let onNext {
       HStack(spacing: Tokens.Spacing.snug) {
-        if let onDone {
-          Button(action: onDone) {
-            Text("Done")
-              .font(Tokens.Text.label.weight(.semibold))
-              .frame(maxWidth: .infinity, minHeight: Tokens.loggerTapTarget)
+        Button("Done", action: onDone)
+          .buttonStyle(HardsetButtonStyle(.secondary, size: .logger))
+        Button(action: onNext) {
+          HStack(spacing: Tokens.Spacing.tight) {
+            Text("Next")
+            Image(systemName: "chevron.right")
           }
-          .buttonStyle(.plain)
-          .background(
-            Tokens.Color.background,
-            in: RoundedRectangle(cornerRadius: Tokens.Radius.control)
-          )
         }
-        if let onNext {
-          Button(action: onNext) {
-            HStack(spacing: Tokens.Spacing.tight) {
-              Text("Next")
-              Image(systemName: "chevron.right")
-            }
-            .font(Tokens.Text.label.weight(.semibold))
-            .frame(maxWidth: .infinity, minHeight: Tokens.loggerTapTarget)
-          }
-          .buttonStyle(.plain)
-          .background(
-            Tokens.Color.accent.opacity(0.15),
-            in: RoundedRectangle(cornerRadius: Tokens.Radius.control)
-          )
-        }
+        .buttonStyle(HardsetButtonStyle(.primary, size: .logger))
+        .accessibilityLabel("Next field")
       }
     } else if let onDone {
-      Button(action: onDone) {
-        Text("Done")
-          .font(Tokens.Text.label.weight(.semibold))
-          .frame(maxWidth: .infinity, minHeight: Tokens.loggerTapTarget)
-      }
-      .buttonStyle(.plain)
-      .background(
-        Tokens.Color.accent.opacity(0.15),
-        in: RoundedRectangle(cornerRadius: Tokens.Radius.control)
-      )
+      Button("Done", action: onDone)
+        .buttonStyle(HardsetButtonStyle(.primary, size: .logger))
     }
   }
 
@@ -142,16 +159,11 @@ public struct NumericPad: View {
         }
       }
       .font(Tokens.Text.readout)
-      .frame(maxWidth: .infinity, minHeight: Tokens.loggerTapTarget)
-      .contentShape(Rectangle())
     }
-    .buttonStyle(.plain)
+    .buttonStyle(HardsetKeyStyle())
     .disabled(key == .disabledDecimal)
     .opacity(key == .disabledDecimal ? 0 : 1)
-    .background(
-      Tokens.Color.background,
-      in: RoundedRectangle(cornerRadius: Tokens.Radius.control)
-    )
+    .accessibilityHidden(key == .disabledDecimal)
     .accessibilityLabel(accessibilityLabel(for: key))
   }
 
@@ -195,3 +207,31 @@ public struct NumericPad: View {
     }
   }
 }
+
+#if DEBUG
+  #Preview("Keypad, weight") {
+    struct Harness: View {
+      @State private var buffer = NumericEntryBuffer(
+        value: 102.5, maximumIntegerDigits: 4, maximumFractionDigits: 2
+      )
+
+      var body: some View {
+        NumericPad(buffer: $buffer, title: "Weight", unit: "kg", onDone: {}, onNext: {})
+      }
+    }
+    return Harness()
+  }
+
+  #Preview("Keypad, reps") {
+    struct Harness: View {
+      @State private var buffer = NumericEntryBuffer(
+        value: nil, allowsDecimal: false, maximumIntegerDigits: 3, maximumFractionDigits: 0
+      )
+
+      var body: some View {
+        NumericPad(buffer: $buffer, title: "Reps", unit: "reps", onDone: {})
+      }
+    }
+    return Harness()
+  }
+#endif

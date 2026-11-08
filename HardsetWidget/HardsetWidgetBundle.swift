@@ -20,45 +20,102 @@ struct HardsetWidgetBundle: WidgetBundle {
   }
 }
 
+/// The rest timer away from the app, drawn in the app's own type and palette.
+///
+/// The Lock Screen shows what the lifter is resting after, the countdown at the app's largest
+/// figure size, and a bar that the system advances from AlarmKit's own dates. The Dynamic Island
+/// keeps to the countdown and the movement, because that is all there is room to read at a glance.
 struct RestTimerLiveActivity: Widget {
   var body: some WidgetConfiguration {
     ActivityConfiguration(for: AlarmAttributes<RestMetadata>.self) { context in
       // Lock Screen / banner presentation.
-      HStack {
-        VStack(alignment: .leading, spacing: Tokens.Spacing.tight) {
-          Text(context.attributes.metadata?.exerciseName ?? "Rest")
-            .font(.headline)
-          if let label = context.attributes.metadata?.setLabel {
-            Text(label)
-              .font(Tokens.Text.caption)
-              .foregroundStyle(.secondary)
+      VStack(alignment: .leading, spacing: Tokens.Spacing.regular) {
+        HStack(alignment: .center, spacing: Tokens.Spacing.loose) {
+          VStack(alignment: .leading, spacing: Tokens.Spacing.hairline) {
+            Text(statusLabel(for: context.state))
+              .font(Tokens.Text.sectionHeader)
+              .foregroundStyle(Tokens.Color.accent)
+            Text(context.attributes.metadata?.exerciseName ?? "Rest")
+              .font(Tokens.Text.headline)
+              .foregroundStyle(Tokens.Color.textPrimary)
+              .lineLimit(1)
+            if let detail = detail(for: context.attributes.metadata) {
+              Text(detail)
+                .font(Tokens.Text.caption)
+                .foregroundStyle(Tokens.Color.textSecondary)
+                .lineLimit(1)
+            }
           }
+          Spacer(minLength: Tokens.Spacing.snug)
+          countdown(for: context.state)
+            .font(Tokens.Text.hero)
+            .foregroundStyle(Tokens.Color.textPrimary)
+            .multilineTextAlignment(.trailing)
         }
-        Spacer()
-        countdown(for: context.state)
-          .font(Tokens.Text.readout)
+        progress(for: context.state)
       }
       .padding(Tokens.Spacing.loose)
-      .activityBackgroundTint(nil)
+      .activityBackgroundTint(Tokens.Color.background)
+      .activitySystemActionForegroundColor(Tokens.Color.accent)
     } dynamicIsland: { context in
       DynamicIsland {
         DynamicIslandExpandedRegion(.leading) {
-          Text(context.attributes.metadata?.exerciseName ?? "Rest")
-            .font(Tokens.Text.label)
+          VStack(alignment: .leading, spacing: Tokens.Spacing.hairline) {
+            Text(statusLabel(for: context.state))
+              .font(Tokens.Text.caption.weight(.semibold))
+              .foregroundStyle(Tokens.Color.accent)
+            Text(context.attributes.metadata?.exerciseName ?? "Rest")
+              .font(Tokens.Text.headline)
+              .lineLimit(1)
+          }
         }
         DynamicIslandExpandedRegion(.trailing) {
           countdown(for: context.state)
             .font(Tokens.Text.readout)
+            .foregroundStyle(Tokens.Color.accent)
+            .multilineTextAlignment(.trailing)
+        }
+        DynamicIslandExpandedRegion(.bottom) {
+          VStack(alignment: .leading, spacing: Tokens.Spacing.snug) {
+            if let detail = detail(for: context.attributes.metadata) {
+              Text(detail)
+                .font(Tokens.Text.caption)
+                .foregroundStyle(Tokens.Color.textSecondary)
+                .lineLimit(1)
+            }
+            progress(for: context.state)
+          }
         }
       } compactLeading: {
         Image(systemName: "timer")
+          .foregroundStyle(Tokens.Color.accent)
       } compactTrailing: {
         countdown(for: context.state)
-          .monospacedDigit()
+          .font(Tokens.Text.figure)
+          .foregroundStyle(Tokens.Color.accent)
+          // A timer text otherwise claims all the width it is offered and pushes the island wide.
+          .frame(width: 44)
       } minimal: {
         Image(systemName: "timer")
+          .foregroundStyle(Tokens.Color.accent)
       }
+      .keylineTint(Tokens.Color.accent)
     }
+  }
+
+  private func statusLabel(for state: AlarmPresentationState) -> String {
+    switch state.mode {
+    case .countdown: "Resting"
+    case .paused: "Rest paused"
+    case .alert: "Rest over"
+    @unknown default: "Rest"
+    }
+  }
+
+  /// "Set 2 of 4, Hammer Strength" — the set and, when it was recorded, the machine.
+  private func detail(for metadata: RestMetadata?) -> String? {
+    guard let metadata else { return nil }
+    return [metadata.setLabel, metadata.machineName].compactMap { $0 }.joined(separator: ", ")
   }
 
   /// Renders the countdown from the dates AlarmKit provides.
@@ -75,14 +132,38 @@ struct RestTimerLiveActivity: Widget {
   private func countdown(for state: AlarmPresentationState) -> some View {
     switch state.mode {
     case .countdown(let countdown):
-      Text(timerInterval: Date.now...countdown.fireDate, countsDown: true)
+      // Clamped like the app's rest bar: a deadline already past would make an inverted range,
+      // which traps, in the moment before the presentation switches to the alert.
+      Text(timerInterval: Date.now...max(Date.now, countdown.fireDate), countsDown: true)
+        .monospacedDigit()
     case .paused(let paused):
       let left = paused.totalCountdownDuration - paused.previouslyElapsedDuration
       Text(Duration.seconds(max(0, left)), format: .time(pattern: .minuteSecond))
+        .monospacedDigit()
     case .alert:
       Text("Done")
     @unknown default:
       Text("--:--")
+    }
+  }
+
+  /// How much of the rest has gone, as a bar the system advances.
+  ///
+  /// Built from AlarmKit's own interval -- the deadline and the total length -- so it costs no
+  /// updates, exactly like the countdown beside it. Paused and finished timers have no running
+  /// interval, so they draw no bar rather than a frozen or invented one.
+  @ViewBuilder
+  private func progress(for state: AlarmPresentationState) -> some View {
+    if case .countdown(let countdown) = state.mode {
+      let start = countdown.fireDate.addingTimeInterval(-countdown.totalCountdownDuration)
+      ProgressView(timerInterval: start...max(start, countdown.fireDate), countsDown: true) {
+        EmptyView()
+      } currentValueLabel: {
+        EmptyView()
+      }
+      .progressViewStyle(.linear)
+      .tint(Tokens.Color.accent)
+      .accessibilityHidden(true)
     }
   }
 }

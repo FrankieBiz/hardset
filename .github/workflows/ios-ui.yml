@@ -1,0 +1,79 @@
+# Compiles what the Linux development machine cannot, and renders the screens for review.
+#
+# Hardset is developed on Linux, which can parse Swift and run the Core and Store suites but cannot
+# compile SwiftUI, Charts, WidgetKit or AlarmKit. This job builds the package for the macOS host,
+# builds the app and widget for the iOS Simulator, and runs HardsetUISnapshotTests, which writes a
+# PNG of every screen. The images and full logs are uploaded as the `hardset-ios-ui` artifact.
+
+name: iOS build and screens
+
+on:
+  push:
+    # main too: Core and Store changes land there from other worktrees, and one already broke the
+    # UI's compile without anything on Linux noticing.
+    branches: ["main", "FrankieBiz/**"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ios-ui-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  ios:
+    name: Build app and render screens
+    runs-on: macos-26
+    timeout-minutes: 75
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_26.6.app/Contents/Developer
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Toolchain
+        run: |
+          xcodebuild -version
+          xcrun simctl list devices available | grep -E "iPhone 17" || true
+
+      - name: Build HardsetKit for the macOS host
+        run: |
+          set -o pipefail
+          swift build --package-path Packages/HardsetKit 2>&1 | tee macos-build.log | tail -40
+
+      - name: Build the app and widget for the iOS Simulator
+        run: |
+          set -o pipefail
+          xcodebuild build \
+            -project Hardset.xcodeproj -scheme Hardset \
+            -destination 'generic/platform=iOS Simulator' \
+            -skipMacroValidation -skipPackagePluginValidation \
+            CODE_SIGNING_ALLOWED=NO \
+            2>&1 | tee app-build.log | grep -E "error:|BUILD (SUCCEEDED|FAILED)" || true
+          grep -q "BUILD SUCCEEDED" app-build.log
+
+      - name: Render screens on the iOS Simulator
+        env:
+          TEST_RUNNER_HARDSET_SNAPSHOT_DIR: ${{ github.workspace }}/snapshots
+        run: |
+          set -o pipefail
+          mkdir -p snapshots
+          cd Packages/HardsetKit
+          xcodebuild test \
+            -scheme HardsetKit-Package \
+            -destination 'platform=iOS Simulator,name=iPhone 17,OS=latest' \
+            -only-testing:HardsetUISnapshotTests \
+            -skipMacroValidation -skipPackagePluginValidation \
+            2>&1 | tee ../../snapshot-test.log | grep -E "error:|TEST (SUCCEEDED|FAILED)|Test run" || true
+          ls -la ../../snapshots
+          grep -q "TEST SUCCEEDED" ../../snapshot-test.log
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: always()
+        with:
+          name: hardset-ios-ui
+          path: |
+            snapshots/
+            *.log
+          if-no-files-found: warn
+          retention-days: 14

@@ -64,6 +64,9 @@ def build_settings(target):
             "INFOPLIST_FILE": "Hardset/Info.plist",
             "CODE_SIGN_ENTITLEMENTS": "Hardset/Hardset.entitlements",
             "ASSETCATALOG_COMPILER_APPICON_NAME": "AppIcon",
+            # Without this the AccentColor asset is never applied, and every system-drawn control
+            # outside an explicit `.tint` -- alerts, the launch, share sheets -- falls back to blue.
+            "ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME": "AccentColor",
             "ENABLE_PREVIEWS": "YES",
             "LD_RUNPATH_SEARCH_PATHS": '"$(inherited) @executable_path/Frameworks"',
         })

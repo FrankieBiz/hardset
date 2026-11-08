@@ -24,8 +24,13 @@
 	<string>1.0</string>
 	<key>CFBundleVersion</key>
 	<string>1</string>
+	<!-- The launch fills with the app's own canvas colour, so opening the app does not flash
+	     system white or black before the first screen draws. -->
 	<key>UILaunchScreen</key>
-	<dict/>
+	<dict>
+		<key>UIColorName</key>
+		<string>LaunchBackground</string>
+	</dict>
 
 	<!-- Required for AlarmKit. Without this key AlarmManager cannot schedule at all: the
 	     framework fails at runtime with "Client has not provided an NSAlarmKitUsageDescription

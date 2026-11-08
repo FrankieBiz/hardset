@@ -17,6 +17,8 @@ public struct ExerciseSectionView: View {
   private let onSelectMachine: (() -> Void)?
   private let onShowHistory: (() -> Void)?
 
+  @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
   /// - Parameter onSelectMachine: Opens the machine picker. Passing `nil` hides the chip, which is
   ///   correct when no gym is known — an affordance that opens an empty list is worse than none.
   /// - Parameter onShowHistory: Opens this movement's load history. `nil` leaves the name inert.
@@ -35,16 +37,25 @@ public struct ExerciseSectionView: View {
   }
 
   public var body: some View {
-    VStack(alignment: .leading, spacing: Tokens.Spacing.snug) {
+    VStack(alignment: .leading, spacing: Tokens.Spacing.regular) {
       header
 
-      VStack(spacing: Tokens.Spacing.hairline) {
+      VStack(spacing: Tokens.Spacing.tight) {
+        // Labelled once, above the columns, rather than inside every row: "Last time" and "kg"
+        // repeated down a five-set card is noise the eye learns to skip. At accessibility sizes
+        // the rows stack and label themselves, so there are no columns to head.
+        if !dynamicTypeSize.isAccessibilitySize {
+          columnHeader
+        }
+
         ForEach($state.slots) { $slot in
           SetRowView(
             draft: $slot.draft,
             ordinal: ordinal(of: slot),
             isWarmup: slot.isWarmup,
             isLogged: slot.isLogged,
+            isNext: slot.id == state.nextUnloggedSlotID,
+            showsInlineLabels: false,
             unit: unit,
             previous: state.suggestion(forSetIndex: ordinal(of: slot)),
             // The borrowed-history note is shown once in the header, not repeated on every
@@ -52,34 +63,36 @@ public struct ExerciseSectionView: View {
             priorNote: nil,
             onLog: { onLogSet(slot) }
           )
-          .clipShape(RoundedRectangle(cornerRadius: Tokens.Radius.control))
         }
       }
 
-      addSetButton
+      addSetButtons
     }
-    .padding(.vertical, Tokens.Spacing.regular)
+    .padding(Tokens.Spacing.regular)
+    .hardsetCard()
   }
 
   private var header: some View {
-    VStack(alignment: .leading, spacing: Tokens.Spacing.tight) {
-      HStack(alignment: .firstTextBaseline) {
+    VStack(alignment: .leading, spacing: Tokens.Spacing.snug) {
+      HStack(alignment: .firstTextBaseline, spacing: Tokens.Spacing.snug) {
         // The name is the way into this movement's load history. Placed here because "how have I
         // been doing on this" is a question asked while standing at the machine, and a chart
         // buried in a separate browse tab does not get looked at mid-set.
         Button {
           onShowHistory?()
         } label: {
-          HStack(spacing: Tokens.Spacing.tight) {
+          HStack(alignment: .firstTextBaseline, spacing: Tokens.Spacing.snug) {
             Text(state.exerciseName)
-              .font(Tokens.Text.label.weight(.semibold))
+              .font(Tokens.Text.title)
               .foregroundStyle(Tokens.Color.textPrimary)
+              .multilineTextAlignment(.leading)
             if onShowHistory != nil {
               Image(systemName: "chart.xyaxis.line")
-                .font(Tokens.Text.caption)
+                .font(Tokens.Text.caption.weight(.semibold))
                 .foregroundStyle(Tokens.Color.accent)
             }
           }
+          .frame(minHeight: Tokens.minimumTapTarget, alignment: .leading)
           .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -88,11 +101,11 @@ public struct ExerciseSectionView: View {
           onShowHistory == nil
             ? state.exerciseName : "\(state.exerciseName). Show load history."
         )
-        Spacer()
-        Text(progressDescription)
-          .font(Tokens.Text.caption)
-          .foregroundStyle(Tokens.Color.textSecondary)
-          .monospacedDigit()
+        .accessibilityAddTraits(.isHeader)
+
+        Spacer(minLength: Tokens.Spacing.snug)
+
+        progress
       }
       if let onSelectMachine {
         machineChip(action: onSelectMachine)
@@ -105,7 +118,69 @@ public struct ExerciseSectionView: View {
         )
       }
     }
-    .padding(.horizontal, Tokens.Spacing.regular)
+  }
+
+  /// How far through the working sets the lifter is: a pip per set, filled when logged, and the
+  /// count in figures beside it. The pips are hidden from VoiceOver, which reads the sentence.
+  private var progress: some View {
+    let working = state.workingSetCount
+    let logged = loggedWorkingSets
+    return HStack(spacing: Tokens.Spacing.snug) {
+      // Beyond eight sets the pips stop being countable at a glance, so only the figure remains.
+      if working > 0 && working <= 8 {
+        HStack(spacing: Tokens.Spacing.hairline) {
+          ForEach(0..<working, id: \.self) { index in
+            Capsule()
+              .fill(index < logged ? Tokens.Color.success : Tokens.Color.surfaceRaised)
+              .overlay(
+                Capsule().strokeBorder(
+                  index < logged ? Tokens.Color.success : Tokens.Color.controlBorder,
+                  lineWidth: Tokens.Stroke.hairline
+                )
+              )
+              .frame(width: 10, height: 6)
+          }
+        }
+        .accessibilityHidden(true)
+      }
+      Text("\(logged)/\(working)")
+        .font(Tokens.Text.figure)
+        .foregroundStyle(logged == working && working > 0 ? Tokens.Color.success : Tokens.Color.textSecondary)
+    }
+    .accessibilityElement(children: .combine)
+    .accessibilityLabel("\(logged) of \(working) working sets logged")
+  }
+
+  /// Working sets only. Counting a logged warm-up here made "1 of 3 logged" appear before a single
+  /// working set had been done.
+  private var loggedWorkingSets: Int {
+    state.slots.count { !$0.isWarmup && $0.isLogged }
+  }
+
+  /// Labels for the set rows' columns, using the same widths so each label sits over its values.
+  private var columnHeader: some View {
+    HStack(spacing: Tokens.Spacing.snug) {
+      Text("Set")
+        .frame(width: SetRowMetrics.ordinalWidth)
+      Text("Last time")
+        // A label, not a value, so it may tighten to share the narrow column's width.
+        .minimumScaleFactor(0.8)
+        .frame(width: SetRowMetrics.previousWidth, alignment: .leading)
+      Text(unit.abbreviation)
+        .frame(minWidth: SetRowMetrics.weightMinWidth, maxWidth: .infinity)
+      Text("Reps")
+        .frame(minWidth: SetRowMetrics.repsMinWidth, maxWidth: .infinity)
+      Color.clear
+        .frame(width: Tokens.loggerTapTarget, height: 1)
+    }
+    .font(Tokens.Text.caption.weight(.medium))
+    .foregroundStyle(Tokens.Color.textSecondary)
+    .lineLimit(1)
+    // The same inset as each row, so every label sits over its column.
+    .padding(.horizontal, Tokens.Spacing.tight)
+    // The rows carry the same information in their spoken labels; reading the header as well
+    // would only add a stop before every set.
+    .accessibilityHidden(true)
   }
 
   /// Where per-machine tracking is actually reached.
@@ -119,19 +194,41 @@ public struct ExerciseSectionView: View {
   /// Unset reads as an invitation, never a warning. A set with no machine is a real set.
   private func machineChip(action: @escaping () -> Void) -> some View {
     Button(action: action) {
-      HStack(spacing: Tokens.Spacing.hairline) {
-        Image(systemName: state.machineID == nil ? "dumbbell" : "dumbbell.fill")
+      HStack(spacing: Tokens.Spacing.snug) {
+        Image(systemName: state.machineID == nil ? "plus" : "dumbbell.fill")
+          .font(Tokens.Text.caption.weight(.semibold))
         Text(state.machineName ?? "Choose machine")
+          .font(Tokens.Text.caption.weight(.semibold))
+          // One line at ordinary sizes; at accessibility sizes the name wraps rather than
+          // truncating to "Hamm…", because it is how the lifter recognises the machine.
+          .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 1)
         if let increment = state.machineIncrementKg {
-          // Shown because it is the constraint on what a suggestion may propose.
-          Text("· \(Self.format(increment)) kg steps")
+          // Shown because it is the constraint on what a suggestion may propose. Rounded to a
+          // tenth before formatting, so 10 kg reads "22 lb steps" rather than "22.0".
+          let step = (unit.fromKilograms(increment) * 10).rounded() / 10
+          Text("\(Self.format(step)) \(unit.abbreviation) steps")
+            .font(Tokens.Text.caption)
+            .foregroundStyle(Tokens.Color.textSecondary)
+            .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 1)
         }
+        Image(systemName: "chevron.down")
+          .font(Tokens.Text.caption.weight(.semibold))
+          .foregroundStyle(Tokens.Color.textSecondary)
       }
-      .font(Tokens.Text.caption)
-      .foregroundStyle(
-        state.machineID == nil ? Tokens.Color.textSecondary : Tokens.Color.accent
+      .foregroundStyle(state.machineID == nil ? Tokens.Color.accent : Tokens.Color.textPrimary)
+      .padding(.horizontal, Tokens.Spacing.regular)
+      .padding(.vertical, Tokens.Spacing.snug)
+      .background(
+        state.machineID == nil ? Tokens.Color.accentSurface : Tokens.Color.surfaceRaised,
+        in: Capsule()
       )
-      .frame(minHeight: Tokens.minimumTapTarget, alignment: .leading)
+      .overlay(
+        Capsule().strokeBorder(
+          state.machineID == nil ? Tokens.Color.accent : Tokens.Color.controlBorder,
+          lineWidth: Tokens.Stroke.hairline
+        )
+      )
+      .frame(minHeight: Tokens.minimumTapTarget)
       .contentShape(Rectangle())
     }
     .buttonStyle(.plain)
@@ -144,29 +241,23 @@ public struct ExerciseSectionView: View {
     value == value.rounded() ? String(Int(value)) : String(format: "%.1f", value)
   }
 
-  private var addSetButton: some View {
+  private var addSetButtons: some View {
     HStack(spacing: Tokens.Spacing.snug) {
       Button {
         state.appendSlot()
       } label: {
-        Label("Add set", systemImage: "plus.circle")
-          .font(Tokens.Text.label)
-          .frame(minHeight: Tokens.minimumTapTarget)
+        Label("Add set", systemImage: "plus")
       }
-      .buttonStyle(.plain)
-      .foregroundStyle(Tokens.Color.accent)
+      .buttonStyle(HardsetButtonStyle(.secondary, fullWidth: true))
 
       Button {
         state.appendSlot(isWarmup: true)
       } label: {
-        Label("Warm-up", systemImage: "plus.circle.dashed")
-          .font(Tokens.Text.label)
-          .frame(minHeight: Tokens.minimumTapTarget)
+        Label("Warm-up", systemImage: "plus")
       }
-      .buttonStyle(.plain)
-      .foregroundStyle(Tokens.Color.textSecondary)
+      .buttonStyle(HardsetButtonStyle(.quiet, fullWidth: false))
+      .accessibilityLabel("Add warm-up set")
     }
-    .padding(.horizontal, Tokens.Spacing.regular)
   }
 
   /// Warm-ups do not consume a working-set number, so the badge on row three still reads "3"
@@ -174,11 +265,6 @@ public struct ExerciseSectionView: View {
   private func ordinal(of slot: SetSlot) -> Int {
     guard let index = state.slots.firstIndex(of: slot) else { return 0 }
     return state.slots[..<index].count { !$0.isWarmup }
-  }
-
-  private var progressDescription: String {
-    let working = state.slots.count { !$0.isWarmup }
-    return "\(state.loggedCount) of \(working) logged"
   }
 }
 
@@ -205,7 +291,8 @@ public struct ExerciseSectionView: View {
           initialValue: .build(
             exerciseID: exercise,
             machineID: machine,
-            exerciseName: "Leg Press — Hammer Strength",
+            exerciseName: "Leg Press",
+            machineName: "Hammer Strength",
             snapshot: snapshot
           )
         )
@@ -213,10 +300,17 @@ public struct ExerciseSectionView: View {
 
       var body: some View {
         ScrollView {
-          ExerciseSectionView(state: $state, unit: .kilograms) { slot in
-            // Stands in for the store write.
-            state.markLogged(slotID: slot.id, setID: SetID())
-          }
+          ExerciseSectionView(
+            state: $state,
+            unit: .kilograms,
+            onLogSet: { slot in
+              // Stands in for the store write.
+              state.markLogged(slotID: slot.id, setID: SetID())
+            },
+            onSelectMachine: {},
+            onShowHistory: {}
+          )
+          .padding()
         }
         .background(Tokens.Color.background)
       }

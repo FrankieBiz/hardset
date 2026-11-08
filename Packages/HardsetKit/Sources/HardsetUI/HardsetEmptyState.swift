@@ -2,79 +2,84 @@ import SwiftUI
 
 /// An honest, high-density empty state replacing generic `ContentUnavailableView`.
 ///
-/// Designed with Hardset's dark-slate aesthetic: a contained surface card with subtle charcoal
-/// border, restrained iconography, clear plain-English explanation, and an optional direct action.
-/// Accessible as a single combined VoiceOver element.
+/// Drawn as an empty slot rather than a dialog: the symbol sits in a dashed socket, which is the
+/// one place a dashed outline appears in the app and it always means "nothing here yet". Then a
+/// plain-English statement of what is missing, and, when there is one, the action that fills it.
+///
+/// The words and symbol read as one VoiceOver element; the action stays its own button, so it can
+/// be found and activated rather than being folded into a sentence.
 public struct HardsetEmptyState: View {
   private let title: String
   private let detail: String?
   private let systemImage: String
   private let actionTitle: String?
+  private let actionSystemImage: String
   private let action: (() -> Void)?
 
+  /// - Parameter actionSystemImage: The action's symbol. A plus by default, because most empty
+  ///   states are filled by adding something; a retry passes `arrow.clockwise`.
   public init(
     title: String,
     detail: String? = nil,
     systemImage: String,
     actionTitle: String? = nil,
+    actionSystemImage: String = "plus",
     action: (() -> Void)? = nil
   ) {
     self.title = title
     self.detail = detail
     self.systemImage = systemImage
     self.actionTitle = actionTitle
+    self.actionSystemImage = actionSystemImage
     self.action = action
   }
 
   public var body: some View {
-    VStack(spacing: Tokens.Spacing.regular) {
-      ZStack {
-        Circle()
-          .fill(Tokens.Color.surfaceRaised)
-          .frame(width: 52, height: 52)
+    VStack(spacing: Tokens.Spacing.loose) {
+      VStack(spacing: Tokens.Spacing.regular) {
+        Image(systemName: systemImage)
+          .font(Tokens.Text.title)
+          .foregroundStyle(Tokens.Color.textSecondary)
+          .frame(width: Tokens.loggerTapTarget, height: Tokens.loggerTapTarget)
+          .background(
+            Tokens.Color.surfaceRaised,
+            in: RoundedRectangle(cornerRadius: Tokens.Radius.card)
+          )
           .overlay(
-            Circle()
-              .strokeBorder(Tokens.Color.border, lineWidth: Tokens.Stroke.hairline)
+            RoundedRectangle(cornerRadius: Tokens.Radius.card)
+              .strokeBorder(
+                Tokens.Color.controlBorder,
+                style: StrokeStyle(lineWidth: Tokens.Stroke.hairline, dash: [4, 3])
+              )
           )
 
-        Image(systemName: systemImage)
-          .font(.system(size: 22, weight: .medium))
-          .foregroundStyle(Tokens.Color.textSecondary)
-      }
-
-      VStack(spacing: Tokens.Spacing.tight) {
-        Text(title)
-          .font(Tokens.Text.labelEmphasis)
-          .foregroundStyle(Tokens.Color.textPrimary)
-          .multilineTextAlignment(.center)
-
-        if let detail, !detail.isEmpty {
-          Text(detail)
-            .font(Tokens.Text.caption)
-            .foregroundStyle(Tokens.Color.textSecondary)
+        VStack(spacing: Tokens.Spacing.tight) {
+          Text(title)
+            .font(Tokens.Text.headline)
+            .foregroundStyle(Tokens.Color.textPrimary)
             .multilineTextAlignment(.center)
-            .lineSpacing(2)
+
+          if let detail, !detail.isEmpty {
+            Text(detail)
+              .font(Tokens.Text.label)
+              .foregroundStyle(Tokens.Color.textSecondary)
+              .multilineTextAlignment(.center)
+              .fixedSize(horizontal: false, vertical: true)
+          }
         }
       }
+      .accessibilityElement(children: .combine)
 
       if let actionTitle, let action {
         Button(action: action) {
-          Text(actionTitle)
-            .font(Tokens.Text.caption.weight(.semibold))
-            .foregroundStyle(Tokens.Color.background)
-            .padding(.horizontal, Tokens.Spacing.loose)
-            .frame(minHeight: Tokens.minimumTapTarget)
-            .background(Tokens.Color.accent, in: RoundedRectangle(cornerRadius: Tokens.Radius.control))
+          Label(actionTitle, systemImage: actionSystemImage)
         }
-        .buttonStyle(.plain)
-        .padding(.top, Tokens.Spacing.tight)
+        .buttonStyle(HardsetButtonStyle(.primary, fullWidth: false))
       }
     }
-    .padding(Tokens.Spacing.section)
+    .padding(.vertical, Tokens.Spacing.section)
+    .padding(.horizontal, Tokens.Spacing.section)
     .frame(maxWidth: .infinity)
-    .hardsetCard()
-    .padding(.horizontal, Tokens.Spacing.loose)
-    .accessibilityElement(children: .combine)
   }
 }
 

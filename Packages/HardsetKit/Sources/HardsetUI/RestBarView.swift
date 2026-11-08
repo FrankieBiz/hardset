@@ -13,6 +13,11 @@ import SwiftUI
 /// carries only durations and no dates, so there is no deadline to hand SwiftUI. It renders as
 /// static text from the frozen remainder instead, which is why `RestTimerState` models paused
 /// as a `Duration` rather than as a stopped clock.
+///
+/// Laid out as one line when the countdown, its caption and four 56 pt controls fit, and as two
+/// lines — countdown above, controls below at equal widths — when they do not. Four 56 pt
+/// controls reserve over 300 pt on their own, so on most phones the second form is the one in use,
+/// and the countdown keeps its full size instead of being squeezed into what is left.
 public struct RestBarView: View {
   private let state: RestTimerState
   private let metadata: RestMetadata?
@@ -41,30 +46,51 @@ public struct RestBarView: View {
     if case .idle = state {
       EmptyView()
     } else {
-      HStack(spacing: Tokens.Spacing.regular) {
-        VStack(alignment: .leading, spacing: Tokens.Spacing.hairline) {
-          countdown
-          if let metadata {
-            Text("\(metadata.exerciseName) · \(metadata.setLabel)")
-              .font(Tokens.Text.caption)
-              .foregroundStyle(Tokens.Color.textSecondary)
-              .lineLimit(1)
-          }
+      ViewThatFits(in: .horizontal) {
+        HStack(spacing: Tokens.Spacing.regular) {
+          status
+          Spacer(minLength: Tokens.Spacing.snug)
+          controls
+            .fixedSize()
         }
-
-        Spacer(minLength: 0)
-
-        adjustButton(label: "−15", delta: .seconds(-15))
-        adjustButton(label: "+15", delta: .seconds(15))
-        pauseResumeButton
-        skipButton
+        VStack(alignment: .leading, spacing: Tokens.Spacing.regular) {
+          status
+          controls
+        }
       }
+      .padding(Tokens.Spacing.regular)
+      .background(Tokens.Color.surfaceRaised, in: RoundedRectangle(cornerRadius: Tokens.Radius.card))
+      .overlay(
+        RoundedRectangle(cornerRadius: Tokens.Radius.card)
+          .strokeBorder(Tokens.Color.border, lineWidth: Tokens.Stroke.hairline)
+      )
       .padding(.horizontal, Tokens.Spacing.regular)
-      .padding(.vertical, Tokens.Spacing.snug)
-      .background(Tokens.Color.surface)
-      .accessibilityElement(children: .combine)
-      .accessibilityLabel(spokenLabel)
+      .padding(.bottom, Tokens.Spacing.snug)
+      // The countdown is one element and each control is its own, so a VoiceOver user can hear
+      // the time and still reach "Add 15 seconds" directly. Combining the whole bar made the
+      // controls unreachable.
+      .accessibilityElement(children: .contain)
     }
+  }
+
+  /// The countdown and what it is resting after.
+  private var status: some View {
+    HStack(alignment: .firstTextBaseline, spacing: Tokens.Spacing.regular) {
+      countdown
+      VStack(alignment: .leading, spacing: Tokens.Spacing.hairline) {
+        Text(state.isRunning ? "Resting" : "Paused")
+          .font(Tokens.Text.sectionHeader)
+          .foregroundStyle(state.isRunning ? Tokens.Color.accent : Tokens.Color.textSecondary)
+        if let metadata {
+          Text("\(metadata.exerciseName), \(metadata.setLabel.lowercased())")
+            .font(Tokens.Text.caption)
+            .foregroundStyle(Tokens.Color.textSecondary)
+            .lineLimit(2)
+        }
+      }
+    }
+    .accessibilityElement(children: .ignore)
+    .accessibilityLabel(spokenLabel)
   }
 
   @ViewBuilder private var countdown: some View {
@@ -75,54 +101,67 @@ public struct RestBarView: View {
       // System-rendered from the deadline. Costs zero updates and survives backgrounding,
       // because there is nothing of ours to keep running.
       Text(timerInterval: referenceDate...max(endsAt, referenceDate), countsDown: true)
-        .font(Tokens.Text.readout)
+        .font(Tokens.Text.hero)
         .foregroundStyle(Tokens.Color.textPrimary)
+        .lineLimit(1)
+        .fixedSize()
     case .paused(let remaining):
-      HStack(spacing: Tokens.Spacing.tight) {
-        Text(remaining.clockString)
-          .font(Tokens.Text.readout)
-        Image(systemName: "pause.fill")
-          .font(Tokens.Text.caption)
+      Text(remaining.clockString)
+        .font(Tokens.Text.hero)
+        .foregroundStyle(Tokens.Color.textSecondary)
+        .lineLimit(1)
+        .fixedSize()
+    }
+  }
+
+  private var controls: some View {
+    HStack(spacing: Tokens.Spacing.snug) {
+      control(
+        title: "−15",
+        systemImage: nil,
+        accessibilityLabel: "Subtract 15 seconds"
+      ) { onAdjust(.seconds(-15)) }
+      control(
+        title: "+15",
+        systemImage: nil,
+        accessibilityLabel: "Add 15 seconds"
+      ) { onAdjust(.seconds(15)) }
+      control(
+        title: nil,
+        systemImage: state.isRunning ? "pause.fill" : "play.fill",
+        accessibilityLabel: state.isRunning ? "Pause rest" : "Resume rest",
+        action: onPauseResume
+      )
+      control(
+        title: nil,
+        systemImage: "forward.end.fill",
+        accessibilityLabel: "Skip rest",
+        action: onSkip
+      )
+    }
+  }
+
+  /// A rest control: a 56 pt key, with a figure or a symbol.
+  private func control(
+    title: String?,
+    systemImage: String?,
+    accessibilityLabel: String,
+    action: @escaping () -> Void
+  ) -> some View {
+    Button(action: action) {
+      Group {
+        if let title {
+          Text(title)
+            .font(Tokens.Text.figure)
+        } else if let systemImage {
+          Image(systemName: systemImage)
+            .font(Tokens.Text.headline)
+        }
       }
-      .foregroundStyle(Tokens.Color.textSecondary)
+      .frame(minWidth: Tokens.loggerTapTarget)
     }
-  }
-
-  private func adjustButton(label: String, delta: Duration) -> some View {
-    Button { onAdjust(delta) } label: {
-      Text(label)
-        .font(Tokens.Text.label.weight(.semibold))
-        .monospacedDigit()
-        .frame(minWidth: Tokens.loggerTapTarget, minHeight: Tokens.loggerTapTarget)
-        .contentShape(Rectangle())
-    }
-    .buttonStyle(.plain)
-    .foregroundStyle(Tokens.Color.accent)
-    .accessibilityLabel(delta.seconds < 0 ? "Subtract 15 seconds" : "Add 15 seconds")
-  }
-
-  private var pauseResumeButton: some View {
-    Button(action: onPauseResume) {
-      Image(systemName: state.isRunning ? "pause.circle" : "play.circle")
-        .font(.title2)
-        .frame(width: Tokens.loggerTapTarget, height: Tokens.loggerTapTarget)
-        .contentShape(Rectangle())
-    }
-    .buttonStyle(.plain)
-    .foregroundStyle(Tokens.Color.accent)
-    .accessibilityLabel(state.isRunning ? "Pause rest" : "Resume rest")
-  }
-
-  private var skipButton: some View {
-    Button(action: onSkip) {
-      Image(systemName: "forward.end")
-        .font(.body)
-        .frame(width: Tokens.loggerTapTarget, height: Tokens.loggerTapTarget)
-        .contentShape(Rectangle())
-    }
-    .buttonStyle(.plain)
-    .foregroundStyle(Tokens.Color.textSecondary)
-    .accessibilityLabel("Skip rest")
+    .buttonStyle(HardsetKeyStyle())
+    .accessibilityLabel(accessibilityLabel)
   }
 
   private var spokenLabel: String {
@@ -152,7 +191,7 @@ public struct RestBarView: View {
         onAdjust: { _ in }, onPauseResume: {}, onSkip: {}
       )
     }
-    .padding()
+    .padding(.vertical)
     .background(Tokens.Color.background)
   }
 #endif

@@ -132,6 +132,33 @@ struct ProgressionTests {
     #expect(!change.explanation.lowercased().contains("weaker"))
   }
 
+  /// The chart and its notes are drawn in the lifter's unit, so the sentence under the chart must
+  /// be too. A pound user read "20 kg lower" beneath a line labelled in pounds.
+  @Test("The machine-change sentence is stated in the unit the lifter reads")
+  func machineChangeExplanationUsesDisplayUnit() throws {
+    let all = samples([
+      (1, hammer, 100, 8, 0),
+      (2, cybex, 80, 8, 7),
+    ])
+    let change = try #require(ProgressionAnalyzer.machineChanges(from: all).first)
+    #expect(change.explanation(in: .pounds).contains("44.1 lb lower"))
+    #expect(!change.explanation(in: .pounds).contains("kg"))
+    #expect(change.explanation(in: .kilograms).contains("20 kg lower"))
+    // The unit-free spelling stays the canonical kilograms sentence it always was.
+    #expect(change.explanation == change.explanation(in: .kilograms))
+  }
+
+  /// A difference too small to show must not be printed as "0 kg higher", which reads as a
+  /// comparison the numbers do not support.
+  @Test("A load difference that rounds to nothing is stated as a match")
+  func machineChangeRoundingToZero() {
+    let change = MachineChange(
+      date: day0, fromMachineID: hammer, toMachineID: cybex, heaviestLoadDeltaKg: 0.01
+    )
+    #expect(change.explanation(in: .kilograms).contains("coincidence, not a comparison"))
+    #expect(!change.explanation(in: .pounds).contains("0 lb"))
+  }
+
   @Test("Staying on one machine produces no changes")
   func noChangeWhenStable() {
     let all = samples([

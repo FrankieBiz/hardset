@@ -11,9 +11,16 @@ import SwiftUI
 ///
 /// It is also the brand. An app whose claim is calibrated honesty has to be willing to show the
 /// limits of its own numbers on the same screen as the numbers.
+///
+/// Laid out as a document rather than a form: the certainty first, because it is the answer to
+/// "how far can I trust this", then the method, then its limits, then the source in a raised card
+/// set apart from the prose it supports.
 public struct MethodologySheet: View {
   private let source: EvidenceSource
   private let certainty: Certainty?
+  /// Every caller presents this as a sheet, so it carries its own way out rather than relying on a
+  /// drag a lifter may not know about.
+  @Environment(\.dismiss) private var dismiss
 
   public init(source: EvidenceSource, certainty: Certainty? = nil) {
     self.source = source
@@ -25,12 +32,8 @@ public struct MethodologySheet: View {
       ScrollView {
         VStack(alignment: .leading, spacing: Tokens.Spacing.section) {
           if let certainty {
-            HStack(spacing: Tokens.Spacing.tight) {
-              Image(systemName: Self.symbol(for: certainty))
-              Text(Self.label(for: certainty))
-            }
-            .font(Tokens.Text.caption)
-            .foregroundStyle(Tokens.Color.certainty(Self.level(for: certainty)))
+            CertaintyCapsule(level: Self.level(for: certainty), isInteractive: false)
+              .accessibilityElement(children: .combine)
           }
 
           section("How this is calculated", source.methodology)
@@ -42,27 +45,68 @@ public struct MethodologySheet: View {
           }
 
           if let citation = source.citation {
-            section("Source", citation, monospaced: true)
+            citationCard(citation)
           }
         }
-        .padding(Tokens.Spacing.regular)
+        .padding(.horizontal, Tokens.Spacing.loose)
+        .padding(.top, Tokens.Spacing.loose)
+        .padding(.bottom, Tokens.Spacing.block)
         .frame(maxWidth: .infinity, alignment: .leading)
       }
       .background(Tokens.Color.background)
-      .navigationTitle(source.title)
+      .hardsetNavigationTitle(source.title)
+      .toolbar {
+        ToolbarItem(placement: .confirmationAction) {
+          Button("Done") { dismiss() }
+        }
+      }
     }
   }
 
-  private func section(_ heading: String, _ body: String, monospaced: Bool = false) -> some View {
+  private func section(_ heading: String, _ body: String) -> some View {
     VStack(alignment: .leading, spacing: Tokens.Spacing.snug) {
       Text(heading)
-        .font(Tokens.Text.label.weight(.semibold))
+        .font(Tokens.Text.headline)
+        .foregroundStyle(Tokens.Color.textPrimary)
+        .accessibilityAddTraits(.isHeader)
       Text(body)
-        .font(monospaced ? Tokens.Text.caption.monospaced() : Tokens.Text.label)
-        .foregroundStyle(monospaced ? Tokens.Color.textSecondary : Tokens.Color.textPrimary)
+        .font(Tokens.Text.label)
+        .foregroundStyle(Tokens.Color.textPrimary)
+        .fixedSize(horizontal: false, vertical: true)
         .textSelection(.enabled)
     }
     .frame(maxWidth: .infinity, alignment: .leading)
+  }
+
+  /// The citation, set apart on a raised card. Monospaced so a DOI or PMID can be read back
+  /// character by character, and selectable so it can be copied into a search.
+  private func citationCard(_ citation: String) -> some View {
+    VStack(alignment: .leading, spacing: Tokens.Spacing.snug) {
+      Label {
+        Text("Source")
+      } icon: {
+        Image(systemName: "text.book.closed")
+          .foregroundStyle(Tokens.Color.textSecondary)
+      }
+      .font(Tokens.Text.sectionHeader)
+      .foregroundStyle(Tokens.Color.textPrimary)
+      .accessibilityAddTraits(.isHeader)
+      Text(citation)
+        .font(Tokens.Text.caption.monospaced())
+        .foregroundStyle(Tokens.Color.textSecondary)
+        .fixedSize(horizontal: false, vertical: true)
+        .textSelection(.enabled)
+    }
+    .padding(Tokens.Spacing.regular)
+    .frame(maxWidth: .infinity, alignment: .leading)
+    .background(
+      Tokens.Color.surfaceRaised,
+      in: RoundedRectangle(cornerRadius: Tokens.Radius.card)
+    )
+    .overlay(
+      RoundedRectangle(cornerRadius: Tokens.Radius.card)
+        .strokeBorder(Tokens.Color.border, lineWidth: Tokens.Stroke.hairline)
+    )
   }
 
   /// Maps engine certainty onto the UI's own scale. Kept here so `HardsetUI` does not need the
@@ -87,5 +131,9 @@ public struct MethodologySheet: View {
 
   #Preview("No target exists") {
     MethodologySheet(source: VolumeAnalyzer.targetSource, certainty: .unevaluated)
+  }
+
+  #Preview("Load history, no certainty") {
+    MethodologySheet(source: ProgressionAnalyzer.source)
   }
 #endif

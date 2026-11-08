@@ -102,5 +102,17 @@ let package = Package(
       ],
       swiftSettings: strictConcurrency
     ),
+
+    // Renders every screen to PNG on the iOS Simulator so the interface can be reviewed from a
+    // machine that cannot compile SwiftUI. Inert unless HARDSET_SNAPSHOT_DIR is set, and empty
+    // wherever UIKit is unavailable, so the host suites are unaffected.
+    .testTarget(
+      name: "HardsetUISnapshotTests",
+      dependencies: [
+        "HardsetUI", "HardsetFeature", "HardsetStore", "HardsetCore",
+        .product(name: "GRDB", package: "GRDB.swift"),
+      ],
+      swiftSettings: mainActorByDefault
+    ),
   ]
 )

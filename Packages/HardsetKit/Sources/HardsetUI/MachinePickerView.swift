@@ -19,8 +19,10 @@ public struct MachineOption: Hashable, Sendable, Identifiable {
 /// Picks which physical machine a movement is being performed on.
 ///
 /// Recency-first: the machine the lifter used last time is rendered as a prominent hero card
-/// at the top, reachable in a single tap on the gym floor. Other gym machines, unrecorded sets,
-/// and adding a new machine are neatly structured below in dark-slate cards.
+/// at the top, reachable in a single tap on the gym floor, because it is almost always the one
+/// they are standing at. Other recent machines and the rest of the gym follow as 56 pt selection
+/// rows under sentence-case labels. "Not recorded" stays a real choice, and adding a machine is a
+/// plainly styled action rather than a row pretending to be one.
 public struct MachinePickerView: View {
   private let recent: [MachineOption]
   private let others: [MachineOption]
@@ -47,165 +49,134 @@ public struct MachinePickerView: View {
 
   public var body: some View {
     ScrollView {
-      VStack(alignment: .leading, spacing: Tokens.Spacing.loose) {
-        // Guidance header
-        VStack(alignment: .leading, spacing: Tokens.Spacing.tight) {
-          Text("Select Machine")
-            .font(Tokens.Text.labelEmphasis)
-            .foregroundStyle(Tokens.Color.textPrimary)
+      VStack(alignment: .leading, spacing: Tokens.Spacing.section) {
+        Text("Loads are tracked per machine, so weight on different equipment stays separate.")
+          .font(Tokens.Text.label)
+          .foregroundStyle(Tokens.Color.textSecondary)
+          .fixedSize(horizontal: false, vertical: true)
 
-          Text("Loads are tracked per machine, so weight on different equipment stays separate.")
-            .font(Tokens.Text.caption)
-            .foregroundStyle(Tokens.Color.textSecondary)
-        }
-        .padding(.horizontal, Tokens.Spacing.loose)
-        .padding(.top, Tokens.Spacing.regular)
-
-        // Hero card: Most recent machine
         if let hero = recent.first {
           VStack(alignment: .leading, spacing: Tokens.Spacing.snug) {
-            Text("YOU USED THIS LAST")
-              .font(Tokens.Text.sectionHeader)
-              .foregroundStyle(Tokens.Color.textSecondary)
-              .padding(.horizontal, Tokens.Spacing.loose)
-
-            Button {
-              onSelect(hero.id)
-            } label: {
-              VStack(alignment: .leading, spacing: Tokens.Spacing.tight) {
-                HStack {
-                  Text("Recent machine")
-                    .font(Tokens.Text.caption.weight(.semibold))
-                    .foregroundStyle(Tokens.Color.accent)
-                  Spacer()
-                  if selected == hero.id {
-                    Image(systemName: "checkmark.circle.fill")
-                      .font(.system(size: 16, weight: .semibold))
-                      .foregroundStyle(Tokens.Color.accent)
-                  }
-                }
-
-                Text(hero.displayName)
-                  .font(Tokens.Text.rowTitle.weight(.semibold))
-                  .foregroundStyle(Tokens.Color.textPrimary)
-
-                if let increment = hero.stackIncrementKg {
-                  Text(Self.formatStep(increment, unit: unit))
-                    .font(Tokens.Text.caption)
-                    .foregroundStyle(Tokens.Color.textSecondary)
-                }
-              }
-              .padding(Tokens.Spacing.regular)
-              .frame(maxWidth: .infinity, alignment: .leading)
-              .hardsetCard(selected: selected == hero.id, cornerRadius: Tokens.Radius.control)
-            }
-            .buttonStyle(.plain)
-            .padding(.horizontal, Tokens.Spacing.loose)
-            .accessibilityElement(children: .combine)
-            .accessibilityLabel(accessibilityLabel(for: hero, prefix: "Last used"))
-            .accessibilityAddTraits(selected == hero.id ? [.isButton, .isSelected] : [.isButton])
+            SectionLabel("Used last time")
+            heroCard(hero)
           }
+        } else if others.isEmpty {
+          // True whether the gym has no machines yet or its list could not be read, which is why
+          // it does not claim either.
+          Text("No machines to show for this gym.")
+            .font(Tokens.Text.label)
+            .foregroundStyle(Tokens.Color.textPrimary)
+            .fixedSize(horizontal: false, vertical: true)
         }
 
-        // Other recents (if more than 1)
         if recent.count > 1 {
-          VStack(alignment: .leading, spacing: Tokens.Spacing.snug) {
-            Text("OTHER RECENT EQUIPMENT")
-              .font(Tokens.Text.sectionHeader)
-              .foregroundStyle(Tokens.Color.textSecondary)
-              .padding(.horizontal, Tokens.Spacing.loose)
-
-            VStack(spacing: Tokens.Spacing.snug) {
-              ForEach(Array(recent.dropFirst())) { option in
-                SelectionRow(
-                  title: option.displayName,
-                  subtitle: option.stackIncrementKg.map { Self.formatStep($0, unit: unit) },
-                  badge: "Recent",
-                  isSelected: selected == option.id,
-                  action: { onSelect(option.id) }
-                )
-              }
-            }
-            .padding(.horizontal, Tokens.Spacing.loose)
-          }
+          machineSection("Other recent machines", options: Array(recent.dropFirst()))
         }
 
-        // Also at this gym
         if !others.isEmpty {
-          VStack(alignment: .leading, spacing: Tokens.Spacing.snug) {
-            Text("ALSO AT THIS GYM")
-              .font(Tokens.Text.sectionHeader)
-              .foregroundStyle(Tokens.Color.textSecondary)
-              .padding(.horizontal, Tokens.Spacing.loose)
-
-            VStack(spacing: Tokens.Spacing.snug) {
-              ForEach(others) { option in
-                SelectionRow(
-                  title: option.displayName,
-                  subtitle: option.stackIncrementKg.map { Self.formatStep($0, unit: unit) },
-                  isSelected: selected == option.id,
-                  action: { onSelect(option.id) }
-                )
-              }
-            }
-            .padding(.horizontal, Tokens.Spacing.loose)
-          }
+          machineSection("Also at this gym", options: others)
         }
 
-        // Unrecorded and Add Machine
         VStack(alignment: .leading, spacing: Tokens.Spacing.snug) {
-          Text("OPTIONS")
-            .font(Tokens.Text.sectionHeader)
-            .foregroundStyle(Tokens.Color.textSecondary)
-            .padding(.horizontal, Tokens.Spacing.loose)
+          SectionLabel("Not on the list")
 
-          VStack(spacing: Tokens.Spacing.snug) {
-            SelectionRow(
-              title: "Not recorded",
-              subtitle: "Log set without machine calibration",
-              leadingIcon: "slash.circle",
-              isSelected: selected == nil,
-              action: { onSelect(nil) }
-            )
+          SelectionRow(
+            title: "Not recorded",
+            subtitle: "History is kept for the movement, not a machine",
+            leadingIcon: "slash.circle",
+            isSelected: selected == nil,
+            action: { onSelect(nil) }
+          )
 
-            if let onAddMachine {
-              Button(action: onAddMachine) {
-                HStack(spacing: Tokens.Spacing.regular) {
-                  Image(systemName: "plus.circle.fill")
-                    .font(.system(size: 18, weight: .semibold))
-                    .foregroundStyle(Tokens.Color.accent)
-
-                  Text("Add a machine")
-                    .font(Tokens.Text.rowTitle.weight(.medium))
-                    .foregroundStyle(Tokens.Color.accent)
-
-                  Spacer()
-                }
-                .padding(.horizontal, Tokens.Spacing.regular)
-                .frame(minHeight: Tokens.loggerTapTarget)
-                .contentShape(Rectangle())
-                .hardsetCard(cornerRadius: Tokens.Radius.control)
+          if let onAddMachine {
+            Button(action: onAddMachine) {
+              Label {
+                Text("Add a machine")
+              } icon: {
+                Image(systemName: "plus")
+                  .foregroundStyle(Tokens.Color.accent)
               }
-              .buttonStyle(.plain)
             }
+            .buttonStyle(HardsetButtonStyle(.secondary, size: .logger))
+            .padding(.top, Tokens.Spacing.tight)
           }
-          .padding(.horizontal, Tokens.Spacing.loose)
         }
       }
+      .padding(.horizontal, Tokens.Spacing.loose)
+      .padding(.top, Tokens.Spacing.regular)
       .padding(.bottom, Tokens.Spacing.section)
     }
     .background(Tokens.Color.background)
   }
 
-  private func accessibilityLabel(for option: MachineOption, prefix: String? = nil) -> String {
+  // MARK: - Hero card
+
+  /// The machine used last time, as the largest target on the screen.
+  ///
+  /// Name in the title role and the stack step in the lifter's unit beneath it. Selected uses the
+  /// same accent ring, tint and check as every other choice, only bigger.
+  private func heroCard(_ hero: MachineOption) -> some View {
+    let isSelected = selected == hero.id
+    return Button {
+      onSelect(hero.id)
+    } label: {
+      HStack(alignment: .center, spacing: Tokens.Spacing.regular) {
+        VStack(alignment: .leading, spacing: Tokens.Spacing.tight) {
+          Text(hero.displayName)
+            .font(Tokens.Text.title)
+            .foregroundStyle(Tokens.Color.textPrimary)
+
+          if let increment = hero.stackIncrementKg {
+            Text(Self.formatStep(increment, unit: unit))
+              .font(Tokens.Text.provenance.monospacedDigit())
+              .foregroundStyle(Tokens.Color.textSecondary)
+          }
+        }
+        .multilineTextAlignment(.leading)
+        .fixedSize(horizontal: false, vertical: true)
+        .frame(maxWidth: .infinity, alignment: .leading)
+
+        SelectionIndicator(isSelected: isSelected)
+      }
+      .padding(Tokens.Spacing.loose)
+      // Inside the label, so the frame and the tappable shape are the same rectangle.
+      .frame(
+        maxWidth: .infinity,
+        minHeight: Tokens.loggerTapTarget + Tokens.Spacing.section,
+        alignment: .leading
+      )
+      .contentShape(RoundedRectangle(cornerRadius: Tokens.Radius.card))
+    }
+    .buttonStyle(SelectionCardButtonStyle(isSelected: isSelected, cornerRadius: Tokens.Radius.card))
+    .accessibilityElement(children: .combine)
+    .accessibilityLabel(spokenLabel(for: hero, prefix: "Used last time"))
+    .accessibilityAddTraits(isSelected ? [.isButton, .isSelected] : [.isButton])
+  }
+
+  // MARK: - Lists
+
+  private func machineSection(_ title: String, options: [MachineOption]) -> some View {
+    VStack(alignment: .leading, spacing: Tokens.Spacing.snug) {
+      SectionLabel(title, count: options.count)
+
+      ForEach(options) { option in
+        SelectionRow(
+          title: option.displayName,
+          subtitle: option.stackIncrementKg.map { Self.formatStep($0, unit: unit) },
+          isSelected: selected == option.id,
+          action: { onSelect(option.id) }
+        )
+      }
+    }
+  }
+
+  /// The selected state is spoken by the `.isSelected` trait, so it is not repeated here.
+  private func spokenLabel(for option: MachineOption, prefix: String? = nil) -> String {
     var parts: [String] = []
     if let prefix { parts.append(prefix) }
     parts.append(option.displayName)
     if let increment = option.stackIncrementKg {
       parts.append(Self.formatStep(increment, unit: unit))
-    }
-    if selected == option.id {
-      parts.append("selected")
     }
     return parts.joined(separator: ", ")
   }
@@ -221,29 +192,47 @@ public struct MachinePickerView: View {
 
 #if DEBUG
   private struct MachinePickerHarness: View {
-    @State private var selected: MachineID?
+    let unit: WeightUnit
+    let isEmpty: Bool
+    @State private var selected: MachineID? = nil
     private let hammer = MachineID()
     private let cybex = MachineID()
     private let panatta = MachineID()
 
+    init(unit: WeightUnit = .kilograms, isEmpty: Bool = false) {
+      self.unit = unit
+      self.isEmpty = isEmpty
+    }
+
     var body: some View {
-      MachinePickerView(
-        recent: [
-          MachineOption(id: hammer, displayName: "Hammer Strength Leg Press", stackIncrementKg: 10),
-          MachineOption(id: cybex, displayName: "Cybex Leg Press"),
-        ],
-        others: [MachineOption(id: panatta, displayName: "Panatta Leg Press")],
-        selected: selected,
-        unit: .kilograms,
-        onSelect: { selected = $0 },
-        onAddMachine: {}
-      )
+      NavigationStack {
+        MachinePickerView(
+          recent: isEmpty
+            ? []
+            : [
+              MachineOption(id: hammer, displayName: "Hammer Strength Leg Press", stackIncrementKg: 10),
+              MachineOption(id: cybex, displayName: "Cybex Leg Press", stackIncrementKg: 4.5),
+            ],
+          others: isEmpty ? [] : [MachineOption(id: panatta, displayName: "Panatta Leg Press")],
+          selected: selected,
+          unit: unit,
+          onSelect: { selected = $0 },
+          onAddMachine: {}
+        )
+        .hardsetNavigationTitle("Machine")
+      }
     }
   }
 
   #Preview("Machine picker") {
-    NavigationStack {
-      MachinePickerHarness().navigationTitle("Machine")
-    }
+    MachinePickerHarness()
+  }
+
+  #Preview("Machine picker, pounds") {
+    MachinePickerHarness(unit: .pounds)
+  }
+
+  #Preview("Machine picker, no machines") {
+    MachinePickerHarness(isEmpty: true)
   }
 #endif
