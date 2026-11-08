@@ -22,12 +22,17 @@ public struct SettingsSheet: View {
   @State private var lifetime = LifetimeAccess()
   private let health: DeviceHealthStore?
   private let transfer: DataTransferStore?
+  private let sync: SyncStatus?
   private let onDone: () -> Void
 
-  public init(useImperial: Binding<Bool>, transfer: DataTransferStore? = nil, health: DeviceHealthStore? = nil, onDone: @escaping () -> Void) {
+  public init(
+    useImperial: Binding<Bool>, transfer: DataTransferStore? = nil,
+    health: DeviceHealthStore? = nil, sync: SyncStatus? = nil, onDone: @escaping () -> Void
+  ) {
     self._useImperial = useImperial
     self.health = health
     self.transfer = transfer
+    self.sync = sync
     self.onDone = onDone
   }
 
@@ -41,6 +46,7 @@ public struct SettingsSheet: View {
           if let health { HealthSettingsSection(store: health, unit: useImperial ? .pounds : .kilograms) }
           #endif
           LifetimePurchaseSection(access: lifetime)
+          if let sync { syncSection(sync) }
           if let transfer {
             DataPortabilitySection(store: transfer, unit: useImperial ? .pounds : .kilograms)
           }
@@ -106,6 +112,47 @@ public struct SettingsSheet: View {
       .foregroundStyle(Tokens.Color.textSecondary)
       .fixedSize(horizontal: false, vertical: true)
       .padding(.horizontal, Tokens.Spacing.tight)
+    }
+  }
+
+  // MARK: - Sync
+
+  /// Where the lifter's workouts live, stated rather than implied.
+  ///
+  /// A build signed without iCloud opens local-only, and nothing else on screen would tell the
+  /// lifter that their history has no copy off this phone. "Set up" is as far as the enabled
+  /// state claims: the engine exists, but whether an account is signed in and records have
+  /// uploaded is CloudKit's to know, and the app does not guess.
+  private func syncSection(_ sync: SyncStatus) -> some View {
+    VStack(alignment: .leading, spacing: Tokens.Spacing.snug) {
+      SectionLabel("iCloud")
+
+      HStack(alignment: .firstTextBaseline, spacing: Tokens.Spacing.regular) {
+        Image(systemName: sync.isSyncing ? "icloud" : "iphone")
+          .font(Tokens.Text.headline)
+          .foregroundStyle(Tokens.Color.textSecondary)
+          .accessibilityHidden(true)
+        VStack(alignment: .leading, spacing: Tokens.Spacing.hairline) {
+          Text(sync.isSyncing ? "iCloud sync is set up" : "Saved on this iPhone only")
+            .font(Tokens.Text.headline)
+            .foregroundStyle(Tokens.Color.textPrimary)
+          Text(
+            sync.isSyncing
+              ? "Workouts replicate to your private iCloud database while you are signed in "
+                + "to iCloud."
+              : "iCloud sync is off in this build, so workouts are not backed up to iCloud. "
+                + "Export below to keep a copy elsewhere."
+          )
+          .font(Tokens.Text.caption)
+          .foregroundStyle(Tokens.Color.textSecondary)
+          .fixedSize(horizontal: false, vertical: true)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+      }
+      .padding(Tokens.Spacing.loose)
+      .frame(maxWidth: .infinity, alignment: .leading)
+      .hardsetCard()
+      .accessibilityElement(children: .combine)
     }
   }
 

@@ -1,6 +1,7 @@
 import Foundation
 import HardsetCore
 import SQLiteData
+import SwiftData
 
 /// Database and sync wiring.
 // `nonisolated` is deliberate. This module defaults to MainActor isolation, which is right
@@ -12,31 +13,70 @@ public nonisolated enum HardsetDatabase {
   /// The engine's SQL functions must remain alive for writes on this writer.
   public nonisolated struct Resources: Sendable {
     public let database: any DatabaseWriter
-    public let syncEngine: SyncEngine
+    /// `nil` exactly when `sync` is `.localOnly`: there is no container to sync to, so no engine
+    /// and none of the triggers that would need its SQL functions.
+    public let syncEngine: SyncEngine?
+    public let sync: SyncStatus
     public let restCheckpoint: Result<RestCheckpoint, any Error>
   }
 
   /// Blocking preparation for `AppStartup`'s dedicated queue. Publish neither
   /// resource until opening, migrations, and engine construction all succeed.
+  ///
+  /// A build with no iCloud container entitlement opens local-only. Before it did, SQLiteData
+  /// threw `noCloudKitContainer` from both the metadatabase attach and the engine, so a device
+  /// build signed by a personal team -- which cannot carry the entitlement -- could never get
+  /// past "Could not open Hardset", and retrying failed identically every time.
+  ///
+  /// When a container IS entitled, engine construction failure still fails startup rather than
+  /// falling back. Rows written without the engine's triggers get no sync metadata and would
+  /// never upload, so quietly running local-only there would lose data from iCloud's view.
   public static func prepareForLaunch(containerIdentifier: String? = nil) throws -> Resources {
-    let database = try open(containerIdentifier: containerIdentifier)
+    guard
+      let container = SyncStatus.container(
+        explicit: containerIdentifier, entitled: entitledContainerIdentifier()
+      )
+    else {
+      let database = try open(syncContainer: nil)
+      return Resources(
+        database: database, syncEngine: nil, sync: .localOnly,
+        restCheckpoint: Result { try RestJournal(database: database).load() }
+      )
+    }
+    let database = try open(syncContainer: container)
     let engine = try makeSyncEngine(
-      for: database, delegate: HardsetSyncDelegate(), containerIdentifier: containerIdentifier
+      for: database, delegate: HardsetSyncDelegate(), containerIdentifier: container
     )
-    return Resources(database: database, syncEngine: engine, restCheckpoint: Result { try RestJournal(database: database).load() })
+    return Resources(
+      database: database, syncEngine: engine, sync: .enabled(containerIdentifier: container),
+      restCheckpoint: Result { try RestJournal(database: database).load() }
+    )
+  }
+
+  /// The iCloud container this build is entitled to, or `nil` when it carries none.
+  ///
+  /// Resolved with the same expression SQLiteData uses for its own default (`SyncEngine.init`
+  /// and `attachMetadatabase` in 1.10.0), so this check and the library can never disagree about
+  /// whether a container exists.
+  public static func entitledContainerIdentifier() -> String? {
+    ModelConfiguration(groupContainer: .automatic).cloudKitContainerIdentifier
   }
 
   /// Opens the on-disk database and runs migrations.
   ///
   /// The app calls this through `AppStartup`, once per preparation attempt.
   /// Only a failed attempt may be retried; never reopen a live resource set.
-  public static func open(containerIdentifier: String? = nil) throws -> any DatabaseWriter {
+  /// - Parameter syncContainer: The container whose sync metadatabase to attach, or `nil` for a
+  ///   local-only database with no metadatabase at all.
+  public static func open(syncContainer: String?) throws -> any DatabaseWriter {
     var configuration = Configuration()
     // Required for ON DELETE CASCADE / SET NULL to actually fire.
     configuration.foreignKeysEnabled = true
-    configuration.prepareDatabase { db in
-      // Attaches SQLiteData's sync metadatabase under the `sqlitedata_icloud` schema.
-      try db.attachMetadatabase(containerIdentifier: containerIdentifier)
+    if let syncContainer {
+      configuration.prepareDatabase { db in
+        // Attaches SQLiteData's sync metadatabase under the `sqlitedata_icloud` schema.
+        try db.attachMetadatabase(containerIdentifier: syncContainer)
+      }
     }
 
     // Spelled with the module prefix on purpose: inside a `DependencyValues` extension the

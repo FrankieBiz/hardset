@@ -30,6 +30,14 @@ final class AppScreensUITests: XCTestCase {
     XCTAssertTrue(app.buttons["Done"].waitForExistence(timeout: 5))
     capture(app, "02-settings")
     audit(app, screen: "settings")
+    // A build signed without iCloud opens local-only and says so here, rather than stranding the
+    // lifter on the startup failure screen. CI's build carries no iCloud container, as a
+    // personal-team device build does not, so reaching this line is that regression check.
+    let syncStatus = app.descendants(matching: .any)
+      .matching(NSPredicate(format: "label CONTAINS 'Saved on this iPhone only'")).firstMatch
+    XCTAssertTrue(syncStatus.waitForExistence(timeout: 5))
+    app.swipeUp()
+    capture(app, "02b-settings-data")
     app.buttons["Done"].tap()
 
     openTab(app, "Volume")

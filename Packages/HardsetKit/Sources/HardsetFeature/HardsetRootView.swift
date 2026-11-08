@@ -20,8 +20,14 @@ public struct HardsetEnvironment {
   public let receipts: ReceiptStore
   public let transfer: DataTransferStore
   public let gyms: GymStore
+  /// Whether this launch replicates to iCloud. Shown in Settings, so a local-only build says
+  /// plainly where the lifter's workouts live instead of leaving them to assume a backup.
+  public let sync: SyncStatus?
 
-  public init(database: any DatabaseWriter) {
+  /// - Parameter sync: `nil` in previews and tests, where no launch decided it; Settings then
+  ///   omits the section rather than claiming either state.
+  public init(database: any DatabaseWriter, sync: SyncStatus? = nil) {
+    self.sync = sync
     self.logger = LoggerStore(database: database)
     self.catalog = CatalogSeeder(database: database)
     self.volume = VolumeStore(database: database)
@@ -139,7 +145,10 @@ public struct HardsetRootView: View {
             // header and from the live session's alike, and finishing a workout while it is open
             // cannot pull its anchor out from under it.
             .sheet(isPresented: $isShowingSettings) {
-              SettingsSheet(useImperial: $useImperial, transfer: environment.transfer, health: environment.health) { isShowingSettings = false }
+              SettingsSheet(
+                useImperial: $useImperial, transfer: environment.transfer,
+                health: environment.health, sync: environment.sync
+              ) { isShowingSettings = false }
                 .hardsetSheet()
             }
         }

@@ -56,11 +56,22 @@ if [ -n "$DEVICE_ID" ]; then
         exit 1
     fi
 
-    echo "==> Installing Hardset to iPhone ($DEVICE_ID)..."
+    # The identifier the build actually carries, not a hard-coded one: the generator takes it from
+    # HARDSET_BUNDLE_ID, and launching a stale identifier fails after a successful install.
+    BUNDLE_ID=$(/usr/libexec/PlistBuddy -c "Print :CFBundleIdentifier" "$APP_BUNDLE/Info.plist")
+
+    echo "==> Installing Hardset ($BUNDLE_ID) to iPhone ($DEVICE_ID)..."
     xcrun devicectl device install app --device "$DEVICE_ID" "$APP_BUNDLE"
 
     echo "==> Launching Hardset on iPhone..."
-    xcrun devicectl device process launch --device "$DEVICE_ID" com.hardset.app
+    if ! xcrun devicectl device process launch --device "$DEVICE_ID" "$BUNDLE_ID"; then
+        echo "" >&2
+        echo "Installed, but iOS refused to launch it. With a personal team, trust the developer" >&2
+        echo "certificate once on the iPhone: Settings > General > VPN & Device Management, then" >&2
+        echo "open Hardset from the Home Screen. Developer Mode must also be on" >&2
+        echo "(Settings > Privacy & Security > Developer Mode)." >&2
+        exit 1
+    fi
     echo ""
     echo "=========================================================="
     echo "  SUCCESS: Hardset is now installed and running on your iPhone!"
@@ -92,11 +103,13 @@ else
     xcrun simctl boot "$SIM_NAME" 2>/dev/null || true
     open -a Simulator 2>/dev/null || true
 
-    echo "==> Installing Hardset on Simulator..."
+    BUNDLE_ID=$(/usr/libexec/PlistBuddy -c "Print :CFBundleIdentifier" "$APP_BUNDLE/Info.plist")
+
+    echo "==> Installing Hardset ($BUNDLE_ID) on Simulator..."
     xcrun simctl install booted "$APP_BUNDLE"
 
     echo "==> Launching Hardset..."
-    xcrun simctl launch booted com.hardset.app
+    xcrun simctl launch booted "$BUNDLE_ID"
     echo ""
     echo "=========================================================="
     echo "  SUCCESS: Hardset is now installed and running on $SIM_NAME!"
