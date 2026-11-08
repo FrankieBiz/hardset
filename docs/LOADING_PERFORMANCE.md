@@ -608,6 +608,37 @@ next targets, not changes in the root-model code. AppSmokeTests also still refer
 the obsolete private RootView() initializer and is outside the native workflow's
 selected screenshot suite; it must be repaired and executed separately.
 
+## Skip unchanged catalogue updates — 2026-11-08
+
+An unchanged launch previously executed50 exercise UPDATEs. A regression installs
+an SQLite row-update audit trigger after seeding and editing user-owned fields;
+it reproduced50 updates through both synchronous seed and async loadCatalog.
+The loader now compares all catalogue-owned fields and the existing three-way
+merged name inside its write transaction, skipping UPDATE when they match.
+Both paths now record zero updates. No catalog-version flag or persistent cache
+can hide later changes or missing rows. Notes, archive state and creation time
+remain untouched, and user renames retain the existing conditional assignment.
+
+Seven parameterized correction cases cover every compared field, including the
+curated-name merge. Expanded Release Store passes179 tests in19 suites across17
+portable files. make check passes98 syntax files,179 Core tests/23 suites,
+81 default Store tests/5 suites,8 query cases and172 contrast pairs. These new
+catalog regressions are outside the installed checker's default Store selection.
+
+A temporary Release probe ran ten warm loads against the actual CatalogSeeder
+and migrator in an in-memory DatabaseQueue, with identical pinned dependencies.
+Baseline commit7acda12 ranged7.58–9.62ms; changed code ranged7.55–8.21ms on Linux.
+The ranges overlap; this is modest host evidence, not an iPhone launch-time claim.
+The probe had no CloudKit tracking triggers and is outside the repository. Logs
+are catalog-benchmark-before.log and catalog-benchmark-after.log in the local
+hardset-check cache. The regression's audit trigger separately proves50 updates
+become zero; it does not measure network or CloudKit traffic.
+
+Native feature verification is run42431360543 for commitc0f9bc4 and remains pending
+at this entry. App smoke-target repair is separately under run42431117598. Main's
+root-loading integration passed repeat native run42430194445. The user selected
+Linux and simulator CI for now; signed account/device checks remain pending.
+
 ## Remaining app-wide work
 
 - Capture Release cold/warm launch, first usable workout, resume, picker, history,

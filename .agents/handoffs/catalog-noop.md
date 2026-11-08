@@ -28,3 +28,9 @@
 
 - Expanded Release Store completed:179 tests in19 suites passed after0.742s;
   includes all17 portable test files. Source reviewed; no migration changes.
+
+- Native catalog run42431360543 is live for c0f9bc4. Added uncommitted loading
+  documentation with honest overlapping Release benchmark ranges (7.58–9.62ms before,
+  7.55–8.21ms after, ten warm actual seeder loads, no CloudKit). Probe only in checker
+  cache, removed in finally. User chose Linux/simulator CI for now; device/signed
+  checks stay pending. Do not change those goals into assumed device verification.
