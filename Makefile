@@ -1,10 +1,11 @@
 # Hardset Hypertrophy Logger — Multi-Model Orchestration & Verification Makefile
 .DEFAULT_GOAL := help
-.PHONY: check check-core check-store check-parse check-contrast project install orchestrate-probe orchestrate-stats test help
+.PHONY: check check-core check-store check-parse check-contrast project install mac-test mac-install orchestrate-probe orchestrate-stats test help
 
 SWIFT := $(shell which swift)
 PY := python3
 CHECK := $(PY) Tools/hardset_check.py
+MAC_DIR ?= ~/hardset
 
 check: ## Run honest Linux checks across all targets (parse syntax, Core suite, Store suite, query indexes, palette contrast)
 	$(CHECK) all
@@ -13,6 +14,12 @@ check: ## Run honest Linux checks across all targets (parse syntax, Core suite, 
 
 install: ## Build, sign, install, and launch Hardset on connected iPhone or Simulator (macOS)
 	./Tools/install_device.sh
+
+mac-test: ## Run test suite on connected Mac via SSH bridge
+	ssh mac "cd $(MAC_DIR) && git pull origin main && xcodebuild test -project Hardset.xcodeproj -scheme Hardset -destination 'generic/platform=iOS Simulator' -skipMacroValidation -skipPackagePluginValidation CODE_SIGNING_ALLOWED=NO"
+
+mac-install: ## Build, sign, and install Hardset onto connected iPhone via Mac SSH bridge
+	ssh mac "cd $(MAC_DIR) && git pull origin main && ./Tools/install_device.sh"
 
 check-core: ## Run HardsetCore unit test suite
 	$(CHECK) core
