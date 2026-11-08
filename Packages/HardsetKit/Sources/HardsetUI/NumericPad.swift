@@ -138,6 +138,8 @@ public struct NumericPad: View {
         Button(action: onNext) {
           HStack(spacing: Tokens.Spacing.tight) {
             Text("Next")
+              .lineLimit(1)
+              .minimumScaleFactor(0.7)
             Image(systemName: "chevron.right")
           }
         }

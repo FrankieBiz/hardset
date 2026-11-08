@@ -117,7 +117,7 @@ jobs:
           [ -n "$DATA" ] && cp "$DATA/tmp/stderr.log" app-screens/app-stderr.txt 2>/dev/null || true
           cp -R "$HOME/Library/Developer/CoreSimulator/Devices/$UDID/data/Library/Logs/CrashReporter" app-screens/simulator-crashes 2>/dev/null || true
           ls -la app-screens
-          grep -q "TEST SUCCEEDED" ui-test.log && grep -q "TEST SUCCEEDED" ui-test-light.log
+          grep -qE "TEST (EXECUTE )?SUCCEEDED" ui-test.log && grep -qE "TEST (EXECUTE )?SUCCEEDED" ui-test-light.log
 
       # When the app dies under test, its crash report is the only explanation. Simulator crashes
       # land in the host's DiagnosticReports.
