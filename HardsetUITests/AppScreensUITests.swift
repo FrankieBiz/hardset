@@ -14,17 +14,15 @@ import XCTest
 final class AppScreensUITests: XCTestCase {
   private var auditReport: [String] = []
 
-  /// The whole journey, in dark mode, starting from a fresh install.
+  /// The start screen, Settings and the two other tabs, in dark mode.
   @MainActor
-  func testJourneyInDarkMode() throws {
-    // Set here rather than in an overridden setUp, whose isolation would have to match XCTest's.
+  func testStartAndTabsDark() throws {
     continueAfterFailure = true
-    XCUIDevice.shared.appearance = .dark
     let app = XCUIApplication()
-    app.launch()
+    launch(app, appearance: .dark)
 
     guard waitForStartScreen(app) else { return }
-    capture(app, "01-start-empty")
+    capture(app, "01-start")
     audit(app, screen: "start")
 
     // Settings, over the start screen: the sheet's toolbar is system glass.
@@ -34,40 +32,35 @@ final class AppScreensUITests: XCTestCase {
     audit(app, screen: "settings")
     app.buttons["Done"].tap()
 
-    // The other two tabs, empty.
     openTab(app, "Volume")
-    capture(app, "03-volume-empty")
+    capture(app, "03-volume")
     audit(app, screen: "volume")
     openTab(app, "History")
-    capture(app, "04-history-empty")
+    capture(app, "04-history")
     audit(app, screen: "history")
-    openTab(app, "Train")
 
-    // A gym, added from the start screen's card.
-    app.buttons["Add a gym to track machines"].tap()
-    XCTAssertTrue(app.buttons["Add a gym"].waitForExistence(timeout: 5))
-    capture(app, "05-gym-picker")
-    audit(app, screen: "gym picker")
-    app.buttons["Add a gym"].tap()
-    let name = app.textFields.firstMatch
-    XCTAssertTrue(name.waitForExistence(timeout: 5))
-    capture(app, "06-name-entry")
-    name.typeText("Metroflex Gym")
-    app.buttons["Add"].tap()
-    XCTAssertTrue(app.buttons["Start workout"].waitForExistence(timeout: 5))
-    capture(app, "07-start-with-gym")
+    writeAuditReport(named: "accessibility-audit-start-and-tabs")
+  }
 
-    // A workout: empty, then with a movement.
+  /// A workout from start to finish, without choosing a gym first: start, add a movement, type a
+  /// set on the keypad, log it, finish, and see it on the start screen and in history.
+  @MainActor
+  func testWorkoutJourneyDark() throws {
+    continueAfterFailure = true
+    let app = XCUIApplication()
+    launch(app, appearance: .dark)
+
+    guard waitForStartScreen(app) else { return }
     app.buttons["Start workout"].tap()
     let addMovement = app.buttons["Add movement"]
     XCTAssertTrue(addMovement.waitForExistence(timeout: 5))
-    capture(app, "08-session-empty")
+    capture(app, "10-session-empty")
     audit(app, screen: "empty session")
     addMovement.tap()
     let bench = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Barbell Bench Press'"))
       .firstMatch
     XCTAssertTrue(bench.waitForExistence(timeout: 5))
-    capture(app, "09-movement-picker")
+    capture(app, "11-movement-picker")
     audit(app, screen: "movement picker")
     bench.tap()
 
@@ -76,57 +69,84 @@ final class AppScreensUITests: XCTestCase {
     let row = app.descendants(matching: .any)
       .matching(NSPredicate(format: "label BEGINSWITH 'Set 1'")).firstMatch
     XCTAssertTrue(row.waitForExistence(timeout: 5))
-    capture(app, "10-session-movement")
+    capture(app, "12-session-movement")
     audit(app, screen: "session with a movement")
     row.coordinate(withNormalizedOffset: CGVector(dx: 0.44, dy: 0.5)).tap()
     XCTAssertTrue(app.buttons["Next field"].waitForExistence(timeout: 5))
     for key in ["1", "0", "0"] { app.buttons[key].tap() }
-    capture(app, "11-keypad-weight")
+    capture(app, "13-keypad-weight")
     audit(app, screen: "keypad")
     app.buttons["Next field"].tap()
     app.buttons["8"].tap()
     app.buttons["Done"].tap()
     row.coordinate(withNormalizedOffset: CGVector(dx: 0.93, dy: 0.5)).tap()
-    capture(app, "12-session-logged")
+    capture(app, "14-session-logged")
 
-    // Finish, which asks once, then the start screen and history with the workout in them.
+    // Finish asks once, then the workout is on the start screen and in history.
     let finish = app.buttons["Finish workout"]
     if finish.waitForExistence(timeout: 5) {
       finish.tap()
-      capture(app, "13-finish-confirm")
+      capture(app, "15-finish-confirm")
       app.buttons["Finish"].tap()
     }
     XCTAssertTrue(app.buttons["Start workout"].waitForExistence(timeout: 5))
-    capture(app, "14-start-last-workout")
+    capture(app, "16-start-last-workout")
     openTab(app, "History")
-    capture(app, "15-history")
+    capture(app, "17-history-with-workout")
     audit(app, screen: "history with a workout")
     openTab(app, "Volume")
-    capture(app, "16-volume")
+    capture(app, "18-volume-with-workout")
     audit(app, screen: "volume with a workout")
 
-    writeAuditReport(named: "accessibility-audit-dark")
+    writeAuditReport(named: "accessibility-audit-workout")
+  }
+
+  /// The gym picker and adding a gym, on their own: the first runs saw the app exit as this sheet
+  /// presented, and a separate test keeps that from hiding every screen after it.
+  @MainActor
+  func testGymPickerDark() throws {
+    continueAfterFailure = true
+    let app = XCUIApplication()
+    launch(app, appearance: .dark)
+
+    guard waitForStartScreen(app) else { return }
+    let card = app.buttons.matching(NSPredicate(format: "label CONTAINS 'gym'")).firstMatch
+    XCTAssertTrue(card.waitForExistence(timeout: 5))
+    card.tap()
+    let addGym = app.buttons["Add a gym"]
+    XCTAssertTrue(addGym.waitForExistence(timeout: 10))
+    capture(app, "20-gym-picker")
+    audit(app, screen: "gym picker")
+    addGym.tap()
+    let name = app.textFields.firstMatch
+    XCTAssertTrue(name.waitForExistence(timeout: 5))
+    capture(app, "21-name-entry")
+    name.typeText("Metroflex Gym")
+    app.buttons["Add"].tap()
+    XCTAssertTrue(app.buttons["Start workout"].waitForExistence(timeout: 5))
+    capture(app, "22-start-with-gym")
+
+    writeAuditReport(named: "accessibility-audit-gym")
   }
 
   /// The main screens again in light mode, over whatever the dark journey left behind.
   @MainActor
   func testScreensInLightMode() throws {
     continueAfterFailure = true
-    XCUIDevice.shared.appearance = .light
     let app = XCUIApplication()
-    app.launch()
+    launch(app, appearance: .light)
 
     guard waitForStartScreen(app) else { return }
-    capture(app, "21-light-start")
+    capture(app, "30-light-start")
     audit(app, screen: "light start")
     openTab(app, "Volume")
-    capture(app, "22-light-volume")
+    capture(app, "31-light-volume")
     openTab(app, "History")
-    capture(app, "23-light-history")
+    capture(app, "32-light-history")
     openTab(app, "Train")
     app.buttons["Settings"].tap()
     if app.buttons["Done"].waitForExistence(timeout: 5) {
-      capture(app, "24-light-settings")
+      capture(app, "33-light-settings")
       app.buttons["Done"].tap()
     }
 
@@ -134,6 +154,18 @@ final class AppScreensUITests: XCTestCase {
   }
 
   // MARK: - Helpers
+
+  /// The appearance switch reaches the system asynchronously: set once before launch, the first
+  /// run's "dark" screenshots still came out light. So it is set, given time to settle, and set
+  /// again once the app is up -- a running app follows a live change.
+  @MainActor
+  private func launch(_ app: XCUIApplication, appearance: XCUIDevice.Appearance) {
+    XCUIDevice.shared.appearance = appearance
+    Thread.sleep(forTimeInterval: 2)
+    app.launch()
+    XCUIDevice.shared.appearance = appearance
+    Thread.sleep(forTimeInterval: 2)
+  }
 
   /// Waits for the start screen, and when it does not come, says what is showing instead.
   @MainActor

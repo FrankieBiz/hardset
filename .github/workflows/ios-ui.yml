@@ -77,14 +77,34 @@ jobs:
         run: |
           set -o pipefail
           mkdir -p app-screens
+          # One known device, booted here, so its log can be streamed for the whole run: when the
+          # app exits under test without a crash report, its own log is the only explanation.
+          UDID=$(xcrun simctl list devices available -j | python3 -c '
+          import json, sys
+          devices = json.load(sys.stdin)["devices"]
+          runtimes = sorted((r for r in devices if "iOS-26" in r), key=lambda r: [int(x) for x in r.split("iOS-")[1].split("-")])
+          for runtime in reversed(runtimes):
+              for d in devices[runtime]:
+                  if d["name"] == "iPhone 17":
+                      print(d["udid"]); sys.exit()
+          ')
+          echo "Device: $UDID"
+          xcrun simctl boot "$UDID" || true
+          xcrun simctl bootstatus "$UDID" -b
+          xcrun simctl spawn "$UDID" log stream --level debug --style compact \
+            --predicate 'process == "Hardset" OR eventMessage CONTAINS[c] "hardset"' \
+            > app-screens/app-log.txt 2>&1 &
+          LOG_PID=$!
           xcodebuild test \
             -project Hardset.xcodeproj -scheme Hardset \
-            -destination 'platform=iOS Simulator,name=iPhone 17,OS=latest' \
+            -destination "id=$UDID" \
             -only-testing:HardsetTests -only-testing:HardsetUITests \
             -skipMacroValidation -skipPackagePluginValidation \
             -resultBundlePath app-screens/ui-tests.xcresult \
             CODE_SIGN_IDENTITY=- CODE_SIGN_STYLE=Manual DEVELOPMENT_TEAM= \
             2>&1 | tee ui-test.log | grep -E "error:|Test [Cc]ase|TEST (SUCCEEDED|FAILED)|Executed" || true
+          kill "$LOG_PID" || true
+          cp -R "$HOME/Library/Developer/CoreSimulator/Devices/$UDID/data/Library/Logs/CrashReporter" app-screens/simulator-crashes 2>/dev/null || true
           ls -la app-screens
           grep -q "TEST SUCCEEDED" ui-test.log
 
