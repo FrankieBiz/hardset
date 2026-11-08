@@ -89,7 +89,7 @@ struct HistoryStoreTests {
     let tables = HardsetMigrations.syncedTableNames + HardsetMigrations.deviceLocalTableNames
       + HardsetMigrations.deferredSyncTableNames
     let before = try database.read { db in
-      try tables.map { table in (table, try Row.fetchAll(db, sql: "SELECT * FROM \"\(table)\" ORDER BY id")) }
+      try tables.filter { try db.tableExists($0) }.map { table in (table, try Row.fetchAll(db, sql: "SELECT * FROM \"\(table)\" ORDER BY id")) }
     }
     var migrator = HardsetMigrations.migrator()
     if variant & 4 != 0 { migrator.eraseDatabaseOnSchemaChange = false }

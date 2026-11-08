@@ -35,6 +35,10 @@
 	<!-- Required for AlarmKit. Without this key AlarmManager cannot schedule at all: the
 	     framework fails at runtime with "Client has not provided an NSAlarmKitUsageDescription
 	     value". There is no AlarmKit entitlement and no Xcode capability to add. -->
+	<key>NSHealthShareUsageDescription</key>
+	<string>Read body mass and workout summaries you choose to share. They remain on this device and never identify a machine.</string>
+	<key>NSHealthUpdateUsageDescription</key>
+	<string>Save completed strength workouts and body mass you enter to Apple Health when you choose.</string>
 	<key>NSAlarmKitUsageDescription</key>
 	<string>Hardset uses alarms so your rest timer still alerts you when the app is closed, silenced, or in Focus.</string>
 

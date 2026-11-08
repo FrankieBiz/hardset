@@ -14,6 +14,8 @@ public struct HistoryScreen: View {
   /// never replaces what is on screen.
   @State private var snapshot = SnapshotLoader<[HistoryRow]>()
 
+  @State private var selectedSession: ReceiptSelection?
+  private let receipts: ReceiptStore?
   private let store: HistoryStore
   private let unit: WeightUnit
 
@@ -22,7 +24,8 @@ public struct HistoryScreen: View {
   /// of more, rather than calling fifty of many "50 workouts".
   private static let limit = 50
 
-  public init(store: HistoryStore, unit: WeightUnit) {
+  public init(store: HistoryStore, unit: WeightUnit, receipts: ReceiptStore? = nil) {
+    self.receipts = receipts
     self.store = store
     self.unit = unit
   }
@@ -49,7 +52,8 @@ public struct HistoryScreen: View {
           rows: rows,
           unit: unit,
           title: Self.title,
-          subtitle: rows.count >= Self.limit ? "Latest \(Self.limit) workouts, newest first" : nil
+          subtitle: rows.count >= Self.limit ? "Latest \(Self.limit) workouts, newest first" : nil,
+          onSelect: receipts == nil ? nil : { selectedSession = ReceiptSelection(id: $0.id) }
         )
       } else {
         VStack(alignment: .leading, spacing: 0) {
@@ -61,6 +65,9 @@ public struct HistoryScreen: View {
     }
     .task { await load() }
     .refreshable { await load() }
+    .sheet(item: $selectedSession) { id in
+      if let receipts { WorkoutReceiptScreen(sessionID: id.id, store: receipts, unit: unit) }
+    }
   }
 
   private func load() async {
@@ -82,3 +89,5 @@ public struct HistoryScreen: View {
     }
   }
 }
+
+private nonisolated struct ReceiptSelection: Identifiable { let id: SessionID }

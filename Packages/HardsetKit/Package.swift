@@ -30,6 +30,7 @@ let package = Package(
     .library(name: "HardsetAlarm", targets: ["HardsetAlarm"]),
     .library(name: "HardsetStore", targets: ["HardsetStore"]),
     .library(name: "HardsetUI", targets: ["HardsetUI"]),
+    .library(name: "HardsetHealth", targets: ["HardsetHealth"]),
     .library(name: "HardsetFeature", targets: ["HardsetFeature"]),
   ],
   dependencies: [
@@ -57,10 +58,13 @@ let package = Package(
       name: "HardsetStore",
       dependencies: [
         "HardsetCore",
+        .product(name: "GRDB", package: "GRDB.swift"),
         .product(name: "SQLiteData", package: "sqlite-data"),
       ],
       swiftSettings: mainActorByDefault
     ),
+
+    .target(name: "HardsetHealth", dependencies: ["HardsetCore", "HardsetStore"], swiftSettings: mainActorByDefault),
 
     .target(
       name: "HardsetUI",
@@ -79,7 +83,7 @@ let package = Package(
     .target(
       name: "HardsetFeature",
       dependencies: [
-        "HardsetCore", "HardsetStore", "HardsetUI",
+        "HardsetCore", "HardsetStore", "HardsetUI", "HardsetHealth",
         // Declared explicitly, not leaned on transitively: the composition root takes a
         // `DatabaseWriter`, so this target genuinely uses the type and should say so.
         .product(name: "SQLiteData", package: "sqlite-data"),
@@ -109,7 +113,7 @@ let package = Package(
     .testTarget(
       name: "HardsetUISnapshotTests",
       dependencies: [
-        "HardsetUI", "HardsetFeature", "HardsetStore", "HardsetCore",
+        "HardsetUI", "HardsetFeature", "HardsetStore", "HardsetCore", "HardsetAlarm",
         .product(name: "GRDB", package: "GRDB.swift"),
       ],
       swiftSettings: mainActorByDefault

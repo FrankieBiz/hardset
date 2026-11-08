@@ -167,6 +167,7 @@ public nonisolated struct LoggerStore: Sendable {
     sessionID: SessionID,
     exerciseID: ExerciseID,
     machineID: MachineID? = nil,
+    commandID: SetID = SetID(),
     sessionExerciseID: UUID? = nil,
     draft: SetEntryDraft,
     setOrdinal: Int? = nil,
@@ -176,7 +177,7 @@ public nonisolated struct LoggerStore: Sendable {
   ) throws -> SetID {
     try logSet(
       sessionID: sessionID, exerciseID: exerciseID, machineID: machineID,
-      sessionExerciseID: sessionExerciseID, draft: draft, setOrdinal: setOrdinal,
+      commandID: commandID, sessionExerciseID: sessionExerciseID, draft: draft, setOrdinal: setOrdinal,
       isWarmup: isWarmup, rpe: rpe, recordIncrement: nil, detectingRecords: false,
       at: completedAt
     ).setID
@@ -188,6 +189,7 @@ public nonisolated struct LoggerStore: Sendable {
     sessionID: SessionID,
     exerciseID: ExerciseID,
     machineID: MachineID? = nil,
+    commandID: SetID = SetID(),
     sessionExerciseID: UUID? = nil,
     draft: SetEntryDraft,
     setOrdinal: Int? = nil,
@@ -200,9 +202,20 @@ public nonisolated struct LoggerStore: Sendable {
     guard let resolved = draft.resolved() else {
       throw LoggerStoreError.incompleteSet
     }
-    let id = SetID()
+    let id = commandID
     var records: [PersonalRecord] = []
     try database.write { db in
+      // A lost acknowledgement may be retried even after the workout is closed.
+      // Identity is local-command identity, never a synchronized ordinal constraint.
+      if let existing = try LoggedSet.where({ $0.id.eq(id.rawValue) }).fetchOne(db) {
+        guard existing.sessionID == sessionID.rawValue,
+          existing.exerciseID == exerciseID.rawValue, existing.machineID == machineID?.rawValue,
+          existing.sessionExerciseID == sessionExerciseID, existing.weightKg == resolved.weightKg,
+          existing.reps == resolved.reps, existing.isWarmup == isWarmup, existing.rpe == rpe,
+          setOrdinal == nil || existing.setOrdinal == setOrdinal
+        else { throw SetCommandError.identityConflict }
+        return
+      }
       let gymID = try Self.requireOpenSession(sessionID, in: db)
       try Self.requireExercise(exerciseID, in: db)
       if let sessionExerciseID {
@@ -677,4 +690,9 @@ public enum LoggerStoreError: Error, Equatable, Sendable {
   case sessionExerciseMismatch
   /// A single-row insert or update completed without affecting exactly one row.
   case writeNotApplied
+}
+
+/// Reusing an acknowledged command identity cannot replace its saved payload.
+public nonisolated enum SetCommandError: Error, Equatable, Sendable {
+  case identityConflict
 }

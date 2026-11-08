@@ -1,5 +1,6 @@
 import HardsetCore
 import HardsetUI
+import HardsetStore
 import SwiftUI
 
 /// The app's settings, currently one decision that genuinely cannot be inferred reliably.
@@ -18,10 +19,15 @@ public struct SettingsSheet: View {
   /// Which disclosure is open. One optional rather than a flag per row, so two can never be asked
   /// to present at once.
   @State private var disclosure: Disclosure?
+  @State private var lifetime = LifetimeAccess()
+  private let health: DeviceHealthStore?
+  private let transfer: DataTransferStore?
   private let onDone: () -> Void
 
-  public init(useImperial: Binding<Bool>, onDone: @escaping () -> Void) {
+  public init(useImperial: Binding<Bool>, transfer: DataTransferStore? = nil, health: DeviceHealthStore? = nil, onDone: @escaping () -> Void) {
     self._useImperial = useImperial
+    self.health = health
+    self.transfer = transfer
     self.onDone = onDone
   }
 
@@ -31,6 +37,13 @@ public struct SettingsSheet: View {
         VStack(alignment: .leading, spacing: Tokens.Spacing.block) {
           unitsSection
           methodologySection
+          #if os(iOS)
+          if let health { HealthSettingsSection(store: health, unit: useImperial ? .pounds : .kilograms) }
+          #endif
+          LifetimePurchaseSection(access: lifetime)
+          if let transfer {
+            DataPortabilitySection(store: transfer, unit: useImperial ? .pounds : .kilograms)
+          }
         }
         .padding(.horizontal, Tokens.Spacing.loose)
         .padding(.top, Tokens.Spacing.loose)

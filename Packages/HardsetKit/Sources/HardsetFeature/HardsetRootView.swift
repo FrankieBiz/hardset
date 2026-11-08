@@ -16,6 +16,9 @@ public struct HardsetEnvironment {
   public let volume: VolumeStore
   public let history: HistoryStore
   public let progression: ProgressionStore
+  public let health: DeviceHealthStore
+  public let receipts: ReceiptStore
+  public let transfer: DataTransferStore
   public let gyms: GymStore
 
   public init(database: any DatabaseWriter) {
@@ -25,6 +28,9 @@ public struct HardsetEnvironment {
     self.history = HistoryStore(database: database)
     self.progression = ProgressionStore(database: database)
     self.gyms = GymStore(database: database)
+    self.health = DeviceHealthStore(database: database)
+    self.receipts = ReceiptStore(database: database)
+    self.transfer = DataTransferStore(database: database)
   }
 }
 
@@ -118,7 +124,7 @@ public struct HardsetRootView: View {
             // header and from the live session's alike, and finishing a workout while it is open
             // cannot pull its anchor out from under it.
             .sheet(isPresented: $isShowingSettings) {
-              SettingsSheet(useImperial: $useImperial) { isShowingSettings = false }
+              SettingsSheet(useImperial: $useImperial, transfer: environment.transfer, health: environment.health) { isShowingSettings = false }
                 .hardsetSheet()
             }
         }
@@ -133,7 +139,7 @@ public struct HardsetRootView: View {
       }
       Tab("History", systemImage: "clock.arrow.circlepath") {
         NavigationStack {
-          HistoryScreen(store: environment.history, unit: unit)
+          HistoryScreen(store: environment.history, unit: unit, receipts: environment.receipts)
             .navigationTitle("History")
             .hardsetTabRoot()
         }

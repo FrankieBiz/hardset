@@ -44,6 +44,7 @@ public struct SetRowView: View {
   private let isNext: Bool
   private let showsInlineLabels: Bool
   private let unit: WeightUnit
+  private let machineIncrementKg: Double?
   private let previous: PriorSetRecord?
   private let priorNote: String?
   private let onLog: () -> Void
@@ -61,6 +62,7 @@ public struct SetRowView: View {
     isNext: Bool = false,
     showsInlineLabels: Bool = true,
     unit: WeightUnit,
+    machineIncrementKg: Double? = nil,
     previous: PriorSetRecord? = nil,
     priorNote: String? = nil,
     onLog: @escaping () -> Void
@@ -72,6 +74,7 @@ public struct SetRowView: View {
     self.isNext = isNext
     self.showsInlineLabels = showsInlineLabels
     self.unit = unit
+    self.machineIncrementKg = machineIncrementKg
     self.previous = previous
     self.priorNote = priorNote
     self.onLog = onLog
@@ -101,9 +104,15 @@ public struct SetRowView: View {
   public var body: some View {
     Group {
       if isStacked {
-        stackedLayout
+        VStack(spacing: Tokens.Spacing.snug) {
+          stackedLayout
+          inlineAdjusters
+        }
       } else {
-        rowLayout
+        VStack(spacing: Tokens.Spacing.snug) {
+          rowLayout
+          inlineAdjusters
+        }
       }
     }
     .padding(.horizontal, Tokens.Spacing.tight)
@@ -119,7 +128,7 @@ public struct SetRowView: View {
     .accessibilityLabel(spokenLabel)
     .accessibilityHint(draft.isLoggable ? "Double tap to log this set." : "Enter a weight and reps to log.")
     .accessibilityAction(named: Text("Log set")) {
-      if draft.isLoggable { onLog() }
+      if draft.isLoggable && !isLogged { onLog() }
     }
     .accessibilityAction(named: Text("Edit weight")) { beginEditing(.weight) }
     .accessibilityAction(named: Text("Edit reps")) { beginEditing(.reps) }
@@ -131,6 +140,7 @@ public struct SetRowView: View {
     // Editing that row would then have written 132.28 kg to storage — a wrong number the user
     // never typed. The draft is canonical kilograms, so reseeding from it is always correct.
     .onChange(of: unit) { reseedBuffers() }
+    .onChange(of: draft) { if editing == nil { reseedBuffers() } }
   }
 
   // MARK: - Layouts
@@ -182,6 +192,35 @@ public struct SetRowView: View {
       maximumIntegerDigits: 3,
       maximumFractionDigits: 0
     )
+  }
+
+  @ViewBuilder private var inlineAdjusters: some View {
+    if !isLogged, let step = machineIncrementKg, step.isFinite, step > 0 {
+      ViewThatFits(in: .horizontal) {
+        HStack(spacing: Tokens.Spacing.snug) {
+          loadAdjustment(-step)
+          loadAdjustment(step)
+        }
+        VStack(spacing: Tokens.Spacing.snug) {
+          loadAdjustment(-step)
+          loadAdjustment(step)
+        }
+      }
+    }
+  }
+
+  private func loadAdjustment(_ delta: Double) -> some View {
+    let label = "\(delta < 0 ? "−" : "+")\(unit.fromKilograms(abs(delta)).formatted(.number.precision(.fractionLength(0...2)))) \(unit.abbreviation)"
+    return Button(label) {
+      guard let current = draft.weightKg else { return }
+      let updated = max(0, current + delta)
+      guard updated.isFinite else { return }
+      draft.weightKg = updated
+    }
+    .buttonStyle(HardsetButtonStyle(.secondary, size: .logger, fullWidth: true))
+    .disabled(draft.weightKg == nil || (delta < 0 && draft.weightKg == 0))
+    .accessibilityLabel("\(delta < 0 ? "Decrease" : "Increase") load by \(unit.fromKilograms(abs(delta)).formatted()) \(unit.abbreviation)")
+    .sensoryFeedback(.selection, trigger: draft.weightKg)
   }
 
   // MARK: - Pieces
@@ -280,6 +319,7 @@ public struct SetRowView: View {
       .contentShape(shape)
     }
     .buttonStyle(.plain)
+    .disabled(isLogged)
   }
 
   /// The one tap the whole logger is built around.
@@ -320,7 +360,7 @@ public struct SetRowView: View {
     }
     .buttonStyle(.plain)
     // The same predicate the store enforces. There is no second definition of "complete".
-    .disabled(!isReady)
+    .disabled(!isReady || isLogged)
     .opacity(isReady || isLogged ? 1 : 0.6)
     .accessibilityLabel(isLogged ? "Logged" : "Log set")
     // Haptics confirm the tap landed without the user looking at the phone.
@@ -384,6 +424,7 @@ public struct SetRowView: View {
   /// Puts the keypad on a field. A field that already holds a value is armed to be replaced by
   /// the first digit typed, so retyping a prefilled weight does not mean deleting it first.
   private func beginEditing(_ field: SetRowField) {
+    guard !isLogged else { return }
     if field == .weight && !weightBuffer.isEmpty {
       weightBuffer.replaceOnFirstEntry = true
     } else if field == .reps && !repsBuffer.isEmpty {

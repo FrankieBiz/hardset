@@ -20,6 +20,35 @@
   @Suite("Screens render for review", .serialized)
   @MainActor
   struct ScreenSnapshotTests {
+    @Test func workoutReceipt() async throws {
+      let receipt = WorkoutReceipt(id: SessionID(), title: "Push", startedAt: Date(timeIntervalSince1970: 1793527200),
+        finishedAt: Date(timeIntervalSince1970: 1793530800), lines: [
+          .init(id: SetID(), exerciseName: "Incline Press", machineName: "Cybex · Station 2", weightKg: 80, reps: 8,
+            isWarmup: false, records: [.init(kind: .heaviestLoad, weightKg: 80, reps: 8, previousWeightKg: 75)]),
+          .init(id: SetID(), exerciseName: "Press (Imported • Strong)", machineName: nil, weightKg: 60, reps: 10,
+            isWarmup: false, isImported: true),
+        ])
+      try await Snapshot.capture("receipt-dark-375", size: Snapshot.narrow) {
+        ScrollView { WorkoutReceiptView(receipt: receipt, unit: .kilograms) }
+          .background(Tokens.Color.background)
+      }
+      try await Snapshot.capture("receipt-light-ax3", style: .light, typeSize: .accessibility3) {
+        ScrollView { WorkoutReceiptView(receipt: receipt, unit: .pounds) }
+          .background(Tokens.Color.background)
+      }
+    }
+
+    @Test func deepMuscleMap() async throws {
+      let report = MuscleVolumeReport(fractionalSets: [MuscleKey(.chest): 8, MuscleKey(.triceps): 4],
+        hardSets: 10, unattributedHardSets: 2, setsTouchingGroup: [:])
+      try await Snapshot.capture("muscle-map-dark-375", size: Snapshot.narrow) {
+        ScrollView { MuscleHeatmapView(report: report) }.background(Tokens.Color.background)
+      }
+      try await Snapshot.capture("muscle-map-light-ax3", style: .light, typeSize: .accessibility3) {
+        ScrollView { MuscleHeatmapView(report: report) }.background(Tokens.Color.background)
+      }
+    }
+
     // MARK: - Logger
 
     @Test func liveSession() async throws {

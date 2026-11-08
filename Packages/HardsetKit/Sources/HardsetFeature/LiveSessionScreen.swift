@@ -19,6 +19,9 @@ private struct MachineTarget: Identifiable, Hashable {
 /// running, which is honest, instead of a countdown that is not backed by an alarm.
 @MainActor
 public struct RestTimerHooks {
+  public var metadata: () -> RestMetadata?
+  public var hasError: () -> Bool
+  public var retry: () -> Void
   public var state: () -> RestTimerState
   public var start: (Duration, RestMetadata) -> Void
   public var adjust: (Duration) -> Void
@@ -27,11 +30,17 @@ public struct RestTimerHooks {
 
   public init(
     state: @escaping () -> RestTimerState = { .idle },
+    metadata: @escaping () -> RestMetadata? = { nil },
+    hasError: @escaping () -> Bool = { false },
+    retry: @escaping () -> Void = {},
     start: @escaping (Duration, RestMetadata) -> Void = { _, _ in },
     adjust: @escaping (Duration) -> Void = { _ in },
     pauseOrResume: @escaping () -> Void = {},
     cancel: @escaping () -> Void = {}
   ) {
+    self.metadata = metadata
+    self.hasError = hasError
+    self.retry = retry
     self.state = state
     self.start = start
     self.adjust = adjust
@@ -114,11 +123,19 @@ public struct LiveSessionScreen: View {
       title: "Workout",
       gymName: gymName,
       restState: hooks.state(),
-      restMetadata: restMetadata,
+      restMetadata: hooks.metadata() ?? restMetadata,
       errorMessage: errorMessage,
       records: coordinator.lastRecords,
       onLogSet: { exerciseStateID, slot in
         coordinator.logSet(slotID: slot.id, inExercise: exerciseStateID)
+      },
+      onStartRest: { exerciseID, duration in
+        guard let exercise = coordinator.exercises.first(where: { $0.id == exerciseID }) else { return }
+        let completed = exercise.slots.filter { $0.isLogged && !$0.isWarmup }.count
+        let metadata = RestMetadata(exerciseName: exercise.exerciseName, setOrdinal: completed,
+          plannedSets: exercise.workingSetCount, machineName: exercise.machineName)
+        restMetadata = metadata
+        hooks.start(duration, metadata)
       },
       onAdjustRest: hooks.adjust,
       onPauseResumeRest: hooks.pauseOrResume,
@@ -134,6 +151,16 @@ public struct LiveSessionScreen: View {
       onShowSettings: onShowSettings,
       onFinish: finish
     )
+    .safeAreaInset(edge: .top) {
+      if hooks.hasError() {
+        VStack(spacing: Tokens.Spacing.snug) {
+          Text("Rest timer could not be saved or scheduled. Your logged sets are saved.")
+            .font(Tokens.Text.provenance).foregroundStyle(Tokens.Color.error)
+          Button("Retry rest timer", action: hooks.retry).buttonStyle(HardsetButtonStyle(.secondary))
+        }
+        .padding(Tokens.Spacing.regular).background(Tokens.Color.background)
+      }
+    }
     .sheet(isPresented: $isPickerPresented) {
       NavigationStack {
         ExercisePickerView(

@@ -29,6 +29,7 @@ public struct RestMetadata: Codable, Hashable, Sendable {
 
   /// e.g. "Set 2 of 4" or "Set 2".
   public var setLabel: String {
+    guard setOrdinal > 0 else { return "Rest" }
     if let plannedSets { return "Set \(setOrdinal) of \(plannedSets)" }
     return "Set \(setOrdinal)"
   }

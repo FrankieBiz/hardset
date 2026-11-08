@@ -13,6 +13,8 @@ import SwiftUI
 @MainActor
 public struct WeeklyVolumeScreen: View {
   @State private var snapshot = SnapshotLoader<MuscleVolumeReport>()
+  @State private var isShowingMap = false
+  @State private var lifetime = LifetimeAccess()
   @State private var isShowingMethodology = false
 
   private let store: VolumeStore
@@ -62,6 +64,25 @@ public struct WeeklyVolumeScreen: View {
           HardsetLoadingState("Reading this week…")
         }
         .background(Tokens.Color.background)
+      }
+    }
+    .safeAreaInset(edge: .bottom) {
+      if snapshot.value != nil {
+        Button("Deep muscle map") { isShowingMap = true }
+          .buttonStyle(HardsetButtonStyle(.secondary))
+          .padding(Tokens.Spacing.loose).background(Tokens.Color.background)
+      }
+    }
+    .sheet(isPresented: $isShowingMap) {
+      NavigationStack {
+        ScrollView {
+          if lifetime.isUnlocked, let report = snapshot.value { MuscleHeatmapView(report: report) }
+          else { LifetimePurchaseSection(access: lifetime).padding(Tokens.Spacing.loose) }
+        }
+        .background(Tokens.Color.background)
+        .hardsetNavigationTitle("Deep muscle map")
+        .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { isShowingMap = false } } }
+        .task { await lifetime.load() }
       }
     }
     .task { await load() }

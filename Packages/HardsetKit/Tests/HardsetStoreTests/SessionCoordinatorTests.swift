@@ -99,7 +99,7 @@ struct SessionCoordinatorTests {
     let store = LoggerStore(database: database)
     let exercise = try seedExercise(database)
     let statements = Mutex<[String]>([])
-    try database.writeWithoutTransaction { db in
+    database.writeWithoutTransaction { db in
       db.trace { event in
         if case .statement(let statement) = event {
           statements.withLock { $0.append(statement.sql) }
@@ -371,7 +371,7 @@ struct SessionCoordinatorTests {
     live.exercises[0].slots[0].draft = SetEntryDraft(weightKg: 100, reps: 8)
     live.exercises[0].slots[0].isWarmup = isWarmup
     let statements = Mutex<[String]>([])
-    try database.writeWithoutTransaction { db in
+    database.writeWithoutTransaction { db in
       db.trace { event in
         if case .statement(let statement) = event {
           statements.withLock { $0.append(statement.sql) }
@@ -387,7 +387,10 @@ struct SessionCoordinatorTests {
     #expect(readsInsideSave)
     // Three primary-key reads validate session, exercise, and plan. Empty
     // history needs one benchmark probe; warm-ups skip it. Both read one ordinal.
-    #expect(reads.count == (isWarmup ? 4 : 5))
+    // The command identity probe is a separate primary-key read in this same transaction.
+    let identityReads = reads.filter { sql[$0].contains("WHERE ((\"loggedSets\".\"id\") =") }
+    #expect(identityReads.count == 1)
+    #expect(reads.count - identityReads.count == (isWarmup ? 4 : 5))
   }
 
   @Test("Unreadable record history suppresses claims while a valid new set still saves")

@@ -64,8 +64,9 @@ public enum RestAlarmService {
     )
 
     let countdown = AlarmPresentation.Countdown(
-      title: LocalizedStringResource(stringLiteral: request.metadata.setLabel),
-      pauseButton: AlarmButton(text: "Pause", textColor: .white, systemImageName: "pause.fill")
+      // Pause/resume are app commands so the journal commits before the OS changes.
+      // Do not expose a daemon-only pause that cannot update the durable deadline.
+      title: LocalizedStringResource(stringLiteral: request.metadata.setLabel)
     )
 
     let paused = AlarmPresentation.Paused(
@@ -104,6 +105,10 @@ public enum RestAlarmService {
     // Required: the enum is resilient, so omitting this is a compile error.
     @unknown default: false
     }
+  }
+
+  public static func contains(id: UUID) throws -> Bool {
+    try AlarmManager.shared.alarms.contains { $0.id == id }
   }
 
   public static func cancel(id: UUID) throws { try AlarmManager.shared.cancel(id: id) }

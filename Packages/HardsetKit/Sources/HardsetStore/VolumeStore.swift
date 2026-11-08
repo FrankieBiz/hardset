@@ -141,7 +141,7 @@ public nonisolated struct ProgressionStore: Sendable {
   private static func readHistoryInputs(for exerciseID: ExerciseID, in db: Database) throws
     -> ([ProgressionSample], [MachineID: String])
   {
-    let samples = try readSamples(for: exerciseID, limit: 2_000, in: db)
+    let samples = try readSamples(for: exerciseID, limit: Int.max, in: db)
     let ids = Array(Set(samples.compactMap(\.machineID)))
     return (samples, try readMachineNames(ids, in: db))
   }
@@ -160,7 +160,7 @@ public nonisolated struct ProgressionStore: Sendable {
     try LoggedSet
       .where { $0.exerciseID.eq(exerciseID.rawValue) }
       .where { !$0.isWarmup }
-      .order { $0.completedAt.desc() }
+      .order { ($0.completedAt.desc(), $0.setOrdinal.desc(), $0.id.desc()) }
       .limit(limit)
       .fetchAll(db)
       .reversed()

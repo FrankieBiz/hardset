@@ -27,7 +27,7 @@ QUERIES = {
         ("2026-10-28", "2026-11-04"),
     ),
     "progression": (
-        'SELECT * FROM loggedSets WHERE exerciseID = ? AND NOT isWarmup ORDER BY completedAt DESC LIMIT 2000',
+        'SELECT * FROM loggedSets WHERE exerciseID = ? AND NOT isWarmup ORDER BY completedAt DESC, setOrdinal DESC, id DESC',
         ("exercise-3",),
     ),
     "machine history": (
@@ -120,7 +120,7 @@ def main():
     for name, query in QUERIES.items():
         rows, elapsed, plan = measure(db, *query)
         old_rows, old_elapsed, old_plan = before[name]
-        # Ordering ties are deliberately unspecified by the Store API.
+        # Compare all values; progression now also specifies stable ordinal/ID ties.
         assert sorted(rows) == sorted(old_rows), f"{name}: results changed"
         if name == "open workout (absent)":
             assert rows == [], "Finished history must not resume a workout"

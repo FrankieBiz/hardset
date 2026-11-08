@@ -747,3 +747,10 @@ CI status. Main root-loading run42430194445 is green.
 Ongoing after root integration: app-test coverage repair on branch
 `FrankieBiz/verify-app-smoke`; see [.agents/handoffs/app-smoke.md](handoffs/app-smoke.md).
 Main7acda12's repeat native run is42430194445; root code's native run42429147943 passed.
+
+## Full GPT handout execution — 2026-11-08
+
+Current work is isolated on `FrankieBiz/complete-gpt-handout-tasks` in `zoanthid`.
+See [.agents/handoffs/gpt-handout.md](handoffs/gpt-handout.md) and
+[the coverage record](../docs/GPT_HANDOUT_PROGRESS.md) for scope, limits and fresh
+verification. Native verification is pending for the new feature milestone.

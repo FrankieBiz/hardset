@@ -344,6 +344,7 @@ public final class SessionCoordinator {
         sessionID: sessionID,
         exerciseID: exercise.exerciseID,
         machineID: exercise.machineID,
+        commandID: SetID(rawValue: slot.id),
         // Stamped so recovery can tell two blocks of the same movement apart. Without it,
         // grouping by exercise made both blocks claim the same sets and double-counted them.
         sessionExerciseID: planRowIDs[exercise.id],

@@ -41,6 +41,13 @@ jobs:
           set -o pipefail
           swift build --package-path Packages/HardsetKit 2>&1 | tee macos-build.log | tail -40
 
+      - name: Test portability, receipt, Health storage and retry guarantees
+        run: |
+          set -o pipefail
+          swift test --package-path Packages/HardsetKit \
+            --filter 'CSVDocumentTests|SetCommandTests|DataTransferTests|RestJournalTests|ReceiptStoreTests|DeviceHealthStoreTests' \
+            2>&1 | tee portable-feature-tests.log | tail -50
+
       - name: Build the app and widget for the iOS Simulator
         run: |
           set -o pipefail

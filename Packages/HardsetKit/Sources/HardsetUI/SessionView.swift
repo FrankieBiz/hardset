@@ -21,6 +21,7 @@ public struct SessionView: View {
   private let errorMessage: String?
   private let records: [PersonalRecord]
   private let onLogSet: (UUID, SetSlot) -> Void
+  private let onStartRest: ((UUID, Duration) -> Void)?
   private let onAdjustRest: (Duration) -> Void
   private let onPauseResumeRest: () -> Void
   private let onSkipRest: () -> Void
@@ -50,6 +51,7 @@ public struct SessionView: View {
     errorMessage: String? = nil,
     records: [PersonalRecord] = [],
     onLogSet: @escaping (UUID, SetSlot) -> Void,
+    onStartRest: ((UUID, Duration) -> Void)? = nil,
     onAdjustRest: @escaping (Duration) -> Void = { _ in },
     onPauseResumeRest: @escaping () -> Void = {},
     onSkipRest: @escaping () -> Void = {},
@@ -68,6 +70,7 @@ public struct SessionView: View {
     self.errorMessage = errorMessage
     self.records = records
     self.onLogSet = onLogSet
+    self.onStartRest = onStartRest
     self.onAdjustRest = onAdjustRest
     self.onPauseResumeRest = onPauseResumeRest
     self.onSkipRest = onSkipRest
@@ -105,6 +108,7 @@ public struct SessionView: View {
             state: $exercise,
             unit: unit,
             onLogSet: { slot in onLogSet(exercise.id, slot) },
+            onStartRest: onStartRest.map { start in { duration in start(exercise.id, duration) } },
             onSelectMachine: onSelectMachine.map { select in
               { select(exercise.id) }
             },

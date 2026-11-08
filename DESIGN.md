@@ -171,3 +171,26 @@ components rather than native spinners.
   workout. Appearance callers share model-owned preparation, so one disappearing
   caller does not abandon recovery. Later appearances preserve live drafts and
   finished-state transitions instead of replaying an old snapshot.
+
+## Handout feature additions
+
+- Logger rows expose −/+ controls only when an explicit positive machine increment
+  exists. They add/subtract canonical kilograms and convert only the label. Each
+  button uses the existing56pt logger style and selection haptic. Blank loads stay
+  blank, saved loads are read-only, and Reduce Motion uses the existing button style.
+- Rest starts only from an explicit duration choice. Durable absolute-date state is
+  separate from OS scheduling; a visible retry banner reports either persistence or
+  scheduling failure. No countdown state is stored or animated by a custom loop.
+- Settings adds file import/export, optional Apple Health and a StoreKit Lifetime
+  section. Reuse existing spacing, typography, buttons and semantic error colours.
+  Import previews state unknown equipment and unit/time-zone interpretation before
+  saving. Busy operations disable their controls and expose native progress.
+- History opens a static receipt of committed sets. It states equipment provenance,
+  caveats and same-machine record definitions. Native share sheets handle text and a
+  deliberately dark image; long sessions retain text sharing rather than render an
+  unbounded image. It adds no animation and responds to Dynamic Type.
+- The optional deep muscle map uses the existing palette and fractional-set method,
+  with labelled values and comparative tracks, never target bands. It uses two
+  columns at ordinary sizes and one at accessibility sizes. Unknown attribution
+  keeps the lower-bound caveat; counted-only muscle tokens retain that disclosure.
+  No new colour, radius, typography or motion token is introduced.

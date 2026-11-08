@@ -52,6 +52,8 @@ public nonisolated enum HardsetMigrations {
   public static let deviceLocalTableNames: [String] = [
     "deviceHealthSamples",
     "deviceRestTimer",
+    "deviceImportBatches",
+    "deviceRestJournal",
   ]
 
   /// Tables that exist locally but are deliberately NOT synchronized in v1, pending a
@@ -417,6 +419,34 @@ public nonisolated enum HardsetMigrations {
         """
       )
       .execute(db)
+    }
+
+    // Device-only replay ledger. CSV contents are training data and stay off CloudKit.
+    migrator.registerMigration("v7_importReplayLedger") { db in
+      try #sql(
+        """
+        CREATE TABLE deviceImportBatches (id TEXT PRIMARY KEY NOT NULL, sourceCSV TEXT NOT NULL) STRICT
+        """
+      ).execute(db)
+    }
+
+    migrator.registerMigration("v8_durableRestJournal") { db in
+      try #sql(
+        """
+        CREATE TABLE deviceRestJournal (id INTEGER PRIMARY KEY, checkpointJSON TEXT NOT NULL) STRICT
+        """
+      ).execute(db)
+    }
+
+    // Match the complete chart history's stable tie ordering without a temporary sort.
+    migrator.registerMigration("v9_progressionOrder") { db in
+      try #sql(
+        """
+        CREATE INDEX loggedSets_on_progressionOrder
+          ON loggedSets(exerciseID, completedAt DESC, setOrdinal DESC, id DESC)
+          WHERE NOT isWarmup
+        """
+      ).execute(db)
     }
 
     return migrator

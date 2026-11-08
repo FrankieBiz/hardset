@@ -29,10 +29,11 @@ struct HardsetApp: App {
 private struct StartupView: View {
   let startup: AppStartup<HardsetDatabase.Resources>
   let restTimer: RestTimerController
+  @State private var timerReady = false
 
   var body: some View {
     Group {
-      if let resources = startup.resources {
+      if let resources = startup.resources, timerReady {
         RootView(database: resources.database, restTimer: restTimer)
       } else if startup.lastError != nil {
         // The design system's empty state and primary button, not the stock bordered one, so the
@@ -54,6 +55,12 @@ private struct StartupView: View {
       }
     }
     .task { await startup.start() }
+    .onChange(of: startup.resources != nil, initial: true) {
+      guard let resources = startup.resources else { return }
+      let journal = RestJournal(database: resources.database)
+      restTimer.configure(checkpoint: resources.restCheckpoint, save: journal.save)
+      timerReady = true
+    }
   }
 }
 
@@ -71,6 +78,9 @@ private struct RootView: View {
       unit: nil,
       hooks: RestTimerHooks(
         state: { restTimer.state },
+        metadata: { restTimer.metadata },
+        hasError: { restTimer.lastError != nil },
+        retry: { restTimer.retry() },
         start: { duration, metadata in
           restTimer.start(duration: duration, metadata: metadata)
         },

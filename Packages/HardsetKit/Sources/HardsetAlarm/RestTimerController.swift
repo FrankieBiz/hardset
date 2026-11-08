@@ -1,105 +1,154 @@
 #if canImport(AlarmKit)
-
 import Foundation
 import HardsetCore
+import Observation
 
-/// Owns the rest timer the user sees, and keeps AlarmKit in sync with it.
-///
-/// ## Why adjustments are debounced
-///
-/// AlarmKit has **no API to change a running countdown** -- the full mutation surface is
-/// `schedule`, `countdown`, `cancel`, `stop`, `pause`, `resume`. So "+15 s" is really
-/// `cancel(id:)` followed by scheduling a replacement. Since `schedule` is `async throws`,
-/// three fast taps would interleave three cancel/schedule pairs and the last one to land wins,
-/// which is not necessarily the last one the user tapped.
-///
-/// The on-screen countdown therefore updates **synchronously and immediately**, and the
-/// AlarmKit round-trip is coalesced behind a short debounce. The user never waits on the
-/// framework, and AlarmKit is written exactly once per burst of taps.
+/// Persists desired absolute deadlines before changing UI or AlarmKit. One reconciler owns
+/// all OS requests; a late schedule cannot overwrite a newer user action.
 @MainActor
 @Observable
 public final class RestTimerController {
-  /// The truth the UI renders. A deadline or a frozen remainder -- never a countdown.
   public private(set) var state: RestTimerState = .idle
+  public private(set) var metadata: RestMetadata?
   public private(set) var lastError: (any Error)?
+  private let operations: RestAlarmOperations
+  private var checkpoint = RestCheckpoint()
+  private var save: ((RestCheckpoint) throws -> Void)?
+  private var reconciliation: Task<Void, Never>?
+  private var generation = 0
+  private var configured = false
 
-  private var alarmID: UUID?
-  private var metadata: RestMetadata?
-  private var commitTask: Task<Void, Never>?
+  public init(operations: RestAlarmOperations = .live) { self.operations = operations }
 
-  /// Long enough to absorb a burst of taps, short enough to feel immediate.
-  private let debounce: Duration = .milliseconds(400)
-
-  public init() {}
-
-  public func start(duration: Duration, metadata: RestMetadata, now: Date = .now) {
-    self.metadata = metadata
-    state = .running(endsAt: now.addingTimeInterval(duration.seconds))
-    alarmID = UUID()
-    scheduleCommit()
+  /// Called once after the app opens its live writer. A failed journal read gates the
+  /// root screen, so it cannot silently replace a durable timer with a fresh idle one.
+  public func configure(checkpoint: RestCheckpoint, save: @escaping (RestCheckpoint) throws -> Void) {
+    guard !configured else { return }
+    configured = true
+    self.save = save
+    self.checkpoint = checkpoint
+    state = checkpoint.state
+    metadata = checkpoint.metadata
+    reconcile()
   }
 
-  /// The +/-15 s controls. Updates the visible deadline at once; AlarmKit catches up.
+  public func start(duration: Duration, metadata: RestMetadata, now: Date = .now) {
+    guard duration.seconds.isFinite, duration > .zero else { return }
+    transition(to: .running(endsAt: now.addingTimeInterval(duration.seconds)), metadata: metadata)
+  }
+
   public func adjust(by delta: Duration, now: Date = .now) {
-    guard state.isRunning || state.remaining(at: now) != nil else { return }
-    state = state.adjusted(by: delta, at: now)
-    scheduleCommit()
+    guard state.remaining(at: now) != nil else { return }
+    transition(to: state.adjusted(by: delta, at: now), metadata: metadata)
   }
 
   public func pause(now: Date = .now) {
     guard state.isRunning else { return }
-    state = state.paused(at: now)
-    commitTask?.cancel()
-    if let alarmID { try? RestAlarmService.pause(id: alarmID) }
+    transition(to: state.paused(at: now), metadata: metadata)
   }
 
   public func resume(now: Date = .now) {
     guard case .paused = state else { return }
-    state = state.resumed(at: now)
-    // Resuming shifts the deadline, and AlarmKit cannot be told a new one -- so the alarm is
-    // replaced rather than resumed in place.
-    scheduleCommit()
+    transition(to: state.resumed(at: now), metadata: metadata)
   }
 
-  public func cancel() {
-    commitTask?.cancel()
-    commitTask = nil
-    state = .idle
-    if let alarmID { try? RestAlarmService.cancel(id: alarmID) }
-    alarmID = nil
-    metadata = nil
+  public func cancel() { transition(to: .idle, metadata: nil) }
+  public func retry() { reconcile() }
+
+  public func waitForReconciliation() async { await reconciliation?.value }
+
+  private func transition(to state: RestTimerState, metadata: RestMetadata?) {
+    var retired = checkpoint.retiredAlarmIDs
+    if let old = checkpoint.alarmID { retired.append(old) }
+    let updated = RestCheckpoint(state: state, metadata: metadata,
+      alarmID: state.isRunning ? UUID() : nil, retiredAlarmIDs: Array(Set(retired)))
+    do {
+      guard let save else { throw RestControllerError.journalUnavailable }
+      try save(updated)
+      checkpoint = updated
+      self.state = state
+      self.metadata = metadata
+      generation += 1
+      lastError = nil
+      reconcile()
+    } catch { lastError = error }
   }
 
-  /// Coalesces AlarmKit writes. Each call supersedes any pending one.
-  private func scheduleCommit() {
-    commitTask?.cancel()
-    let debounce = debounce
-    commitTask = Task { [weak self] in
-      try? await Task.sleep(for: debounce)
-      guard !Task.isCancelled else { return }
-      await self?.commit()
+  private func reconcile() {
+    // Do not cancel an in-flight schedule. Wait for its acknowledgement, then reconcile
+    // the newest generation. Its ID was already journalled, so a crash can cancel it.
+    guard reconciliation == nil, configured else { return }
+    reconciliation = Task { [weak self] in
+      guard let self else { return }
+      await self.runReconciliation()
+      self.reconciliation = nil
     }
   }
 
-  private func commit() async {
-    guard case .running(let endsAt) = state, let metadata else { return }
-    let remaining = endsAt.timeIntervalSince(.now)
-    guard remaining > 0 else { return }
-
-    // Replace rather than update: there is no update.
-    if let existing = alarmID { try? RestAlarmService.cancel(id: existing) }
-    let id = UUID()
-    alarmID = id
-
-    do {
-      try await RestAlarmService.schedule(
-        .init(id: id, duration: .seconds(remaining), metadata: metadata)
-      )
-      lastError = nil
-    } catch {
-      lastError = error
+  private func runReconciliation() async {
+    while true {
+      let revision = generation
+      let desired = checkpoint
+      do {
+        for id in desired.retiredAlarmIDs {
+          // An absent alarm is already canceled; other cancellation failures remain visible.
+          if try operations.contains(id) { try operations.cancel(id) }
+        }
+        if revision != generation { continue }
+        let cleaned = RestCheckpoint(state: desired.state, metadata: desired.metadata,
+          alarmID: desired.alarmID, retiredAlarmIDs: [])
+        try save?(cleaned)
+        checkpoint = cleaned
+        if case .running(let end) = desired.state, let id = desired.alarmID, let metadata = desired.metadata {
+          let remaining = end.timeIntervalSinceNow
+          if remaining > 0 {
+            if !operations.isAuthorized() {
+              guard try await operations.requestAuthorization() else { throw RestControllerError.authorizationDenied }
+              if revision != generation { continue }
+            }
+            guard end > Date.now else { lastError = nil; return }
+            // Relaunch keeps an existing alarm. A fresh request uses its already-journalled ID.
+            if try !operations.contains(id) {
+              try await operations.schedule(id, .seconds(max(0, end.timeIntervalSinceNow)), metadata)
+            }
+          }
+        }
+        if revision != generation { continue }
+        lastError = nil
+        return
+      } catch {
+        if revision != generation { continue }
+        lastError = error
+        return
+      }
     }
   }
 }
 
-#endif  // canImport(AlarmKit)
+/// Injectable OS boundary for deterministic scheduling, cancellation and relaunch tests.
+@MainActor
+public struct RestAlarmOperations {
+  public let contains: (UUID) throws -> Bool
+  public let cancel: (UUID) throws -> Void
+  public let isAuthorized: () -> Bool
+  public let requestAuthorization: () async throws -> Bool
+  public let schedule: (UUID, Duration, RestMetadata) async throws -> Void
+
+  public init(contains: @escaping (UUID) throws -> Bool, cancel: @escaping (UUID) throws -> Void,
+    isAuthorized: @escaping () -> Bool, requestAuthorization: @escaping () async throws -> Bool,
+    schedule: @escaping (UUID, Duration, RestMetadata) async throws -> Void) {
+    self.contains = contains; self.cancel = cancel; self.isAuthorized = isAuthorized
+    self.requestAuthorization = requestAuthorization; self.schedule = schedule
+  }
+
+  public static var live: Self {
+    Self(contains: { try RestAlarmService.contains(id: $0) }, cancel: { try RestAlarmService.cancel(id: $0) },
+      isAuthorized: { RestAlarmService.isAuthorized }, requestAuthorization: { try await RestAlarmService.requestAuthorization() },
+      schedule: { id, duration, metadata in
+        try await RestAlarmService.schedule(.init(id: id, duration: duration, metadata: metadata))
+      })
+  }
+}
+
+private enum RestControllerError: Error { case journalUnavailable, authorizationDenied }
+#endif

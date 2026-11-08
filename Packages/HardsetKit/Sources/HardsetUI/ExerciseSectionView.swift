@@ -14,6 +14,7 @@ public struct ExerciseSectionView: View {
   @Binding private var state: ExerciseLogState
   private let unit: WeightUnit
   private let onLogSet: (SetSlot) -> Void
+  private let onStartRest: ((Duration) -> Void)?
   private let onSelectMachine: (() -> Void)?
   private let onShowHistory: (() -> Void)?
 
@@ -26,12 +27,14 @@ public struct ExerciseSectionView: View {
     state: Binding<ExerciseLogState>,
     unit: WeightUnit,
     onLogSet: @escaping (SetSlot) -> Void,
+    onStartRest: ((Duration) -> Void)? = nil,
     onSelectMachine: (() -> Void)? = nil,
     onShowHistory: (() -> Void)? = nil
   ) {
     self._state = state
     self.unit = unit
     self.onLogSet = onLogSet
+    self.onStartRest = onStartRest
     self.onSelectMachine = onSelectMachine
     self.onShowHistory = onShowHistory
   }
@@ -57,6 +60,7 @@ public struct ExerciseSectionView: View {
             isNext: slot.id == state.nextUnloggedSlotID,
             showsInlineLabels: false,
             unit: unit,
+            machineIncrementKg: state.machineIncrementKg,
             previous: state.suggestion(forSetIndex: ordinal(of: slot)),
             // The borrowed-history note is shown once in the header, not repeated on every
             // row — an honest caveat that appears five times reads as noise and gets ignored.
@@ -67,6 +71,17 @@ public struct ExerciseSectionView: View {
       }
 
       addSetButtons
+      if let onStartRest {
+        Menu {
+          ForEach([60, 90, 120, 180], id: \.self) { seconds in
+            Button("\(seconds) seconds") { onStartRest(.seconds(seconds)) }
+          }
+        } label: {
+          Label("Start rest", systemImage: "timer")
+            .frame(maxWidth: .infinity, minHeight: Tokens.loggerTapTarget)
+        }
+        .buttonStyle(HardsetButtonStyle(.secondary, size: .logger))
+      }
     }
     .padding(Tokens.Spacing.regular)
     .hardsetCard()

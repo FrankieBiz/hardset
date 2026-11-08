@@ -58,6 +58,32 @@ struct ProgressionStoreTests {
     try store.finishSession(id, at: date.addingTimeInterval(3600))
   }
 
+  @Test("The chart includes complete history beyond two thousand sets")
+  func completeChart() async throws {
+    let (database, _, progression, exercise, _) = try fixture()
+    let id = UUID()
+    try await database.write { db in
+      try Session.insert { Session.Draft(id: id, startedAt: self.now) }.execute(db)
+      for index in 0..<2005 {
+        try LoggedSet.insert {
+          LoggedSet.Draft(id: UUID(), sessionID: id, exerciseID: exercise.rawValue,
+            setOrdinal: index, weightKg: index == 0 ? 150 : 100, reps: 8,
+            completedAt: self.now.addingTimeInterval(Double(index)))
+        }.execute(db)
+      }
+    }
+    let history = try await progression.loadHistory(for: exercise)
+    let points = history.series.flatMap(\.points)
+    #expect(points.count == 1)
+    #expect(points.first?.heaviestLoadKg == 150)
+    let plan = try await database.read { db in
+      try String.fetchAll(db, sql: "EXPLAIN QUERY PLAN SELECT * FROM loggedSets WHERE exerciseID = ? AND NOT isWarmup ORDER BY completedAt DESC, setOrdinal DESC, id DESC",
+        arguments: [exercise.rawValue.uuidString.lowercased()], adapter: SuffixRowAdapter(fromIndex: 3))
+    }
+    #expect(plan.contains { $0.contains("loggedSets_on_progressionOrder") })
+    #expect(!plan.contains { $0.contains("TEMP B-TREE") })
+  }
+
   @Test("History reads samples and labels in one transaction", arguments: [false, true])
   func historyUsesOneRead(withMachine: Bool) throws {
     let (database, logger, progression, exercise, gym) = try fixture()
