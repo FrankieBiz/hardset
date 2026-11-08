@@ -30,6 +30,11 @@ a second implementation.
   explicit native retry button; use background, section spacing and minimum tap
   target tokens. A disappearing scene does not restart or cancel process-owned
   preparation. Startup introduces no custom motion or color-only feedback.
+- Root readiness: after resource startup, show native progress until catalog,
+  workout recovery and gym options load successfully. A read failure offers retry
+  before a new workout can be created; it never stands in for an empty workout.
+  Appearance tasks share model-owned preparation. A later appearance preserves
+  live drafts and completed-state transitions instead of replaying cached recovery.
 - Motion: the current shared tokens define no custom animations. Snapshot loading
   adds none, so reduced-motion users get the same immediate state feedback. If
   custom motion is introduced, first add shared fast 100–150 ms, medium 150–250 ms,

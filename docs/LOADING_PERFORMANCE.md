@@ -525,13 +525,63 @@ Synchronous catalog seeding, workout recovery and gym loading after this gate
 remain subsequent work. First useful-screen timing still requires Release iPhone
 measurements, including migration cost for multi-year databases.
 
+## Root preparation and recovery gate — 2026-11-07
+
+The root's appearance task synchronously seeded the catalog, swallowed recovery
+errors with `try?`, and synchronously loaded gym options. In the portable
+reproduction of that exact call pattern, an unreadable plan table made recovery
+look empty, so the new-start path inserted a second session over an existing
+unfinished workout. A real catalog query also blocked a queued MainActor job in
+the availability probe. Both assertions failed before the change. This reproduces
+the Store call sequence; it is not a native SwiftUI interaction test.
+
+`WorkoutRootModel` now owns readiness, recovered coordinator, gym options and
+selection. It awaits GRDB's async seed write, one complete recovery read, and one
+combined gym-options/preselection read. Connection helpers and recovery-state
+construction are shared with the synchronous APIs; catalog merge, machine
+provenance, session exclusion and date semantics are preserved. Database waits
+release MainActor; building actor-owned workout state remains on MainActor and
+still needs CPU profiling on device.
+
+The UI exposes progress or retry before offering the tabs. Failed required input
+loads publish no partial root and cannot be bypassed by calling `startWorkout`:
+the model enforces readiness and refuses another workout while it owns a live
+coordinator. Retry can recover the same saved session. Only a finished coordinator
+can be cleared; later appearances do not replay old recovery or discard drafts.
+Initial preparation is model-owned and shared among appearance callers. Canceling
+one caller does not cancel that job underneath another appearance. This differs
+intentionally from refreshable report snapshots, where superseded reads cancel.
+The job handle is released on completion, including failure.
+
+The probe measures three initial transactions (one seed write and two reads),
+with no additional reads/writes on another appearance. Tests cover catalog,
+recovery and gym-read failures; retry; logged-set and gym recovery; canceled
+callers; duplicate appearances; refusing premature/new duplicate starts; finishing
+and starting a later workout. The gym list and last-used preselection now share a
+single read snapshot. Initial root errors use existing components and tokens;
+there is no custom motion. A successful gym save followed by a failed refresh is
+reported as a saved gym with a read failure rather than an unsuccessful write.
+
+Verification: `make check` passed (96 Swift files, 177 Core tests, 81 default
+Store tests and eight query-plan cases). Explicit Debug with WorkoutRootModelTests
+passed 86 tests in six suites. Expanded Release Store passed all seventeen
+portable files (177 tests in nineteen suites). Project/scheme regeneration remained
+identical. The installed default selection omits this new test file, so the
+expanded run is required to execute its regressions.
+
+Readiness is point-in-time. It does not exclude a different writer/device starting
+a workout after this load, or solve the separately tracked missing-plan recovery
+and retry-identity issues. User-initiated gym writes and follow-up refresh still
+use synchronous APIs. Native root rendering, focus/VoiceOver, background/foreground
+and scene transitions, plus iPhone load/frame measurements, remain unverified.
+
 ## Remaining app-wide work
 
 - Capture Release cold/warm launch, first usable workout, resume, picker, history,
   progression, and volume timings on iPhone, with small and multi-year databases.
   Record median/tail latency, main-thread hangs, memory, and device/OS/build details
   before setting defensible loading budgets.
-- Audit remaining synchronous catalog/recovery/gym/picker loading and post-read
+- Audit remaining synchronous picker and user-initiated gym loading, and post-read
   analysis on the main actor. Profile before moving additional CPU work, preserve
   cancellation and consistent snapshot semantics, and validate the new startup
   owner with Apple frameworks and real scene/account transitions.

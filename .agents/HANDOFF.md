@@ -555,3 +555,62 @@ The requested architectural review is documented. No production Swift source or 
   a new workout if recovery failed. Other broad-goal work remains chart limits/order,
   incomplete-plan recovery/provenance, numeric/retry identity, durable rest/account
   gating, and native/device validation. Goal remains active.
+
+
+### 2026-11-08 00:12 UTC — Gate root readiness on async recovery
+
+- Objective: make catalog/recovery/gym startup waits asynchronous and prevent a
+  recovery error from masquerading as no workout. Previous turn was verified progress
+  (a8e6eb8). User later said a usage limit interrupted the session and requested
+  continuation; current authoritative status still contains only this milestone's
+  owned changes. Existing worktree `/home/frankbiz/orca/workspaces/hardset/mojarra`,
+  branch FrankieBiz/mojarra. No subagents used.
+- Owned paths: new Store/WorkoutRootModel.swift and StoreTests/WorkoutRootModelTests.swift;
+  Store/{CatalogSeeder,GymStore,LoggerStore,SessionCoordinator}.swift;
+  Feature/HardsetRootView.swift; DESIGN.md; docs/LOADING_PERFORMANCE.md; this handoff.
+- Baseline portable reproduction used the original root's real Store call sequence:
+  hidden plan table -> try? resume returns nil -> start inserts a second session.
+  Expected count1 failed with2. Actual catalog read on MainActor also failed its
+  availability probe. Native SwiftUI interaction is not claimed by these tests.
+- Shared DB helpers power cancellable async catalog seeding, recovery snapshot and
+  combined gym options/preselection. Sync APIs preserved; seed merge and recovery
+  reconstruction rules unchanged (reviewed whitespace-insensitive diff). Store
+  wrappers have compiler-checked Sendable. GymStore extension helper isolation needed
+  one compile correction: explicit nonisolated, because extension declarations picked
+  up module MainActor default. Keep that annotation; do not blindly remove it.
+- WorkoutRootModel owns coordinator/readiness/gym state. No start before all required
+  inputs succeed; no replacement while it owns a live workout. Required input failures
+  expose retry, not empty workout. Only finished coordinators can be cleared. Later
+  appearances do not reseed or resurrect a completed workout. Root view gates tabs
+  with native progress/retry, uses existing tokens and adds no motion.
+- Settled lifecycle decision: initial preparation is model-owned, shared by all
+  appearances, and survives cancellation of one caller. Do not regress to returning
+  early on isLoading with a caller-owned load: a new appearance could otherwise lose
+  its loader when the old caller is canceled. Child task is retained and cleared on
+  completion/failure. Report refreshes deliberately use different cancellation policy.
+- Gym options and last-used selection now share1 read. Initial trace:1 seed write +
+  1 recovery read +1 gym-selection read,3 transactions total; repeat appearance0.
+  A gym saved before a failed refresh is reported as saved plus a read failure.
+- Regression coverage: catalog/recovery/gym read failures, retry to the same saved
+  session, blocked starts before readiness/while live, logged-set+gym restoration,
+  guarded finish/clear/new start, overlapping and canceled appearance callers,
+  main-actor availability and transaction counts. Only probes use bounded semaphores;
+  no production semaphores or detached tasks. Extended Debug passed86 tests/6 suites.
+- Verification before interruption: make check passed96 parsed files,177 Core tests/
+  23 suites,81 default Store tests/5 suites,8 query-plan cases. Expanded Release now
+  17 portable files passed177 tests/19 suites; default checker omits new root test.
+  Project/scheme regeneration identical, diff/whitespace reviewed. Refreshing make
+  check after the interrupted session passed with the same counts before committing.
+  Expanded Release after resumption passed177 tests/19 suites (17 portable files);
+  source and test scope match the earlier passing run.
+- Native UI compilation/rendering, focus/VoiceOver, scene/background transitions,
+  CloudKit/AlarmKit/widget integration and iPhone loading/frame measurements remain
+  pending. Reconstruction CPU remains on MainActor. Readiness is point-in-time; no
+  cross-writer/device uniqueness claim. Missing-plan recovery and command/retry
+  identity remain separate. User-initiated gym writes/follow-up refresh still sync.
+- Next concrete performance work: measure repeated seeding of an unchanged catalog
+  (currently updates all existing curated rows, potentially causing avoidable sync
+  work) and absent last-used-gym lookup with years of nil-gym sessions. Then continue
+  picker loading, complete chart histories/tie order, incomplete-plan recovery,
+  provenance, numeric/retry identity, durable rest/account gating, and native/device
+  validation. Full app goal remains active.

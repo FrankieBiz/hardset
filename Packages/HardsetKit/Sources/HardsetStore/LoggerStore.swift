@@ -18,7 +18,7 @@ import SQLiteData
 // `nonisolated` is deliberate, matching the rest of this module: the work happens on GRDB's
 // database queues, and isolating it to the main actor would force every caller to hop for
 // no reason.
-public nonisolated struct LoggerStore {
+public nonisolated struct LoggerStore: Sendable {
   private let database: any DatabaseWriter
 
   public init(database: any DatabaseWriter) {
@@ -487,15 +487,22 @@ public nonisolated struct LoggerStore {
   /// All recovery inputs share one SQLite read snapshot. The connection never
   /// escapes this closure; callers receive immutable, Sendable records only.
   func recoverySnapshot(asOf: Date) throws -> SessionRecoverySnapshot? {
-    try database.read { db in
-      guard let session = try Self.readOpenSession(in: db) else { return nil }
-      let planned = try Self.readSessionExercises(in: session.id, db: db)
-      let written = try Self.readSets(in: session.id, db: db)
-      let prior = try Self.readPriorPerformance(
-        for: planned.map(\.progressionKey), excluding: session.id, asOf: asOf, in: db
-      )
-      return SessionRecoverySnapshot(session: session, planned: planned, written: written, prior: prior)
-    }
+    try database.read { db in try Self.readRecoverySnapshot(asOf: asOf, in: db) }
+  }
+
+  func loadRecoverySnapshot(asOf: Date) async throws -> SessionRecoverySnapshot? {
+    try Task.checkCancellation()
+    return try await database.read { db in try Self.readRecoverySnapshot(asOf: asOf, in: db) }
+  }
+
+  private static func readRecoverySnapshot(asOf: Date, in db: Database) throws -> SessionRecoverySnapshot? {
+    guard let session = try Self.readOpenSession(in: db) else { return nil }
+    let planned = try Self.readSessionExercises(in: session.id, db: db)
+    let written = try Self.readSets(in: session.id, db: db)
+    let prior = try Self.readPriorPerformance(
+      for: planned.map(\.progressionKey), excluding: session.id, asOf: asOf, in: db
+    )
+    return SessionRecoverySnapshot(session: session, planned: planned, written: written, prior: prior)
   }
 
   /// Loads complete latest-session sets and an all-time heaviest set per machine.
