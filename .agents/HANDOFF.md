@@ -743,3 +743,7 @@ The requested architectural review is documented. No production Swift source or 
 
 See `.agents/handoffs/catalog-noop.md` for the current optimization, tests and native
 CI status. Main root-loading run42430194445 is green.
+
+Ongoing after root integration: app-test coverage repair on branch
+`FrankieBiz/verify-app-smoke`; see [.agents/handoffs/app-smoke.md](handoffs/app-smoke.md).
+Main7acda12's repeat native run is42430194445; root code's native run42429147943 passed.

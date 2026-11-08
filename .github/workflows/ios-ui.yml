@@ -52,6 +52,19 @@ jobs:
             2>&1 | tee app-build.log | grep -E "error:|BUILD (SUCCEEDED|FAILED)" || true
           grep -q "BUILD SUCCEEDED" app-build.log
 
+      - name: Test the app target on the iOS Simulator
+        run: |
+          set -o pipefail
+          xcodebuild test \
+            -project Hardset.xcodeproj -scheme Hardset \
+            -destination 'platform=iOS Simulator,name=iPhone 17,OS=latest' \
+            -only-testing:HardsetTests \
+            -skipMacroValidation -skipPackagePluginValidation \
+            CODE_SIGNING_ALLOWED=NO \
+            2>&1 | tee app-test.log | grep -E "error:|TEST (SUCCEEDED|FAILED)|Test run" || true
+          grep -q "TEST SUCCEEDED" app-test.log
+          grep -Eq 'Test run with [1-9][0-9]* tests? in [1-9][0-9]* suites? passed' app-test.log
+
       - name: Render screens on the iOS Simulator
         env:
           TEST_RUNNER_HARDSET_SNAPSHOT_DIR: ${{ github.workspace }}/snapshots
