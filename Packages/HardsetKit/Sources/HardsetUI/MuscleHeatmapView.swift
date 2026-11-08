@@ -10,7 +10,7 @@ public struct MuscleHeatmapView: View {
   public var body: some View {
     VStack(alignment: .leading, spacing: Tokens.Spacing.section) {
       Text("Deep muscle map").font(Tokens.Text.title)
-      Text("Last 7 days · Comparative fractional sets. Colour shows volume relative to your most-credited muscle; it does not rate whether you trained enough.")
+      Text("Last 7 days · Comparative fractional sets. Bars compare volume with your most-credited muscle; it does not rate whether you trained enough.")
         .font(Tokens.Text.provenance).foregroundStyle(Tokens.Color.textSecondary)
       CertaintyBadge(level: .moderate, methodology: SetCounting.source.methodology, citation: SetCounting.source.citation)
       if report.isLowerBound {

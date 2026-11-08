@@ -30,6 +30,7 @@ public struct SetRowView: View {
   @Binding private var draft: SetEntryDraft
   @State private var weightBuffer: NumericEntryBuffer
   @State private var repsBuffer: NumericEntryBuffer
+  @State private var adjustmentFeedback = 0
   @State private var editing: SetRowField?
   /// The keypad's measured height, so the sheet is exactly as tall as its keys. Seeded with a
   /// close estimate so the first presentation does not visibly resize.
@@ -124,6 +125,7 @@ public struct SetRowView: View {
       in: RoundedRectangle(cornerRadius: Tokens.Radius.control)
     )
     .animation(Tokens.Motion.adaptive(Tokens.Motion.state, reduceMotion: reduceMotion), value: isLogged)
+    .sensoryFeedback(.selection, trigger: adjustmentFeedback)
     .accessibilityElement(children: .combine)
     .accessibilityLabel(spokenLabel)
     .accessibilityHint(isLogged ? "This set is saved." : (draft.isLoggable ? "Double tap to log this set." : "Enter a weight and reps to log."))
@@ -233,13 +235,13 @@ public struct SetRowView: View {
     .buttonStyle(HardsetButtonStyle(.secondary, size: .logger, fullWidth: true))
     .disabled(draft.weightKg == nil || (delta < 0 && draft.weightKg == 0))
     .accessibilityLabel("\(delta < 0 ? "Decrease" : "Increase") load by \(unit.fromKilograms(abs(delta)).formatted()) \(unit.abbreviation)")
-    .sensoryFeedback(.selection, trigger: draft.weightKg)
   }
 
   private func adjustLoad(by delta: Double) {
     guard !isLogged, let current = draft.weightKg else { return }
     let updated = max(0, current + delta)
-    guard updated.isFinite else { return }
+    guard updated.isFinite, updated != current else { return }
+    adjustmentFeedback += 1
     editing = nil
     draft.weightKg = updated
     reseedBuffers()
@@ -340,7 +342,7 @@ public struct SetRowView: View {
       )
       .contentShape(shape)
     }
-    .buttonStyle(.plain)
+    .buttonStyle(SetReadoutStyle())
     .disabled(isLogged)
   }
 
@@ -380,7 +382,7 @@ public struct SetRowView: View {
           value: isLogged
         )
     }
-    .buttonStyle(.plain)
+    .buttonStyle(SetReadoutStyle())
     // The same predicate the store enforces. There is no second definition of "complete".
     .disabled(!isReady || isLogged)
     .opacity(isReady || isLogged ? 1 : 0.6)
@@ -548,3 +550,9 @@ extension SetRowField: Identifiable {
     return Harness()
   }
 #endif
+
+/// Disabled saved rows retain measured text contrast; only actions are disabled.
+/// Incomplete log controls still apply their explicit disabled opacity above.
+private struct SetReadoutStyle: ButtonStyle {
+  func makeBody(configuration: ButtonStyleConfiguration) -> some View { configuration.label }
+}

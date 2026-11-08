@@ -199,3 +199,7 @@ components rather than native spinners.
   values; logger VoiceOver actions expose the same one-step adjustments as the buttons.
 - Rest recovery failure appears above every tab and prevents new timer commands until
   recovery succeeds. It does not block the workout database, personal history or export.
+
+- Saved logger facts retain full foreground contrast even though their actions are
+  disabled. Confidence labels wrap at large Dynamic Type sizes instead of truncating
+  the word that qualifies a claim. Neither change introduces motion or new tokens.

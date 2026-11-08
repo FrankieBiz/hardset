@@ -39,6 +39,7 @@ public struct LoadStepSheet: View {
         }.padding(Tokens.Spacing.loose)
       }
       .background(Tokens.Color.background)
+      .tint(Tokens.Color.accent)
       .hardsetNavigationTitle("Machine load step")
       .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Cancel", action: onCancel) } }
     }

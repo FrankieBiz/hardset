@@ -100,7 +100,7 @@ struct CertaintyCapsule: View {
         .accessibilityHidden(true)
       // Colour is never the only carrier of meaning.
       Text(level.label)
-        .lineLimit(1)
+        .fixedSize(horizontal: false, vertical: true)
     }
     .font(Tokens.Text.caption.weight(.semibold))
     .foregroundStyle(Tokens.Color.certainty(level))

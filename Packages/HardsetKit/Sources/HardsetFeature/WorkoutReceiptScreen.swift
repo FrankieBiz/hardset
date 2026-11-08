@@ -22,7 +22,7 @@ struct WorkoutReceiptScreen: View {
           ScrollView {
             WorkoutReceiptView(receipt: receipt, unit: unit)
             VStack(spacing: Tokens.Spacing.regular) {
-              CertaintyBadge(level: receipt.lines.contains { $0.machineName == nil || $0.isImported } ? .unevaluated : .high,
+              CertaintyBadge(level: receipt.lines.isEmpty || receipt.lines.contains { $0.machineName == nil || $0.isImported } ? .unevaluated : .high,
                 methodology: "A receipt of saved user-entered sets. Unknown equipment is unevaluated. No independent load measurement or technique verification is claimed.")
               ShareLink(item: receipt.text(unit: unit)) { Label("Share text receipt", systemImage: "square.and.arrow.up") }
                 .buttonStyle(HardsetButtonStyle(.secondary))

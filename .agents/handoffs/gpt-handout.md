@@ -64,3 +64,28 @@
   tests,198 portable Store tests,8 query plans and172 contrast pairs. Generator and
   whitespace checks clean. Native initial run passed host compilation, feature storage
   tests and iOS app/widget compilation; newer source will supersede that run.
+
+## Native milestone verified, visual follow-up
+
+- Native run42439315205 SUCCESS for40e599b: macOS package,30 feature tests/8 suites,
+  unsigned iOS app/widget,1 app test,25 tests/2 suites (17 screen tests and8 durable
+  controller tests). Includes journal failure/retry, stale schedule cancellation,
+  relaunch, pause, denied permission and OS-stop acknowledgement.
+- Artifacts: /tmp/hardset-handout-42439315205. Inspected receipt-dark-375,
+  muscle-map-dark-375, machine-step-pounds-375 and exercise-card-pounds-375.
+  Receipt unknown/imported provenance is visible; map lower-bound disclosure and
+  stepped loads fit. Native layer renderer retains the known glass/capsule artefacts.
+- Visual finding: native plain disabled styling dims saved load/reps and the saved
+  check. Replaced only those row button styles with a label-preserving style so
+  disabled actions keep factual readout contrast. Added explicit tint in the load
+  editor’s standalone navigation context. New native verification required.
+- Final small corrections: empty receipts use unevaluated confidence; muscle-map
+  copy describes comparative bars; one selection haptic fires for a real adjustment,
+  rather than one from each of the two controls or from keypad typing.
+- Pre-existing warnings remain in legacy tests and platform chrome; checks pass,
+  but this record does not claim a warning-free dependency graph or device run.
+
+- Also inspected receipt-light-ax3 and muscle-map-light-ax3. Receipt figures reflow
+  legibly. The confidence capsule truncated at AX3, so its label now wraps vertically
+  at the offered width rather than forcing one line. The same fixture verifies it
+  in the follow-up render run; no typography was shrunk.
