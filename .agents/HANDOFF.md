@@ -710,3 +710,31 @@ The requested architectural review is documented. No production Swift source or 
   branch to the existing iOS build and screens workflow; verify its native results
   before advancing main. Actual device timings/account/signed-entitlement integration
   remain pending even after unsigned native CI succeeds.
+
+
+### Native root integration verified — 2026-11-08
+
+- Feature branch FrankieBiz/resume-workout-root-model at924dd1f passed existing CI
+  run42429147943 (https://github.com/FrankieBiz/hardset/actions/runs/42429147943):
+  macOS package compile, unsigned iOS Simulator app/widget compile,14 screen tests.
+  Native artifacts downloaded outside repo to /tmp/hardset-root-ui-42429147943.
+  Inspected root-start-dark.png and root-start-light.png: loaded gym Metroflex and
+  expected2 working sets/16 reps/1200kg card in both, not a stuck loading state.
+  Renderer cannot reproduce Liquid Glass; light tab icons limitation predates this.
+- Latest combined make check:98 syntax files,179 Core tests/23 suites,81 selected
+  Store tests/5 suites,8 query cases,172 contrast pairs. Expanded Release Store177/
+  19 suites and Release Core179/23 suites passed. Generated project/scheme identical.
+- Follow-up probes outside source: unchanged CatalogSeeder.seed executes50 updates
+  with0 inserts, five warm runs18.0–20.7ms (no CloudKit); lastUsedGym absent across
+  50k nil-gym sessions4.4ms, scratch partial covering index0.0006ms. Probe Swift file
+  was deleted from checker workspace; no production fix yet. Logs warm-seed-probe.log
+  in checker cache. AppSmokeTests obsolete RootView() call confirmed in actual source;
+  not compiled/executed by current workflow (only-testing:HardsetUISnapshotTests).
+- Advancing main with the verified code plus these documentation-only records; main
+  workflow will run again. Fetch/inspect remote first and never force push. Current
+  remote last checked8422cd3, no new divergence. Source is identical to verified924dd1f.
+- Broad goal remains active. Prioritize test-target repair/native execution, avoidable
+  seed writes and nil-gym lookup, then remaining data/identity/rest/account issues and
+  real device timing/interaction/accessibility checks. Native compile/render evidence
+  above supersedes earlier blanket Apple-build-pending notes for this exact code;
+  it does not prove signed CloudKit or AlarmKit behavior or physical-device performance.

@@ -575,6 +575,39 @@ and retry-identity issues. User-initiated gym writes and follow-up refresh still
 use synchronous APIs. Native root rendering, focus/VoiceOver, background/foreground
 and scene transitions, plus iPhone load/frame measurements, remain unverified.
 
+## Root integration with the current UI — 2026-11-08
+
+Remote main advanced during the interrupted session. The push guard rejected the
+old-base root commit, and the feature branch merged main8422cd3 without rewriting
+remote history. The merged RootView retains the current cyan design system,
+settings, workout headers/accessory, and last-workout card. Loading/retry uses the
+existing HardsetLoadingState and HardsetEmptyState action. The optional last-workout
+card now loads asynchronously through SnapshotLoader, retaining its absent-on-error
+policy and rejecting stale overlapping refreshes.
+
+CI run [42429147943](https://github.com/FrankieBiz/hardset/actions/runs/42429147943)
+passed for code commit924dd1f: macOS HardsetKit build, unsigned iOS Simulator app
+and widget build, and14 screen-render tests. Root-start light/dark artifacts were
+inspected: both reach loaded Metroflex Gym data and the expected two-set last-workout
+card. This proves the fixture reaches loaded UI; the renderer's800ms settling delay
+is not a device latency benchmark. Liquid Glass/tab-bar appearance remains limited
+by the renderer, as recorded in MAC-VERIFICATION.md.
+
+After integration, make check passed98 syntax files,179 Core tests/23 suites,
+81 default Store tests/5 suites,8 query cases and172 palette contrast pairs.
+Expanded Release Store passed177 tests/19 suites across17 portable files; Release
+Core passed179 tests/23 suites. Project/scheme regeneration stayed identical.
+Native signed entitlements, real account transitions, UI interaction/accessibility
+and physical-device cold/warm loading/frame measurements still need validation.
+
+Read-only follow-up measurements found that an unchanged catalog seed still issues
+50 UPDATE statements (five warm host runs about18–21ms, without CloudKit triggers).
+An absent last-used-gym query scans50,000 nil-gym sessions (about4.4ms in SQLite);
+a scratch partial covering index avoids that history traversal. These are measured
+next targets, not changes in the root-model code. AppSmokeTests also still references
+the obsolete private RootView() initializer and is outside the native workflow's
+selected screenshot suite; it must be repaired and executed separately.
+
 ## Remaining app-wide work
 
 - Capture Release cold/warm launch, first usable workout, resume, picker, history,
