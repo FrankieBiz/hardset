@@ -21,7 +21,7 @@ def oid(name):
     _used[name] = v
     return v
 
-BUNDLE_ID = "com.hardset.app"
+BUNDLE_ID = os.environ.get("HARDSET_BUNDLE_ID", "com.francisbisignano.hardset")
 IOS_MIN = "26.1"
 SWIFT_VERSION = "6.0"
 DEVELOPMENT_TEAM = os.environ.get("DEVELOPMENT_TEAM", "DG7KBJLSJ3")
