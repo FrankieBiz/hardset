@@ -15,6 +15,7 @@ final class AppScreensUITests: XCTestCase {
   private var auditReport: [String] = []
 
   /// The whole journey, in dark mode, starting from a fresh install.
+  @MainActor
   func testJourneyInDarkMode() throws {
     // Set here rather than in an overridden setUp, whose isolation would have to match XCTest's.
     continueAfterFailure = true
@@ -108,6 +109,7 @@ final class AppScreensUITests: XCTestCase {
   }
 
   /// The main screens again in light mode, over whatever the dark journey left behind.
+  @MainActor
   func testScreensInLightMode() throws {
     continueAfterFailure = true
     XCUIDevice.shared.appearance = .light
@@ -134,6 +136,7 @@ final class AppScreensUITests: XCTestCase {
   // MARK: - Helpers
 
   /// Waits for the start screen, and when it does not come, says what is showing instead.
+  @MainActor
   private func waitForStartScreen(_ app: XCUIApplication) -> Bool {
     if app.buttons["Start workout"].waitForExistence(timeout: 30) { return true }
     capture(app, "00-launch-did-not-reach-start")
@@ -144,6 +147,7 @@ final class AppScreensUITests: XCTestCase {
     return false
   }
 
+  @MainActor
   private func openTab(_ app: XCUIApplication, _ title: String) {
     let tab = app.tabBars.buttons[title].firstMatch
     if tab.waitForExistence(timeout: 5) {
@@ -153,6 +157,7 @@ final class AppScreensUITests: XCTestCase {
     }
   }
 
+  @MainActor
   private func capture(_ app: XCUIApplication, _ name: String) {
     // Let presentation and scroll-edge transitions settle before the frame is taken.
     Thread.sleep(forTimeInterval: 0.8)
@@ -168,6 +173,7 @@ final class AppScreensUITests: XCTestCase {
 
   /// Apple's accessibility audit on whatever is on screen: hit regions, contrast, clipped text,
   /// Dynamic Type, element descriptions and traits. Every issue is recorded and the run goes on.
+  @MainActor
   private func audit(_ app: XCUIApplication, screen: String) {
     do {
       try app.performAccessibilityAudit { [weak self] issue in
@@ -184,6 +190,7 @@ final class AppScreensUITests: XCTestCase {
     }
   }
 
+  @MainActor
   private func writeAuditReport(named name: String) {
     let text =
       auditReport.isEmpty

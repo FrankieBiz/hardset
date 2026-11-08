@@ -89,6 +89,10 @@ def build_settings(target):
             "PRODUCT_NAME": "HardsetUITests",
             "GENERATE_INFOPLIST_FILE": "YES",
             "TEST_TARGET_NAME": "Hardset",
+            # Nonisolated by default: an XCTestCase subclass whose inherited initialisers became
+            # MainActor no longer matches XCTest's. The methods that drive the app are marked
+            # @MainActor themselves.
+            "SWIFT_DEFAULT_ACTOR_ISOLATION": "nonisolated",
         })
     else:
         s.update({
