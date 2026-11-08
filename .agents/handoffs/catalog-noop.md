@@ -34,3 +34,8 @@
   7.55–8.21ms after, ten warm actual seeder loads, no CloudKit). Probe only in checker
   cache, removed in finally. User chose Linux/simulator CI for now; device/signed
   checks stay pending. Do not change those goals into assumed device verification.
+
+- 2026-11-08: catalog run42431360543 SUCCESS (14 screen tests); smoke run42431117598
+  SUCCESS (1 app test +14 screen tests). Artifacts downloaded under /tmp. Combined
+  make check passes, generated project/scheme identical. Merged remote main5887ceb
+  documentation handout without conflict. Preparing main push; repeat CI still pending.

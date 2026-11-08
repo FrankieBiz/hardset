@@ -32,3 +32,8 @@
   MainActor-isolated HardsetApp construction. make check passed:98 parsed Swift
   files,179 Core/23 suites,81 selected Store/5 suites,8 query cases,172 contrast pairs.
   Native fix verification remains pending; do not infer runtime success from Linux.
+
+- 2026-11-08: catalog run42431360543 SUCCESS (14 screen tests); smoke run42431117598
+  SUCCESS (1 app test +14 screen tests). Artifacts downloaded under /tmp. Combined
+  make check passes, generated project/scheme identical. Merged remote main5887ceb
+  documentation handout without conflict. Preparing main push; repeat CI still pending.

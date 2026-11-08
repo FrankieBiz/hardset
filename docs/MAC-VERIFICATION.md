@@ -20,8 +20,12 @@ has proven is ticked below; the rest still needs a Mac, a device, or both.
 - [x] The dynamic-colour providers, `onGeometryChange`, and the computed-`id` `Identifiable`
       types compile with no isolation errors.
 - [ ] A signed build on a Mac with the real CloudKit and AlarmKit entitlements; CI builds unsigned.
-- [ ] The app target's own `HardsetTests` do not compile: `AppSmokeTests` calls `RootView()`,
-      which is `private` and takes `syncDelegate:` and `restTimer:`. This predates the design pass.
+- [x] The app target's own `HardsetTests` builds and executes: run
+      [42431117598](https://github.com/FrankieBiz/hardset/actions/runs/42431117598)
+      passed one test in one suite, plus14 screen-render tests. The smoke test constructs
+      `HardsetApp` on MainActor instead of calling its private RootView. CI now runs
+      this target and requires a nonzero passing Swift Testing count. Construction
+      verifies app-target build/link behavior; it does not certify signed sync startup.
 
 ## 1a. What the rendered screens cannot show
 

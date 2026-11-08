@@ -634,10 +634,15 @@ are catalog-benchmark-before.log and catalog-benchmark-after.log in the local
 hardset-check cache. The regression's audit trigger separately proves50 updates
 become zero; it does not measure network or CloudKit traffic.
 
-Native feature verification is run42431360543 for commitc0f9bc4 and remains pending
-at this entry. App smoke-target repair is separately under run42431117598. Main's
-root-loading integration passed repeat native run42430194445. The user selected
-Linux and simulator CI for now; signed account/device checks remain pending.
+Native feature run [42431360543](https://github.com/FrankieBiz/hardset/actions/runs/42431360543)
+passed for commitc0f9bc4: macOS package, iOS Simulator app/widget and14 screen tests.
+App smoke repair run [42431117598](https://github.com/FrankieBiz/hardset/actions/runs/42431117598)
+passed one app test plus14 screen tests. CI now executes the app target and checks
+for a nonzero test count. Both sources are integrated locally; combined make check
+passes and project regeneration is identical. Remote main's documentation-only
+handout commit5887ceb is preserved. Main's earlier root-loading integration passed
+repeat run42430194445. The user selected Linux and simulator CI for now; signed
+account/device checks remain pending.
 
 ## Remaining app-wide work
 
