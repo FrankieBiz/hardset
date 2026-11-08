@@ -10,8 +10,9 @@ import Testing
 /// and links.
 @Suite("App target builds and links")
 struct AppSmokeTests {
-  @Test("The app's root view is constructible")
-  func rootViewExists() {
-    _ = RootView()
+  @Test("The app entry point is constructible")
+  @MainActor
+  func appEntryPointExists() {
+    _ = HardsetApp()
   }
 }
