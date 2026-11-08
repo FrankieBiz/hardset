@@ -140,8 +140,12 @@ public struct SetRowView: View {
         }
       }
     }
-    .sheet(item: $editing) { field in
-      padSheet(for: field)
+    // One keypad for the whole set. Presented while either field is being edited and retargeted in
+    // place when "Next" moves from weight to reps. Keyed on the field, the sheet was dismissed and
+    // presented again between the two numbers of every set: half a second of sliding keypad, and a
+    // digit typed during it was lost.
+    .sheet(isPresented: isEditing) {
+      padSheet(for: editing ?? .weight)
     }
     // Reseeded when the unit changes, because `@State` is initialised once per view identity: the
     // suffix switched to "kg" while the number stayed in pounds, so a 60 kg set read "132.28 kg".
@@ -402,6 +406,11 @@ public struct SetRowView: View {
     // pairing that clears 7:1 on both the accent and the success fill.
     if isLogged || (isReady && isNext) { return Tokens.Color.onAccent }
     return isReady ? Tokens.Color.accent : Tokens.Color.textSecondary
+  }
+
+  /// Whether the keypad is up. Dismissing it, by Done or by dragging, ends editing.
+  private var isEditing: Binding<Bool> {
+    Binding(get: { editing != nil }, set: { if !$0 { editing = nil } })
   }
 
   private func padSheet(for field: SetRowField) -> some View {

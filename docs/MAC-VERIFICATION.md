@@ -27,11 +27,27 @@ has proven is ticked below; the rest still needs a Mac, a device, or both.
       this target and requires a nonzero passing Swift Testing count. Construction
       verifies app-target build/link behavior; it does not certify signed sync startup.
 
-## 1a. What the rendered screens cannot show
+## 1a. The real app, driven on the simulator
 
-The snapshot suite draws through Core Animation without an app host, which cannot render Liquid
-Glass. The tab bar, the workout accessory, and prominent toolbar buttons such as Settings' "Done"
-appear unstyled or veiled in those images. Check them on a simulator or device instead.
+`HardsetUITests` launches the real app in CI (signed to run locally, so the iCloud entitlements
+are embedded), walks a lifter's journey and saves system-composited screenshots, Liquid Glass
+included. It also runs Apple's `performAccessibilityAudit` on each screen. Verified there:
+
+- [x] The tab bar, the workout accessory, and sheet toolbars render as system glass with the
+      readout-cyan tint in both appearances, not stock blue.
+- [x] The journey works end to end: add a gym, start a workout, add a movement, type weight and
+      reps on one keypad that retargets in place, log the set, finish, and see it on the start
+      screen, in history and in the weekly volume.
+- [x] A crash found there is fixed: design-token colour providers inherited `MainActor`
+      isolation and trapped (SIGTRAP) when UIKit resolved a colour off the main thread, which
+      happened as the gym picker presented and as a workout's first exercise appeared.
+- [x] Apple's audit reports no contrast, hit-region, element-description or trait issues on any
+      audited screen. What it still reports is Dynamic Type scaling of navigation-bar titles and
+      the system Done buttons (bars cap their text; titles carry the Large Content Viewer), the
+      single-line search field, and the deliberately hidden set-row column header.
+
+The package snapshot suite draws through Core Animation without an app host and cannot render
+glass; use the real-app screenshots above for chrome.
 
 ## 2. Visual checks, per appearance
 

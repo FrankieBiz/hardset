@@ -130,7 +130,11 @@ private struct NavigationTitleChrome: ViewModifier {
               .font(Tokens.Text.title)
               .foregroundStyle(Tokens.Color.textPrimary)
               .lineLimit(1)
+              .minimumScaleFactor(0.8)
               .accessibilityAddTraits(.isHeader)
+              // Bars cap their text size; the Large Content Viewer is how a bar title stays
+              // readable at accessibility sizes, as Apple's own bar items do.
+              .accessibilityShowsLargeContentViewer()
           }
         }
     #else
@@ -307,43 +311,60 @@ public struct StatLedger: View {
   }
 
   private let items: [Item]
+  @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
   public init(_ items: [Item]) {
     self.items = items
   }
 
+  /// A row of columns at ordinary sizes; at accessibility sizes, one figure per line. Three columns
+  /// of large text left each figure a third of the width, and the running app's accessibility
+  /// audit flagged "800" as clipping.
   public var body: some View {
-    HStack(spacing: 0) {
-      ForEach(items) { item in
-        VStack(alignment: .leading, spacing: Tokens.Spacing.hairline) {
-          HStack(alignment: .firstTextBaseline, spacing: Tokens.Spacing.tight) {
-            Text(item.value)
-              .font(Tokens.Text.setEntry)
-              .foregroundStyle(Tokens.Color.textPrimary)
-              .lineLimit(1)
-            if let unit = item.unit {
-              Text(unit)
-                .font(Tokens.Text.unit)
-                .foregroundStyle(Tokens.Color.textSecondary)
+    if dynamicTypeSize.isAccessibilitySize {
+      VStack(alignment: .leading, spacing: Tokens.Spacing.regular) {
+        ForEach(items) { item in
+          figure(item)
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+      }
+    } else {
+      HStack(spacing: 0) {
+        ForEach(items) { item in
+          figure(item)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.leading, item.id == items.first?.id ? 0 : Tokens.Spacing.regular)
+            .overlay(alignment: .leading) {
+              if item.id != items.first?.id {
+                Rectangle()
+                  .fill(Tokens.Color.border)
+                  .frame(width: Tokens.Stroke.hairline)
+              }
             }
-          }
-          Text(item.label)
-            .font(Tokens.Text.caption)
+        }
+      }
+      .fixedSize(horizontal: false, vertical: true)
+    }
+  }
+
+  private func figure(_ item: Item) -> some View {
+    VStack(alignment: .leading, spacing: Tokens.Spacing.hairline) {
+      HStack(alignment: .firstTextBaseline, spacing: Tokens.Spacing.tight) {
+        Text(item.value)
+          .font(Tokens.Text.setEntry)
+          .foregroundStyle(Tokens.Color.textPrimary)
+          .lineLimit(1)
+        if let unit = item.unit {
+          Text(unit)
+            .font(Tokens.Text.unit)
             .foregroundStyle(Tokens.Color.textSecondary)
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.leading, item.id == items.first?.id ? 0 : Tokens.Spacing.regular)
-        .overlay(alignment: .leading) {
-          if item.id != items.first?.id {
-            Rectangle()
-              .fill(Tokens.Color.border)
-              .frame(width: Tokens.Stroke.hairline)
-          }
-        }
-        .accessibilityElement(children: .combine)
       }
+      Text(item.label)
+        .font(Tokens.Text.caption)
+        .foregroundStyle(Tokens.Color.textSecondary)
     }
-    .fixedSize(horizontal: false, vertical: true)
+    .accessibilityElement(children: .combine)
   }
 }
 

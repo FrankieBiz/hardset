@@ -89,6 +89,9 @@ public struct NumericPad: View {
         .font(Tokens.Text.hero)
         .foregroundStyle(buffer.isEmpty ? Tokens.Color.textSecondary : Tokens.Color.textPrimary)
         .lineLimit(1)
+        // A readout must show the whole number: at the largest text sizes it scales down rather
+        // than clip "1002.5" to "100…". The row's own field keeps the full-size figure.
+        .minimumScaleFactor(0.5)
       if let unit {
         Text(unit)
           .font(Tokens.Text.unit)
@@ -135,6 +138,8 @@ public struct NumericPad: View {
         Button(action: onNext) {
           HStack(spacing: Tokens.Spacing.tight) {
             Text("Next")
+              .lineLimit(1)
+              .minimumScaleFactor(0.7)
             Image(systemName: "chevron.right")
           }
         }

@@ -26,12 +26,17 @@ IOS_MIN = "26.1"
 SWIFT_VERSION = "6.0"
 
 APP, WIDGET, TESTS = "Hardset", "HardsetWidget", "HardsetTests"
+# Drives the real app on the simulator: screenshots of every screen, including the system-drawn
+# chrome a package test cannot render, and Apple's accessibility audit of the running interface.
+UITESTS = "HardsetUITests"
+TARGETS = (APP, WIDGET, TESTS, UITESTS)
 
 # (file name, group dir, target)
 SOURCES = [
     ("HardsetApp.swift", "Hardset", APP),
     ("HardsetWidgetBundle.swift", "HardsetWidget", WIDGET),
     ("AppSmokeTests.swift", "HardsetTests", TESTS),
+    ("AppScreensUITests.swift", "HardsetUITests", UITESTS),
 ]
 RESOURCES = [
     ("PrivacyInfo.xcprivacy", "Hardset", APP),
@@ -78,6 +83,17 @@ def build_settings(target):
             "SKIP_INSTALL": "YES",
             "LD_RUNPATH_SEARCH_PATHS": '"$(inherited) @executable_path/Frameworks @executable_path/../../Frameworks"',
         })
+    elif target == UITESTS:
+        s.update({
+            "PRODUCT_BUNDLE_IDENTIFIER": f"{BUNDLE_ID}.uitests",
+            "PRODUCT_NAME": "HardsetUITests",
+            "GENERATE_INFOPLIST_FILE": "YES",
+            "TEST_TARGET_NAME": "Hardset",
+            # Nonisolated by default: an XCTestCase subclass whose inherited initialisers became
+            # MainActor no longer matches XCTest's. The methods that drive the app are marked
+            # @MainActor themselves.
+            "SWIFT_DEFAULT_ACTOR_ISOLATION": "nonisolated",
+        })
     else:
         s.update({
             "PRODUCT_BUNDLE_IDENTIFIER": f"{BUNDLE_ID}.tests",
@@ -97,6 +113,7 @@ PRODUCTS = {
     APP: ["HardsetCore", "HardsetStore", "HardsetUI", "HardsetAlarm", "HardsetFeature"],
     WIDGET: ["HardsetCore", "HardsetUI", "HardsetAlarm"],
     TESTS: ["HardsetCore"],
+    UITESTS: [],
 }
 
 L = []
@@ -120,12 +137,12 @@ w("/* End PBXBuildFile section */\n")
 
 # ---- PBXContainerItemProxy (target deps) ----
 w("/* Begin PBXContainerItemProxy section */")
-for dep, name in ((WIDGET, "HardsetWidget"), (APP, "Hardset")):
+for dep, name in ((WIDGET, "HardsetWidget"), (APP, "Hardset"), (APP + "_ui", "Hardset")):
     w(f"\t\t{oid('proxy_'+dep)} /* PBXContainerItemProxy */ = {{")
     w("\t\t\tisa = PBXContainerItemProxy;")
     w(f"\t\t\tcontainerPortal = {oid('project')} /* Project object */;")
     w("\t\t\tproxyType = 1;")
-    w(f"\t\t\tremoteGlobalIDString = {oid('target_'+dep)};")
+    w(f"\t\t\tremoteGlobalIDString = {oid('target_'+dep.removesuffix('_ui'))};")
     w(f"\t\t\tremoteInfo = {name};")
     w("\t\t};")
 w("/* End PBXContainerItemProxy section */\n")
@@ -165,6 +182,7 @@ for fname, group in (("Info.plist", "Hardset"), ("Hardset.entitlements", "Hardse
 w(f"\t\t{oid('prod_'+APP)} /* Hardset.app */ = {{isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Hardset.app; sourceTree = BUILT_PRODUCTS_DIR; }};")
 w(f"\t\t{oid('prod_'+WIDGET)} /* HardsetWidget.appex */ = {{isa = PBXFileReference; explicitFileType = \"wrapper.app-extension\"; includeInIndex = 0; path = HardsetWidget.appex; sourceTree = BUILT_PRODUCTS_DIR; }};")
 w(f"\t\t{oid('prod_'+TESTS)} /* HardsetTests.xctest */ = {{isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = HardsetTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; }};")
+w(f"\t\t{oid('prod_'+UITESTS)} /* HardsetUITests.xctest */ = {{isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = HardsetUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; }};")
 w("/* End PBXFileReference section */\n")
 
 # ---- XCLocalSwiftPackageReference ----
@@ -187,7 +205,7 @@ w("/* End XCSwiftPackageProductDependency section */\n")
 
 # ---- PBXFrameworksBuildPhase ----
 w("/* Begin PBXFrameworksBuildPhase section */")
-for target in (APP, WIDGET, TESTS):
+for target in TARGETS:
     w(f"\t\t{oid('fw_'+target)} /* Frameworks */ = {{")
     w("\t\t\tisa = PBXFrameworksBuildPhase;")
     w("\t\t\tbuildActionMask = 2147483647;")
@@ -204,7 +222,7 @@ w("/* Begin PBXGroup section */")
 w(f"\t\t{oid('grp_root')} = {{")
 w("\t\t\tisa = PBXGroup;")
 w("\t\t\tchildren = (")
-for g in ("Hardset", "HardsetWidget", "HardsetTests"):
+for g in ("Hardset", "HardsetWidget", "HardsetTests", "HardsetUITests"):
     w(f"\t\t\t\t{oid('grp_'+g)} /* {g} */,")
 w(f"\t\t\t\t{oid('grp_products')} /* Products */,")
 w("\t\t\t);")
@@ -214,6 +232,7 @@ group_children = {
     "Hardset": ["HardsetApp.swift", "Assets.xcassets", "Info.plist", "Hardset.entitlements", "PrivacyInfo.xcprivacy"],
     "HardsetWidget": ["HardsetWidgetBundle.swift", "Info.plist"],
     "HardsetTests": ["AppSmokeTests.swift"],
+    "HardsetUITests": ["AppScreensUITests.swift"],
 }
 for g, children in group_children.items():
     w(f"\t\t{oid('grp_'+g)} /* {g} */ = {{")
@@ -228,7 +247,7 @@ for g, children in group_children.items():
 w(f"\t\t{oid('grp_products')} /* Products */ = {{")
 w("\t\t\tisa = PBXGroup;")
 w("\t\t\tchildren = (")
-for t, prod in ((APP, "Hardset.app"), (WIDGET, "HardsetWidget.appex"), (TESTS, "HardsetTests.xctest")):
+for t, prod in ((APP, "Hardset.app"), (WIDGET, "HardsetWidget.appex"), (TESTS, "HardsetTests.xctest"), (UITESTS, "HardsetUITests.xctest")):
     w(f"\t\t\t\t{oid('prod_'+t)} /* {prod} */,")
 w("\t\t\t);")
 w("\t\t\tname = Products;")
@@ -242,8 +261,9 @@ meta = {
     APP: ("Hardset", "com.apple.product-type.application", "Hardset.app", oid('prod_'+APP)),
     WIDGET: ("HardsetWidget", "com.apple.product-type.app-extension", "HardsetWidget.appex", oid('prod_'+WIDGET)),
     TESTS: ("HardsetTests", "com.apple.product-type.bundle.unit-test", "HardsetTests.xctest", oid('prod_'+TESTS)),
+    UITESTS: ("HardsetUITests", "com.apple.product-type.bundle.ui-testing", "HardsetUITests.xctest", oid('prod_'+UITESTS)),
 }
-for target in (APP, WIDGET, TESTS):
+for target in TARGETS:
     name, ptype, pref, prodid = meta[target]
     w(f"\t\t{oid('target_'+target)} /* {name} */ = {{")
     w("\t\t\tisa = PBXNativeTarget;")
@@ -261,6 +281,8 @@ for target in (APP, WIDGET, TESTS):
         w(f"\t\t\t\t{oid('dep_'+WIDGET)} /* PBXTargetDependency */,")
     if target == TESTS:
         w(f"\t\t\t\t{oid('dep_'+APP)} /* PBXTargetDependency */,")
+    if target == UITESTS:
+        w(f"\t\t\t\t{oid('dep_'+APP+'_ui')} /* PBXTargetDependency */,")
     w("\t\t\t);")
     w(f"\t\t\tname = {name};")
     w("\t\t\tpackageProductDependencies = (")
@@ -282,8 +304,9 @@ w("\t\t\t\tBuildIndependentTargetsInParallel = 1;")
 w("\t\t\t\tLastSwiftUpdateCheck = 2640;")
 w("\t\t\t\tLastUpgradeCheck = 2640;")
 w("\t\t\t\tTargetAttributes = {")
-for target in (APP, WIDGET, TESTS):
-    w(f"\t\t\t\t\t{oid('target_'+target)} = {{\n\t\t\t\t\t\tCreatedOnToolsVersion = 26.4;\n\t\t\t\t\t}};")
+for target in TARGETS:
+    test_target = f"\n\t\t\t\t\t\tTestTargetID = {oid('target_'+APP)};" if target == UITESTS else ""
+    w(f"\t\t\t\t\t{oid('target_'+target)} = {{\n\t\t\t\t\t\tCreatedOnToolsVersion = 26.4;{test_target}\n\t\t\t\t\t}};")
 w("\t\t\t\t};")
 w("\t\t\t};")
 w(f"\t\t\tbuildConfigurationList = {oid('cfglist_project')};")
@@ -299,7 +322,7 @@ w(f"\t\t\tproductRefGroup = {oid('grp_products')} /* Products */;")
 w('\t\t\tprojectDirPath = "";')
 w('\t\t\tprojectRoot = "";')
 w("\t\t\ttargets = (")
-for target in (APP, WIDGET, TESTS):
+for target in TARGETS:
     w(f"\t\t\t\t{oid('target_'+target)} /* {meta[target][0]} */,")
 w("\t\t\t);")
 w("\t\t};")
@@ -307,7 +330,7 @@ w("/* End PBXProject section */\n")
 
 # ---- PBXResourcesBuildPhase ----
 w("/* Begin PBXResourcesBuildPhase section */")
-for target in (APP, WIDGET, TESTS):
+for target in TARGETS:
     w(f"\t\t{oid('res_'+target)} /* Resources */ = {{")
     w("\t\t\tisa = PBXResourcesBuildPhase;")
     w("\t\t\tbuildActionMask = 2147483647;")
@@ -322,7 +345,7 @@ w("/* End PBXResourcesBuildPhase section */\n")
 
 # ---- PBXSourcesBuildPhase ----
 w("/* Begin PBXSourcesBuildPhase section */")
-for target in (APP, WIDGET, TESTS):
+for target in TARGETS:
     w(f"\t\t{oid('src_'+target)} /* Sources */ = {{")
     w("\t\t\tisa = PBXSourcesBuildPhase;")
     w("\t\t\tbuildActionMask = 2147483647;")
@@ -337,10 +360,10 @@ w("/* End PBXSourcesBuildPhase section */\n")
 
 # ---- PBXTargetDependency ----
 w("/* Begin PBXTargetDependency section */")
-for dep in (WIDGET, APP):
+for dep in (WIDGET, APP, APP + "_ui"):
     w(f"\t\t{oid('dep_'+dep)} /* PBXTargetDependency */ = {{")
     w("\t\t\tisa = PBXTargetDependency;")
-    w(f"\t\t\ttarget = {oid('target_'+dep)} /* {meta[dep][0]} */;")
+    w(f"\t\t\ttarget = {oid('target_'+dep.removesuffix('_ui'))} /* {meta[dep.removesuffix('_ui')][0]} */;")
     w(f"\t\t\ttargetProxy = {oid('proxy_'+dep)} /* PBXContainerItemProxy */;")
     w("\t\t};")
 w("/* End PBXTargetDependency section */\n")
@@ -380,7 +403,7 @@ for cfg in ("Debug", "Release"):
     w("\t\t\t};")
     w(f"\t\t\tname = {cfg};")
     w("\t\t};")
-for target in (APP, WIDGET, TESTS):
+for target in TARGETS:
     for cfg in ("Debug", "Release"):
         w(f"\t\t{oid('cfg_'+target+cfg)} /* {cfg} */ = {{")
         w("\t\t\tisa = XCBuildConfiguration;")
@@ -393,7 +416,7 @@ w("/* End XCBuildConfiguration section */\n")
 
 # ---- XCConfigurationList ----
 w("/* Begin XCConfigurationList section */")
-for key in ("project", APP, WIDGET, TESTS):
+for key in ("project",) + TARGETS:
     w(f"\t\t{oid('cfglist_'+key)} = {{")
     w("\t\t\tisa = XCConfigurationList;")
     w("\t\t\tbuildConfigurations = (")
@@ -435,6 +458,10 @@ with open(os.path.join(sd, "Hardset.xcscheme"), "w") as f:
          <TestableReference skipped="NO">
             <BuildableReference BuildableIdentifier="primary" BlueprintIdentifier="{oid('target_'+TESTS)}"
                BuildableName="HardsetTests.xctest" BlueprintName="HardsetTests" ReferencedContainer="container:Hardset.xcodeproj"/>
+         </TestableReference>
+         <TestableReference skipped="NO">
+            <BuildableReference BuildableIdentifier="primary" BlueprintIdentifier="{oid('target_'+UITESTS)}"
+               BuildableName="HardsetUITests.xctest" BlueprintName="HardsetUITests" ReferencedContainer="container:Hardset.xcodeproj"/>
          </TestableReference>
       </Testables>
    </TestAction>

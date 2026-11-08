@@ -113,6 +113,7 @@ public struct HardsetRootView: View {
             detail: "Try again before starting a new workout.",
             systemImage: "exclamationmark.triangle",
             actionTitle: "Try again",
+            actionSystemImage: "arrow.clockwise",
             action: { Task { await model.load() } }
           )
           .padding(.top, Tokens.Spacing.block)
@@ -459,7 +460,7 @@ public struct HardsetRootView: View {
         },
         onAddGym: { isAddingGym = true }
       )
-      .hardsetNavigationTitle("Where are you training?")
+      .hardsetNavigationTitle("Choose a gym")
       .toolbar {
         ToolbarItem(placement: .confirmationAction) {
           Button("Done") { isChoosingGym = false }

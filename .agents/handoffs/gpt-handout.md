@@ -89,3 +89,19 @@
   legibly. The confidence capsule truncated at AX3, so its label now wraps vertically
   at the offered width rather than forcing one line. The same fixture verifies it
   in the follow-up render run; no typography was shrunk.
+
+## Main integration after final visual verification
+
+- Native run42440991940 SUCCESS forfff85b9: all build gates,30 feature tests,1 app
+  test and25 screen/controller tests. Artifacts /tmp/hardset-handout-42440991940.
+  Reviewed saved-row contrast (now full white values and bright saved check), full
+  AX3 confidence wording and the machine-step editor. Known layer-renderer capsule
+  edge/glass artefacts remain; no physical-device claim.
+- Remote main advanced tofe09154 while verification ran. Merging it, preserving
+  real-app UI tests, local signing/runtime logging, off-main token-colour resolution,
+  responsive ledger layout, keypad scaling, shorter gym title and project generator.
+- One conflict in SetRowView: retain main’s single keypad sheet and isEditing binding
+  while keeping this task’s conditional accessibility actions, canonical precision,
+  read-only contrast, inline machine controls and single haptic. No test assertion
+  removed or weakened. New native run must validate the integrated source and the
+  newly inherited real-app journey/audit workflow before main advances.

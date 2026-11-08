@@ -139,12 +139,18 @@ public enum Tokens {
   /// exact values the app renders. The increased-contrast values default to the normal ones, which
   /// is correct for the status hues: they already clear 7:1, and pure black or white surfaces only
   /// raise that.
-  private static func swatch(
+  ///
+  /// `nonisolated`, and its providers `@Sendable`, because UIKit resolves dynamic colours on
+  /// whatever thread is rendering -- under iOS 26 that includes the threads sampling content for
+  /// Liquid Glass. A provider formed in this target's default `MainActor` isolation inherits that
+  /// isolation and a runtime check, and the check traps the moment a colour is resolved off the
+  /// main thread: the app exited with SIGTRAP as the first sheets presented.
+  nonisolated private static func swatch(
     light: UInt32, dark: UInt32, highLight: UInt32? = nil, highDark: UInt32? = nil
   ) -> SwiftUI.Color {
     #if canImport(UIKit)
       return SwiftUI.Color(
-        UIColor { traits in
+        UIColor { @Sendable traits in
           let isHigh = traits.accessibilityContrast == .high
           let hex =
             traits.userInterfaceStyle == .dark
@@ -156,7 +162,7 @@ public enum Tokens {
       )
     #elseif canImport(AppKit)
       return SwiftUI.Color(
-        NSColor(name: nil) { appearance in
+        NSColor(name: nil) { @Sendable appearance in
           let match: NSAppearance.Name =
             appearance.bestMatch(from: [
               .aqua, .darkAqua, .accessibilityHighContrastAqua, .accessibilityHighContrastDarkAqua,
