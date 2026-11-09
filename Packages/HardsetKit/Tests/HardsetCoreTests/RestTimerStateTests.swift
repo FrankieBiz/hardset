@@ -76,6 +76,17 @@ struct RestTimerStateTests {
     #expect(shrunk == .running(endsAt: now))
   }
 
+  /// +15 on a rest whose deadline has already passed (the alarm is ringing, or ended unseen)
+  /// means "15 more seconds". Shifting the old deadline would land it in the past and clamp to
+  /// now, which ends the rest instead of extending it.
+  @Test("Adding time to a rest that has already ended counts from now")
+  func addAfterExpiry() {
+    let ended = RestTimerState.running(endsAt: now.addingTimeInterval(-40))
+    #expect(ended.adjusted(by: .seconds(15), at: now) == .running(endsAt: now.addingTimeInterval(15)))
+    let running = RestTimerState.running(endsAt: now.addingTimeInterval(10))
+    #expect(running.adjusted(by: .seconds(15), at: now) == .running(endsAt: now.addingTimeInterval(25)))
+  }
+
   @Test("Adjusting a paused timer moves the remainder, not a deadline")
   func adjustPaused() {
     let paused = RestTimerState.paused(remaining: .seconds(30))
