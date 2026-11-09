@@ -14,11 +14,15 @@ import SwiftUI
 /// Laid out by hand rather than as a stock `Form`: one field in the same outline as the search
 /// field, the note under it, and the confirm action as a full-width 56 pt button in the content,
 /// where a thumb reaches it, instead of a small word in the navigation bar.
+///
+/// When saving fails, the caller keeps the sheet up and passes the reason in: it appears above the
+/// field, and the name typed is still in it, so trying again is one tap rather than a retype.
 public struct NameEntrySheet: View {
   private let title: String
   private let prompt: String
   private let footnote: String?
   private let confirmLabel: String
+  private let errorMessage: String?
   private let onConfirm: (String) -> Void
   private let onCancel: () -> Void
 
@@ -30,6 +34,7 @@ public struct NameEntrySheet: View {
     prompt: String,
     footnote: String? = nil,
     confirmLabel: String = "Add",
+    errorMessage: String? = nil,
     onConfirm: @escaping (String) -> Void,
     onCancel: @escaping () -> Void
   ) {
@@ -37,6 +42,7 @@ public struct NameEntrySheet: View {
     self.prompt = prompt
     self.footnote = footnote
     self.confirmLabel = confirmLabel
+    self.errorMessage = errorMessage
     self.onConfirm = onConfirm
     self.onCancel = onCancel
   }
@@ -49,6 +55,10 @@ public struct NameEntrySheet: View {
     NavigationStack {
       ScrollView {
         VStack(alignment: .leading, spacing: Tokens.Spacing.loose) {
+          if let errorMessage, !errorMessage.isEmpty {
+            HardsetBanner(.error, message: errorMessage)
+          }
+
           VStack(alignment: .leading, spacing: Tokens.Spacing.snug) {
             nameField
 
@@ -80,6 +90,11 @@ public struct NameEntrySheet: View {
         }
       }
       .onAppear { isFocused = true }
+      // The sheet staying up is the only other sign that saving failed, so VoiceOver says why.
+      .onChange(of: errorMessage) { _, message in
+        guard let message, !message.isEmpty else { return }
+        AccessibilityNotification.Announcement(message).post()
+      }
     }
     .presentationDetents([.medium])
   }
@@ -113,6 +128,18 @@ public struct NameEntrySheet: View {
       title: "Add a machine",
       prompt: "Name or brand",
       footnote: "Whatever you'd recognise it by.",
+      onConfirm: { _ in },
+      onCancel: {}
+    )
+    .hardsetSheet()
+  }
+
+  #Preview("Name entry, save failed") {
+    NameEntrySheet(
+      title: "Add a gym",
+      prompt: "Name",
+      footnote: "Machines are recorded per gym, so this is what groups them.",
+      errorMessage: "“Iron Temple” could not be saved. Try again.",
       onConfirm: { _ in },
       onCancel: {}
     )

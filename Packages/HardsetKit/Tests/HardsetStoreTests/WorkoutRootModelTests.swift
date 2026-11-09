@@ -168,6 +168,58 @@ struct WorkoutRootModelTests {
     #expect(model.coordinator?.gymID == gym)
   }
 
+  @Test("A discarded workout leaves the root like a finished one")
+  @MainActor
+  func discardedWorkoutClears() async throws {
+    let database = try fixture()
+    let model = WorkoutRootModel(
+      logger: LoggerStore(database: database), catalog: CatalogSeeder(database: database),
+      gyms: GymStore(database: database), now: { now }
+    )
+    await model.load()
+    try model.startWorkout()
+    let live = try #require(model.coordinator)
+    model.clearFinishedWorkout()
+    #expect(model.coordinator === live)
+    try live.discard()
+    model.clearFinishedWorkout()
+    #expect(model.coordinator == nil)
+    try model.startWorkout()
+    #expect(model.coordinator != nil)
+    #expect(model.coordinator !== live)
+  }
+
+  @Test("A gym picked on the start screen and not yet trained at can be restored")
+  @MainActor
+  func restoresUnstartedGymPick() async throws {
+    let database = try fixture()
+    let logger = LoggerStore(database: database)
+    let gyms = GymStore(database: database)
+    let home = try gyms.createGym(name: "Home")
+    let metroflex = try gyms.createGym(name: "Metroflex")
+    // A workout at Home makes it the learned default.
+    let earlier = try SessionCoordinator.start(store: logger, gymID: home, plan: [], now: { now })
+    try earlier.finish()
+    let model = WorkoutRootModel(
+      logger: logger, catalog: CatalogSeeder(database: database), gyms: gyms, now: { now }
+    )
+    // Nothing to restore against until the saved gyms have been read.
+    #expect(!model.restoreGymPick(metroflex))
+    await model.load()
+    #expect(model.selectedGym == home)
+    #expect(model.restoreGymPick(metroflex))
+    #expect(model.selectedGym == metroflex)
+    // "Not recorded" is a real pick too.
+    #expect(model.restoreGymPick(nil))
+    #expect(model.selectedGym == nil)
+    // A gym that is no longer a saved option is ignored rather than selected.
+    #expect(!model.restoreGymPick(GymID()))
+    #expect(model.selectedGym == nil)
+    #expect(model.restoreGymPick(metroflex))
+    try model.startWorkout()
+    #expect(model.coordinator?.gymID == metroflex)
+  }
+
   @Test("A disappearing caller cannot abandon recovery for the next appearance")
   @MainActor
   func cancellationCanRetry() async throws {
