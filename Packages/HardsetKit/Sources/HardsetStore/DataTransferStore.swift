@@ -3,6 +3,20 @@ import GRDB
 import HardsetCore
 import SQLiteData
 
+/// What one committed import wrote, and what it left out as already imported.
+public nonisolated struct WorkoutImportResult: Sendable, Equatable {
+  public let importedWorkouts: Int
+  public let importedSets: Int
+  /// Workouts in the file already imported from the same app's earlier export.
+  public let skippedWorkouts: Int
+
+  public init(importedWorkouts: Int, importedSets: Int, skippedWorkouts: Int) {
+    self.importedWorkouts = importedWorkouts
+    self.importedSets = importedSets
+    self.skippedWorkouts = skippedWorkouts
+  }
+}
+
 /// Free, complete exports and atomic migration of a validated external workout file.
 /// No live database connection or lazy row escapes a read snapshot.
 public nonisolated struct DataTransferStore: Sendable {
@@ -11,15 +25,30 @@ public nonisolated struct DataTransferStore: Sendable {
 
   public enum Format: String, CaseIterable, Sendable {
     case csv, json, sqlite
+
+    /// How the format is written in prose: "SQLite", not "SQLITE".
+    public var displayName: String {
+      switch self {
+      case .csv: "CSV"
+      case .json: "JSON"
+      case .sqlite: "SQLite"
+      }
+    }
   }
 
   /// Every export gets its own directory, so overlapping shares cannot replace each other's file.
   /// SQLite uses the online backup API, including committed WAL pages. It never copies a live file.
-  public func export(_ format: Format, directory: URL) async throws -> URL {
+  ///
+  /// The file is named for the local day it was made, `Hardset-2026-11-09.csv`, so exports saved
+  /// side by side in Files can be told apart without opening them.
+  public func export(
+    _ format: Format, directory: URL, madeAt: Date = Date(), timeZone: TimeZone = .current
+  ) async throws -> URL {
     try Task.checkCancellation()
     let folder = directory.appendingPathComponent(UUID().uuidString, isDirectory: true)
     try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
-    let destination = folder.appendingPathComponent("Hardset.\(format.rawValue)")
+    let destination = folder.appendingPathComponent(
+      "\(Self.fileStem(madeAt: madeAt, timeZone: timeZone)).\(format.rawValue)")
     do {
       switch format {
       case .csv:
@@ -44,9 +73,44 @@ public nonisolated struct DataTransferStore: Sendable {
     }
   }
 
+  private static func fileStem(madeAt: Date, timeZone: TimeZone) -> String {
+    let formatter = DateFormatter()
+    formatter.locale = Locale(identifier: "en_US_POSIX")
+    formatter.calendar = Calendar(identifier: .gregorian)
+    formatter.timeZone = timeZone
+    formatter.dateFormat = "yyyy-MM-dd"
+    return "Hardset-\(formatter.string(from: madeAt))"
+  }
+
+  /// Imports the previewed sets and returns how many were written.
+  ///
+  /// Workouts already imported from the same app are skipped; `commit(_:)` reports how many.
+  public func importWorkouts(_ preview: WorkoutImportPreview) async throws -> Int {
+    try await commit(preview).importedSets
+  }
+
+  /// How many of the previewed workouts are already in Hardset from an earlier import of the
+  /// same app's export, and would be skipped. Read before committing, so the preview can say so.
+  public func alreadyImportedWorkoutCount(in preview: WorkoutImportPreview) async throws -> Int {
+    try Task.checkCancellation()
+    return try await database.read { db in
+      var count = 0
+      for workout in preview.sessions where try Self.isAlreadyImported(workout, from: preview.source, in: db) {
+        count += 1
+      }
+      return count
+    }
+  }
+
   /// Preview construction is public only through the parser, so callers cannot forge a
   /// validated workout or substitute file contents between validation and persistence.
-  public func importWorkouts(_ preview: WorkoutImportPreview) async throws -> Int {
+  ///
+  /// Strong and Hevy export the whole history every time, so a later export repeats every
+  /// workout an earlier one carried. A workout is skipped when an imported session from the same
+  /// app already has its start and title; a native session at the same moment is the lifter's own
+  /// and never counts. The exact-file refusal still applies on top. A file that adds nothing is not
+  /// retained as an import.
+  public func commit(_ preview: WorkoutImportPreview) async throws -> WorkoutImportResult {
     try Task.checkCancellation()
     return try await database.write { db in
       if try Row.fetchOne(db, sql: "SELECT id FROM deviceImportBatches WHERE sourceCSV = ?",
@@ -54,7 +118,16 @@ public nonisolated struct DataTransferStore: Sendable {
       // Use separate movements for unverified imported equipment. An imported nil machine
       // must never seed the native movement's free-weight or machine benchmark series.
       var exercises: [String: UUID] = [:]
+      var importedWorkouts = 0
+      var importedSets = 0
+      var skippedWorkouts = 0
       for workout in preview.sessions {
+        if try Self.isAlreadyImported(workout, from: preview.source, in: db) {
+          skippedWorkouts += 1
+          continue
+        }
+        importedWorkouts += 1
+        importedSets += workout.sets.count
         let session = UUID()
         try Session.insert {
           Session.Draft(id: session, title: workout.title,
@@ -64,12 +137,18 @@ public nonisolated struct DataTransferStore: Sendable {
         var plans: [String: UUID] = [:]
         for (ordinal, set) in workout.sets.enumerated() {
           let exercise: UUID
+          let importedName = "\(set.exercise) (Imported • \(preview.source))"
           if let existing = exercises[set.exercise] { exercise = existing }
-          else {
+          else if let earlier = try Self.importedExercise(named: importedName, in: db) {
+            // An earlier import's movement of the same name, so a later export's sets continue
+            // that series instead of splitting it across two identically named movements.
+            exercise = earlier
+            exercises[set.exercise] = exercise
+          } else {
             exercise = UUID()
             exercises[set.exercise] = exercise
             try Exercise.insert {
-              Exercise.Draft(id: exercise, name: "\(set.exercise) (Imported • \(preview.source))",
+              Exercise.Draft(id: exercise, name: importedName,
                 notes: "Imported • Unevaluated Machine. \(set.notes)", createdAt: workout.startedAt)
             }.execute(db)
           }
@@ -95,10 +174,34 @@ public nonisolated struct DataTransferStore: Sendable {
         try db.execute(sql: "UPDATE sessions SET notes = notes || ? WHERE id = ?",
           arguments: [". Set timestamps are unavailable; grouped at workout start.", session.uuidString.lowercased()])
       }
-      try db.execute(sql: "INSERT INTO deviceImportBatches(id, sourceCSV) VALUES (?, ?)",
-        arguments: [UUID().uuidString.lowercased(), preview.originalCSV])
-      return preview.setCount
+      if importedWorkouts > 0 {
+        try db.execute(sql: "INSERT INTO deviceImportBatches(id, sourceCSV) VALUES (?, ?)",
+          arguments: [UUID().uuidString.lowercased(), preview.originalCSV])
+      }
+      return WorkoutImportResult(
+        importedWorkouts: importedWorkouts, importedSets: importedSets, skippedWorkouts: skippedWorkouts)
     }
+  }
+
+  /// A live movement an earlier import created under this exact name, if any.
+  private static func importedExercise(named name: String, in db: Database) throws -> UUID? {
+    try Exercise
+      .where { $0.name.eq(name) && $0.notes.like("Imported • %") && !$0.isArchived }
+      .order { ($0.createdAt, $0.id) }
+      .fetchOne(db)?
+      .id
+  }
+
+  /// An imported session from the same app with the same start and title. Imported sessions are
+  /// the only ones whose notes begin "Imported from <app> ", which `commit` writes.
+  private static func isAlreadyImported(
+    _ workout: WorkoutImportPreview.Workout, from source: String, in db: Database
+  ) throws -> Bool {
+    let startedAt = workout.startedAt
+    let title = workout.title
+    return try Session
+      .where { $0.startedAt.eq(startedAt) && $0.title.eq(title) && $0.notes.like("Imported from \(source) %") }
+      .fetchCount(db) > 0
   }
 
   private static func csv(in db: Database) throws -> Data {

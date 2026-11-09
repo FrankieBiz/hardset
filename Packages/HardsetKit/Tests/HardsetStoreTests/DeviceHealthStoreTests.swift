@@ -48,4 +48,25 @@ struct DeviceHealthStoreTests {
     }
     #expect(try await DeviceHealthStore(database: db).workoutsToExport().map(\.id.rawValue) == [expected])
   }
+
+  /// What was read from Apple Health is shown back, so reading it is not a silent no-op. Only a
+  /// body-mass sample qualifies: a workout summary's value is a placeholder, never a weight.
+  @Test("The latest body mass is the newest body-mass sample, and nothing else")
+  func latestBodyMass() async throws {
+    let db = try DatabaseQueue()
+    try HardsetMigrations.migrator().migrate(db)
+    let store = DeviceHealthStore(database: db)
+    #expect(try await store.latestBodyMass() == nil)
+    let older = Date(timeIntervalSince1970: 1000)
+    let newer = Date(timeIntervalSince1970: 2000)
+    try await store.save([
+      .init(id: UUID(), kind: "apple.bodyMass", value: 82, unit: "kg", startedAt: older, endedAt: older),
+      .init(id: UUID(), kind: "apple.bodyMass", value: 81.4, unit: "kg", startedAt: newer, endedAt: newer),
+      .init(id: UUID(), kind: "apple.workout.50", value: 0, unit: "", startedAt: Date(timeIntervalSince1970: 3000),
+        endedAt: Date(timeIntervalSince1970: 3600)),
+    ])
+    let latest = try #require(try await store.latestBodyMass())
+    #expect(latest.kilograms == 81.4)
+    #expect(latest.measuredAt == newer)
+  }
 }
