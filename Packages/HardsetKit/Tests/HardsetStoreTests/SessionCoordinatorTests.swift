@@ -500,8 +500,11 @@ struct SessionCoordinatorTests {
       onStartRest: { duration, metadata in spy.requests.append((duration, metadata)) }
     )
     coordinator.addSet(inExercise: coordinator.exercises[0].id, isWarmup: true)
-    let warmupSlot = coordinator.exercises[0].slots.last!
-    coordinator.exercises[0].slots[1].draft = SetEntryDraft(weightKg: 40, reps: 15)
+    // Warm-ups go before the working rows, so find it rather than assume it is last.
+    let found = coordinator.exercises[0].slots.firstIndex { $0.isWarmup }
+    let warmupIndex = try #require(found)
+    let warmupSlot = coordinator.exercises[0].slots[warmupIndex]
+    coordinator.exercises[0].slots[warmupIndex].draft = SetEntryDraft(weightKg: 40, reps: 15)
 
     #expect(coordinator.logSet(slotID: warmupSlot.id, inExercise: coordinator.exercises[0].id))
     #expect(try store.sets(in: coordinator.sessionID).count == 1)
@@ -579,10 +582,18 @@ struct SessionCoordinatorTests {
     try coordinator.finish()
     #expect(coordinator.isFinished)
     #expect(try store.openSession() == nil)
-
-    // The second attempt is refused by the same invariant the store enforces.
-    #expect(throws: SessionTimelineError.alreadyFinished) {
-      try coordinator.finish()
+    let finishedAt = {
+      try database.read { db in
+        try Session.where { $0.id.eq(coordinator.sessionID.rawValue) }.fetchOne(db)?.finishedAt
+      }
     }
+    let firstClose = try finishedAt()
+
+    // The second attempt is refused by the same invariant the store enforces, so the stored
+    // instant cannot drift. The coordinator reports the truth, that the workout is finished,
+    // rather than a stale error the root would have to interpret.
+    try coordinator.finish()
+    #expect(coordinator.isFinished)
+    #expect(try finishedAt() == firstClose)
   }
 }
