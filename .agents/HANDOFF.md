@@ -782,3 +782,43 @@ configuration and physical-device validation remain documented separately.
   header.
 - Still device- or user-bound: a signed build with real CloudKit/AlarmKit, physical glare and
   touch checks, and the final app icon (an interim one ships from `Tools/render_interim_icon.py`).
+
+## Workspace model quality configuration — 2026-11-09 00:33 UTC
+
+- Objective: make workspace model reasoning/context settings explicit and reliable.
+- Worktree: `/home/frankbiz/orca/workspaces/hardset/houndshark`; branch
+  `FrankieBiz/optimize-workspace-model-configs`; baseline `ca32573` (clean at startup).
+- Owned paths: `.codex/config.toml`, `.claude/settings.json`, `opencode.json`,
+  `AGENTS.md`, `CLAUDE.md`, `docs/MODEL_CONFIGURATION.md`,
+  `docs/ORCA_ORCHESTRATION.md`, `scripts/orchestrate.py`, `scripts/orca-child.sh`,
+  `scripts/test_orchestrate.py`, `Makefile`, this appended handoff.
+- Codex retains `gpt-6.1-sol` with xhigh work/planning/dispatcher/child defaults;
+  Claude retains user model selection with high effort, and existing sonnet worker
+  selection. Both dispatchers now actually pass effort. OpenCode retains the free
+  DeepSeek model and disables the paid provider. No global/account config changed.
+- Claude imports shared rules/design; all worker launch paths carry coordinator
+  boundaries. Fixed effort-only child argument placement, subprocess timeout/pipe
+  handling, and verification-failure task/CLI status. Probe uses the selected Orca
+  and skips paid DeepSeek API unless explicitly opted in.
+- Verification so far: 12 offline launch-contract tests passed; Bash syntax passed;
+  Claude doctor reports no installation issues; generator/project/scheme hashes
+  unchanged. Full make check is running; results appended below when complete.
+- Installed versions: Codex 0.163.0, Claude 2.1.296, OpenCode 2.2.6, Orca 1.4.253.
+  Exact Orca executable resolved/probed from ORCA_CLI_COMMAND; no fallback builds.
+- Failed diagnostic: `codex --strict-config features list` is unsupported by this
+  installed version. Used TOML/JSON parser checks, CLI help, installed model
+  catalog, doctor, and mocked launch tests instead. No live inference, paid probes,
+  model upgrades/downloads, or additional agents. Gemini CLI unavailable here.
+- Limits: no model quality benchmark or account entitlement/alias/remote effort
+  verification. Explicit Orca/CLI choices and resumed-session settings can override
+  files. Apple builds/signing and physical-device behavior require native CI/device.
+- Next concrete step: finish make check, review/stage only owned files, commit with
+  required identity, and push non-destructively to main per project finish protocol.
+- Final verification: fresh `make check` exited 0 after the final implementation:
+  12 offline orchestration tests; 124 Swift parses; 181 Core tests in 24 suites;
+  198 Store tests in 25 suites; query-plan/result gate; 172 contrast pairs.
+  Project/scheme generation unchanged; diff whitespace and Bash syntax passed.
+  Current workspace's Codex trust entry is `trusted`.
+- Delivery: committing owned files and pushing to main as explicitly required by
+  the project protocol. Native CI will report separately; no Apple validation is
+  claimed by the Linux gate.

@@ -1,5 +1,8 @@
 # Hardset — Frontend & Ergonomics Instructions (Claude Worker)
 
+@AGENTS.md
+@DESIGN.md
+
 You are the Principal Frontend & Ergonomics Architect for Hardset, an iOS hypertrophy logger for intermediate lifters.
 
 ## Frontier Model Tier
@@ -12,8 +15,8 @@ You are the Principal Frontend & Ergonomics Architect for Hardset, an iOS hypert
    - The interface renders "unevaluated" rather than guessing or extrapolating curves it cannot justify.
    - `CertaintyBadge` must remain visible beside estimated metrics (e.g. 1RM estimations, fractional attribution).
 2. **Design Tokens & Aesthetic Restraint**:
-   - Tokens live in `Packages/HardsetKit/Sources/HardsetUI/DesignTokens.swift`.
-   - Dark background palette with subtle charcoal card borders.
+   - Follow `DESIGN.md` and the tokens in `Packages/HardsetKit/Sources/HardsetUI/DesignTokens.swift`.
+   - Preserve the established light/dark palettes, increased contrast, and reduced-motion behavior.
    - High-density monospace tabular figures (`.monospacedDigit()`) for weights, reps, and rest timers.
    - No image asset catalogs in `HardsetUI`: all colors and dynamic styles are defined strictly in Swift code.
 3. **Gym Floor Ergonomics & Fast Logging**:

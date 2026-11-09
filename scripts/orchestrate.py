@@ -36,8 +36,8 @@ LEDGER_FILE = QA_DIR / "token_ledger.json"
 
 # Mandated Frontier Model Defaults
 DEFAULT_CODEX_MODEL = "gpt-6.1-sol"
-DEFAULT_CLAUDE_MODEL = "sonnet"  # Aliases to claude-sonnet-5.5
-DEFAULT_DEEPSEEK_MODEL = "deepseek-chat"  # Maps to latest deepseek-flash
+DEFAULT_CLAUDE_MODEL = "sonnet"  # Retain installed alias; live target requires verification.
+DEFAULT_DEEPSEEK_MODEL = "deepseek-chat"  # Optional API alias; live target is unverified.
 DEFAULT_OPENCODE_MODEL = "opencode/deepseek-v4.1-flash-free"
 
 # Prohibited Legacy Tiers (Strict Rule Enforcer)
@@ -225,6 +225,25 @@ def run_verification() -> tuple[bool, str]:
         return False, str(e)
 
 
+def resolve_orca() -> str:
+    """Select once per probe; never fall back to another Orca build on failure."""
+    if os.environ.get("ORCA_CLI_COMMAND"):
+        return os.environ["ORCA_CLI_COMMAND"]
+    if os.environ.get("ORCA_DEV_REPO_ROOT"):
+        return "orca-dev"
+    if sys.platform.startswith("linux") and not os.environ.get("ORCA_WORKTREE_ID"):
+        return "orca-ide"
+    candidate = shutil.which("orca")
+    if candidate is None or Path(candidate).resolve() == Path("/usr/bin/orca"):
+        raise FileNotFoundError("Orca CLI unavailable; refusing the Linux screen reader")
+    return candidate
+
+
+def validate_effort(effort: str) -> None:
+    if effort not in {"high", "xhigh"}:
+        raise ValueError("Hardset workers require high or xhigh reasoning effort.")
+
+
 def validate_frontier_model(model_name: str) -> None:
     low = model_name.lower()
     for prohibited in PROHIBITED_MODELS:
@@ -243,12 +262,13 @@ def dispatch_codex(
     task: str,
     files: list[str] | None = None,
     model: str = DEFAULT_CODEX_MODEL,
-    effort: str = "high",
+    effort: str = "xhigh",
     verify: bool = False,
     timeout_s: int = 600,
 ) -> TaskResult:
     """Dispatch a backend, Core, or Store task to Codex (gpt-6.1-sol)."""
     validate_frontier_model(model)
+    validate_effort(effort)
     run_id = f"codex_{int(time.time())}"
     start_time = time.time()
 
@@ -264,6 +284,8 @@ def dispatch_codex(
         "You are the Hardset Core & Store Engineer (Codex). Adhere strictly to CODEX.md.\n"
         "Strictly NO diagrams (no Mermaid, no ASCII box art). Strict Swift 6 typing, nonisolated HardsetCore, permanent schema rules, zero database work per render.\n"
         "Zero AI attribution. Attributed strictly to FrankieBiz <frankabisignano@gmail.com>.\n"
+        "Read AGENTS.md and the current handoff first. Work only within assigned paths. "
+        "Do not launch other agents, push, or run agent-finish; report back to the coordinator.\n"
         f"{file_context}\n"
         f"TASK:\n{task}"
     )
@@ -277,6 +299,8 @@ def dispatch_codex(
         "--dangerously-bypass-approvals-and-sandbox",
         "-m",
         model,
+        "-c",
+        f'model_reasoning_effort="{effort}"',
         "-C",
         str(REPO_ROOT),
         full_prompt,
@@ -289,15 +313,15 @@ def dispatch_codex(
     exit_code = 1
 
     try:
-        proc = subprocess.Popen(
+        proc = subprocess.run(
             cmd,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
+            check=False,
+            capture_output=True,
             text=True,
             cwd=str(REPO_ROOT),
+            timeout=timeout_s,
         )
-        assert proc.stdout is not None
-        for line in proc.stdout:
+        for line in proc.stdout.splitlines():
             line_str = line.strip()
             if not line_str:
                 continue
@@ -319,7 +343,8 @@ def dispatch_codex(
             except json.JSONDecodeError:
                 pass
 
-        proc.wait(timeout=timeout_s)
+        if proc.returncode != 0:
+            output_lines.append(proc.stderr.strip())
         exit_code = proc.returncode
         success = exit_code == 0
     except (subprocess.SubprocessError, OSError) as e:
@@ -333,6 +358,9 @@ def dispatch_codex(
     ver_out = None
     if verify and success:
         ver_passed, ver_out = run_verification()
+        success = ver_passed
+        if not ver_passed:
+            exit_code = 1
 
     res = TaskResult(
         run_id=run_id,
@@ -365,6 +393,7 @@ def dispatch_claude(
 ) -> TaskResult:
     """Dispatch a frontend or UX task to Claude (claude-sonnet-5.5 / claude-opus-5-5)."""
     validate_frontier_model(model)
+    validate_effort(effort)
     run_id = f"claude_{int(time.time())}"
     start_time = time.time()
 
@@ -381,8 +410,10 @@ def dispatch_claude(
     full_prompt = (
         "You are the Hardset Frontend & Ergonomics Architect (Claude).\n"
         "Adhere strictly to CLAUDE.md.\n"
-        "Strictly NO diagrams (no Mermaid, no ASCII box art). Adhere to calibrated honesty, CertaintyBadge, dark palette design tokens, MainActor UI isolation.\n"
+        "Strictly NO diagrams (no Mermaid, no ASCII box art). Adhere to calibrated honesty, CertaintyBadge, DESIGN.md light/dark tokens, MainActor UI isolation.\n"
         "Zero AI attribution. Attributed strictly to FrankieBiz <frankabisignano@gmail.com>.\n"
+        "Read AGENTS.md and the current handoff first. Work only within assigned paths. "
+        "Do not launch other agents, push, or run agent-finish; report back to the coordinator.\n"
         f"{file_context}\n"
         f"TASK:\n{task}"
     )
@@ -398,6 +429,8 @@ def dispatch_claude(
         "json",
         "--model",
         model,
+        "--effort",
+        effort,
     ]
 
     tokens = TokenUsage()
@@ -453,6 +486,9 @@ def dispatch_claude(
     ver_out = None
     if verify and success:
         ver_passed, ver_out = run_verification()
+        success = ver_passed
+        if not ver_passed:
+            exit_code = 1
 
     res = TaskResult(
         run_id=run_id,
@@ -607,6 +643,8 @@ def dispatch_opencode(
         "You are the Hardset OpenCode Worker.\n"
         "Strictly NO diagrams (no Mermaid, no ASCII box art). Adhere to Swift 6 strict concurrency, nonisolated HardsetCore, permanent schema rules, zero database work per render.\n"
         "Zero AI attribution. Attributed strictly to FrankieBiz <frankabisignano@gmail.com>.\n"
+        "Read AGENTS.md and the current handoff first. Work only within assigned paths. "
+        "Do not launch other agents, push, or run agent-finish; report back to the coordinator.\n"
         f"{file_context}\n"
         f"TASK:\n{task}"
     )
@@ -631,15 +669,15 @@ def dispatch_opencode(
     exit_code = 1
 
     try:
-        proc = subprocess.Popen(
+        proc = subprocess.run(
             cmd,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
+            check=False,
+            capture_output=True,
             text=True,
             cwd=str(REPO_ROOT),
+            timeout=timeout_s,
         )
-        assert proc.stdout is not None
-        for line in proc.stdout:
+        for line in proc.stdout.splitlines():
             line_str = line.strip()
             if not line_str:
                 continue
@@ -663,7 +701,8 @@ def dispatch_opencode(
             except json.JSONDecodeError:
                 pass
 
-        proc.wait(timeout=timeout_s)
+        if proc.returncode != 0:
+            output_lines.append(proc.stderr.strip())
         exit_code = proc.returncode
         success = exit_code == 0
     except (subprocess.SubprocessError, OSError) as e:
@@ -677,6 +716,9 @@ def dispatch_opencode(
     ver_out = None
     if verify and success:
         ver_passed, ver_out = run_verification()
+        success = ver_passed
+        if not ver_passed:
+            exit_code = 1
 
     res = TaskResult(
         run_id=run_id,
@@ -709,8 +751,8 @@ def spawn_child_worktree(
     """Spawn a supervised child worktree via Orca CLI."""
     orca_script = REPO_ROOT / "scripts" / "orca-child.sh"
     cmd = [str(orca_script), "spawn", agent, name, prompt]
-    if model:
-        cmd.append(model)
+    if model or effort:
+        cmd.append(model or "")
     if effort:
         cmd.append(effort)
 
@@ -750,7 +792,7 @@ def merge_child_worktree(name: str, verify: bool = True) -> bool:
 # -----------------------------------------------------------------------------
 # 6. Orchestration Diagnostic Probe
 # -----------------------------------------------------------------------------
-def run_probe() -> dict[str, Any]:
+def run_probe(include_paid_api: bool = False) -> dict[str, Any]:
     """Test access, versions, and latency to all mandated models and Orca."""
     probe_results: dict[str, Any] = {}
 
@@ -814,28 +856,32 @@ def run_probe() -> dict[str, Any]:
 
     # 3. Probe DeepSeek (deepseek-v4.1-flash API)
     print("\n[3/5] Probing DeepSeek (deepseek-v4.1-flash API)...")
-    try:
-        t0 = time.time()
-        deepseek_res = dispatch_deepseek(
-            prompt='Respond in JSON: {"status": "ok", "agent": "deepseek", "tier": "flash"}',
-            json_mode=True,
-            timeout_s=15,
-        )
-        latency = round(time.time() - t0, 2)
-        probe_results["deepseek"] = {
-            "status": "PASS" if deepseek_res.success else "FAIL",
-            "model": deepseek_res.model,
-            "latency_s": latency,
-            "tokens": asdict(deepseek_res.tokens),
-            "output_preview": deepseek_res.output[:120].strip(),
-        }
-        print(
-            f"  ✓ DeepSeek Online: model={deepseek_res.model}, "
-            f"latency={latency}s, tokens={deepseek_res.tokens.total_tokens}"
-        )
-    except (urllib.error.URLError, ValueError) as e:
-        probe_results["deepseek"] = {"status": "FAIL", "error": str(e)}
-        print(f"  ✗ DeepSeek Failed: {e}")
+    if include_paid_api:
+        try:
+            t0 = time.time()
+            deepseek_res = dispatch_deepseek(
+                prompt='Respond in JSON: {"status": "ok", "agent": "deepseek", "tier": "flash"}',
+                json_mode=True,
+                timeout_s=15,
+            )
+            latency = round(time.time() - t0, 2)
+            probe_results["deepseek"] = {
+                "status": "PASS" if deepseek_res.success else "FAIL",
+                "model": deepseek_res.model,
+                "latency_s": latency,
+                "tokens": asdict(deepseek_res.tokens),
+                "output_preview": deepseek_res.output[:120].strip(),
+            }
+            print(
+                f"  ✓ DeepSeek Online: model={deepseek_res.model}, "
+                f"latency={latency}s, tokens={deepseek_res.tokens.total_tokens}"
+            )
+        except (urllib.error.URLError, ValueError) as e:
+            probe_results["deepseek"] = {"status": "FAIL", "error": str(e)}
+            print(f"  ✗ DeepSeek Failed: {e}")
+    else:
+        probe_results["deepseek"] = {"status": "SKIP", "reason": "Paid API probe requires --include-paid-api"}
+        print("  Skipped: paid API probe requires --include-paid-api")
 
     # 4. Probe OpenCode (opencode/deepseek-v4.1-flash-free)
     print("\n[4/5] Probing OpenCode (deepseek-v4.1-flash)...")
@@ -868,7 +914,7 @@ def run_probe() -> dict[str, Any]:
     print("\n[5/5] Probing Orca Orchestration Runtime...")
     try:
         proc = subprocess.run(
-            ["orca", "--version"],
+            [resolve_orca(), "--version"],
             check=False,
             capture_output=True,
             text=True,
@@ -885,9 +931,9 @@ def run_probe() -> dict[str, Any]:
         print(f"  ✗ Orca Runtime Failed: {e}")
 
     print("\n================================================================")
-    all_passed = all(v.get("status") == "PASS" for v in probe_results.values())
+    all_passed = all(v.get("status") in {"PASS", "SKIP"} for v in probe_results.values())
     if all_passed:
-        print(" ALL MANDATED FRONTIER MODEL WORKERS READY FOR TASK DISPATCH")
+        print(" ALL REQUESTED PROBES PASSED (SKIPPED WORKERS ARE UNVERIFIED)")
     else:
         print(" WARNING: Some orchestration workers failed diagnostic check")
     print("================================================================\n")
@@ -945,7 +991,8 @@ def main() -> None:
     subparsers = parser.add_subparsers(dest="command", required=True)
 
     # Probe command
-    subparsers.add_parser("probe", help="Run end-to-end diagnostic probe")
+    probe_p = subparsers.add_parser("probe", help="Run live worker probes (uses model quota)")
+    probe_p.add_argument("--include-paid-api", action="store_true", help="Also authorize the paid DeepSeek API probe")
 
     # Stats command
     subparsers.add_parser("stats", help="Show token ledger & orchestration stats")
@@ -959,6 +1006,7 @@ def main() -> None:
     codex_p.add_argument(
         "--model", "-m", default=DEFAULT_CODEX_MODEL, help="Model override"
     )
+    codex_p.add_argument("--effort", choices=("high", "xhigh"), default="xhigh")
     codex_p.add_argument(
         "--verify", "-v", action="store_true", help="Run make check after task"
     )
@@ -973,6 +1021,7 @@ def main() -> None:
     claude_p.add_argument(
         "--model", "-m", default=DEFAULT_CLAUDE_MODEL, help="Model override"
     )
+    claude_p.add_argument("--effort", choices=("high", "xhigh"), default="high")
     claude_p.add_argument(
         "--verify", "-v", action="store_true", help="Run make check after task"
     )
@@ -1046,7 +1095,9 @@ def main() -> None:
     args = parser.parse_args()
 
     if args.command == "probe":
-        run_probe()
+        results = run_probe(include_paid_api=args.include_paid_api)
+        if any(item["status"] == "FAIL" for item in results.values()):
+            sys.exit(1)
     elif args.command == "stats":
         print_stats()
     elif args.command == "backend":
@@ -1054,6 +1105,7 @@ def main() -> None:
             task=args.task,
             files=args.files,
             model=args.model,
+            effort=args.effort,
             verify=args.verify,
         )
         print(f"\n[Codex Result] Run: {res.run_id} | Success: {res.success}")
@@ -1067,11 +1119,14 @@ def main() -> None:
             ver_text = "PASSED" if res.verification_passed else "FAILED"
             print(f"make check: {ver_text}")
         print("\nWorker Output:\n", res.output)
+        if not res.success:
+            sys.exit(res.exit_code or 1)
     elif args.command == "frontend":
         res = dispatch_claude(
             task=args.task,
             files=args.files,
             model=args.model,
+            effort=args.effort,
             verify=args.verify,
         )
         print(f"\n[Claude Result] Run: {res.run_id} | Success: {res.success}")
@@ -1085,6 +1140,8 @@ def main() -> None:
             ver_text = "PASSED" if res.verification_passed else "FAILED"
             print(f"make check: {ver_text}")
         print("\nWorker Output:\n", res.output)
+        if not res.success:
+            sys.exit(res.exit_code or 1)
     elif args.command == "extract":
         res = dispatch_deepseek(
             prompt=args.prompt,
@@ -1115,6 +1172,8 @@ def main() -> None:
             ver_text = "PASSED" if res.verification_passed else "FAILED"
             print(f"make check: {ver_text}")
         print("\nWorker Output:\n", res.output)
+        if not res.success:
+            sys.exit(res.exit_code or 1)
     elif args.command == "child-spawn":
         out = spawn_child_worktree(
             agent=args.agent,

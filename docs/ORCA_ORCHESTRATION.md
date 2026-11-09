@@ -1,5 +1,13 @@
 # Orca Multi-Model Orchestration Framework
 
+Current workspace defaults and verified limits are documented in
+[`MODEL_CONFIGURATION.md`](MODEL_CONFIGURATION.md). Codex defaults to `xhigh`;
+Claude defaults to `high`. Explicit launch flags take precedence over config files.
+The paid DeepSeek API is optional and skipped by diagnostic probes unless
+`--include-paid-api` is supplied. Model aliases and account access require live
+verification; descriptive model names below are not evidence of availability.
+Workers report to their coordinator; only the coordinator runs the finish protocol.
+
 ## Core Philosophy: Orchestrator vs. Heavy Lifters
 
 Antigravity operates as the **Master Orchestrator**, not a monolithic heavy lifter. The orchestrator's job is project coordination, contract definition, task decomposition, quality gatekeeping, test verification, and production release. The heavy engineering lifting is delegated to specialized, newest-generation frontier models via the unified orchestration hub (`scripts/orchestrate.py`) and local Orca runtime.
@@ -14,7 +22,7 @@ Older-generation models (e.g. Claude 3.5, Claude 3.7, GPT-4o, legacy tiers) are 
 | :--- | :--- | :--- | :--- |
 | **OpenAI / Codex** | Worker: `codex`<br>Model: `gpt-6.1-sol` or `gpt-6-astra`<br>Effort: `high` / `xhigh` | **Core Engine, GRDB Storage, & Swift 6 Strict Concurrency**<br>Flawless algorithmic reasoning, Swift 6 strict concurrency (`NonisolatedNonsendingByDefault`), nonisolated Foundation-only `HardsetCore`, permanent schema rules (`DECISIONS.md` §4), SQLiteData sync engine preservation, and zero database work per render. Guided by `CODEX.md`. | - Foundation-only `HardsetCore` engine & timeline logic<br>- GRDB schema migrations & permanent SQLite rules<br>- `PriorPerformanceSnapshot` build-once performance contracts<br>- Swift 6 concurrency verification & `hardset-check store` |
 | **Anthropic / Claude** | Worker: `claude`<br>Model: `claude-sonnet-5.5` / `claude-opus-5-5`<br>Effort: `high` | **SwiftUI Ergonomics, UI Tokens & Calibrated Honesty**<br>Deliberate aesthetic restraint, typography hierarchy (`Tokens.Typography`), monochrome signals, CertaintyBadge design, keypad interaction ergonomics, and session log craft. Guided by `CLAUDE.md`. | - `HardsetUI` design tokens & dark slate components<br>- `CertaintyBadge` honest reporting without invention<br>- Custom numeric keypad & dynamic set row interactions<br>- Session history, progression charts, & volume reports |
-| **DeepSeek (OpenCode / API)** | Worker: `opencode` / `deepseek`<br>Model: `opencode/deepseek-v4.1-flash-free`<br>Speed: Sub-second | **Taxonomy Parsing, Seed Audits & Boundary Fuzzing**<br>High-throughput execution for structured hypertrophy taxonomy parsing, seed catalogue auditing, volume math verification, and boundary fuzzing. Guided by `docs/MuscleTaxonomy-spec.md`. | - Muscle taxonomy parsing against `docs/MuscleTaxonomy-spec.md`<br>- 50-movement seed catalogue verification & attribution<br>- Fractional volume attribution matrices & boundary fuzzing<br>- Multi-machine load conflict edge cases |
+| **DeepSeek (OpenCode / API)** | Worker: `opencode` / `deepseek`<br>Model: `opencode/deepseek-v4.1-flash-free`<br>Latency: Provider-dependent, unmeasured | **Taxonomy Parsing, Seed Audits & Boundary Fuzzing**<br>High-throughput execution for structured hypertrophy taxonomy parsing, seed catalogue auditing, volume math verification, and boundary fuzzing. Guided by `docs/MuscleTaxonomy-spec.md`. | - Muscle taxonomy parsing against `docs/MuscleTaxonomy-spec.md`<br>- 50-movement seed catalogue verification & attribution<br>- Fractional volume attribution matrices & boundary fuzzing<br>- Multi-machine load conflict edge cases |
 | **Antigravity** | Role: `orchestrator`<br>Authority: Master Conductor | **Master Conductor, System Integrator & Release Authority**<br>Coordinates multi-model workers, spins up child worktrees for Claude Code and OpenCode, defines task contracts, resolves integration conflicts, executes tests (`make check` / `hardset-check all`), and drives git finish protocol. | - Task decomposition & contract specification<br>- Child worktree creation (`scripts/orca-child.sh`)<br>- Multi-model worker dispatch & telemetry tracking<br>- Test suite execution (`make check`) & project generator (`make project`)<br>- Production release push via `agent-finish` |
 
 ---
@@ -40,7 +48,7 @@ python3 scripts/orchestrate.py backend \
   --files Packages/HardsetKit/Sources/HardsetCore/ExerciseLogState.swift \
   --verify
 ```
-Automatically enforces `CODEX.md` instructions, Swift 6 strict concurrency, and zero diagrams. `--verify` triggers `make check` upon completion.
+Instructs the worker to follow `CODEX.md`, Swift 6 strict concurrency, and zero diagrams. `--verify` triggers `make check` upon completion.
 
 #### 2. Frontend Ergonomics (Claude `claude-sonnet-5.5`)
 ```bash
@@ -49,7 +57,7 @@ python3 scripts/orchestrate.py frontend \
   --files Packages/HardsetKit/Sources/HardsetUI/CertaintyBadge.swift \
   --verify
 ```
-Automatically enforces `CLAUDE.md` instructions, MainActor UI isolation, dark palette tokens, and zero diagrams.
+Instructs the worker to follow `CLAUDE.md`, MainActor UI isolation, dark palette tokens, and zero diagrams.
 
 #### 3. Batch Taxonomy Extraction & Fuzzing (DeepSeek `deepseek-v4.1-flash`)
 ```bash

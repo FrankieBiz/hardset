@@ -10,10 +10,14 @@ MAC_DIR ?= ~/hardset
 # what gets installed. `git pull origin main` built main whatever was being tested.
 BRANCH ?= $(shell git rev-parse --abbrev-ref HEAD)
 
-check: ## Run honest Linux checks across all targets (parse syntax, Core suite, Store suite, query indexes, palette contrast)
+check: check-orchestration ## Run honest Linux checks across all targets (parse syntax, Core suite, Store suite, query indexes, palette contrast)
 	$(CHECK) all
 	$(PY) Tools/check_query_performance.py --require-indexes
 	$(PY) Tools/check_contrast.py
+
+.PHONY: check-orchestration
+check-orchestration: ## Verify model launch contracts offline, without provider calls
+	PYTHONDONTWRITEBYTECODE=1 $(PY) -m unittest discover -s scripts -p 'test_*.py'
 
 install: ## Build, sign, install, and launch Hardset on connected iPhone or Simulator (macOS)
 	./Tools/install_device.sh
