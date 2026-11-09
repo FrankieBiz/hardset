@@ -84,10 +84,26 @@ public final class WorkoutRootModel {
     )
   }
 
-  /// Finishing has already persisted through the coordinator; never discard a live workout.
+  /// Finishing or discarding has already persisted through the coordinator; never drop a live
+  /// workout.
   public func clearFinishedWorkout() {
-    guard coordinator?.isFinished == true else { return }
-    coordinator = nil
+    guard let coordinator, coordinator.isFinished || coordinator.isDiscarded else { return }
+    self.coordinator = nil
+  }
+
+  /// Re-applies a gym picked on the start screen that no workout has recorded yet, such as one
+  /// the view kept across a relaunch after iOS ended the app in the background.
+  ///
+  /// `nil` re-applies "Not recorded", which is a real pick. A gym that is no longer a saved option
+  /// is ignored, so the learned default stands rather than a gym the picker cannot show. Nothing is
+  /// stored here: the learned last-used gym (`GymStore.lastUsedGym`) stays the only lasting source.
+  /// - Returns: Whether the pick was applied. `false` before the saved gyms have been read.
+  @discardableResult
+  public func restoreGymPick(_ id: GymID?) -> Bool {
+    guard isReady else { return false }
+    if let id, !gymOptions.contains(where: { $0.id == id }) { return false }
+    selectedGym = id
+    return true
   }
 
   public func refreshGyms() throws {
