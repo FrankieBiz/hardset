@@ -34,6 +34,10 @@ public struct ProgressionPoint: Hashable, Sendable, Identifiable {
   /// twenty-rep sets produces no estimate, and inventing one would be the ancestor's bug.
   public let bestEstimatedOneRepMaxKg: Double?
   public let workingSets: Int
+  /// How far the best estimate can be trusted, from the rep count of the set that produced it:
+  /// a single or two to six reps is high, seven to ten moderate, eleven or twelve low. `nil` when
+  /// there is no estimate, and when the point was built without saying (previews).
+  public let bestEstimateCertainty: Certainty?
 
   public var id: SessionID { sessionID }
 
@@ -43,7 +47,8 @@ public struct ProgressionPoint: Hashable, Sendable, Identifiable {
     date: Date,
     heaviestLoadKg: Double,
     bestEstimatedOneRepMaxKg: Double?,
-    workingSets: Int
+    workingSets: Int,
+    bestEstimateCertainty: Certainty? = nil
   ) {
     self.sessionID = sessionID
     self.machineID = machineID
@@ -51,6 +56,7 @@ public struct ProgressionPoint: Hashable, Sendable, Identifiable {
     self.heaviestLoadKg = heaviestLoadKg
     self.bestEstimatedOneRepMaxKg = bestEstimatedOneRepMaxKg
     self.workingSets = workingSets
+    self.bestEstimateCertainty = bestEstimatedOneRepMaxKg == nil ? nil : bestEstimateCertainty
   }
 }
 
@@ -168,17 +174,44 @@ public enum ProgressionAnalyzer {
     let heaviest = samples.map(\.weightKg).max() ?? 0
     // Only estimable sets contribute. A session of high-rep work yields no estimate at all rather
     // than an extrapolated one.
-    let estimates = samples.compactMap {
-      StrengthMath.estimatedOneRepMax(weightKg: $0.weightKg, reps: $0.reps).value
+    let estimates = samples.compactMap { sample -> (value: Double, certainty: Certainty)? in
+      let claim = StrengthMath.estimatedOneRepMax(weightKg: sample.weightKg, reps: sample.reps)
+      return claim.value.map { ($0, claim.certainty) }
+    }
+    // The winning estimate keeps its own certainty. Two sets estimating the same value keep the
+    // better-supported one, because that is the estimate the point is entitled to.
+    let best = estimates.max { lhs, rhs in
+      lhs.value != rhs.value ? lhs.value < rhs.value : lhs.certainty < rhs.certainty
     }
     return ProgressionPoint(
       sessionID: sessionID,
       machineID: machineID,
       date: samples.map(\.completedAt).min() ?? .distantPast,
       heaviestLoadKg: heaviest,
-      bestEstimatedOneRepMaxKg: estimates.max(),
-      workingSets: samples.count
+      bestEstimatedOneRepMaxKg: best?.value,
+      workingSets: samples.count,
+      bestEstimateCertainty: best?.certainty
     )
+  }
+
+  /// The certainty to state beside an estimate chart: the weakest of each line's latest estimate,
+  /// because those are the figures the legend reads out. `.unevaluated` when no line has one.
+  ///
+  /// A point that does not say how certain its estimate is counts as low. Certainty is never
+  /// assumed upward.
+  public static func estimateCertainty(latestOf series: [[ProgressionPoint]]) -> Certainty {
+    let latest = series.compactMap { points in
+      points.filter { $0.bestEstimatedOneRepMaxKg != nil }.max { $0.date < $1.date }
+    }
+    guard !latest.isEmpty else { return .unevaluated }
+    return Certainty.combine(latest.map { $0.bestEstimateCertainty ?? .low })
+  }
+
+  /// True when there are points and every one of them recorded no added load: bodyweight work,
+  /// where a load line would be a flat line at zero that says nothing.
+  public static func hasNoAddedLoad(_ series: [[ProgressionPoint]]) -> Bool {
+    let points = series.flatMap { $0 }
+    return !points.isEmpty && points.allSatisfy { $0.heaviestLoadKg <= 0 }
   }
 
   /// Points where the machine changed between consecutive sessions or stints, in chronological order.
@@ -230,13 +263,14 @@ public enum ProgressionAnalyzer {
       Each point is your best work in one session on one specific machine: the heaviest load you \
       moved, and where the rep counts allow it, the best estimated one-rep max. Sessions on \
       different machines are drawn as separate lines and never merged, because the same number on \
-      different equipment is not the same effort.
+      different equipment is not the same effort. Sets with no machine recorded form their own line.
       """,
     citation: nil,
     validRange: """
       An estimated one-rep max is only shown for sets of twelve reps or fewer; above that no \
-      estimate is produced. A change in load across a machine switch is a difference between \
-      machines, not a change in strength, and is labelled as such.
+      estimate is produced. Its certainty follows the reps behind it: a single or two to six reps \
+      is high, seven to ten moderate, eleven or twelve low. A change in load across a machine \
+      switch is a difference between machines, not a change in strength, and is labelled as such.
       """
   )
 }
