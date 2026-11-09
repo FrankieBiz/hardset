@@ -89,6 +89,7 @@ public final class SessionCoordinator {
     gymID: GymID? = nil,
     title: String = "",
     plan: [PlannedExercise],
+    knownEquipmentOnly: Bool = false,
     now: @escaping () -> Date = { Date() },
     restAfterSet: Duration? = nil,
     onStartRest: @escaping (Duration, RestMetadata) -> Void = { _, _ in }
@@ -97,7 +98,7 @@ public final class SessionCoordinator {
     // Prepare fallible reads before creating durable state. There is no new
     // session to exclude yet, and a read failure must not abandon an empty one.
     let snapshot = try store.priorPerformanceSnapshot(
-      for: plan.map(\.progressionKey),
+      for: plan.filter { !knownEquipmentOnly || $0.machineID != nil }.map(\.progressionKey),
       asOf: startedAt
     )
 
@@ -107,7 +108,8 @@ public final class SessionCoordinator {
     // increment was passed in — and nothing in the app passed one — while `resume` read it from
     // storage, so the same set could be a record before a restart and not after.
     let increments = try store.machineIncrements(for: plan.compactMap(\.machineID))
-    let saved = try store.startSession(gymID: gymID, title: title, at: startedAt, plan: plan)
+    let saved = try store.startSession(gymID: gymID, title: title, at: startedAt, plan: plan,
+      knownEquipmentOnly: knownEquipmentOnly)
     for (position, planned) in plan.enumerated() {
       let state = ExerciseLogState.build(
         exerciseID: planned.exerciseID,
@@ -116,8 +118,9 @@ public final class SessionCoordinator {
         machineName: planned.machineName,
         machineIncrementKg: planned.machineID.flatMap { increments[$0] }
           ?? planned.machineIncrementKg,
-        snapshot: snapshot,
-        plannedSets: planned.plannedSets
+        snapshot: knownEquipmentOnly && planned.machineID == nil ? .empty(capturedAt: startedAt) : snapshot,
+        plannedSets: planned.plannedSets,
+        allowingOtherMachines: !knownEquipmentOnly
       )
       rowIDs[state.id] = saved.planRowIDs[position]
       states.append(state)
@@ -228,8 +231,9 @@ public final class SessionCoordinator {
         // equipment may be unable to hit.
         machineIncrementKg: entry.machineIncrementKg,
         loggedSets: logged,
-        snapshot: snapshot,
-        plannedSets: entry.plannedSets
+        snapshot: session.knownEquipmentOnly && entry.machineID == nil ? .empty(capturedAt: snapshot.capturedAt) : snapshot,
+        plannedSets: entry.plannedSets,
+        allowingOtherMachines: !session.knownEquipmentOnly
       )
       rowIDs[state.id] = entry.id
       return state

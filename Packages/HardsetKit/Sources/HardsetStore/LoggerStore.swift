@@ -42,7 +42,8 @@ public nonisolated struct LoggerStore: Sendable {
     gymID: GymID?,
     title: String,
     at startedAt: Date,
-    plan: [PlannedExercise]
+    plan: [PlannedExercise],
+    knownEquipmentOnly: Bool = false
   ) throws -> (sessionID: SessionID, planRowIDs: [UUID]) {
     let id = SessionID()
     let rowIDs = plan.map { _ in UUID() }
@@ -60,6 +61,7 @@ public nonisolated struct LoggerStore: Sendable {
       try Session.insert {
         Session.Draft(
           id: id.rawValue,
+          knownEquipmentOnly: knownEquipmentOnly,
           gymID: gymID?.rawValue,
           title: title,
           notes: "",
@@ -611,12 +613,14 @@ nonisolated struct SessionRecoverySnapshot: Hashable, Sendable {
 // invariant for free instead of being trusted to reconstruct it.
 
 public nonisolated struct SessionRecord: Hashable, Sendable {
+  public let knownEquipmentOnly: Bool
   public let id: SessionID
   public let gymID: GymID?
   public let title: String
   public let timeline: SessionTimeline
 
   init(row: Session) {
+    self.knownEquipmentOnly = row.knownEquipmentOnly
     self.id = SessionID(rawValue: row.id)
     self.gymID = row.gymID.map(GymID.init(rawValue:))
     self.title = row.title

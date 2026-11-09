@@ -17,6 +17,7 @@ public struct HardsetEnvironment {
   public let history: HistoryStore
   public let progression: ProgressionStore
   public let health: DeviceHealthStore
+  public let repeats: RepeatWorkoutStore
   public let receipts: ReceiptStore
   public let transfer: DataTransferStore
   public let gyms: GymStore
@@ -29,6 +30,7 @@ public struct HardsetEnvironment {
     self.progression = ProgressionStore(database: database)
     self.gyms = GymStore(database: database)
     self.health = DeviceHealthStore(database: database)
+    self.repeats = RepeatWorkoutStore(database: database)
     self.receipts = ReceiptStore(database: database)
     self.transfer = DataTransferStore(database: database)
   }
@@ -44,6 +46,7 @@ public struct HardsetEnvironment {
 @MainActor
 public struct HardsetRootView: View {
   @State private var model: WorkoutRootModel
+  @State private var isRepeatingWorkout = false
   @State private var startFailed = false
   @State private var isChoosingGym = false
   @State private var isAddingGym = false
@@ -233,6 +236,11 @@ public struct HardsetRootView: View {
             }
             .buttonStyle(HardsetButtonStyle(.primary, size: .logger))
 
+            Button { isRepeatingWorkout = true } label: {
+              Label("Repeat a workout", systemImage: "arrow.clockwise")
+            }
+            .buttonStyle(HardsetButtonStyle(.secondary, size: .logger))
+
             if startFailed {
               HardsetBanner(
                 .error,
@@ -244,8 +252,8 @@ public struct HardsetRootView: View {
             // Said where the button is, because it is the first thing a lifter used to a
             // programme app would expect: the workout is theirs to build, not one handed to them.
             Text(
-              "The workout starts empty and you add movements as you go. Hardset does not "
-                + "invent a program."
+              "Start empty, or repeat a workout from your history. You choose the work; "
+                + "Hardset keeps the record."
             )
             .font(Tokens.Text.provenance)
             .foregroundStyle(Tokens.Color.textSecondary)
@@ -268,6 +276,12 @@ public struct HardsetRootView: View {
     .scrollBounceBehavior(.basedOnSize)
     .background(Tokens.Color.background)
     .sheet(isPresented: $isChoosingGym) { gymSheet.hardsetSheet() }
+    .sheet(isPresented: $isRepeatingWorkout) {
+      RepeatWorkoutScreen(history: environment.history, store: environment.repeats,
+        gymID: model.selectedGym, gymName: selectedGymName,
+        onStart: { try model.startWorkout(repeating: $0) })
+        .hardsetSheet()
+    }
   }
 
   /// Today, as the start screen's context line: "Saturday 7 November", in the device's format.

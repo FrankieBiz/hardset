@@ -203,3 +203,13 @@ components rather than native spinners.
 - Saved logger facts retain full foreground contrast even though their actions are
   disabled. Confidence labels wrap at large Dynamic Type sizes instead of truncating
   the word that qualifies a claim. Neither change introduces motion or new tokens.
+
+## Repeat from history
+
+Train offers an empty start and a secondary “Repeat a workout” action. The latter
+opens a scrollable history chooser and explicit preview: movement order, completed
+working-set counts, destination gym, and equipment provenance. Archived movements
+are disclosed; missing equipment starts blank. Reuse existing button, typography,
+spacing and banner tokens. No new motion: native sheet presentation and immediate
+preview state changes retain the existing Reduce Motion behavior. Rows wrap with
+Dynamic Type; controls remain separate accessibility elements.

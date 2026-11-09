@@ -275,3 +275,26 @@ To preserve architectural velocity and calibration honesty, this workspace adher
     ```bash
     agent-finish "<imperative commit message>"
     ```
+
+## History-led workout continuity — 2026-11-09
+
+- Objective: make a substantial product improvement grounded in Hardset's purpose.
+- Worktree: `/home/frankbiz/orca/workspaces/hardset/bobtail`; branch `FrankieBiz/bobtail`.
+- Decision: completed workouts become explicit, previewable starting points. Preserve
+  performed working-set counts, movement occurrences and eligible equipment; use latest
+  same-machine history for drafts. Unknown equipment stays blank through recovery.
+- Implementation: RepeatWorkoutStore, RepeatWorkoutScreen, root wiring and root-model
+  start path; additive v10 session policy migration. No new routine database. Existing
+  sessions default to their previous prefill policy. Full rationale: PRODUCT_DIRECTION.md.
+- Verification: baseline and initial implementation make check passed. Final gate with
+  six repeat-workout tests, migration and UI journey extension is pending below.
+- Native UI journey now covers choosing, previewing and starting a repeated workout.
+  Apple CI and physical-device verification are separate from Linux checks.
+- Final Linux verification passed: `make check` exit 0, 12 orchestration tests,
+  127 Swift syntax parses, 181 Core tests, 204 Store tests, query-plan/result gate,
+  172 contrast pairs. Project regeneration unchanged; diff whitespace check passed.
+- Migration-test failure diagnosed: legacy fixture inserted with the current Session
+  macro before upgrade. Replaced those inserts with historical-column SQL; all sixteen
+  upgrade variants now pass. No migration or integrity assertion was weakened.
+- Existing main CI (42541134810, commit 24211fb) fails simulator startup in all UI
+  journeys; native compilation passed on that baseline. Feature CI pending separately.

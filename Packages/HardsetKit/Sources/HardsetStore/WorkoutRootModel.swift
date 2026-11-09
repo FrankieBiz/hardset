@@ -84,6 +84,17 @@ public final class WorkoutRootModel {
     )
   }
 
+  /// The preview is user-selected history. Starting still obeys recovery and atomic-save gates.
+  public func startWorkout(repeating workout: RepeatWorkout) throws {
+    guard isReady else { throw WorkoutRootError.notReady }
+    guard coordinator == nil else { throw WorkoutRootError.workoutAlreadyOpen }
+    guard selectedGym == workout.gymID else { throw RepeatWorkoutError.gymChanged }
+    coordinator = try SessionCoordinator.start(
+      store: logger, gymID: selectedGym, title: workout.title, plan: workout.exercises,
+      knownEquipmentOnly: true, now: now, restAfterSet: restAfterSet, onStartRest: onStartRest
+    )
+  }
+
   /// Finishing has already persisted through the coordinator; never discard a live workout.
   public func clearFinishedWorkout() {
     guard coordinator?.isFinished == true else { return }

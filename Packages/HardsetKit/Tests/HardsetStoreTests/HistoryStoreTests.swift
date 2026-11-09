@@ -58,13 +58,9 @@ struct HistoryStoreTests {
       try Gym.insert { Gym.Draft(id: gym, name: "My gym") }.execute(db)
       try Machine.insert { Machine.Draft(id: machine, gymID: gym, name: "My press", stackIncrementKg: 5) }.execute(db)
       try MachineExercise.insert { MachineExercise.Draft(id: UUID(), machineID: machine, exerciseID: exercise) }.execute(db)
-      try Session.insert {
-        Session.Draft(id: active, gymID: gym, title: "Open workout", notes: "Keep this too", startedAt: self.now)
-      }.execute(db)
-      try Session.insert {
-        Session.Draft(id: finished, gymID: gym, title: "Finished workout",
-                      startedAt: self.now.addingTimeInterval(-7200), finishedAt: self.now.addingTimeInterval(-3600))
-      }.execute(db)
+      // Use the historical column list, independent of today's additive Session model.
+      try #sql("INSERT INTO sessions (id, gymID, title, notes, startedAt) VALUES (\(active), \(gym), 'Open workout', 'Keep this too', \(self.now))").execute(db)
+      try #sql("INSERT INTO sessions (id, gymID, title, startedAt, finishedAt) VALUES (\(finished), \(gym), 'Finished workout', \(self.now.addingTimeInterval(-7200)), \(self.now.addingTimeInterval(-3600)))").execute(db)
       try SessionExercise.insert {
         SessionExercise.Draft(id: plan, sessionID: active, exerciseID: exercise, machineID: machine, position: 0, plannedSets: 3)
       }.execute(db)
