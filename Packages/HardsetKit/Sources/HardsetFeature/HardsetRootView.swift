@@ -46,10 +46,15 @@ public struct HardsetEnvironment {
 /// accessory, so a lifter mid-workout can still open their history or check the week's volume
 /// without abandoning the session — which is what a modal would force. That slot is what
 /// `tabViewBottomAccessory` exists for, and the tab bar minimises on scroll so the set grid keeps
-/// the screen.
+/// the screen. Tapping the accessory returns to the workout, as a now-playing bar returns to what
+/// is playing; on the Train tab it is hidden, because the session screen already shows the same
+/// sets and rest.
 @MainActor
 public struct HardsetRootView: View {
   @State private var model: WorkoutRootModel
+  /// Held here rather than left to the tab view, so the workout accessory can bring the lifter
+  /// back to Train from whichever tab they are reading.
+  @State private var selectedTab: RootTab = .train
   @State private var startFailed = false
   @State private var isChoosingGym = false
   @State private var isAddingGym = false
@@ -57,6 +62,18 @@ public struct HardsetRootView: View {
   /// The newest finished workout, for the start screen. `nil` when there is none, and then the
   /// start screen shows nothing in its place rather than a placeholder that implies a history.
   @State private var lastWorkoutSnapshot = SnapshotLoader<[SessionSummary]>()
+  /// The day the start screen's header names. Read when the view is made and again whenever the
+  /// app returns to the foreground on a later day; read only while drawing, the header went on
+  /// naming yesterday for a lifter who left the app open overnight.
+  @State private var today = Date.now
+  /// The gym picked on the start screen that no workout has recorded yet, as an ID, `noGymPick`
+  /// for "Not recorded", or empty when there is none.
+  ///
+  /// Scene state rather than a stored preference: iOS restores it after ending the app in the
+  /// background between choosing and starting, a force-quit discards it, and it is cleared once a
+  /// workout starts and its session records the gym. From then on the learned last-used gym is
+  /// the default again, so there is still no setting to go stale.
+  @SceneStorage("hardset.pendingGymPick") private var pendingGymPick = ""
   /// Inferred from the device's locale on first launch rather than asked, and stored the moment the
   /// user disagrees. Kilograms remain the canonical storage unit either way — this only decides
   /// what is displayed and what typed numbers are read as.
@@ -65,7 +82,11 @@ public struct HardsetRootView: View {
   /// Why the last gym write failed, in the user's words. A `try?` here hid a real failure behind a
   /// button that appeared to do nothing, which is precisely what this app is not allowed to do.
   @State private var gymError: String?
+  /// Why the gym just named could not be saved. Shown inside the name sheet, which stays up so the
+  /// typed name is still there for the retry; the picker's banner would be hidden behind it.
+  @State private var addGymError: String?
   @Environment(\.accessibilityReduceMotion) private var reduceMotion
+  @Environment(\.scenePhase) private var scenePhase
   private let environment: HardsetEnvironment
   /// Overrides the stored preference. Exists for previews and tests; the app passes `nil` so the
   /// user's own choice wins.
@@ -108,82 +129,83 @@ public struct HardsetRootView: View {
       }
   }
 
-  @ViewBuilder private var rootContent: some View {
-    Group {
-      if model.isReady {
-        tabs
-      } else if model.lastError != nil {
-        ScrollView {
-          HardsetEmptyState(
-            title: "Could not load your workout",
-            detail: "Try again before starting a new workout.",
-            systemImage: "exclamationmark.triangle",
-            actionTitle: "Try again",
-            actionSystemImage: "arrow.clockwise",
-            action: { Task { await model.load() } }
-          )
-          .padding(.top, Tokens.Spacing.block)
-        }
-        .background(Tokens.Color.background)
-      } else {
-        HardsetLoadingState("Loading your workout…")
+  /// The tabs are drawn whatever the root's readiness. Only Train waits for the catalogue, recovery
+  /// and gyms, because only Train offers a new workout; History, Volume, and Settings with its
+  /// export read their own data and stay reachable when preparing a workout fails.
+  private var rootContent: some View {
+    tabs
+      .tint(Tokens.Color.accent)
+      // Above every tab, so Settings opens from each tab's header alike, and outside anything
+      // that changes when a workout starts or finishes, so finishing while it is open cannot pull
+      // its anchor out from under it.
+      .sheet(isPresented: $isShowingSettings) {
+        SettingsSheet(
+          useImperial: $useImperial, transfer: environment.transfer,
+          health: environment.health, sync: environment.sync,
+          // An import adds finished workouts, so the start screen's last workout may have
+          // changed underneath the sheet, which does not make the start screen appear again.
+          onDataChanged: { Task { await refreshLastWorkout() } }
+        ) { isShowingSettings = false }
+          .hardsetSheet()
       }
-    }
-    .tint(Tokens.Color.accent)
-    .task {
-      await model.load()
-      if model.isReady { await refreshLastWorkout() }
-    }
+      .task { await prepare() }
+      .onChange(of: scenePhase) { _, phase in
+        guard phase == .active, !Calendar.current.isDate(today, inSameDayAs: .now) else { return }
+        today = .now
+      }
   }
 
-  @ViewBuilder private var tabs: some View {
-    let content = TabView {
-      Tab("Train", systemImage: "figure.strengthtraining.traditional") {
+  private var tabs: some View {
+    TabView(selection: $selectedTab) {
+      Tab("Train", systemImage: "figure.strengthtraining.traditional", value: RootTab.train) {
         NavigationStack {
           trainTab
-            // Attached above both states of the tab, so Settings opens from the start screen's
-            // header and from the live session's alike, and finishing a workout while it is open
-            // cannot pull its anchor out from under it.
-            .sheet(isPresented: $isShowingSettings) {
-              SettingsSheet(
-                useImperial: $useImperial, transfer: environment.transfer,
-                health: environment.health, sync: environment.sync
-              ) { isShowingSettings = false }
-                .hardsetSheet()
-            }
         }
       }
-      Tab("Volume", systemImage: "chart.bar.xaxis") {
+      Tab("Volume", systemImage: "chart.bar.xaxis", value: RootTab.volume) {
         NavigationStack {
           // The screen draws its own header; the title stays as the screen's accessible name.
-          WeeklyVolumeScreen(store: environment.volume)
-            .navigationTitle("This week")
-            .hardsetTabRoot()
+          WeeklyVolumeScreen(
+            store: environment.volume, onShowSettings: { isShowingSettings = true }
+          )
+          .navigationTitle("This week")
+          .hardsetTabRoot()
         }
       }
-      Tab("History", systemImage: "clock.arrow.circlepath") {
+      Tab("History", systemImage: "clock.arrow.circlepath", value: RootTab.history) {
         NavigationStack {
-          HistoryScreen(store: environment.history, unit: unit, receipts: environment.receipts)
-            .navigationTitle("History")
-            .hardsetTabRoot()
+          HistoryScreen(
+            store: environment.history, unit: unit, receipts: environment.receipts,
+            onShowSettings: { isShowingSettings = true }
+          )
+          .navigationTitle("History")
+          .hardsetTabRoot()
         }
       }
     }
-
     #if os(iOS)
-      // The accessory is attached only while a session exists. Attaching it unconditionally and
-      // returning an empty view inside drew an empty pill above the tab bar on the start screen —
-      // the slot is reserved by the modifier, not by its content.
-      if coordinator != nil {
-        content
-          .tabViewBottomAccessory { liveSessionAccessory }
-          .tabBarMinimizeBehavior(.onScrollDown)
-      } else {
-        content
-      }
-    #else
-      content
+      // Always attached and switched with `isEnabled`. The slot is reserved by the modifier, not
+      // by its content, so an empty accessory still drew a pill above the tab bar; and adding or
+      // removing the modifier itself gave the tab view a new identity, rebuilding every tab's
+      // state each time a workout started or finished.
+      .tabViewBottomAccessory(isEnabled: isAccessoryShown) { liveSessionAccessory }
+      .tabBarMinimizeBehavior(coordinator != nil ? .onScrollDown : .automatic)
     #endif
+  }
+
+  /// A workout is open and the lifter is on another tab. On Train the session screen itself shows
+  /// the sets and the rest bar, and the accessory would only repeat them above the tab bar.
+  private var isAccessoryShown: Bool {
+    coordinator != nil && selectedTab != .train
+  }
+
+  /// Loads the root, then what the start screen shows from it. Shared by the first appearance and
+  /// "Try again", so a load that succeeds only on retry fills in everything a first load does.
+  private func prepare() async {
+    await model.load()
+    guard model.isReady else { return }
+    restorePendingGymPick()
+    await refreshLastWorkout()
   }
 
   // MARK: - Train
@@ -211,11 +233,67 @@ public struct HardsetRootView: View {
       // stays as the screen's accessible name; the stock bar is hidden.
       .navigationTitle("Workout")
       .hardsetTabRoot()
-    } else {
+    } else if model.isReady {
       startView
         .navigationTitle("Train")
         .hardsetTabRoot()
+    } else if let error = model.lastError {
+      preparationFailure(error)
+        .navigationTitle("Train")
+        .hardsetTabRoot()
+    } else {
+      VStack(alignment: .leading, spacing: 0) {
+        trainHeader
+        HardsetLoadingState("Preparing your workout…")
+      }
+      .background(Tokens.Color.background)
+      .navigationTitle("Train")
+      .hardsetTabRoot()
     }
+  }
+
+  /// The Train header, with the settings action, shared by the start screen and the states before
+  /// it so Settings is reachable while a workout is still being prepared.
+  private var trainHeader: some View {
+    ScreenHeader("Train", subtitle: Self.dayLabel(today)) {
+      HeaderIconButton(systemImage: "gearshape", accessibilityLabel: "Settings") {
+        isShowingSettings = true
+      }
+    }
+  }
+
+  /// The catalogue, the open workout or the gyms could not be read, so no new workout is offered.
+  ///
+  /// Said about the workout only, because that is all that is held back: the other tabs and
+  /// Settings keep working. The error itself follows, small and selectable as on the startup
+  /// screen, because on a phone with no debugger attached this is the only place to read it.
+  private func preparationFailure(_ error: any Error) -> some View {
+    ScrollView {
+      VStack(alignment: .leading, spacing: Tokens.Spacing.section) {
+        trainHeader
+        VStack(spacing: Tokens.Spacing.regular) {
+          HardsetEmptyState(
+            title: "Could not prepare a workout",
+            detail: "Your history and exports are still available.",
+            systemImage: "exclamationmark.triangle",
+            actionTitle: "Try again",
+            actionSystemImage: "arrow.clockwise",
+            action: { Task { await prepare() } }
+          )
+          Text(verbatim: String(describing: error))
+            .font(Tokens.Text.provenance)
+            .foregroundStyle(Tokens.Color.textSecondary)
+            .multilineTextAlignment(.center)
+            .lineLimit(6)
+            .textSelection(.enabled)
+            .padding(.horizontal, Tokens.Spacing.section)
+            .accessibilityLabel("Error details: \(String(describing: error))")
+        }
+      }
+      .padding(.bottom, Tokens.Spacing.block)
+      .frame(maxWidth: .infinity, alignment: .leading)
+    }
+    .background(Tokens.Color.background)
   }
 
   /// The start screen: where the lifter is, the one action, and what they did last time.
@@ -226,11 +304,7 @@ public struct HardsetRootView: View {
   private var startView: some View {
     ScrollView {
       VStack(alignment: .leading, spacing: Tokens.Spacing.block) {
-        ScreenHeader("Train", subtitle: Self.today) {
-          HeaderIconButton(systemImage: "gearshape", accessibilityLabel: "Settings") {
-            isShowingSettings = true
-          }
-        }
+        trainHeader
 
         VStack(alignment: .leading, spacing: Tokens.Spacing.loose) {
           gymCard
@@ -276,12 +350,13 @@ public struct HardsetRootView: View {
     }
     .scrollBounceBehavior(.basedOnSize)
     .background(Tokens.Color.background)
-    .sheet(isPresented: $isChoosingGym) { gymSheet.hardsetSheet() }
+    // A failure belongs to the visit it happened in; reopening the picker starts clean.
+    .sheet(isPresented: $isChoosingGym, onDismiss: { gymError = nil }) { gymSheet.hardsetSheet() }
   }
 
-  /// Today, as the start screen's context line: "Saturday 7 November", in the device's format.
-  private static var today: String {
-    Date.now.formatted(.dateTime.weekday(.wide).day().month(.wide))
+  /// A day, as the start screen's context line: "Saturday 7 November", in the device's format.
+  private static func dayLabel(_ date: Date) -> String {
+    date.formatted(.dateTime.weekday(.wide).day().month(.wide))
   }
 
   /// Sets where this workout is, which is what makes per-machine tracking reachable at all: a
@@ -464,7 +539,7 @@ public struct HardsetRootView: View {
         selected: model.selectedGym,
         errorMessage: gymError,
         onSelect: { id in
-          model.selectedGym = id
+          chooseGym(id)
           isChoosingGym = false
         },
         onAddGym: { isAddingGym = true }
@@ -477,15 +552,13 @@ public struct HardsetRootView: View {
       }
       // Attached INSIDE the gym sheet on purpose. Two `.sheet` modifiers on the same anchor means
       // the second one silently never presents: "Add a gym" was a button that did nothing.
-      .sheet(isPresented: $isAddingGym) {
+      .sheet(isPresented: $isAddingGym, onDismiss: { addGymError = nil }) {
         NameEntrySheet(
           title: "Add a gym",
           prompt: "Name",
           footnote: "Machines are recorded per gym, so this is what groups them.",
-          onConfirm: { name in
-            isAddingGym = false
-            addGym(named: name)
-          },
+          errorMessage: addGymError,
+          onConfirm: { name in addGym(named: name) },
           onCancel: { isAddingGym = false }
         )
         .hardsetSheet()
@@ -504,16 +577,21 @@ public struct HardsetRootView: View {
   /// Takes the name as an argument rather than reading it back out of state. The version that
   /// read `@State` written by a `TextField` inside an `.alert` received an empty string every
   /// time, so no gym was ever created even though the field visibly held text.
+  ///
+  /// The name sheet closes only once the gym exists. When the write fails it stays up with the
+  /// reason inside it, so the name the lifter typed is still there to try again.
   private func addGym(named name: String) {
     guard !name.isEmpty else { return }
     let id: GymID
     do {
       id = try environment.gyms.createGym(name: name)
     } catch {
-      gymError = "\(name) could not be saved. \(error)"
+      // In the lifter's words. The error's own description is the database's, statement and all.
+      addGymError = "“\(name)” could not be saved. Try again."
       return
     }
-    model.selectedGym = id
+    isAddingGym = false
+    chooseGym(id)
     do {
       try model.refreshGyms()
       gymError = nil
@@ -524,10 +602,37 @@ public struct HardsetRootView: View {
     }
   }
 
+  /// Selects where the next workout is, and keeps the pick for this scene until a workout records
+  /// it, so iOS ending the app in the background between choosing and starting does not lose it.
+  private func chooseGym(_ id: GymID?) {
+    model.selectedGym = id
+    pendingGymPick = id?.rawValue.uuidString ?? Self.noGymPick
+  }
+
+  /// Puts back a pick kept by `chooseGym` once the saved gyms are known. One that can no longer be
+  /// applied, such as a gym archived since, is dropped and the learned default stands.
+  private func restorePendingGymPick() {
+    guard !pendingGymPick.isEmpty else { return }
+    let restored: Bool
+    if pendingGymPick == Self.noGymPick {
+      restored = model.restoreGymPick(nil)
+    } else if let raw = UUID(uuidString: pendingGymPick) {
+      restored = model.restoreGymPick(GymID(rawValue: raw))
+    } else {
+      restored = false
+    }
+    if !restored { pendingGymPick = "" }
+  }
+
+  /// `pendingGymPick`'s value for "Not recorded", which is a real choice and not the absence of one.
+  private static let noGymPick = "none"
+
   private func startEmptyWorkout() {
     do {
       try model.startWorkout()
       startFailed = false
+      // The pick is spent: the session recorded it, and the learned default takes over again.
+      pendingGymPick = ""
     } catch {
       startFailed = true
     }
@@ -535,46 +640,78 @@ public struct HardsetRootView: View {
 
   // MARK: - Accessory
 
+  /// The open workout, from another tab: its sets and the rest, and one tap back to it.
+  ///
+  /// A button, as a now-playing bar is: it looked like one and did nothing, so a lifter checking
+  /// History between sets had to find the Train tab, which may be minimised, to get back.
   @ViewBuilder private var liveSessionAccessory: some View {
     if let coordinator {
-      HStack(spacing: Tokens.Spacing.snug) {
-        // A steady mark, not a pulse: the workout is open, and nothing about that changes from
-        // second to second, so nothing here moves.
-        Circle()
-          .fill(Tokens.Color.accent)
-          .frame(width: Tokens.Spacing.snug, height: Tokens.Spacing.snug)
-          .accessibilityHidden(true)
-        loggedSetsLine(coordinator.loggedSetCount)
-        Spacer(minLength: 0)
-        if case .running(let endsAt) = hooks.state() {
-          Image(systemName: "timer")
-            .font(Tokens.Text.caption.weight(.semibold))
-            .foregroundStyle(Tokens.Color.accent)
+      Button {
+        selectedTab = .train
+      } label: {
+        HStack(spacing: Tokens.Spacing.snug) {
+          // A steady mark, not a pulse: the workout is open, and nothing about that changes from
+          // second to second, so nothing here moves.
+          Circle()
+            .fill(Tokens.Color.accent)
+            .frame(width: Tokens.Spacing.snug, height: Tokens.Spacing.snug)
             .accessibilityHidden(true)
-          // System-rendered from the deadline, so the accessory costs no updates.
-          Text(timerInterval: Date()...max(endsAt, Date()), countsDown: true)
-            .font(Tokens.Text.figure)
-            .foregroundStyle(Tokens.Color.accent)
+          loggedSetsLine(coordinator.loggedSetCount)
+          Spacer(minLength: 0)
+          accessoryRest
         }
+        .padding(.horizontal, Tokens.Spacing.loose)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        // The whole pill answers a tap, not only its text.
+        .contentShape(Rectangle())
       }
-      .padding(.horizontal, Tokens.Spacing.loose)
-      .accessibilityElement(children: .combine)
+      .buttonStyle(.plain)
       .accessibilityLabel(
         Text("Workout in progress, ^[\(coordinator.loggedSetCount) set](inflect: true) logged")
       )
-      // The label replaces the combined children, so the countdown is restated here or it would
-      // never be spoken.
+      // The label replaces the button's content, so the rest is restated here or it would never
+      // be spoken.
       .accessibilityValue(restAccessibilityValue)
+      .accessibilityHint("Returns to the workout")
     }
   }
 
-  /// The rest countdown for VoiceOver, rendered by the system from the deadline like the visible
-  /// one. Empty when no rest is running.
+  /// The rest as the accessory shows it: counting down, or frozen while paused. The rest controls
+  /// themselves are one tap away on the workout.
+  @ViewBuilder private var accessoryRest: some View {
+    let state = hooks.state()
+    if case .running(let endsAt) = state {
+      Image(systemName: "timer")
+        .font(Tokens.Text.caption.weight(.semibold))
+        .foregroundStyle(Tokens.Color.accent)
+        .accessibilityHidden(true)
+      // System-rendered from the deadline, so the accessory costs no updates.
+      Text(timerInterval: Date()...max(endsAt, Date()), countsDown: true)
+        .font(Tokens.Text.figure)
+        .foregroundStyle(Tokens.Color.accent)
+    } else if case .paused(let remaining) = state {
+      // Static, like the rest bar's paused figure: nothing is counting, so nothing ticks.
+      Image(systemName: "pause.fill")
+        .font(Tokens.Text.caption.weight(.semibold))
+        .foregroundStyle(Tokens.Color.textSecondary)
+        .accessibilityHidden(true)
+      Text(remaining.clockString)
+        .font(Tokens.Text.figure)
+        .foregroundStyle(Tokens.Color.textSecondary)
+    }
+  }
+
+  /// The rest for VoiceOver, rendered by the system from the deadline like the visible countdown.
+  /// Empty when no rest is running or paused.
   private var restAccessibilityValue: Text {
-    if case .running(let endsAt) = hooks.state() {
+    let state = hooks.state()
+    if case .running(let endsAt) = state {
       return Text("Resting, ")
         + Text(timerInterval: Date()...max(endsAt, Date()), countsDown: true)
         + Text(" left")
+    }
+    if case .paused(let remaining) = state {
+      return Text("Rest paused, \(remaining.clockString) left")
     }
     return Text(verbatim: "")
   }
@@ -594,6 +731,11 @@ public struct HardsetRootView: View {
     .foregroundStyle(Tokens.Color.textPrimary)
     .lineLimit(1)
   }
+}
+
+/// The root's tabs, as the tab view's selection.
+private nonisolated enum RootTab: Hashable, Sendable {
+  case train, volume, history
 }
 
 /// The start screen's gym card: a full-width card that is also one button.
