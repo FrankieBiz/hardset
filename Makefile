@@ -1,11 +1,14 @@
 # Hardset Hypertrophy Logger — Multi-Model Orchestration & Verification Makefile
 .DEFAULT_GOAL := help
-.PHONY: check check-core check-store check-parse check-contrast project install mac-test mac-install orchestrate-probe orchestrate-stats test help
+.PHONY: check check-core check-store check-parse check-contrast project install mac-sync-check mac-test mac-install orchestrate-probe orchestrate-stats test help
 
 SWIFT := $(shell which swift)
 PY := python3
 CHECK := $(PY) Tools/hardset_check.py
 MAC_DIR ?= ~/hardset
+# The branch the Mac builds: the one checked out here, so a fix that lives on a feature branch is
+# what gets installed. `git pull origin main` built main whatever was being tested.
+BRANCH ?= $(shell git rev-parse --abbrev-ref HEAD)
 
 check: ## Run honest Linux checks across all targets (parse syntax, Core suite, Store suite, query indexes, palette contrast)
 	$(CHECK) all
@@ -15,11 +18,15 @@ check: ## Run honest Linux checks across all targets (parse syntax, Core suite, 
 install: ## Build, sign, install, and launch Hardset on connected iPhone or Simulator (macOS)
 	./Tools/install_device.sh
 
-mac-test: ## Run test suite on connected Mac via SSH bridge
-	ssh mac "cd $(MAC_DIR) && git pull origin main && xcodebuild test -project Hardset.xcodeproj -scheme Hardset -destination 'generic/platform=iOS Simulator' -skipMacroValidation -skipPackagePluginValidation CODE_SIGNING_ALLOWED=NO"
+mac-sync-check:
+	@if [ "$$(git rev-parse HEAD)" != "$$(git rev-parse origin/$(BRANCH) 2>/dev/null)" ]; then \
+		echo "Warning: local $(BRANCH) differs from origin/$(BRANCH); the Mac builds what is pushed." >&2; fi
 
-mac-install: ## Build, sign, and install Hardset onto connected iPhone via Mac SSH bridge
-	ssh mac "cd $(MAC_DIR) && git pull origin main && ./Tools/install_device.sh"
+mac-test: mac-sync-check ## Run the app tests on the Mac's simulator via SSH bridge (BRANCH=current branch)
+	ssh mac "cd $(MAC_DIR) && git fetch origin && git checkout --detach origin/$(BRANCH) && python3 Tools/generate_project.py && xcodebuild test -project Hardset.xcodeproj -scheme Hardset -destination 'platform=iOS Simulator,name=iPhone 17,OS=latest' -skipMacroValidation -skipPackagePluginValidation CODE_SIGN_IDENTITY=- CODE_SIGN_STYLE=Manual DEVELOPMENT_TEAM="
+
+mac-install: mac-sync-check ## Build, sign, and install Hardset onto the iPhone connected to the Mac (BRANCH=current branch)
+	ssh mac "cd $(MAC_DIR) && git fetch origin && git checkout --detach origin/$(BRANCH) && ./Tools/install_device.sh"
 
 check-core: ## Run HardsetCore unit test suite
 	$(CHECK) core
