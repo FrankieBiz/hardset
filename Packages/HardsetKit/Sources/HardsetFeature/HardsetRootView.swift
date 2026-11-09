@@ -117,14 +117,12 @@ public struct HardsetRootView: View {
 
   public var body: some View {
     rootContent
+      // One banner per kind of rest-timer problem, each with the action that can actually fix it:
+      // Open Settings when alarms are denied, Retry when scheduling failed, Reset when the saved
+      // rest could not be read. A single generic "Retry" could never fix a denied permission.
       .safeAreaInset(edge: .top) {
-        if hooks.hasError() {
-          VStack(spacing: Tokens.Spacing.snug) {
-            Text("Rest timer could not be recovered, saved or scheduled. Your workouts remain saved.")
-              .font(Tokens.Text.provenance).foregroundStyle(Tokens.Color.error)
-            Button("Retry rest timer", action: hooks.retry).buttonStyle(HardsetButtonStyle(.secondary))
-          }
-          .padding(Tokens.Spacing.regular).background(Tokens.Color.background)
+        if let issue = hooks.issue() {
+          RestTimerIssueBanner(issue: issue, retry: hooks.retry, reset: hooks.resetRestTimer)
         }
       }
   }
