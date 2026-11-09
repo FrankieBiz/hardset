@@ -55,12 +55,16 @@ public enum RestAlarmService {
   public nonisolated static func schedule(_ request: Request) async throws -> Alarm {
     // The 26.1 initialiser. The `stopButton:` overload is deprecated as of 26.1, which is
     // why the deployment target is 26.1 rather than 26.0.
+    //
+    // The system Stop is the only action. The alert fires when the rest is already over, so a
+    // "Skip" had nothing to skip, and as `.custom` with no `secondaryIntent` it had nothing to run
+    // either; it was also white on the light cyan tint. Stop removes the alarm, and the
+    // controller's reconciliation then ends the rest. A second action needs a LiveActivityIntent
+    // that commits the journal before it touches AlarmManager.
     let alert = AlarmPresentation.Alert(
       title: LocalizedStringResource(stringLiteral: request.alertTitle),
-      secondaryButton: AlarmButton(
-        text: "Skip", textColor: .white, systemImageName: "forward.end.fill"
-      ),
-      secondaryButtonBehavior: .custom
+      secondaryButton: nil,
+      secondaryButtonBehavior: nil
     )
 
     let countdown = AlarmPresentation.Countdown(
@@ -69,13 +73,11 @@ public enum RestAlarmService {
       title: LocalizedStringResource(stringLiteral: request.metadata.setLabel)
     )
 
-    let paused = AlarmPresentation.Paused(
-      title: "Paused",
-      resumeButton: AlarmButton(text: "Resume", textColor: .white, systemImageName: "play.fill")
-    )
-
+    // No paused presentation. Nothing pauses an alarm in the daemon (a pause in the app cancels
+    // it and the Live Activity ends), so its "Resume" button could never appear, and if it did it
+    // would resume a countdown the journal never heard about.
     let attributes = AlarmAttributes<RestMetadata>(
-      presentation: AlarmPresentation(alert: alert, countdown: countdown, paused: paused),
+      presentation: AlarmPresentation(alert: alert, countdown: countdown, paused: nil),
       metadata: request.metadata,
       tintColor: request.tint
     )
@@ -108,6 +110,9 @@ public enum RestAlarmService {
   }
 
   /// OS stop/expiry changes drive reconciliation without a polling timer.
+  ///
+  /// Permission changes do too: a lifter who allows alarms in Settings mid-rest gets that rest
+  /// scheduled as soon as the app hears of it, rather than only after the next tap.
   public static var updates: AsyncStream<Void> {
     AsyncStream { continuation in
       let task = Task {
@@ -117,12 +122,26 @@ public enum RestAlarmService {
         }
         continuation.finish()
       }
-      continuation.onTermination = { _ in task.cancel() }
+      let authorization = Task {
+        for await _ in AlarmManager.shared.authorizationUpdates {
+          guard !Task.isCancelled else { break }
+          continuation.yield(())
+        }
+      }
+      continuation.onTermination = { _ in
+        task.cancel()
+        authorization.cancel()
+      }
     }
   }
 
   public static func contains(id: UUID) throws -> Bool {
     try AlarmManager.shared.alarms.contains { $0.id == id }
+  }
+
+  /// Every alarm this app holds. All of them are rest alarms.
+  public static func alarmIDs() throws -> [UUID] {
+    try AlarmManager.shared.alarms.map { $0.id }
   }
 
   public static func cancel(id: UUID) throws { try AlarmManager.shared.cancel(id: id) }

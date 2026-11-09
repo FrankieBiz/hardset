@@ -43,6 +43,7 @@ private struct StartupView: View {
   let startup: AppStartup<HardsetDatabase.Resources>
   let restTimer: RestTimerController
   @State private var timerReady = false
+  @Environment(\.scenePhase) private var scenePhase
 
   var body: some View {
     Group {
@@ -92,6 +93,11 @@ private struct StartupView: View {
       }
       timerReady = true
     }
+    // A rest that ended, or was stopped on the Lock Screen, while the app was away clears as soon
+    // as the lifter is back, rather than waiting for the next alarm update.
+    .onChange(of: scenePhase) { _, phase in
+      if phase == .active { restTimer.refresh() }
+    }
   }
 }
 
@@ -112,7 +118,9 @@ private struct RootView: View {
         state: { restTimer.state },
         metadata: { restTimer.metadata },
         hasError: { restTimer.lastError != nil },
+        issue: { restTimer.issue.map { RestTimerIssue($0) } },
         retry: { restTimer.retry() },
+        resetRestTimer: { restTimer.resetAfterRecoveryFailure() },
         start: { duration, metadata in
           restTimer.start(duration: duration, metadata: metadata)
         },
@@ -129,5 +137,17 @@ private struct RootView: View {
       // per-exercise setting; until then the timer is started explicitly or not at all.
       restAfterSet: nil
     )
+  }
+}
+
+extension RestTimerIssue {
+  /// The controller's issue in the feature layer's terms. The feature layer cannot import the
+  /// AlarmKit-backed module, so the translation lives here with the rest of the wiring.
+  fileprivate init(_ issue: RestTimerController.Issue) {
+    switch issue {
+    case .alarmsDenied: self = .alarmsDenied
+    case .recoveryFailed: self = .recoveryFailed
+    case .failed: self = .unavailable
+    }
   }
 }
