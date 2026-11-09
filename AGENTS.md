@@ -22,6 +22,13 @@ Or individually:
 ## Orchestration Model Rules & Memory
 Detailed orchestration specification: [`docs/ORCA_ORCHESTRATION.md`](docs/ORCA_ORCHESTRATION.md)
 
+### Workspace quality settings
+- See `docs/MODEL_CONFIGURATION.md` for settings, precedence, and verification limits.
+- Codex: `.codex/config.toml` uses `gpt-6.1-sol` with `xhigh` reasoning; read `CODEX.md` for Core/Store work.
+- Claude: `.claude/settings.json` sets high effort while retaining the user's model selection; `CLAUDE.md` imports the shared rules and design system.
+- OpenCode: `opencode.json` retains the free DeepSeek model and disables the paid DeepSeek provider. Read `docs/MuscleTaxonomy-spec.md` for taxonomy audits; return evidence and reproducible cases for coordinator review.
+- A delegated worker owns only its assigned paths, does not delegate again, and reports diffs and actual verification results to its coordinator. The coordinator owns integration and the finish protocol below; workers do not push production changes.
+
 - **Role of Antigravity**: Antigravity is the Master Orchestrator, not a monolithic heavy lifter. Antigravity plans task specifications, coordinates workers via Orca (`orca orchestration` / `scripts/orchestrate.py`), enforces test gates (`make check`), and handles release.
 - **Response Format Requirement**: The very first block of every single response to the user must explicitly list which models were called and their roles:
   ```markdown

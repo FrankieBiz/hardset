@@ -1,0 +1,4 @@
+# Quality default for trusted Hardset workspaces. CLI/Orca overrides take precedence.
+model = "gpt-6.1-sol"
+model_reasoning_effort = "xhigh"
+plan_mode_reasoning_effort = "xhigh"

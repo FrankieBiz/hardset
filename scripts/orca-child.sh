@@ -18,9 +18,9 @@ resolve_orca() {
     local candidate=""
     if [ -n "${ORCA_CLI_COMMAND:-}" ]; then
         candidate="$ORCA_CLI_COMMAND"
-    elif [ -n "${ORCA_DEV_REPO_ROOT:-}" ] && command -v orca-dev >/dev/null 2>&1; then
+    elif [ -n "${ORCA_DEV_REPO_ROOT:-}" ]; then
         candidate="orca-dev"
-    elif [ -n "${DISPLAY:-}" ] && [ -z "${ORCA_TERMINAL:-}" ] && command -v orca-ide >/dev/null 2>&1; then
+    elif [[ "$OSTYPE" == linux* ]] && [ -z "${ORCA_WORKTREE_ID:-}" ]; then
         candidate="orca-ide"
     elif command -v orca >/dev/null 2>&1; then
         local p
@@ -36,10 +36,13 @@ resolve_orca() {
     fi
 
     # Probe chosen binary
-    if ! "$candidate" --version >/dev/null 2>&1; then
+    local version
+    if ! version=$("$candidate" --version 2>&1); then
+        echo "$version" >&2
         echo "ERROR: Resolved Orca binary '$candidate' failed version probe." >&2
         exit 1
     fi
+    echo "[orca-child] Orca CLI: $candidate ($version)" >&2
     echo "$candidate"
 }
 
@@ -134,7 +137,7 @@ cmd_spawn() {
             ;;
         codex)
             model="${model:-gpt-6.1-sol}"
-            effort="${effort:-high}"
+            effort="${effort:-xhigh}"
             ;;
         *)
             echo "ERROR: Unsupported agent '$agent'. Must be claude, opencode, or codex." >&2
@@ -142,6 +145,11 @@ cmd_spawn() {
             ;;
     esac
 
+    if [ -n "$effort" ] && [[ "$effort" != high && "$effort" != xhigh ]]; then
+        echo "ERROR: Hardset workers require high or xhigh effort." >&2
+        exit 1
+    fi
+    prompt="Read AGENTS.md and the current handoff first. Work only within assigned paths. Do not delegate, push, or run agent-finish; report actual verification to the coordinator. $prompt"
     validate_frontier_model "$model"
     verify_repo
 
