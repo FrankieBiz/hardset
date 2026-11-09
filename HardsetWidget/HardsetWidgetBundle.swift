@@ -52,7 +52,7 @@ struct RestTimerLiveActivity: Widget {
             .foregroundStyle(Tokens.Color.textPrimary)
             .multilineTextAlignment(.trailing)
         }
-        progress(for: context.state)
+        progress(for: context.state, metadata: context.attributes.metadata)
       }
       .padding(Tokens.Spacing.loose)
       .activityBackgroundTint(Tokens.Color.background)
@@ -83,7 +83,7 @@ struct RestTimerLiveActivity: Widget {
                 .foregroundStyle(Tokens.Color.textSecondary)
                 .lineLimit(1)
             }
-            progress(for: context.state)
+            progress(for: context.state, metadata: context.attributes.metadata)
           }
         }
       } compactLeading: {
@@ -149,13 +149,19 @@ struct RestTimerLiveActivity: Widget {
 
   /// How much of the rest has gone, as a bar the system advances.
   ///
-  /// Built from AlarmKit's own interval -- the deadline and the total length -- so it costs no
-  /// updates, exactly like the countdown beside it. Paused and finished timers have no running
-  /// interval, so they draw no bar rather than a frozen or invented one.
+  /// Built from AlarmKit's own deadline and a total length, so it costs no updates, exactly like
+  /// the countdown beside it. Paused and finished timers have no running interval, so they draw
+  /// no bar rather than a frozen or invented one.
+  ///
+  /// The total is the whole rest the app recorded in the metadata. Each ±15 s or resume is a
+  /// fresh alarm whose own countdown is only what remained, so measuring from that restarted the
+  /// bar at full after every tap. A rest saved before the total was recorded falls back to the
+  /// alarm's own length, and the bar never claims a rest shorter than what is left.
   @ViewBuilder
-  private func progress(for state: AlarmPresentationState) -> some View {
+  private func progress(for state: AlarmPresentationState, metadata: RestMetadata?) -> some View {
     if case .countdown(let countdown) = state.mode {
-      let start = countdown.fireDate.addingTimeInterval(-countdown.totalCountdownDuration)
+      let total = max(metadata?.totalRest?.seconds ?? 0, countdown.totalCountdownDuration)
+      let start = countdown.fireDate.addingTimeInterval(-total)
       ProgressView(timerInterval: start...max(start, countdown.fireDate), countsDown: true) {
         EmptyView()
       } currentValueLabel: {

@@ -50,12 +50,16 @@ public enum RestTimerState: Hashable, Sendable, Codable {
 
   /// Shift the deadline by `delta` (the +/-15s controls), clamped so it never lands in
   /// the past. Adjusting a paused timer moves the remainder instead.
+  ///
+  /// Added time on a deadline that has already passed counts from `now`: "+15" on a finished
+  /// rest means fifteen more seconds, not a shift that still lands in the past.
   public func adjusted(by delta: Duration, at now: Date) -> RestTimerState {
     switch self {
     case .idle:
       return self
     case .running(let endsAt):
-      let shifted = endsAt.addingTimeInterval(delta.seconds)
+      let base = delta > .zero ? max(endsAt, now) : endsAt
+      let shifted = base.addingTimeInterval(delta.seconds)
       return .running(endsAt: max(shifted, now))
     case .paused(let remaining):
       return .paused(remaining: .seconds(max(0, remaining.seconds + delta.seconds)))

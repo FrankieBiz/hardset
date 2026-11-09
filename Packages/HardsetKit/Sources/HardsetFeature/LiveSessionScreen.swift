@@ -8,49 +8,6 @@ private struct MachineTarget: Identifiable, Hashable {
   let id: UUID
 }
 
-/// Hooks the app supplies for the rest timer.
-///
-/// This exists so the composition root can live in a package target that builds on the host.
-/// `RestTimerController` imports AlarmKit, which ships only in the iPhoneOS SDK, so depending
-/// on it here would make this target — and therefore the wiring — iOS-only and unverifiable
-/// outside a simulator. The app passes the controller's methods in; everything else is testable.
-///
-/// The default is inert rather than a fake timer: a preview or a host build shows no rest
-/// running, which is honest, instead of a countdown that is not backed by an alarm.
-@MainActor
-public struct RestTimerHooks {
-  public var metadata: () -> RestMetadata?
-  public var hasError: () -> Bool
-  public var retry: () -> Void
-  public var state: () -> RestTimerState
-  public var start: (Duration, RestMetadata) -> Void
-  public var adjust: (Duration) -> Void
-  public var pauseOrResume: () -> Void
-  public var cancel: () -> Void
-
-  public init(
-    state: @escaping () -> RestTimerState = { .idle },
-    metadata: @escaping () -> RestMetadata? = { nil },
-    hasError: @escaping () -> Bool = { false },
-    retry: @escaping () -> Void = {},
-    start: @escaping (Duration, RestMetadata) -> Void = { _, _ in },
-    adjust: @escaping (Duration) -> Void = { _ in },
-    pauseOrResume: @escaping () -> Void = {},
-    cancel: @escaping () -> Void = {}
-  ) {
-    self.metadata = metadata
-    self.hasError = hasError
-    self.retry = retry
-    self.state = state
-    self.start = start
-    self.adjust = adjust
-    self.pauseOrResume = pauseOrResume
-    self.cancel = cancel
-  }
-
-  public static var inert: RestTimerHooks { RestTimerHooks() }
-}
-
 /// The live workout, wired.
 ///
 /// Owns the `SessionCoordinator`, binds it to `SessionView`, and routes rest requests to the
