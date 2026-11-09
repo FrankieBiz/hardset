@@ -10,19 +10,31 @@ public struct SetSlot: Hashable, Sendable, Identifiable {
   public var loggedSetID: SetID?
   /// The equipment on which this set was completed, preventing cross-machine load bleeding.
   public fileprivate(set) var loggedMachineID: MachineID?
+  /// When the write completed, as the save reported it. `nil` while the row is unlogged.
+  public fileprivate(set) var loggedAt: Date?
+  /// The identity the next write of this row is saved under.
+  ///
+  /// Equal to `id` until the row is un-logged; then it is replaced, so logging the row again
+  /// writes a new record instead of resurrecting the deleted one's primary key. `id` stays put,
+  /// so the row keeps its place and its view identity through an undo.
+  public fileprivate(set) var commandID: UUID
 
   public init(
     id: UUID = UUID(),
     draft: SetEntryDraft,
     isWarmup: Bool = false,
     loggedSetID: SetID? = nil,
-    loggedMachineID: MachineID? = nil
+    loggedMachineID: MachineID? = nil,
+    loggedAt: Date? = nil,
+    commandID: UUID? = nil
   ) {
     self.id = id
     self.draft = draft
     self.isWarmup = isWarmup
     self.loggedSetID = loggedSetID
     self.loggedMachineID = loggedMachineID
+    self.loggedAt = loggedAt
+    self.commandID = commandID ?? id
   }
 
   public var isLogged: Bool { loggedSetID != nil }
@@ -57,9 +69,20 @@ public struct ExerciseLogState: Hashable, Sendable, Identifiable {
   public private(set) var priorNote: String?
 
   private var prior: PriorPerformance?
-  /// Updated only from successful log events or reconstruction of persisted sets.
-  /// The values are captured at that event; editing a draft cannot rewrite them.
+  /// Updated only from successful log events, reconstruction of persisted sets, or an undo of
+  /// one. The values are captured at that event; editing a draft cannot rewrite them.
   private var lastLoggedByKey: [ProgressionKey: PriorSetRecord] = [:]
+  /// Every save this exercise has seen, in persistence order, with the values captured at that
+  /// moment. Kept so an undo can rebuild `lastLoggedByKey` from what is still saved, rather than
+  /// from row order or from drafts that may have been edited since.
+  private var loggedEvents: [LoggedEvent] = []
+
+  private struct LoggedEvent: Hashable, Sendable {
+    let slotID: UUID
+    let key: ProgressionKey
+    let isWarmup: Bool
+    let record: PriorSetRecord
+  }
 
   public init(
     id: UUID = UUID(),
@@ -81,7 +104,9 @@ public struct ExerciseLogState: Hashable, Sendable, Identifiable {
     self.prior = prior
     self.priorNote = priorNote
     self.slots = slots
-    for slot in slots { rememberLogged(slot) }
+    for slot in slots {
+      rememberLogged(slot, completedAt: slot.loggedAt ?? Date(timeIntervalSince1970: 0))
+    }
   }
 
   /// Builds an exercise's rows from a snapshot taken at session start.
@@ -199,7 +224,8 @@ public struct ExerciseLogState: Hashable, Sendable, Identifiable {
         draft: SetEntryDraft(weightKg: logged.weightKg, reps: logged.reps),
         isWarmup: logged.isWarmup,
         loggedSetID: logged.setID,
-        loggedMachineID: logged.machineID
+        loggedMachineID: logged.machineID,
+        loggedAt: logged.completedAt
       )
       slots.append(slot)
       state.rememberLogged(slot, completedAt: logged.completedAt)
@@ -228,7 +254,20 @@ public struct ExerciseLogState: Hashable, Sendable, Identifiable {
     prior?.suggestion(forSetIndex: index)
   }
 
+  /// What a row's "Last time" column should show: the working set at the same position last
+  /// time, or `nil` for a warm-up. History excludes warm-ups, so a warm-up has no honest
+  /// counterpart, and a working load beside it reads as a target it is not.
+  public func previousSet(forSlotID id: UUID) -> PriorSetRecord? {
+    guard let index = slots.firstIndex(where: { $0.id == id }), !slots[index].isWarmup else {
+      return nil
+    }
+    return suggestion(forSetIndex: slots[..<index].count { !$0.isWarmup })
+  }
+
   public var loggedCount: Int { slots.count(where: \.isLogged) }
+
+  /// When the most recent of this exercise's saved sets was written, or `nil` when none is.
+  public var lastLoggedAt: Date? { slots.compactMap(\.loggedAt).max() }
 
   /// Working sets only. Warm-ups are not part of the prescription.
   public var workingSetCount: Int { slots.count { !$0.isWarmup } }
@@ -251,15 +290,39 @@ public struct ExerciseLogState: Hashable, Sendable, Identifiable {
   /// Within a session, the honest suggestion is what the user just did, not what they did
   /// last week: after logging 100 × 8, the next row opens at 100 × 8. Only when nothing has
   /// been logged yet does this fall back to history.
+  ///
+  /// A warm-up is different on both counts. It goes where it is performed: before the first
+  /// working row still to do, so it becomes the next row rather than sitting under set 3 and
+  /// jumping up after a relaunch, when recovery orders by save. And it is never prefilled from a
+  /// working load: history holds no warm-ups, and a filled row is one tap from being saved, so a
+  /// working load there would record a warm-up at working weight. It opens at the warm-up just
+  /// logged on this equipment, if there is one, and otherwise empty.
   public mutating func appendSlot(isWarmup: Bool = false) {
+    if isWarmup {
+      let lastWarmup = loggedEvents.last { $0.isWarmup && $0.key == progressionKey }?.record
+      let position = slots.firstIndex { !$0.isLogged && !$0.isWarmup } ?? slots.endIndex
+      slots.insert(SetSlot(draft: SetEntryDraft(suggestion: lastWarmup), isWarmup: true), at: position)
+      return
+    }
     let suggestion: PriorSetRecord?
     if let logged = lastLoggedByKey[progressionKey] {
       suggestion = logged
     } else {
-      let workingIndex = slots.count { !$0.isWarmup }
-      suggestion = prior?.suggestion(forSetIndex: isWarmup ? slots.count : workingIndex)
+      suggestion = prior?.suggestion(forSetIndex: workingSetCount)
     }
-    slots.append(SetSlot(draft: SetEntryDraft(suggestion: suggestion), isWarmup: isWarmup))
+    slots.append(SetSlot(draft: SetEntryDraft(suggestion: suggestion)))
+  }
+
+  /// Removes a row that was never saved. Refuses a logged row: removing saved training is a
+  /// store operation, after which `unmarkLogged` reopens the row, not something a value type may
+  /// decide on its own. Returns whether a row was removed.
+  @discardableResult
+  public mutating func removeSlot(id: UUID) -> Bool {
+    guard let index = slots.firstIndex(where: { $0.id == id }), !slots[index].isLogged else {
+      return false
+    }
+    slots.remove(at: index)
+    return true
   }
 
   /// Moves this exercise to a different machine mid-session.
@@ -289,6 +352,19 @@ public struct ExerciseLogState: Hashable, Sendable, Identifiable {
       let workingIndex = slots[..<index].count { !$0.isWarmup }
       slots[index].draft = SetEntryDraft(suggestion: newPrior?.suggestion(forSetIndex: workingIndex))
     }
+
+    // Before any working set, the machine is usually being chosen as the lifter reaches it, so
+    // open as many rows as last time on that machine, as `build` would have. Rows are only ever
+    // added here, never removed, and never once work on this movement has been saved.
+    if !slots.contains(where: { $0.isLogged && !$0.isWarmup }), let newPrior {
+      var working = workingSetCount
+      while working < newPrior.lastSets.count {
+        slots.append(
+          SetSlot(draft: SetEntryDraft(suggestion: newPrior.suggestion(forSetIndex: working)))
+        )
+        working += 1
+      }
+    }
   }
 
   /// Adopt an explicitly saved equipment constraint without re-prefilling any draft.
@@ -304,7 +380,33 @@ public struct ExerciseLogState: Hashable, Sendable, Identifiable {
     guard let index = slots.firstIndex(where: { $0.id == slotID }), !slots[index].isLogged else { return }
     slots[index].loggedSetID = setID
     slots[index].loggedMachineID = self.machineID
+    slots[index].loggedAt = completedAt
     rememberLogged(slots[index], completedAt: completedAt)
+  }
+
+  /// Returns a saved row to unlogged, keeping its values as the draft, after its set was deleted.
+  ///
+  /// The counterpart of `markLogged`, with the same rule about order: call it only once the
+  /// delete has succeeded. The row keeps its id and place, so editing a saved set is undo, then
+  /// log again. It gets a fresh `commandID`, so that log writes a new record. The next-row
+  /// prefill is rebuilt from the saves that remain, in the order they were made.
+  ///
+  /// Returns `false`, and changes nothing, for an unknown or unlogged row.
+  @discardableResult
+  public mutating func unmarkLogged(slotID: UUID) -> Bool {
+    guard let index = slots.firstIndex(where: { $0.id == slotID }), slots[index].isLogged else {
+      return false
+    }
+    slots[index].loggedSetID = nil
+    slots[index].loggedMachineID = nil
+    slots[index].loggedAt = nil
+    slots[index].commandID = UUID()
+    loggedEvents.removeAll { $0.slotID == slotID }
+    lastLoggedByKey = [:]
+    for event in loggedEvents where !event.isWarmup {
+      lastLoggedByKey[event.key] = event.record
+    }
+    return true
   }
 
   /// Calls arrive in persistence order, independently of the row's display index.
@@ -312,10 +414,15 @@ public struct ExerciseLogState: Hashable, Sendable, Identifiable {
   private mutating func rememberLogged(
     _ slot: SetSlot, completedAt: Date = Date(timeIntervalSince1970: 0)
   ) {
-    guard slot.isLogged, !slot.isWarmup, let resolved = slot.draft.resolved() else { return }
+    guard slot.isLogged, let resolved = slot.draft.resolved() else { return }
     let key = ProgressionKey(exerciseID: exerciseID, machineID: slot.loggedMachineID)
-    lastLoggedByKey[key] = PriorSetRecord(
+    let record = PriorSetRecord(
       weightKg: resolved.weightKg, reps: resolved.reps, completedAt: completedAt
     )
+    loggedEvents.append(
+      LoggedEvent(slotID: slot.id, key: key, isWarmup: slot.isWarmup, record: record)
+    )
+    guard !slot.isWarmup else { return }
+    lastLoggedByKey[key] = record
   }
 }
