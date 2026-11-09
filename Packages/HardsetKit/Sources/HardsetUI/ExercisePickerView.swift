@@ -8,28 +8,50 @@ import SwiftUI
 /// anatomical region filter rail, and reports choices.
 ///
 /// Grouped by the muscle a movement primarily trains, because that is how a lifter looking at a
-/// plan thinks about a gap — "I have nothing for hamstrings" — rather than alphabetically.
+/// plan thinks about a gap — "I have nothing for hamstrings" — rather than alphabetically. Before
+/// anything is typed, the movements the lifter logged most recently come first: every workout
+/// starts empty, so rebuilding a usual session should be a tap per movement, not a search.
 ///
 /// Each row is one 56 pt target: the name, the "also …" credit line beneath it, and the modality
-/// as a tag, which is filled but not outlined because it is not something to tap. The empty state
-/// only offers to create a movement when the caller can actually create one.
+/// as a tag, which is filled but not outlined because it is not something to tap. The picker
+/// only offers to create a movement when the caller can actually create one, and then whenever
+/// the search has no exact match. A failed read or save is stated in an error banner, never shown
+/// as an empty catalogue.
 public struct ExercisePickerView: View {
   @Binding private var query: String
   private let entries: [CatalogEntry]
+  private let recent: [CatalogEntry]
+  private let errorMessage: String?
+  private let onCancel: (() -> Void)?
   private let onCreate: ((String) -> Void)?
   private let onSelect: (CatalogEntry) -> Void
 
   @State private var selectedCategory: MuscleFilterCategory?
   @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
+  /// - Parameters:
+  ///   - entries: The caller's search results for `query`, in any order.
+  ///   - recent: Movements the lifter logged most recently, newest first. Shown above the muscle
+  ///     sections while the search is empty, narrowed by the region filter like everything else.
+  ///   - errorMessage: A failed read or save, in the lifter's words. Shown as an error banner
+  ///     under the search field; while it is set, an empty list is not described as empty.
+  ///   - onCancel: Closes the picker without choosing. When set, the picker draws "Cancel" in the
+  ///     toolbar's cancellation position, so the caller should not draw its own.
+  ///   - onCreate: Adds a movement with the typed, trimmed name. When `nil`, no add is offered.
   public init(
     query: Binding<String>,
     entries: [CatalogEntry],
+    recent: [CatalogEntry] = [],
+    errorMessage: String? = nil,
+    onCancel: (() -> Void)? = nil,
     onCreate: ((String) -> Void)? = nil,
     onSelect: @escaping (CatalogEntry) -> Void
   ) {
     self._query = query
     self.entries = entries
+    self.recent = recent
+    self.errorMessage = errorMessage
+    self.onCancel = onCancel
     self.onCreate = onCreate
     self.onSelect = onSelect
   }
@@ -42,17 +64,33 @@ public struct ExercisePickerView: View {
           .padding(.horizontal, Tokens.Spacing.loose)
 
         filterRail
+
+        // Pinned with the search field rather than scrolled with the list, so a failure cannot be
+        // scrolled out of sight.
+        if let visibleErrorMessage {
+          HardsetBanner(.error, message: visibleErrorMessage)
+            .padding(.horizontal, Tokens.Spacing.loose)
+            .padding(.top, Tokens.Spacing.tight)
+        }
       }
       .padding(.top, Tokens.Spacing.snug)
       .background(Tokens.Color.background)
 
-      if displayedEntries.isEmpty {
-        emptyState
-      } else {
+      if hasRows {
         movementList
+      } else if isAwaitingFirstRead {
+        HardsetLoadingState("Reading your movements…")
+      } else if visibleErrorMessage != nil {
+        failureState
+      } else {
+        emptyState
       }
     }
     .background(Tokens.Color.background)
+    .pickerCancelAction(onCancel)
+    // A swipe down closes the sheet without passing through Cancel, and the search used to survive
+    // it, so the next "Add movement" opened on a stale filter. Cleared on every way out.
+    .onDisappear { query = "" }
   }
 
   // MARK: - Anatomical filter rail
@@ -89,27 +127,54 @@ public struct ExercisePickerView: View {
   private var movementList: some View {
     ScrollView {
       LazyVStack(alignment: .leading, spacing: 0, pinnedViews: [.sectionHeaders]) {
+        if !displayedRecent.isEmpty {
+          Section {
+            rowStack(displayedRecent)
+          } header: {
+            sectionHeader("Recent", count: displayedRecent.count)
+          }
+        }
+
         ForEach(sections) { section in
           Section {
-            VStack(spacing: Tokens.Spacing.snug) {
-              ForEach(section.entries) { entry in
-                row(entry)
-              }
-            }
-            .padding(.horizontal, Tokens.Spacing.loose)
-            .padding(.bottom, Tokens.Spacing.section)
+            rowStack(section.entries)
           } header: {
-            SectionLabel(Self.displayName(section.key), count: section.entries.count)
-              .padding(.horizontal, Tokens.Spacing.loose)
-              .padding(.vertical, Tokens.Spacing.snug)
-              // Opaque, because the header is pinned and rows scroll underneath it.
-              .background(Tokens.Color.background)
+            sectionHeader(Self.displayName(section.key), count: section.entries.count)
           }
+        }
+
+        // After the matches, not above them: a partial match ("bench") is usually the movement
+        // the lifter meant, and the first row should not be the one that makes a duplicate.
+        if let createAction {
+          VStack(alignment: .leading, spacing: Tokens.Spacing.snug) {
+            SectionLabel("Not on the list")
+            createButton(createAction)
+          }
+          .padding(.horizontal, Tokens.Spacing.loose)
+          .padding(.bottom, Tokens.Spacing.section)
         }
       }
       .padding(.top, Tokens.Spacing.tight)
     }
     .scrollDismissesKeyboard(.interactively)
+  }
+
+  private func rowStack(_ rowEntries: [CatalogEntry]) -> some View {
+    VStack(spacing: Tokens.Spacing.snug) {
+      ForEach(rowEntries) { entry in
+        row(entry)
+      }
+    }
+    .padding(.horizontal, Tokens.Spacing.loose)
+    .padding(.bottom, Tokens.Spacing.section)
+  }
+
+  private func sectionHeader(_ title: String, count: Int) -> some View {
+    SectionLabel(title, count: count)
+      .padding(.horizontal, Tokens.Spacing.loose)
+      .padding(.vertical, Tokens.Spacing.snug)
+      // Opaque, because the header is pinned and rows scroll underneath it.
+      .background(Tokens.Color.background)
   }
 
   // MARK: - Exercise row
@@ -190,19 +255,30 @@ public struct ExercisePickerView: View {
   private var emptyState: some View {
     ScrollView {
       VStack(spacing: Tokens.Spacing.regular) {
-        HardsetEmptyState(
-          title: "No movement found",
-          detail: emptyStateDetail,
-          systemImage: "magnifyingglass",
-          actionTitle: createAction == nil ? nil : "Add “\(trimmedQuery)” as a movement",
-          action: createAction
-        )
-
         if isHiddenByFilter {
-          Button("Show all regions") {
-            selectedCategory = nil
+          // The movement may well exist under another region, so looking there is the first
+          // offer, and adding one of the lifter's own is the second.
+          HardsetEmptyState(
+            title: "No movement found",
+            detail: emptyStateDetail,
+            systemImage: "magnifyingglass",
+            actionTitle: "Show all regions",
+            actionSystemImage: "line.3.horizontal.decrease",
+            action: { selectedCategory = nil }
+          )
+
+          if let createAction {
+            createButton(createAction, fullWidth: false)
+              .padding(.horizontal, Tokens.Spacing.section)
           }
-          .buttonStyle(HardsetButtonStyle(.secondary, fullWidth: false))
+        } else {
+          HardsetEmptyState(
+            title: "No movement found",
+            detail: emptyStateDetail,
+            systemImage: "magnifyingglass",
+            actionTitle: createAction == nil ? nil : createTitle,
+            action: createAction
+          )
         }
       }
       .frame(maxWidth: .infinity)
@@ -211,17 +287,64 @@ public struct ExercisePickerView: View {
     .scrollDismissesKeyboard(.interactively)
   }
 
+  /// What sits under the error banner when there are no rows to show.
+  ///
+  /// Claims nothing about the catalogue: after a failed read, "nothing matches" or "the catalogue
+  /// is empty" would be a statement about the lifter's data that the app could not check. The add
+  /// action stays, because a failed save is retried from here.
+  private var failureState: some View {
+    ScrollView {
+      VStack(alignment: .leading, spacing: Tokens.Spacing.snug) {
+        if let createAction {
+          createButton(createAction)
+        }
+      }
+      .frame(maxWidth: .infinity, alignment: .leading)
+      .padding(.horizontal, Tokens.Spacing.loose)
+      .padding(.top, Tokens.Spacing.section)
+    }
+    .scrollDismissesKeyboard(.interactively)
+  }
+
+  /// "Add “…” as a custom movement", drawn like "Add a machine": a plainly styled action rather
+  /// than a row pretending to be a movement.
+  private func createButton(_ action: @escaping () -> Void, fullWidth: Bool = true) -> some View {
+    Button(action: action) {
+      Label {
+        Text(createTitle)
+      } icon: {
+        Image(systemName: "plus")
+          .foregroundStyle(Tokens.Color.accent)
+      }
+    }
+    .buttonStyle(HardsetButtonStyle(.secondary, size: .logger, fullWidth: fullWidth))
+  }
+
+  private var createTitle: String {
+    "Add “\(trimmedQuery)” as a custom movement"
+  }
+
   /// The create action, or `nil` when there is nothing honest to offer.
   ///
-  /// Offered only when the caller supplied `onCreate`. The live session passes none, and the
+  /// Offered only when the caller supplied `onCreate`. The live session once passed none, and the
   /// empty state used to show "Add as movement" anyway: a button that did nothing when tapped.
-  /// Also withheld when the region filter is what emptied the list, because the movement may well
-  /// exist under another region, and a duplicate would split its history in two.
+  /// Withheld when a movement already has exactly this name, ignoring case and accents, because a
+  /// duplicate would split its history in two; a partial match ("bench" for "Barbell Bench
+  /// Press") still offers it, below the matches. When the region filter is what emptied the list,
+  /// it comes second, after "Show all regions", because the movement may exist under another
+  /// region.
   private var createAction: (() -> Void)? {
-    guard let onCreate, !isHiddenByFilter else { return nil }
+    guard let onCreate else { return nil }
     let name = trimmedQuery
-    guard !name.isEmpty else { return nil }
+    guard !name.isEmpty, !hasExactMatch(for: name) else { return nil }
     return { onCreate(name) }
+  }
+
+  private func hasExactMatch(for name: String) -> Bool {
+    (entries + recent).contains {
+      $0.name.trimmingCharacters(in: .whitespacesAndNewlines)
+        .compare(name, options: [.caseInsensitive, .diacriticInsensitive]) == .orderedSame
+    }
   }
 
   /// True when the caller found movements and only the region filter is hiding them.
@@ -231,6 +354,27 @@ public struct ExercisePickerView: View {
 
   private var trimmedQuery: String {
     query.trimmingCharacters(in: .whitespacesAndNewlines)
+  }
+
+  private var visibleErrorMessage: String? {
+    guard let errorMessage else { return nil }
+    let trimmed = errorMessage.trimmingCharacters(in: .whitespacesAndNewlines)
+    return trimmed.isEmpty ? nil : trimmed
+  }
+
+  /// True while there is something to list: a recent movement or a match the filter lets through.
+  private var hasRows: Bool {
+    !displayedEntries.isEmpty || !displayedRecent.isEmpty
+  }
+
+  /// True before the caller's first read has come back.
+  ///
+  /// The curated catalogue is seeded before a workout can be started, so an unfiltered,
+  /// error-free and completely empty list is not a fact about the catalogue: it is a read still in
+  /// flight. That frame used to say "The movement catalogue is empty." DESIGN.md: never an empty
+  /// state before a read has succeeded.
+  private var isAwaitingFirstRead: Bool {
+    entries.isEmpty && recent.isEmpty && trimmedQuery.isEmpty && visibleErrorMessage == nil
   }
 
   private var emptyStateDetail: String {
@@ -245,7 +389,9 @@ public struct ExercisePickerView: View {
     if !name.isEmpty {
       return "Nothing in the catalogue matches “\(name)”."
     }
-    return "The movement catalogue is empty."
+    // Reached only through an edge such as recent movements with no catalogue rows; the empty
+    // first frame is `isAwaitingFirstRead`, and a failed read is `failureState`.
+    return "No movements to show."
   }
 
   // MARK: - Data grouping & filtering
@@ -255,6 +401,22 @@ public struct ExercisePickerView: View {
       return entries.filter { selectedCategory.matches($0.primaryMuscle) }
     }
     return entries
+  }
+
+  /// The recent movements to list first: only while nothing is typed, because once there is a
+  /// query the matches are the answer; narrowed by the region filter like every other row; in the
+  /// caller's newest-first order, without repeats.
+  ///
+  /// They also stay in their muscle section below, so the catalogue reads the same with or
+  /// without a history.
+  private var displayedRecent: [CatalogEntry] {
+    guard trimmedQuery.isEmpty else { return [] }
+    var seen = Set<ExerciseID>()
+    return recent.filter { entry in
+      guard seen.insert(entry.id).inserted else { return false }
+      guard let selectedCategory else { return true }
+      return selectedCategory.matches(entry.primaryMuscle)
+    }
   }
 
   private struct MuscleSection: Identifiable {
@@ -327,20 +489,29 @@ public struct ExercisePickerView: View {
 #if DEBUG
   private struct ExercisePickerHarness: View {
     private let allowsCreate: Bool
+    private let hasHistory: Bool
+    private let readFails: Bool
     @State private var query: String
 
-    init(query: String = "", allowsCreate: Bool = true) {
+    init(
+      query: String = "", allowsCreate: Bool = true, hasHistory: Bool = false,
+      readFails: Bool = false
+    ) {
       self.allowsCreate = allowsCreate
+      self.hasHistory = hasHistory
+      self.readFails = readFails
       self._query = State(initialValue: query)
     }
 
+    private var catalogue: [CatalogEntry] {
+      readFails ? [] : ExerciseCatalog.v1.compactMap(\.catalogEntry)
+    }
+
     private var entries: [CatalogEntry] {
-      ExerciseCatalog.v1
-        .compactMap(\.catalogEntry)
-        .filter {
-          query.isEmpty
-            || $0.name.range(of: query, options: [.caseInsensitive, .diacriticInsensitive]) != nil
-        }
+      catalogue.filter {
+        query.isEmpty
+          || $0.name.range(of: query, options: [.caseInsensitive, .diacriticInsensitive]) != nil
+      }
     }
 
     var body: some View {
@@ -348,6 +519,10 @@ public struct ExercisePickerView: View {
         ExercisePickerView(
           query: $query,
           entries: entries,
+          recent: hasHistory ? Array(catalogue.prefix(3)) : [],
+          errorMessage: readFails
+            ? "Your movements could not be read. Close this and try again." : nil,
+          onCancel: {},
           onCreate: allowsCreate ? { (_: String) in } : nil
         ) { _ in }
         .hardsetNavigationTitle("Add movement")
@@ -359,12 +534,26 @@ public struct ExercisePickerView: View {
     ExercisePickerHarness()
   }
 
+  #Preview("Exercise picker, recent first") {
+    ExercisePickerHarness(hasHistory: true)
+  }
+
+  #Preview("Exercise picker, partial match, can create") {
+    // Matches are listed first; "Add “bench” as a custom movement" follows them.
+    ExercisePickerHarness(query: "bench")
+  }
+
   #Preview("Exercise picker, no match, can create") {
     ExercisePickerHarness(query: "Zercher carry")
   }
 
   #Preview("Exercise picker, no match, cannot create") {
-    // The live session's configuration: no `onCreate`, so the empty state offers no button.
+    // A caller with no `onCreate`: the empty state offers no button.
     ExercisePickerHarness(query: "Zercher carry", allowsCreate: false)
+  }
+
+  #Preview("Exercise picker, read failed") {
+    // The banner says what happened; nothing claims the catalogue is empty.
+    ExercisePickerHarness(readFails: true)
   }
 #endif
