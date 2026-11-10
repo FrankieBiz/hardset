@@ -99,9 +99,9 @@ final class AppScreensUITests: XCTestCase {
     let finish = app.buttons["Finish workout"]
     if finish.waitForExistence(timeout: 5) {
       finish.tap()
-      // Expanding the inline confirmation adds height below the summary. Bring its controls
-      // above the floating workout accessory before tapping, just as a lifter would scroll.
-      app.swipeUp()
+      // No manual scroll: the expanded confirmation brings itself into view above the tab bar.
+      // An earlier build needed a swipe here, which hid that its buttons opened off screen.
+      XCTAssertTrue(app.buttons["Finish"].waitForExistence(timeout: 5))
       capture(app, "15-finish-confirm")
       app.buttons["Finish"].tap()
     }
@@ -117,6 +117,77 @@ final class AppScreensUITests: XCTestCase {
     writeAuditReport(named: "accessibility-audit-workout")
   }
 
+  /// Mistakes are reversible: a logged set is undone from its long-press menu, a movement is
+  /// removed from its card menu, and an accidental workout is discarded from the header menu,
+  /// leaving nothing in History. Runs first (alphabetical order) on a fresh simulator.
+  @MainActor
+  func testCorrectionsAndDiscardDark() throws {
+    continueAfterFailure = true
+    let app = XCUIApplication()
+    launch(app, appearance: .dark)
+
+    guard waitForStartScreen(app) else { return }
+    app.buttons["Start workout"].tap()
+    let addMovement = app.buttons["Add movement"]
+    XCTAssertTrue(addMovement.waitForExistence(timeout: 5))
+    addMovement.tap()
+    let bench = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Barbell Bench Press'"))
+      .firstMatch
+    XCTAssertTrue(bench.waitForExistence(timeout: 5))
+    bench.tap()
+
+    // Log one set, as the journey does.
+    let row = app.descendants(matching: .any)
+      .matching(NSPredicate(format: "label BEGINSWITH 'Set 1'")).firstMatch
+    XCTAssertTrue(row.waitForExistence(timeout: 5))
+    row.coordinate(withNormalizedOffset: CGVector(dx: 0.44, dy: 0.5)).tap()
+    XCTAssertTrue(app.buttons["Next field"].waitForExistence(timeout: 5))
+    for key in ["6", "0"] { app.buttons[key].tap() }
+    app.buttons["Next field"].tap()
+    app.buttons["5"].tap()
+    app.buttons["Done"].tap()
+    row.coordinate(withNormalizedOffset: CGVector(dx: 0.93, dy: 0.5)).tap()
+    capture(app, "40-correction-logged")
+
+    // Undo it from the row's long-press menu.
+    row.coordinate(withNormalizedOffset: CGVector(dx: 0.08, dy: 0.5)).press(forDuration: 1.2)
+    let undo = app.buttons["Undo log"]
+    XCTAssertTrue(undo.waitForExistence(timeout: 5))
+    capture(app, "41-set-corrections-menu")
+    audit(app, screen: "set corrections menu")
+    undo.tap()
+    capture(app, "42-set-undone")
+
+    // Remove the movement from its card menu. With nothing logged it goes without a question.
+    let movementMenu = app.buttons["Barbell Bench Press options"]
+    XCTAssertTrue(movementMenu.waitForExistence(timeout: 5))
+    movementMenu.tap()
+    let remove = app.buttons["Remove movement"]
+    XCTAssertTrue(remove.waitForExistence(timeout: 5))
+    capture(app, "43-movement-menu")
+    remove.tap()
+    XCTAssertTrue(addMovement.waitForExistence(timeout: 5))
+    XCTAssertFalse(row.waitForExistence(timeout: 2))
+    capture(app, "44-movement-removed")
+
+    // Discard the workout from the header menu, confirmed.
+    let workoutMenu = app.buttons["Workout options"]
+    XCTAssertTrue(workoutMenu.waitForExistence(timeout: 5))
+    workoutMenu.tap()
+    capture(app, "45-workout-menu")
+    app.buttons["Discard workout"].firstMatch.tap()
+    let confirm = app.buttons.matching(NSPredicate(format: "label == 'Discard workout'")).firstMatch
+    XCTAssertTrue(confirm.waitForExistence(timeout: 5))
+    capture(app, "46-discard-confirm")
+    confirm.tap()
+    XCTAssertTrue(app.buttons["Start workout"].waitForExistence(timeout: 5))
+    capture(app, "47-start-after-discard")
+    openTab(app, "History")
+    capture(app, "48-history-after-discard")
+
+    writeAuditReport(named: "accessibility-audit-corrections")
+  }
+
   /// The gym picker and adding a gym, on their own: the first runs saw the app exit as this sheet
   /// presented, and a separate test keeps that from hiding every screen after it.
   @MainActor
@@ -126,7 +197,7 @@ final class AppScreensUITests: XCTestCase {
     launch(app, appearance: .dark)
 
     guard waitForStartScreen(app) else { return }
-    let card = app.buttons.matching(NSPredicate(format: "label CONTAINS 'gym'")).firstMatch
+    let card = app.buttons.matching(NSPredicate(format: "label CONTAINS[c] 'gym'")).firstMatch
     XCTAssertTrue(card.waitForExistence(timeout: 5))
     card.tap()
     let addGym = app.buttons["Add a gym"]
