@@ -292,9 +292,8 @@ public struct SessionView: View {
     .onChange(of: records) { _, records in
       guard !records.isEmpty else { return }
       let spoken = records.map { "\($0.kind.label), \(Self.describe($0, unit: unit))" }
-      AccessibilityNotification.Announcement(
-        "New record. \(spoken.joined(separator: ". "))"
-      ).post()
+      let announcement: String = "New record. " + spoken.joined(separator: ". ")
+      AccessibilityNotification.Announcement(announcement).post()
     }
   }
 
@@ -498,15 +497,7 @@ public struct SessionView: View {
       onUndoSet: onUndoSet.map { undo in
         { slot in _ = undo(id, slot) }
       },
-      // Editing a saved set is undoing it and logging it again: the numbers stay in the row, the
-      // keypad opens on them, and the set is saved anew only when the lifter logs it.
-      onEditSet: onUndoSet.map { undo in
-        { slot in
-          if undo(id, slot) {
-            beginEditing(exerciseID: id, slotID: slot.id, field: .weight)
-          }
-        }
-      },
+      onEditSet: onUndoSet == nil ? nil : { slot in editSet(slot, inExercise: id) },
       onRemoveSet: onRemoveSet.map { remove in
         { slot in remove(id, slot) }
       },
@@ -514,6 +505,13 @@ public struct SessionView: View {
       onMoveDown: onMoveExercise == nil || isLast ? nil : { move(id, by: 1) },
       onRemove: onRemoveExercise == nil ? nil : { requestRemoval(of: id) }
     )
+  }
+
+  /// Editing a saved set is undoing it and logging it again: the numbers stay in the row, the
+  /// keypad opens on them, and the set is saved anew only when the lifter logs it.
+  private func editSet(_ slot: SetSlot, inExercise id: UUID) {
+    guard let onUndoSet, onUndoSet(id, slot) else { return }
+    beginEditing(exerciseID: id, slotID: slot.id, field: .weight)
   }
 
   private func move(_ id: UUID, by offset: Int) {
