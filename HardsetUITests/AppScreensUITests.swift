@@ -106,6 +106,20 @@ final class AppScreensUITests: XCTestCase {
     capture(app, "18-volume-with-workout")
     audit(app, screen: "volume with a workout")
 
+    openTab(app, "Train")
+    app.buttons["Repeat a workout"].tap()
+    let sourceWorkout = app.buttons.matching(NSPredicate(format: "label CONTAINS 'Barbell Bench Press'")).firstMatch
+    XCTAssertTrue(sourceWorkout.waitForExistence(timeout: 5))
+    sourceWorkout.tap()
+    let repeatStart = app.buttons["Start this workout"]
+    XCTAssertTrue(repeatStart.waitForExistence(timeout: 5))
+    capture(app, "19-repeat-preview")
+    audit(app, screen: "repeat preview")
+    repeatStart.tap()
+    XCTAssertTrue(app.buttons["Add movement"].waitForExistence(timeout: 5))
+    capture(app, "20-repeated-workout")
+    audit(app, screen: "repeated workout")
+
     writeAuditReport(named: "accessibility-audit-workout")
   }
 

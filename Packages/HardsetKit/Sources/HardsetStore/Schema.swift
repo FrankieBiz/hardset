@@ -64,6 +64,8 @@ nonisolated struct MachineExercise: Hashable, Identifiable, Sendable {
 @Table("sessions")
 nonisolated struct Session: Hashable, Identifiable, Sendable {
   let id: UUID
+  /// Repeat-workout provenance policy must survive recovery and sync.
+  var knownEquipmentOnly = false
   var gymID: UUID?
   var title = ""
   var notes = ""

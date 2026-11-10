@@ -275,3 +275,127 @@ To preserve architectural velocity and calibration honesty, this workspace adher
     ```bash
     agent-finish "<imperative commit message>"
     ```
+
+## History-led workout continuity — 2026-11-09
+
+- Objective: make a substantial product improvement grounded in Hardset's purpose.
+- Worktree: `/home/frankbiz/orca/workspaces/hardset/bobtail`; branch `FrankieBiz/bobtail`.
+- Decision: completed workouts become explicit, previewable starting points. Preserve
+  performed working-set counts, movement occurrences and eligible equipment; use latest
+  same-machine history for drafts. Unknown equipment stays blank through recovery.
+- Implementation: RepeatWorkoutStore, RepeatWorkoutScreen, root wiring and root-model
+  start path; additive v10 session policy migration. No new routine database. Existing
+  sessions default to their previous prefill policy. Full rationale: PRODUCT_DIRECTION.md.
+- Verification: baseline and initial implementation make check passed. Final gate with
+  six repeat-workout tests, migration and UI journey extension is pending below.
+- Native UI journey now covers choosing, previewing and starting a repeated workout.
+  Apple CI and physical-device verification are separate from Linux checks.
+- Final Linux verification passed: `make check` exit 0, 12 orchestration tests,
+  127 Swift syntax parses, 181 Core tests, 204 Store tests, query-plan/result gate,
+  172 contrast pairs. Project regeneration unchanged; diff whitespace check passed.
+- Migration-test failure diagnosed: legacy fixture inserted with the current Session
+  macro before upgrade. Replaced those inserts with historical-column SQL; all sixteen
+  upgrade variants now pass. No migration or integrity assertion was weakened.
+- Existing main CI (42541134810, commit 24211fb) fails simulator startup in all UI
+  journeys; native compilation passed on that baseline. Feature CI pending separately.
+
+## Researched product strategy — 2026-11-09
+
+- Objective: planning only for major additions and pivots; no further app changes.
+- Worktree/branch: `/home/frankbiz/orca/workspaces/hardset/bobtail`, `FrankieBiz/bobtail`.
+- Deliverable: `docs/HARDSET_STRATEGIC_PLAN.md`, approximately 5,000 words with 18
+  distinct linked web sources, current repository anchors and explicit research limits.
+- Recommendation: a self-directed training workspace connecting plans, physical
+  equipment context and comparable review. Five bets cover routines/blocks, equipment
+  continuity, training reviews, optional explicit progression and migration/ownership.
+- Includes competitive corrections, alternative pivots, business-model options,
+  deferred investments, discovery/prototype/pilot gates and an outcome-based sequence.
+  Recommendations and numerical pilot gates are proposals, not approved implementation
+  or research results. Repeat-workout work is an entry point, not the whole strategy.
+- Research: official competitor documentation, illustrative community accounts and
+  published resistance-training research; no paid trials, interviews or market sizing.
+- Verification: all five local document references exist; source links and attribution
+  reviewed; no placeholders or internal citation IDs; whitespace check passed.
+  Fresh `make check` passed: 181 Core tests, 204 Store tests, 12 orchestration tests,
+  127 syntax parses, query-plan/result checks and 172 contrast pairs.
+- Delivery remains on the feature branch. This planning request does not authorize
+  promoting the previously held app implementation to production. Next step is review
+  of the proposed direction, followed by discovery/prototype work if selected.
+
+## Product blueprint and broader business decisions — 2026-11-09
+
+- Objective: continue the endorsed strategy through concrete product choices, then
+  address broader business and operating questions. This continuation remains planning.
+- Worktree/branch: `/home/frankbiz/orca/workspaces/hardset/bobtail`, `FrankieBiz/bobtail`.
+- Owned paths: `docs/HARDSET_STRATEGIC_PLAN.md`, new
+  `docs/HARDSET_PRODUCT_BLUEPRINT.md`, new `docs/HARDSET_BUSINESS_AND_VALIDATION.md`,
+  and this handoff. No application, schema, configuration or test code changed.
+- Product decisions: one complete plan-to-review experience; flexible sequence;
+  today-only edits by default; plan versions independent of completed facts;
+  equipment/context distinctions; explicit comparison and correction behavior;
+  bounded first release and acceptance scenarios. Automatic coaching remains deferred.
+- Broader decisions: useful free core; proposed one-time paid planning/review depth;
+  channel sequence; privacy-conscious measurement/support; focused iPhone release;
+  ownership/entitlement preservation; operating economics and release evidence gates.
+- Prepared an interview protocol, prototype tasks, evidence record, pivot criteria
+  and an explicit external-input list. Candidate prices and arithmetic are illustrative
+  research cases, not live offers or estimates of actual business performance.
+- Research: refreshed official Liftin', Hevy, Liftosaur and Boostcamp documentation.
+  Hevy pricing was readable in indexed text but direct fetch returned Loading; no
+  exact Hevy price was relied upon. No outreach, interviews, purchases or publishing.
+- Verification: make check exit 0 (181 Core, 204 Store, 12 orchestration tests;
+  127 syntax parses; query-plan/result checks; 172 contrast pairs). Document local
+  links resolve and citation/placeholder review passed. Markdown whitespace cleaned.
+- Evidence boundary: switching/retention, equipment setup value, willingness to pay,
+  operating economics, delivery capacity and current signed-device readiness cannot
+  be determined by further desk planning. Next concrete step is observed-use research
+  and verification of a candidate native build, not another speculative feature pillar.
+- Delivery remains on the existing feature branch; no production promotion of the
+  earlier implementation is implied by approval of the planning direction.
+
+## Implementation and deployment master plan — 2026-11-09
+
+- Objective: create root `perfect.md` for executing the endorsed strategy through
+  implementation, data deployment, native validation, TestFlight and public rollout.
+- Worktree/branch: `/home/frankbiz/orca/workspaces/hardset/bobtail`, `FrankieBiz/bobtail`.
+- Owned paths: `perfect.md` and this handoff. Planning only; no app behavior changed.
+- Plan covers M0–M8, role ownership, dependencies, acceptance gates, additive/mixed-client
+  data compatibility, current verification commands, missing archive/version pipeline,
+  candidate manifests, internal/external testing, rollout containment and forward fixes.
+- Fresh baseline: PR #1 remains draft/open. Run 42713517490 failed real-app startup;
+  bfe79de run 42729654582 was still in progress at inspection. No cause or native pass
+  inferred. Checked-in app entitlements list HealthKit only; audit effective signed
+  iCloud/push capabilities as an investigation, not a claimed diagnosis.
+- Apple deployment references checked: upload builds, TestFlight, production CloudKit
+  schemas, phased version updates. No store/schema changes, upload, invite or release.
+- Verification: make check exit 0 (181 Core, 204 Store, 12 orchestration tests;
+  127 syntax parses; query/results gate; 172 contrast pairs). Project generation
+  unchanged; all 13 local plan links resolve; stage/placeholder/citation review passed.
+- Next implementation step: inspect final native CI artifacts, reproduce/diagnose
+  startup failure, then audit signing/version/distribution prerequisites while preparing
+  the complete prototype. External research/signing inputs gate only their dependent work.
+- Delivery remains on the feature branch; adding a plan does not promote the existing
+  unverified app implementation to production main.
+
+## Agent workstream split — 2026-11-09
+
+- Objective: split perfect.md into substantial assignable Codex/Claude architecture
+  work and DeepSeek audits, with a clear first task. No workers launched.
+- Branch/worktree: FrankieBiz/bobtail, /home/frankbiz/orca/workspaces/hardset/bobtail.
+- Owned paths: perfect.md, docs/workstreams/ (index plus five briefs), this handoff.
+- First task: Codex native startup/persistence foundation. Claude's docs/prototype
+  phase and DeepSeek's read-only evidence work may run independently in isolated
+  worktrees. Domain implementation follows baseline and accepted product semantics;
+  native implementation consumes reviewed public contracts. Integration is separate.
+- Briefs specify owned paths, dependencies, 3–5 acceptance criteria, verification
+  commands and task-specific handoffs. Workers do not dispatch or push production.
+  DeepSeek owns synthetic repro/report material only; implementers verify/fix findings.
+- Retained installed model choices; no paid probes, provider changes or model calls.
+- CI snapshot: 42730480581 for 91d13f0 was still in progress at inspection; prior
+  native startup failure remains the first issue to diagnose, not an assumed cause.
+- Verification: make check exit 0 (181 Core, 204 Store, 12 orchestration tests;
+  127 parses, SQL result/plan gate and 172 contrast pairs). Generator unchanged;
+  seven documents/24 local references and all ownership/acceptance/verification
+  sections checked. No application changes or external releases.
+- Next concrete step: assign docs/workstreams/01-native-foundation.md to Codex
+  using the prompt in docs/workstreams/README.md and current candidate evidence.

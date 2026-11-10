@@ -449,6 +449,15 @@ public nonisolated enum HardsetMigrations {
       ).execute(db)
     }
 
+    migrator.registerMigration("v10_repeatWorkoutPolicy") { db in
+      try #sql(
+        """
+        ALTER TABLE sessions ADD COLUMN knownEquipmentOnly
+          INTEGER NOT NULL ON CONFLICT REPLACE DEFAULT 0
+        """
+      ).execute(db)
+    }
+
     return migrator
   }
 }
