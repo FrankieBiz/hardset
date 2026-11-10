@@ -139,10 +139,19 @@ public struct HardsetRootView: View {
       .sheet(isPresented: $isShowingSettings) {
         SettingsSheet(
           useImperial: $useImperial, transfer: environment.transfer,
-          health: environment.health, sync: environment.sync,
+          health: environment.health, sync: environment.sync, gyms: environment.gyms,
           // An import adds finished workouts, so the start screen's last workout may have
           // changed underneath the sheet, which does not make the start screen appear again.
-          onDataChanged: { Task { await refreshLastWorkout() } }
+          // A gym renamed or archived in Settings changes the names the start screen and the gym
+          // picker show; an archived pick falls back to the learned default in the model.
+          onDataChanged: {
+            Task { await refreshLastWorkout() }
+            do {
+              try model.refreshGyms()
+            } catch {
+              gymError = "Your gyms could not be re-read. Close and reopen the list to try again."
+            }
+          }
         ) { isShowingSettings = false }
           .hardsetSheet()
       }
