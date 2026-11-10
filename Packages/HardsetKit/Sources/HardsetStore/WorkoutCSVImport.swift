@@ -7,7 +7,30 @@ public nonisolated struct WorkoutImportPreview: Sendable {
   public let sessions: [Workout]
   public let interpretation: String
   public let originalCSV: String
+  /// Rows recognised as something other than a loaded strength set, left out rather than given an
+  /// invented load or rep count. Empty unless the preview was built with
+  /// `skippingUnsupportedRows`.
+  public let skipped: [SkippedRow]
   public var setCount: Int { sessions.reduce(0) { $0 + $1.sets.count } }
+
+  /// A file row that will not be imported, and why.
+  public struct SkippedRow: Sendable, Equatable {
+    /// The row's line in the file, counting the header as line 1.
+    public let line: Int
+    public let reason: Reason
+
+    public init(line: Int, reason: Reason) {
+      self.line = line
+      self.reason = reason
+    }
+
+    public enum Reason: Sendable, Equatable {
+      /// No rep count, or zero reps: a timed set (a plank), a distance set (a run) or an empty row.
+      case noReps
+      /// Reps but a blank load: an unweighted set the exporting app recorded without a weight.
+      case noLoad
+    }
+  }
 
   public struct Workout: Sendable {
     public let title: String
@@ -29,11 +52,25 @@ public nonisolated struct WorkoutImportPreview: Sendable {
 public nonisolated enum WorkoutCSVImport {
   /// Strong's unitless Weight column uses an explicit user-selected unit. Never infer it
   /// from load magnitude. Hevy's weight_kg/weight_lbs headers and Weight Unit take priority.
+  ///
+  /// - Parameter skippingUnsupportedRows: When `false`, any row without an explicit load and rep
+  ///   count fails the whole preview. When `true`, rows with no reps (timed, distance or zero-rep
+  ///   sets) or a blank load (unweighted sets) are listed in `skipped` and left out, because one
+  ///   plank in years of history should not block the rest. Malformed rows -- a bad date, unit or
+  ///   column count, a negative or non-finite number -- still fail the whole preview either way.
   public static func preview(
-    _ text: String, strongUnit: WeightUnit, timeZone: TimeZone = .current
+    _ text: String, strongUnit: WeightUnit, timeZone: TimeZone = .current,
+    skippingUnsupportedRows: Bool = false
   ) throws -> WorkoutImportPreview {
     let rows = try CSVDocument.decode(text)
     guard let first = rows.first, rows.count > 1 else { throw WorkoutImportError.empty }
+    // A semicolon-separated file comes from a comma-decimal locale, where "82,5" is 82.5. In a
+    // comma-separated file the same cell can only have been quoted text, so it stays invalid.
+    let commaDecimals = CSVDocument.separator(of: text) == ";"
+    func number(_ text: String) -> Double? {
+      Double(commaDecimals ? text.replacingOccurrences(of: ",", with: ".") : text)
+    }
+    var skipped: [WorkoutImportPreview.SkippedRow] = []
     let headers = first.map { $0.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() }
     guard Set(headers).count == headers.count else { throw WorkoutImportError.headers }
     let hevy = headers.contains("exercise_title")
@@ -72,7 +109,20 @@ public nonisolated enum WorkoutCSVImport {
       }
       let exercise = value(row, hevy ? "exercise_title" : "exercise name").trimmingCharacters(in: .whitespacesAndNewlines)
       let rawWeight = value(row, "weight_kg", "weight_lbs", "weight")
-      guard !exercise.isEmpty, let weight = Double(rawWeight), weight.isFinite, weight >= 0,
+      if skippingUnsupportedRows {
+        // Recognised non-strength or unloaded rows. Neither a load nor a rep count is invented
+        // for them; anything else malformed still falls through to the error below.
+        let rawReps = value(row, "reps").trimmingCharacters(in: .whitespaces)
+        if rawReps.isEmpty || Int(rawReps) == 0 {
+          skipped.append(.init(line: line, reason: .noReps))
+          continue
+        }
+        if rawWeight.trimmingCharacters(in: .whitespaces).isEmpty {
+          skipped.append(.init(line: line, reason: .noLoad))
+          continue
+        }
+      }
+      guard !exercise.isEmpty, let weight = number(rawWeight), weight.isFinite, weight >= 0,
         let reps = Int(value(row, "reps")), (1...999).contains(reps), weight <= 10000
       else { throw WorkoutImportError.row(line, "Supported sets need an explicit load from 0 to 10,000 and 1 to 999 reps") }
       let unit: WeightUnit
@@ -88,7 +138,7 @@ public nonisolated enum WorkoutCSVImport {
         }
       }
       let rpeText = value(row, "rpe")
-      let rpe = Double(rpeText)
+      let rpe = number(rpeText)
       guard rpeText.isEmpty || (rpe.map { $0.isFinite && (0...10).contains($0) } == true) else {
         throw WorkoutImportError.row(line, "Invalid RPE")
       }
@@ -106,9 +156,12 @@ public nonisolated enum WorkoutCSVImport {
         sessions.append(.init(title: title, startedAt: start, finishedAt: end, sets: [set]))
       }
     }
+    guard !sessions.isEmpty else {
+      throw skipped.isEmpty ? WorkoutImportError.empty : WorkoutImportError.noSupportedSets(skipped: skipped.count)
+    }
     return .init(source: hevy ? "Hevy" : "Strong", sessions: sessions,
       interpretation: "Unitless Strong loads interpreted as \(strongUnit.abbreviation). Dates without an offset interpreted in \(timeZone.identifier).",
-      originalCSV: text)
+      originalCSV: text, skipped: skipped)
   }
 
   private static func date(_ text: String, timeZone: TimeZone) -> Date? {
@@ -155,12 +208,17 @@ public nonisolated enum WorkoutImportError: Error, Equatable, Sendable, Localize
   case headers
   case row(Int, String)
   case alreadyImported
+  /// Every row was a timed, distance or unloaded set, so there is nothing to import.
+  case noSupportedSets(skipped: Int)
   public var errorDescription: String? {
     switch self {
     case .empty: "The CSV contains no sets."
     case .headers: "Use an English Strong or Hevy CSV export with its original header."
     case .row(let row, let reason): "Row \(row): \(reason). No workouts were imported."
     case .alreadyImported: "This exact CSV has already been imported on this device."
+    case .noSupportedSets(let skipped):
+      "None of the \(skipped) rows is a set with a recorded load and reps. Timed, distance and "
+        + "unweighted sets are not imported, so nothing was imported."
     }
   }
 }

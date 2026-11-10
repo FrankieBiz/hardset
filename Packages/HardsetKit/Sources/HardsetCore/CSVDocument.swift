@@ -47,6 +47,13 @@ public enum CSVDocument {
     return rows
   }
 
+  /// The field separator `decode` uses for this text: `;` or `,`, whichever the header uses first
+  /// outside quotes. A semicolon file comes from a comma-decimal locale, which is the only case in
+  /// which a cell like `82,5` can be a number.
+  public static func separator(of text: String) -> Character {
+    separator(in: text.hasPrefix("\u{FEFF}") ? String(text.dropFirst()) : text)
+  }
+
   private static func separator(in characters: String) -> Character {
     var quoted = false
     for character in characters {

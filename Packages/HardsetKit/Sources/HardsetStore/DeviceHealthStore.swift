@@ -27,6 +27,27 @@ public nonisolated struct DeviceHealthStore: Sendable {
     public let end: Date
   }
 
+  /// A body-mass reading kept on this device, read from Apple Health or entered and sent to it.
+  public struct BodyMass: Sendable, Equatable {
+    public let kilograms: Double
+    public let measuredAt: Date
+  }
+
+  /// The body-mass sample this device holds that was measured last, or `nil` when there is none.
+  /// Never a fallback or an average: when Health access was denied, there simply is none.
+  public func latestBodyMass() async throws -> BodyMass? {
+    try await database.read { db in
+      try DeviceHealthSample
+        .where { $0.kind.eq(Self.bodyMassKind) && $0.unit.eq("kg") }
+        .order { ($0.startedAt.desc(), $0.id) }
+        .fetchOne(db)
+        .map { BodyMass(kilograms: $0.value, measuredAt: $0.startedAt) }
+    }
+  }
+
+  /// The kind every body-mass sample is stored under, whether read from or written to Health.
+  public static let bodyMassKind = "apple.bodyMass"
+
   public func save(_ samples: [Sample]) async throws {
     try await database.write { db in
       for sample in samples {
