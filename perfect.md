@@ -6,6 +6,10 @@
 
 **Current scope:** planning. This file defines future execution; it does not authorize an App Store release, production CloudKit changes, paid services, pricing changes or outreach. Existing authorization for ordinary branch delivery continues to apply.
 
+## Agent assignment guide
+
+Use [the workstream split](docs/workstreams/README.md) for ready-to-assign briefs, ownership and parallelization. Start Codex with [01 — Native foundation](docs/workstreams/01-native-foundation.md). Claude can prepare the complete flow and DeepSeek can audit cases in separate worktrees while the foundation is diagnosed. Production implementation follows accepted contracts and the gates below.
+
 ## 1. The outcome
 
 Ship a reliable iPhone product in which a self-directed lifter can:

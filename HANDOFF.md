@@ -376,3 +376,26 @@ To preserve architectural velocity and calibration honesty, this workspace adher
   the complete prototype. External research/signing inputs gate only their dependent work.
 - Delivery remains on the feature branch; adding a plan does not promote the existing
   unverified app implementation to production main.
+
+## Agent workstream split — 2026-11-09
+
+- Objective: split perfect.md into substantial assignable Codex/Claude architecture
+  work and DeepSeek audits, with a clear first task. No workers launched.
+- Branch/worktree: FrankieBiz/bobtail, /home/frankbiz/orca/workspaces/hardset/bobtail.
+- Owned paths: perfect.md, docs/workstreams/ (index plus five briefs), this handoff.
+- First task: Codex native startup/persistence foundation. Claude's docs/prototype
+  phase and DeepSeek's read-only evidence work may run independently in isolated
+  worktrees. Domain implementation follows baseline and accepted product semantics;
+  native implementation consumes reviewed public contracts. Integration is separate.
+- Briefs specify owned paths, dependencies, 3–5 acceptance criteria, verification
+  commands and task-specific handoffs. Workers do not dispatch or push production.
+  DeepSeek owns synthetic repro/report material only; implementers verify/fix findings.
+- Retained installed model choices; no paid probes, provider changes or model calls.
+- CI snapshot: 42730480581 for 91d13f0 was still in progress at inspection; prior
+  native startup failure remains the first issue to diagnose, not an assumed cause.
+- Verification: make check exit 0 (181 Core, 204 Store, 12 orchestration tests;
+  127 parses, SQL result/plan gate and 172 contrast pairs). Generator unchanged;
+  seven documents/24 local references and all ownership/acceptance/verification
+  sections checked. No application changes or external releases.
+- Next concrete step: assign docs/workstreams/01-native-foundation.md to Codex
+  using the prompt in docs/workstreams/README.md and current candidate evidence.
