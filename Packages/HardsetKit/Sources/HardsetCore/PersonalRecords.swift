@@ -54,7 +54,9 @@ public struct PersonalRecord: Sendable, Hashable, Identifiable {
 /// Five rules, each of which is a way the reference app announced records that were not records:
 ///
 /// 1. **Never on the first ever set for a lift.** With no history there is nothing to beat, and
-///    "PR!" on set one of a new movement is noise that devalues every later one.
+///    "PR!" on set one of a new movement is noise that devalues every later one. The stores
+///    extend this to the whole first session on a lift: until a working set exists from an
+///    earlier session they pass no history, so an ordinary ramp is not a run of records.
 /// 2. **A record must beat the old one by a real margin** — the greater of 2.5% and one plate
 ///    increment (the equipment's own step, or one 5 lb plate when it is unknown). Matching last
 ///    week is not a record, and `>=` was the ancestor's actual bug.

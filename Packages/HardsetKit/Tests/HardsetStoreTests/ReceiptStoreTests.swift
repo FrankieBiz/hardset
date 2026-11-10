@@ -133,6 +133,32 @@ struct ReceiptStoreTests {
     #expect(!receipt.text(unit: .kilograms).contains("Unevaluated"))
   }
 
+  /// The receipt repeats the live logger's rule: the first session on a lift sets no records,
+  /// while the same ramp a session later does.
+  @Test("A first-session ramp states no records on its receipt")
+  func firstSessionRamp() async throws {
+    let (db, logger, bench, _) = try Self.fixture()
+    let start = Date(timeIntervalSince1970: 20_000)
+    func ramp(at date: Date, top: Double) throws -> SessionID {
+      let session = try logger.startSession(at: date)
+      for (index, set) in [(60.0, 10), (80, 8), (top, 6)].enumerated() {
+        _ = try logger.logSet(
+          sessionID: session, exerciseID: bench, draft: SetEntryDraft(weightKg: set.0, reps: set.1),
+          at: date.addingTimeInterval(Double(index + 1) * 60))
+      }
+      try logger.finishSession(session, at: date.addingTimeInterval(600))
+      return session
+    }
+    let first = try ramp(at: start, top: 100)
+    let receipt = try await ReceiptStore(database: db).load(first)
+    #expect(receipt.lines.count == 3)
+    #expect(receipt.lines.allSatisfy { $0.records.isEmpty })
+
+    let second = try ramp(at: start.addingTimeInterval(86_400), top: 110)
+    let later = try await ReceiptStore(database: db).load(second)
+    #expect(later.lines.last?.records.map(\.kind).contains(.heaviestLoad) == true)
+  }
+
   /// The receipt repeats the live logger's rule: no estimate for bodyweight work.
   @Test("A bodyweight receipt states no estimated-1RM record")
   func bodyweightReceipt() async throws {
