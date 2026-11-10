@@ -74,6 +74,36 @@ struct ResumeTests {
     #expect(openAreLoggable)
   }
 
+  /// A movement added from the picker has no plan, so the row count comes from history. Warm-ups
+  /// are not working rows, so they must not raise it.
+  @Test("Logged warm-ups do not add working rows when there is no plan")
+  func warmupsDoNotAddPhantomRows() {
+    let history = snapshot(sets: [(140, 10), (150, 8), (160, 6)])
+    let finished = ExerciseLogState.resume(
+      exerciseID: exercise, machineID: machine, exerciseName: "Leg Press",
+      loggedSets: logged([(60, 10, true), (140, 10, false), (150, 8, false), (160, 6, false)]),
+      snapshot: history
+    )
+    #expect(finished.workingSetCount == 3)
+    #expect(finished.nextUnloggedSlotID == nil)
+
+    let partial = ExerciseLogState.resume(
+      exerciseID: exercise, machineID: machine, exerciseName: "Leg Press",
+      loggedSets: logged([(60, 10, true), (80, 10, true), (140, 10, false), (150, 8, false)]),
+      snapshot: history
+    )
+    #expect(partial.workingSetCount == 3)
+    #expect(partial.slots.count == 5)
+    #expect(partial.slots.last?.draft.weightKg == 160)
+
+    let warmupOnly = ExerciseLogState.resume(
+      exerciseID: exercise, machineID: machine, exerciseName: "Leg Press",
+      loggedSets: logged([(60, 10, true)]), snapshot: .empty(capturedAt: now)
+    )
+    #expect(warmupOnly.workingSetCount == 1)
+    #expect(warmupOnly.slots.count { !$0.isLogged } == 1)
+  }
+
   /// The written record wins over the plan. Performing more than planned must not discard work.
   @Test("More sets performed than planned keeps all of them")
   func extraSetsSurvive() {

@@ -31,6 +31,13 @@ public struct PriorPerformance: Hashable, Sendable, Codable {
     if lastSets.indices.contains(index) { return lastSets[index] }
     return lastSets.last
   }
+
+  /// The set actually performed at position `index` last session, or `nil` when last session had
+  /// no set there. Unlike `suggestion(forSetIndex:)` this never repeats the final set: it states
+  /// history, so it must not invent any.
+  public func recorded(atSetIndex index: Int) -> PriorSetRecord? {
+    lastSets.indices.contains(index) ? lastSets[index] : nil
+  }
 }
 
 /// Invariant: the logger performs zero database work per render.

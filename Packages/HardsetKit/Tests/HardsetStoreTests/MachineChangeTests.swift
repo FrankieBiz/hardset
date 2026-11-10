@@ -217,15 +217,17 @@ struct MachineChangeTests {
       ],
       now: { self.now }
     )
+    // A warm-up goes before the first working row still to do, so it precedes both.
     live.addSet(inExercise: live.exercises[0].id, isWarmup: true)
-    // Move the warm-up to the front so it precedes both working rows.
-    let warmup = live.exercises[0].slots.removeLast()
-    live.exercises[0].slots.insert(warmup, at: 0)
+    #expect(live.exercises[0].slots.map(\.isWarmup) == [true, false, false])
 
     #expect(live.changeMachine(to: cybex, machineName: "Cybex", inExercise: live.exercises[0].id))
 
     // The two working rows get the first and second historical sets, not the second and third.
     let working = live.exercises[0].slots.filter { !$0.isWarmup }
     #expect(working.map(\.draft.weightKg) == [80, 90])
+    // The warm-up keeps its empty draft rather than taking the new machine's working load.
+    #expect(live.exercises[0].slots[0].isWarmup)
+    #expect(live.exercises[0].slots[0].draft.weightKg == nil)
   }
 }

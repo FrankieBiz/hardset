@@ -233,8 +233,10 @@ public struct ExerciseLogState: Hashable, Sendable, Identifiable {
 
     // Then however many the plan still expects, prefilled but open. If more was performed than
     // planned, nothing is added and nothing is discarded.
-    let target = plannedSets ?? max(state.slots.count, slots.count)
+    // `build` never creates warm-up rows, so its row count is a working-row count; comparing it
+    // with every logged set would turn each logged warm-up into a phantom working row.
     let workingLogged = slots.count { !$0.isWarmup }
+    let target = plannedSets ?? max(state.slots.count, workingLogged)
     if target > workingLogged {
       for index in workingLogged..<target {
         slots.append(SetSlot(draft: SetEntryDraft(suggestion: state.suggestion(forSetIndex: index))))
@@ -249,19 +251,22 @@ public struct ExerciseLogState: Hashable, Sendable, Identifiable {
     ProgressionKey(exerciseID: exerciseID, machineID: machineID)
   }
 
-  /// What the row at `index` should display in its "Last time" column.
+  /// What the row at `index` should be prefilled with. Past last session's count it repeats the
+  /// final set, which is a reasonable draft but not history; the "Last time" column uses
+  /// `previousSet(forSlotID:)`, which never repeats.
   public func suggestion(forSetIndex index: Int) -> PriorSetRecord? {
     prior?.suggestion(forSetIndex: index)
   }
 
   /// What a row's "Last time" column should show: the working set at the same position last
   /// time, or `nil` for a warm-up. History excludes warm-ups, so a warm-up has no honest
-  /// counterpart, and a working load beside it reads as a target it is not.
+  /// counterpart, and a working load beside it reads as a target it is not. A row beyond last
+  /// session's count is `nil` too: no such set was performed, so none is stated.
   public func previousSet(forSlotID id: UUID) -> PriorSetRecord? {
     guard let index = slots.firstIndex(where: { $0.id == id }), !slots[index].isWarmup else {
       return nil
     }
-    return suggestion(forSetIndex: slots[..<index].count { !$0.isWarmup })
+    return prior?.recorded(atSetIndex: slots[..<index].count { !$0.isWarmup })
   }
 
   public var loggedCount: Int { slots.count(where: \.isLogged) }
@@ -348,7 +353,9 @@ public struct ExerciseLogState: Hashable, Sendable, Identifiable {
     self.prior = newPrior
     self.priorNote = newNote
 
-    for index in slots.indices where !slots[index].isLogged {
+    // Warm-ups keep their drafts: history holds no warm-ups, and a working load in a warm-up row
+    // is one tap from recording a warm-up at working weight (see `appendSlot`).
+    for index in slots.indices where !slots[index].isLogged && !slots[index].isWarmup {
       let workingIndex = slots[..<index].count { !$0.isWarmup }
       slots[index].draft = SetEntryDraft(suggestion: newPrior?.suggestion(forSetIndex: workingIndex))
     }
