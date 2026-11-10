@@ -106,19 +106,95 @@ public nonisolated struct CatalogSeeder: Sendable {
     return inserted
   }
 
+  // MARK: - Custom movements
+
+  /// Saves a movement the catalogue does not ship, so a lifter at an unlisted machine can log it.
+  ///
+  /// The name is trimmed and its inner whitespace collapsed; a blank name throws
+  /// `CatalogSeederError.blankName`. A live movement whose name matches ignoring case and
+  /// diacritics is returned instead of a duplicate, preferring a curated one, so a retap or a
+  /// typed catalogue name cannot split history across two identities.
+  ///
+  /// Nothing is inferred from the name. The row is uncurated with an unknown modality and the
+  /// "unknown" primary muscle, so volume reports it as not attributed rather than inventing
+  /// muscles; attribution is a later, explicit choice.
+  public func createCustomExercise(named name: String, now: Date = Date()) throws -> CatalogEntry {
+    let cleaned = Self.normalized(name)
+    guard !cleaned.isEmpty else { throw CatalogSeederError.blankName }
+    return try database.write { db in
+      let existing = try Exercise
+        .where { !$0.isArchived }
+        .order { ($0.isCurated.desc(), $0.createdAt, $0.id) }
+        .fetchAll(db)
+        .first {
+          !Self.isImported($0)
+            && Self.normalized($0.name).compare(
+              cleaned, options: [.caseInsensitive, .diacriticInsensitive]) == .orderedSame
+        }
+      if let existing { return CatalogEntry(row: existing) }
+
+      let id = UUID()
+      try Exercise.insert { Exercise.Draft(id: id, name: cleaned, createdAt: now) }.execute(db)
+      guard let inserted = try Exercise.where({ $0.id.eq(id) }).fetchOne(db) else {
+        throw CatalogSeederError.notSaved
+      }
+      return CatalogEntry(row: inserted)
+    }
+  }
+
   // MARK: - Queries
 
   /// Selectable movements, newest user-created first, then curated alphabetically.
   ///
   /// Archived rows are excluded — that is what archiving is for — and the sort puts a movement
   /// the user just created where they will look for it.
+  ///
+  /// Movements created by a CSV import are excluded too. They carry no attribution and no
+  /// verified equipment, and the import promises they stay separate from machine-level history;
+  /// offered beside the catalogue's own entry, a lifter could log today's sets against the copy
+  /// and earn no volume for them. Their history stays visible in History and progress screens,
+  /// which read sets directly.
   public func selectableExercises() throws -> [CatalogEntry] {
     try database.read { db in
       try Exercise
         .where { !$0.isArchived }
+        .where { !$0.notes.like(Self.importedNotesPattern) }
         .order { ($0.isCurated, $0.name) }
         .fetchAll(db)
         .map(CatalogEntry.init(row:))
+    }
+  }
+
+  /// Movements most recently logged, newest first, each once, at most `limit` of them.
+  ///
+  /// Only movements the picker would offer: archived and imported ones are skipped. Read from
+  /// what was saved rather than stored as a preference, so there is nothing to go stale.
+  public func recent(limit: Int) throws -> [CatalogEntry] {
+    guard limit > 0 else { return [] }
+    return try database.read { db -> [CatalogEntry] in
+      let query = LoggedSet
+        .group { $0.exerciseID }
+        .select { ($0.exerciseID, $0.completedAt.max()) }
+      let grouped: [(UUID, Date?)] = try query.fetchAll(db)
+      var latest: [(id: UUID, at: Date)] = []
+      for (id, at) in grouped {
+        if let at { latest.append((id: id, at: at)) }
+      }
+      latest.sort { $0.at != $1.at ? $0.at > $1.at : $0.id.uuidString < $1.id.uuidString }
+      guard !latest.isEmpty else { return [] }
+      let ids = latest.map(\.id)
+      let rows: [Exercise] = try Exercise
+        .where { $0.id.in(ids) }
+        .where { !$0.isArchived }
+        .fetchAll(db)
+      var byID: [UUID: Exercise] = [:]
+      for row in rows where !Self.isImported(row) { byID[row.id] = row }
+      var entries: [CatalogEntry] = []
+      for item in latest {
+        guard entries.count < limit else { break }
+        if let row = byID[item.id] { entries.append(CatalogEntry(row: row)) }
+      }
+      return entries
     }
   }
 
@@ -135,6 +211,29 @@ public nonisolated struct CatalogSeeder: Sendable {
     }
   }
 
+  // MARK: - Imported movements
+
+  /// The notes prefix `DataTransferStore.importWorkouts` writes on every movement it creates.
+  static let importedNotesPrefix = "Imported • "
+  /// The same marker as a `LIKE` pattern. The prefix holds no `%` or `_`, so it matches literally.
+  private static let importedNotesPattern = importedNotesPrefix + "%"
+
+  private static func isImported(_ row: Exercise) -> Bool {
+    row.notes.hasPrefix(importedNotesPrefix)
+  }
+
+  /// Trimmed, with each run of inner whitespace collapsed to one space.
+  private static func normalized(_ name: String) -> String {
+    name.split(whereSeparator: \.isWhitespace).joined(separator: " ")
+  }
+}
+
+public nonisolated enum CatalogSeederError: Error, Equatable, Sendable {
+  /// A custom movement needs a name with something other than whitespace in it.
+  case blankName
+  /// The insert completed but the row could not be read back. Nothing is returned to log
+  /// against, because an entry the database does not hold would fail at the first set.
+  case notSaved
 }
 
 /// Maps a stored row into the shared `CatalogEntry` value.
