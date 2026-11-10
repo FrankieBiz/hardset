@@ -85,8 +85,12 @@ public struct HardsetRootView: View {
   /// Why the gym just named could not be saved. Shown inside the name sheet, which stays up so the
   /// typed name is still there for the retry; the picker's banner would be hidden behind it.
   @State private var addGymError: String?
+  /// Bumped when Settings changed saved data, such as an import, so History and Volume re-read
+  /// even when Settings was opened over their own tab and nothing else would prompt them.
+  @State private var dataRevision = 0
   @Environment(\.accessibilityReduceMotion) private var reduceMotion
   @Environment(\.scenePhase) private var scenePhase
+  @Environment(\.dynamicTypeSize) private var dynamicTypeSize
   private let environment: HardsetEnvironment
   /// Overrides the stored preference. Exists for previews and tests; the app passes `nil` so the
   /// user's own choice wins.
@@ -145,6 +149,7 @@ public struct HardsetRootView: View {
           // A gym renamed or archived in Settings changes the names the start screen and the gym
           // picker show; an archived pick falls back to the learned default in the model.
           onDataChanged: {
+            dataRevision &+= 1
             Task { await refreshLastWorkout() }
             do {
               try model.refreshGyms()
@@ -175,6 +180,9 @@ public struct HardsetRootView: View {
           WeeklyVolumeScreen(
             store: environment.volume, onShowSettings: { isShowingSettings = true }
           )
+          // A new identity re-reads the week after Settings changed saved data. The screen has
+          // no reload input of its own; Settings covers it while the read runs.
+          .id(dataRevision)
           // Matches the screen's own header: the window is the last 7 days and can step back.
           .navigationTitle("Volume")
           .hardsetTabRoot()
@@ -187,7 +195,8 @@ public struct HardsetRootView: View {
             progression: environment.progression,
             // Deleting a workout or a set there can change which workout is the latest.
             onHistoryChanged: { Task { await refreshLastWorkout() } },
-            onShowSettings: { isShowingSettings = true }
+            onShowSettings: { isShowingSettings = true },
+            dataRevision: dataRevision
           )
           .navigationTitle("History")
           .hardsetTabRoot()
@@ -394,6 +403,10 @@ public struct HardsetRootView: View {
             Text(selectedGymName)
               .font(Tokens.Text.title)
               .foregroundStyle(Tokens.Color.textPrimary)
+            if dynamicTypeSize.isAccessibilitySize {
+              // Under the name at large sizes, so the name keeps the card's width.
+              changeLabel
+            }
           } else {
             Text(gymInvitation)
               .font(Tokens.Text.headline)
@@ -406,10 +419,8 @@ public struct HardsetRootView: View {
         .multilineTextAlignment(.leading)
         .frame(maxWidth: .infinity, alignment: .leading)
 
-        if selectedGymName != nil {
-          Text("Change")
-            .font(Tokens.Text.labelEmphasis)
-            .foregroundStyle(Tokens.Color.accent)
+        if selectedGymName != nil, !dynamicTypeSize.isAccessibilitySize {
+          changeLabel
         }
         Image(systemName: "chevron.right")
           .font(Tokens.Text.caption.weight(.semibold))
@@ -420,6 +431,12 @@ public struct HardsetRootView: View {
     .buttonStyle(OutlinedCardButtonStyle())
     .accessibilityLabel(gymCardAccessibilityLabel)
     .accessibilityHint("Opens the list of gyms")
+  }
+
+  private var changeLabel: some View {
+    Text("Change")
+      .font(Tokens.Text.labelEmphasis)
+      .foregroundStyle(Tokens.Color.accent)
   }
 
   private var selectedGymName: String? {
@@ -464,7 +481,9 @@ public struct HardsetRootView: View {
       SectionLabel("Last workout")
 
       VStack(alignment: .leading, spacing: Tokens.Spacing.loose) {
-        HStack(alignment: .firstTextBaseline, spacing: Tokens.Spacing.regular) {
+        // Side by side at ordinary sizes; at accessibility sizes the duration drops under the
+        // title instead of squeezing it into a narrow column.
+        headerLayout {
           VStack(alignment: .leading, spacing: Tokens.Spacing.hairline) {
             Text(title.isEmpty ? date : title)
               .font(Tokens.Text.headline)
@@ -507,6 +526,12 @@ public struct HardsetRootView: View {
       .hardsetCard()
       .accessibilityElement(children: .combine)
     }
+  }
+
+  private var headerLayout: AnyLayout {
+    dynamicTypeSize.isAccessibilitySize
+      ? AnyLayout(VStackLayout(alignment: .leading, spacing: Tokens.Spacing.snug))
+      : AnyLayout(HStackLayout(alignment: .firstTextBaseline, spacing: Tokens.Spacing.regular))
   }
 
   /// Working sets, reps, and volume in the unit the lifter reads, rounded to whole units.
@@ -556,9 +581,11 @@ public struct HardsetRootView: View {
         onAddGym: { isAddingGym = true }
       )
       .hardsetNavigationTitle("Choose a gym")
+      // Tapping a row is the choice, so this button only closes: "Cancel", in the cancellation
+      // slot, as in the workout's own gym picker and every other picker.
       .toolbar {
-        ToolbarItem(placement: .confirmationAction) {
-          Button("Done") { isChoosingGym = false }
+        ToolbarItem(placement: .cancellationAction) {
+          Button("Cancel") { isChoosingGym = false }
         }
       }
       // Attached INSIDE the gym sheet on purpose. Two `.sheet` modifiers on the same anchor means
@@ -677,6 +704,19 @@ public struct HardsetRootView: View {
         .contentShape(Rectangle())
       }
       .buttonStyle(.plain)
+      // The accessory is a fixed-height slot in the tab bar's chrome, like the tab bar itself: its
+      // text stops growing at XXL, and from there a long press shows it in the Large Content
+      // Viewer, as the tab bar's own labels do.
+      .dynamicTypeSize(...DynamicTypeSize.xxLarge)
+      #if os(iOS)
+        .accessibilityShowsLargeContentViewer {
+          Label {
+            Text("^[\(coordinator.loggedSetCount) set](inflect: true) logged")
+          } icon: {
+            Image(systemName: "figure.strengthtraining.traditional")
+          }
+        }
+      #endif
       .accessibilityLabel(
         Text("Workout in progress, ^[\(coordinator.loggedSetCount) set](inflect: true) logged")
       )

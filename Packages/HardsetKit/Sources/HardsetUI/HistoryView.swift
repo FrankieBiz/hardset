@@ -207,8 +207,22 @@ public struct HistoryView: View {
 
   // MARK: - Text
 
-  static func dateText(_ date: Date) -> String {
-    date.formatted(.dateTime.weekday(.abbreviated).day().month(.abbreviated))
+  /// The row's date as spoken. The year is added whenever it is not this year, because the month
+  /// header that carries it is not read with the row, and imported history repeats every date.
+  static func dateText(_ date: Date, now: Date = .now) -> String {
+    let style: Date.FormatStyle = .dateTime.weekday(.abbreviated).day().month(.abbreviated)
+    return date.formatted(isThisYear(date, now: now) ? style : style.year())
+  }
+
+  /// "Tuesday 12 March", or "Tuesday 12 March 2024" when not this year, for a confirmation that
+  /// names the workout it acts on.
+  public static func fullDateText(_ date: Date, now: Date = .now) -> String {
+    let style: Date.FormatStyle = .dateTime.weekday(.wide).day().month(.wide)
+    return date.formatted(isThisYear(date, now: now) ? style : style.year())
+  }
+
+  private static func isThisYear(_ date: Date, now: Date) -> Bool {
+    Calendar.current.isDate(date, equalTo: now, toGranularity: .year)
   }
 
   static func volumeText(_ volume: SessionVolume, unit: WeightUnit) -> String {
