@@ -37,6 +37,10 @@ public nonisolated struct WorkoutImportPreview: Sendable {
     public let startedAt: Date
     public let finishedAt: Date
     public var sets: [Set]
+    /// The start exactly as the file wrote it. A date without an offset means a different instant
+    /// in each time zone, so a later import compares this text, read in the zone an earlier
+    /// import used, rather than trusting today's zone.
+    let startText: String
   }
 
   public struct Set: Sendable {
@@ -85,16 +89,17 @@ public nonisolated enum WorkoutCSVImport {
     }
     var sessions: [WorkoutImportPreview.Workout] = []
     var indexes: [String: Int] = [:]
+    var dates = DateParser(timeZone: timeZone)
     for (offset, row) in rows.dropFirst().enumerated() {
       let line = offset + 2
       guard row.count == headers.count else { throw WorkoutImportError.row(line, "Column count differs from the header") }
       let startText = value(row, hevy ? "start_time" : "date")
-      guard let start = date(startText, timeZone: timeZone) else {
+      guard let start = dates.date(startText) else {
         throw WorkoutImportError.row(line, "Unrecognized start date")
       }
       let end: Date
       if hevy {
-        guard let parsed = date(value(row, "end_time"), timeZone: timeZone), parsed >= start else {
+        guard let parsed = dates.date(value(row, "end_time")), parsed >= start else {
           throw WorkoutImportError.row(line, "Missing or invalid end date")
         }
         end = parsed
@@ -153,33 +158,99 @@ public nonisolated enum WorkoutCSVImport {
         sessions[index].sets.append(set)
       } else {
         indexes[key] = sessions.count
-        sessions.append(.init(title: title, startedAt: start, finishedAt: end, sets: [set]))
+        sessions.append(.init(
+          title: title, startedAt: start, finishedAt: end, sets: [set], startText: startText))
       }
     }
     guard !sessions.isEmpty else {
       throw skipped.isEmpty ? WorkoutImportError.empty : WorkoutImportError.noSupportedSets(skipped: skipped.count)
     }
     return .init(source: hevy ? "Hevy" : "Strong", sessions: sessions,
-      interpretation: "Unitless Strong loads interpreted as \(strongUnit.abbreviation). Dates without an offset interpreted in \(timeZone.identifier).",
+      interpretation: "Unitless Strong loads interpreted as \(strongUnit.abbreviation). \(zoneNote)\(timeZone.identifier).",
       originalCSV: text, skipped: skipped)
   }
 
-  private static func date(_ text: String, timeZone: TimeZone) -> Date? {
-    let iso = ISO8601DateFormatter()
-    iso.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-    if let result = iso.date(from: text) { return result }
-    iso.formatOptions = [.withInternetDateTime]
-    if let result = iso.date(from: text) { return result }
-    for format in ["yyyy-MM-dd HH:mm:ss", "dd MMM yyyy, HH:mm", "d MMM yyyy, HH:mm", "yyyy-MM-dd'T'HH:mm:ss"] {
-      let formatter = DateFormatter()
-      formatter.locale = Locale(identifier: "en_US_POSIX")
-      formatter.calendar = Calendar(identifier: .gregorian)
-      formatter.timeZone = timeZone
-      formatter.dateFormat = format
-      formatter.isLenient = false
-      if let result = formatter.date(from: text) { return result }
+  /// Precedes the time-zone identifier in every preview's interpretation, which `commit` writes
+  /// into each imported session's notes. A later import reads the zone back from there.
+  static let zoneNote = "Dates without an offset interpreted in "
+
+  /// The zone an imported session's notes say its dates were read in, if they say.
+  static func interpretedTimeZone(inNotes notes: String) -> TimeZone? {
+    guard let marker = notes.range(of: zoneNote) else { return nil }
+    let rest = notes[marker.upperBound...]
+    let identifier = rest.prefix { $0 != "." && !$0.isWhitespace }
+    return TimeZone(identifier: String(identifier))
+  }
+
+  /// Parses export dates with formatters built once, not once per cell per format: ICU setup per
+  /// formatter made a multi-year export take tens of seconds. The format that matched last is
+  /// tried first, since every row of a file uses the same one.
+  ///
+  /// A date without an offset is a wall-clock time in `timeZone`. Its text is validated strictly
+  /// in GMT, where no wall time is skipped, and then placed in `timeZone` by the calendar. A wall
+  /// time inside a spring-forward gap therefore resolves to the adjacent valid instant instead of
+  /// failing the whole file, while a date such as 30 February is still refused.
+  nonisolated struct DateParser {
+    private static let wallClockFormats = [
+      "yyyy-MM-dd HH:mm:ss", "dd MMM yyyy, HH:mm", "d MMM yyyy, HH:mm", "yyyy-MM-dd'T'HH:mm:ss",
+    ]
+    private let fractionalISO: ISO8601DateFormatter
+    private let iso: ISO8601DateFormatter
+    private let wallClock: [DateFormatter]
+    private let gmtCalendar: Calendar
+    private let localCalendar: Calendar
+    private var lastMatch = 0
+    private var parsed: [String: Date] = [:]
+
+    init(timeZone: TimeZone) {
+      fractionalISO = ISO8601DateFormatter()
+      fractionalISO.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+      iso = ISO8601DateFormatter()
+      iso.formatOptions = [.withInternetDateTime]
+      let gmt = TimeZone(secondsFromGMT: 0)!
+      var gmtCalendar = Calendar(identifier: .gregorian)
+      gmtCalendar.timeZone = gmt
+      self.gmtCalendar = gmtCalendar
+      var localCalendar = Calendar(identifier: .gregorian)
+      localCalendar.timeZone = timeZone
+      self.localCalendar = localCalendar
+      wallClock = Self.wallClockFormats.map { format in
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.calendar = gmtCalendar
+        formatter.timeZone = gmt
+        formatter.dateFormat = format
+        formatter.isLenient = false
+        return formatter
+      }
     }
-    return nil
+
+    mutating func date(_ text: String) -> Date? {
+      // Every set row of a workout repeats its dates, so most cells were read already.
+      if let known = parsed[text] { return known }
+      guard let result = parse(text) else { return nil }
+      parsed[text] = result
+      return result
+    }
+
+    private mutating func parse(_ text: String) -> Date? {
+      // An internet date-time always separates date and time with "T", so the common Strong and
+      // Hevy texts skip two failing ISO attempts per cell.
+      if text.contains(where: { $0 == "T" || $0 == "t" }),
+        let result = fractionalISO.date(from: text) ?? iso.date(from: text)
+      {
+        return result
+      }
+      let order = [lastMatch] + wallClock.indices.filter { $0 != lastMatch }
+      for index in order {
+        guard let gmtWallClock = wallClock[index].date(from: text) else { continue }
+        lastMatch = index
+        let parts = gmtCalendar.dateComponents(
+          [.era, .year, .month, .day, .hour, .minute, .second], from: gmtWallClock)
+        return localCalendar.date(from: parts)
+      }
+      return nil
+    }
   }
 
   private static func duration(_ text: String) -> TimeInterval? {

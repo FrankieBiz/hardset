@@ -95,7 +95,9 @@ public nonisolated struct DataTransferStore: Sendable {
     try Task.checkCancellation()
     return try await database.read { db in
       var count = 0
-      for workout in preview.sessions where try Self.isAlreadyImported(workout, from: preview.source, in: db) {
+      var zones = EarlierZones()
+      for workout in preview.sessions
+      where try Self.isAlreadyImported(workout, from: preview.source, zones: &zones, in: db) {
         count += 1
       }
       return count
@@ -119,7 +121,10 @@ public nonisolated struct DataTransferStore: Sendable {
       if try Row.fetchOne(db, sql: "SELECT id FROM deviceImportBatches WHERE sourceCSV = ?",
         arguments: [preview.originalCSV]) != nil
       {
-        if try preview.sessions.allSatisfy({ try Self.isAlreadyImported($0, from: preview.source, in: db) }) {
+        var zones = EarlierZones()
+        if try preview.sessions.allSatisfy({
+          try Self.isAlreadyImported($0, from: preview.source, zones: &zones, in: db)
+        }) {
           throw WorkoutImportError.alreadyImported
         }
         try db.execute(sql: "DELETE FROM deviceImportBatches WHERE sourceCSV = ?",
@@ -131,8 +136,9 @@ public nonisolated struct DataTransferStore: Sendable {
       var importedWorkouts = 0
       var importedSets = 0
       var skippedWorkouts = 0
+      var zones = EarlierZones()
       for workout in preview.sessions {
-        if try Self.isAlreadyImported(workout, from: preview.source, in: db) {
+        if try Self.isAlreadyImported(workout, from: preview.source, zones: &zones, in: db) {
           skippedWorkouts += 1
           continue
         }
@@ -204,14 +210,42 @@ public nonisolated struct DataTransferStore: Sendable {
 
   /// An imported session from the same app with the same start and title. Imported sessions are
   /// the only ones whose notes begin "Imported from <app> ", which `commit` writes.
+  ///
+  /// "The same start" is decided in the zone the earlier import used, which its notes record. A
+  /// date without an offset is a wall-clock time, so after the phone changes zone the same text
+  /// parses to a different instant; comparing instants alone would import every workout again.
+  /// A start read as the same instant also matches, which covers dates with an offset and an
+  /// exporting app that rewrote its wall-clock text for the new zone.
   private static func isAlreadyImported(
-    _ workout: WorkoutImportPreview.Workout, from source: String, in db: Database
+    _ workout: WorkoutImportPreview.Workout, from source: String, zones: inout EarlierZones,
+    in db: Database
   ) throws -> Bool {
     let startedAt = workout.startedAt
     let title = workout.title
-    return try Session
-      .where { $0.startedAt.eq(startedAt) && $0.title.eq(title) && $0.notes.like("Imported from \(source) %") }
-      .fetchCount(db) > 0
+    // Zone offsets span UTC-12 to UTC+14, so a reinterpreted start lies within this window.
+    let earliest = startedAt.addingTimeInterval(-27 * 3600)
+    let latest = startedAt.addingTimeInterval(27 * 3600)
+    let candidates = try Session
+      .where { $0.startedAt >= earliest && $0.startedAt <= latest }
+      .where { $0.title.eq(title) && $0.notes.like("Imported from \(source) %") }
+      .select { ($0.startedAt, $0.notes) }
+      .fetchAll(db)
+    for candidate in candidates {
+      if candidate.0 == startedAt { return true }
+      guard let zone = WorkoutCSVImport.interpretedTimeZone(inNotes: candidate.1) else { continue }
+      if zones.date(workout.startText, in: zone) == candidate.0 { return true }
+    }
+    return false
+  }
+
+  /// Date parsers for the zones earlier imports were read in, built once per check rather than
+  /// once per workout, since building formatters is the expensive part of parsing.
+  nonisolated struct EarlierZones {
+    private var parsers: [String: WorkoutCSVImport.DateParser] = [:]
+
+    mutating func date(_ text: String, in zone: TimeZone) -> Date? {
+      parsers[zone.identifier, default: WorkoutCSVImport.DateParser(timeZone: zone)].date(text)
+    }
   }
 
   private static func csv(in db: Database) throws -> Data {

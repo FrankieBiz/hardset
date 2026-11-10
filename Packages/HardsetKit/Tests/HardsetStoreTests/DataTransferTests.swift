@@ -146,6 +146,82 @@ struct DataTransferTests {
     #expect(counts.3 == ["Press (Imported • Strong)", "Squat (Imported • Strong)"])
   }
 
+  /// Strong's dates carry no offset, so they were read in the zone the phone was in. After a move
+  /// from New York to London the same wall-clock dates parse to instants five hours apart, which
+  /// must not make every earlier workout look new. Each import records its zone in its notes.
+  @Test("A newer export read in another time zone skips the workouts already imported")
+  func reimportAfterTimeZoneChange() async throws {
+    let db = try database()
+    let store = DataTransferStore(database: db)
+    let newYork = try #require(TimeZone(identifier: "America/New_York"))
+    let london = try #require(TimeZone(identifier: "Europe/London"))
+    _ = try await store.importWorkouts(try WorkoutCSVImport.preview(csv, strongUnit: .kilograms, timeZone: newYork))
+    let newer = csv + "2026-11-05 10:00:00,Push,1h,Press,1,105,8,,\n"
+    let preview = try WorkoutCSVImport.preview(newer, strongUnit: .kilograms, timeZone: london)
+    #expect(try await store.alreadyImportedWorkoutCount(in: preview) == 1)
+    let result = try await store.commit(preview)
+    #expect(result == WorkoutImportResult(importedWorkouts: 1, importedSets: 1, skippedWorkouts: 1))
+    #expect(try await db.read { try Session.fetchCount($0) } == 2)
+
+    // An export whose dates carry an offset is the same instant in any zone.
+    let offsetCSV = csv.replacingOccurrences(of: "2026-11-01 10:00:00", with: "2026-11-01T15:00:00Z")
+    let other = try database()
+    let otherStore = DataTransferStore(database: other)
+    _ = try await otherStore.importWorkouts(try WorkoutCSVImport.preview(offsetCSV, strongUnit: .kilograms, timeZone: newYork))
+    let again = try WorkoutCSVImport.preview(offsetCSV + "\n", strongUnit: .kilograms, timeZone: london)
+    #expect(try await otherStore.alreadyImportedWorkoutCount(in: again) == 1)
+  }
+
+  /// A row stamped inside the spring-forward gap names a wall time that did not exist locally. It
+  /// must not fail the whole file.
+  @Test("A wall time inside a daylight-saving gap is read rather than failing the file")
+  func daylightSavingGap() throws {
+    let newYork = try #require(TimeZone(identifier: "America/New_York"))
+    let text = csv.replacingOccurrences(of: "2026-11-01 10:00:00", with: "2024-03-10 02:30:00")
+    let preview = try WorkoutCSVImport.preview(text, strongUnit: .kilograms, timeZone: newYork)
+    let start = preview.sessions[0].startedAt
+    // 02:30 does not exist that night; the instant lands in the hour around it, not a day away.
+    let gapStart = Date(timeIntervalSince1970: 1_710_054_000)  // 2024-03-10 07:00 UTC
+    #expect(abs(start.timeIntervalSince(gapStart)) <= 3600)
+    // Invalid dates are still refused.
+    let invalid = csv.replacingOccurrences(of: "2026-11-01 10:00:00", with: "2026-02-30 10:00:00")
+    #expect(throws: WorkoutImportError.self) {
+      try WorkoutCSVImport.preview(invalid, strongUnit: .kilograms, timeZone: newYork)
+    }
+  }
+
+  /// Formatters are built once per preview, not once per date per format. Three years of Strong
+  /// history is around fifteen thousand rows; Hevy parses two dates per row.
+  @Test("A multi-year export previews quickly")
+  func largePreviewIsFast() throws {
+    var strong = "Date,Workout Name,Duration,Exercise Name,Set Order,Weight,Reps,RPE,Notes\n"
+    var hevy = "title,start_time,end_time,exercise_title,set_index,set_type,weight_kg,reps\n"
+    let day = 86_400.0
+    let formatter = DateFormatter()
+    formatter.locale = Locale(identifier: "en_US_POSIX")
+    formatter.timeZone = TimeZone(secondsFromGMT: 0)
+    let workouts = (0..<1000).map { Date(timeIntervalSince1970: 1_600_000_000 + Double($0) * day) }
+    formatter.dateFormat = "yyyy-MM-dd HH:mm:ss"
+    let strongDates = workouts.map(formatter.string(from:))
+    formatter.dateFormat = "d MMM yyyy, HH:mm"
+    let hevyStarts = workouts.map(formatter.string(from:))
+    let hevyEnds = workouts.map { formatter.string(from: $0.addingTimeInterval(3600)) }
+    for row in 0..<15_000 {
+      let workout = row / 15
+      strong += "\(strongDates[workout]),Push,1h,Press,\(row % 15 + 1),100,8,,\n"
+      hevy += "Push,\"\(hevyStarts[workout])\",\"\(hevyEnds[workout])\",Press,\(row % 15),normal,100,8\n"
+    }
+    let utc = TimeZone(secondsFromGMT: 0)!
+    let began = Date()
+    let strongPreview = try WorkoutCSVImport.preview(strong, strongUnit: .kilograms, timeZone: utc)
+    let hevyPreview = try WorkoutCSVImport.preview(hevy, strongUnit: .kilograms, timeZone: utc)
+    let elapsed = Date().timeIntervalSince(began)
+    #expect(strongPreview.sessions.count == 1000)
+    #expect(hevyPreview.setCount == 15_000)
+    // Building formatters per cell took about 41 s here; the bound leaves room for a loaded runner.
+    #expect(elapsed < 5, "Preview took \(elapsed) s")
+  }
+
   @Test("A different file holding only imported workouts writes nothing")
   func nothingNew() async throws {
     let db = try database()
