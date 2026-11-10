@@ -53,10 +53,43 @@ struct GymStoreTests {
   /// there is no uniqueness constraint and duplicates must be allowed.
   @Test("Duplicate names are allowed")
   func duplicateNamesAllowed() throws {
-    let (_, gyms, _, _) = try fixture()
+    let (database, gyms, _, _) = try fixture()
     _ = try gyms.createGym(name: "Home Gym", now: now)
-    _ = try gyms.createGym(name: "Home Gym", now: now)
+    // The second arrives from another device, which created it offline.
+    try database.write { db in
+      try Gym.insert { Gym.Draft(id: UUID(), name: "Home Gym", createdAt: self.now) }.execute(db)
+    }
     #expect(try gyms.gyms().count == 2)
+  }
+
+  /// Load history is keyed by machine, so a second "hammer strength" at the same gym would start
+  /// empty and progression would look reset. Creating a name that already exists here selects it.
+  @Test("Creating an existing gym or machine name returns it rather than a duplicate")
+  func creatingAnExistingNameReturnsIt() throws {
+    let (_, gyms, _, _) = try fixture()
+    let gym = try gyms.createGym(name: "Home Gym", now: now)
+    #expect(try gyms.createGym(name: "  home gym ", now: now) == gym)
+    #expect(try gyms.createGym(name: "Hôme Gym", now: now) == gym)
+    #expect(try gyms.gyms().map(\.name) == ["Home Gym"])
+    let other = try gyms.createGym(name: "Club", now: now)
+    #expect(other != gym)
+
+    let press = try gyms.createMachine(at: gym, name: "Leg Press", brand: "Hammer Strength", now: now)
+    #expect(try gyms.createMachine(at: gym, name: "leg press ", brand: " hammer strength", now: now) == press)
+    // A different brand is a different machine, and the same name at another gym is too.
+    let cybex = try gyms.createMachine(at: gym, name: "Leg Press", brand: "Cybex", now: now)
+    #expect(cybex != press)
+    let elsewhere = try gyms.createMachine(at: other, name: "Leg Press", brand: "Hammer Strength", now: now)
+    #expect(elsewhere != press)
+    #expect(try gyms.machines(at: gym).count == 2)
+    #expect(try gyms.machines(at: gym).allSatisfy { $0.name == "Leg Press" })
+
+    // An archived machine is not resurrected; a new one is created.
+    try gyms.archiveMachine(cybex)
+    let fresh = try gyms.createMachine(at: gym, name: "Leg Press", brand: "Cybex", now: now)
+    #expect(fresh != cybex)
+    #expect(throws: EquipmentNameError.blank) { try gyms.createGym(name: "  ", now: self.now) }
+    #expect(throws: EquipmentNameError.blank) { try gyms.createMachine(at: gym, name: "", now: self.now) }
   }
 
   /// Archiving rather than deleting: logged sets reference these machines, and a hard delete would

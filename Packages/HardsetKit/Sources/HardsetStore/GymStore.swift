@@ -59,16 +59,36 @@ public nonisolated struct GymStore: Sendable {
     }
   }
 
+  /// Saves a gym, or returns the live gym that already has this name.
+  ///
+  /// The name is trimmed; a blank one throws `EquipmentNameError.blank`. A live gym whose name
+  /// matches ignoring case, diacritics and spacing is returned instead of a duplicate, as
+  /// `CatalogSeeder.createCustomExercise` does for movements, so a retap or a retyped name selects
+  /// the gym the lifter already has. Duplicates can still arrive from another device created
+  /// offline; storage allows them, this only stops one device making its own.
   @discardableResult
   public func createGym(name: String, now: Date = Date()) throws -> GymID {
-    let id = GymID()
-    try database.write { db in
+    let trimmed = try Self.validName(name)
+    return try database.write { db in
+      let existing = try Gym.where { !$0.isArchived }.order { ($0.createdAt, $0.id) }.fetchAll(db)
+        .first { Self.sameName($0.name, trimmed) }
+      if let existing { return GymID(rawValue: existing.id) }
+      let id = GymID()
       try Gym.insert {
-        Gym.Draft(id: id.rawValue, name: name, isArchived: false, createdAt: now)
+        Gym.Draft(id: id.rawValue, name: trimmed, isArchived: false, createdAt: now)
       }
       .execute(db)
+      return id
     }
-    return id
+  }
+
+  /// Equal ignoring case, diacritics, and leading, trailing or repeated spaces.
+  private static func sameName(_ lhs: String, _ rhs: String) -> Bool {
+    func folded(_ value: String) -> String {
+      value.split(whereSeparator: \.isWhitespace).joined(separator: " ")
+    }
+    return folded(lhs).compare(folded(rhs), options: [.caseInsensitive, .diacriticInsensitive])
+      == .orderedSame
   }
 
   /// Archives rather than deletes. Logged sets reference machines at this gym, and a hard delete
@@ -123,6 +143,13 @@ public nonisolated struct GymStore: Sendable {
     }
   }
 
+  /// Saves a machine at a gym, or returns the live machine there with the same name and brand.
+  ///
+  /// Name and brand are trimmed; a blank name throws `EquipmentNameError.blank`. Load history is
+  /// keyed by machine, so a second "hammer strength leg press" at the same gym would start with
+  /// empty history and progression would look reset. A match ignores case, diacritics and
+  /// spacing, and is returned unchanged: its saved stack step is not overwritten by this call.
+  /// A different brand, or the same name at another gym, is a different machine.
   @discardableResult
   public func createMachine(
     at gymID: GymID,
@@ -132,18 +159,24 @@ public nonisolated struct GymStore: Sendable {
     now: Date = Date()
   ) throws -> MachineID {
     try Self.validateIncrement(stackIncrementKg)
-    let id = MachineID()
-    try database.write { db in
+    let trimmedName = try Self.validName(name)
+    let trimmedBrand = brand.trimmingCharacters(in: .whitespacesAndNewlines)
+    return try database.write { db in
+      let existing = try Machine.where { $0.gymID.eq(gymID.rawValue) && !$0.isArchived }
+        .order { ($0.createdAt, $0.id) }.fetchAll(db)
+        .first { Self.sameName($0.name, trimmedName) && Self.sameName($0.brand, trimmedBrand) }
+      if let existing { return MachineID(rawValue: existing.id) }
+      let id = MachineID()
       try Machine.insert {
         Machine.Draft(
-          id: id.rawValue, gymID: gymID.rawValue, name: name, brand: brand,
+          id: id.rawValue, gymID: gymID.rawValue, name: trimmedName, brand: trimmedBrand,
           loadType: "unknown", stackIncrementKg: stackIncrementKg,
           isArchived: false, createdAt: now
         )
       }
       .execute(db)
+      return id
     }
-    return id
   }
 
   /// Validate and persist before any logger state adopts the equipment constraint.
