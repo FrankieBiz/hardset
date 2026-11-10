@@ -321,3 +321,34 @@ To preserve architectural velocity and calibration honesty, this workspace adher
 - Delivery remains on the feature branch. This planning request does not authorize
   promoting the previously held app implementation to production. Next step is review
   of the proposed direction, followed by discovery/prototype work if selected.
+
+## Product blueprint and broader business decisions — 2026-11-09
+
+- Objective: continue the endorsed strategy through concrete product choices, then
+  address broader business and operating questions. This continuation remains planning.
+- Worktree/branch: `/home/frankbiz/orca/workspaces/hardset/bobtail`, `FrankieBiz/bobtail`.
+- Owned paths: `docs/HARDSET_STRATEGIC_PLAN.md`, new
+  `docs/HARDSET_PRODUCT_BLUEPRINT.md`, new `docs/HARDSET_BUSINESS_AND_VALIDATION.md`,
+  and this handoff. No application, schema, configuration or test code changed.
+- Product decisions: one complete plan-to-review experience; flexible sequence;
+  today-only edits by default; plan versions independent of completed facts;
+  equipment/context distinctions; explicit comparison and correction behavior;
+  bounded first release and acceptance scenarios. Automatic coaching remains deferred.
+- Broader decisions: useful free core; proposed one-time paid planning/review depth;
+  channel sequence; privacy-conscious measurement/support; focused iPhone release;
+  ownership/entitlement preservation; operating economics and release evidence gates.
+- Prepared an interview protocol, prototype tasks, evidence record, pivot criteria
+  and an explicit external-input list. Candidate prices and arithmetic are illustrative
+  research cases, not live offers or estimates of actual business performance.
+- Research: refreshed official Liftin', Hevy, Liftosaur and Boostcamp documentation.
+  Hevy pricing was readable in indexed text but direct fetch returned Loading; no
+  exact Hevy price was relied upon. No outreach, interviews, purchases or publishing.
+- Verification: make check exit 0 (181 Core, 204 Store, 12 orchestration tests;
+  127 syntax parses; query-plan/result checks; 172 contrast pairs). Document local
+  links resolve and citation/placeholder review passed. Markdown whitespace cleaned.
+- Evidence boundary: switching/retention, equipment setup value, willingness to pay,
+  operating economics, delivery capacity and current signed-device readiness cannot
+  be determined by further desk planning. Next concrete step is observed-use research
+  and verification of a candidate native build, not another speculative feature pillar.
+- Delivery remains on the existing feature branch; no production promotion of the
+  earlier implementation is implied by approval of the planning direction.

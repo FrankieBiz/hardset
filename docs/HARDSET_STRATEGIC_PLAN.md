@@ -1,8 +1,17 @@
 # Hardset: major product bets and strategic pivots
 
-**Research date:** 9 November 2026  
-**Status:** Planning proposal. No roadmap approval, app changes, pricing changes, or launch commitments are implied.  
+**Research date:** 9 November 2026
+**Status:** The owner endorsed this direction on 9 November 2026 and requested continued planning. Detailed scope, prices and launch commitments remain proposals; no implementation is authorized by this document.
 **Audience:** Product owner deciding what Hardset should become.
+
+## Planning continuation
+
+The direction has been developed into two decision documents:
+
+- [Product blueprint](HARDSET_PRODUCT_BLUEPRINT.md): first-release scope, plan/workout semantics, equipment context, comparison rules and acceptance scenarios.
+- [Business and validation](HARDSET_BUSINESS_AND_VALIDATION.md): free/paid boundaries, billing hypothesis, distribution, operating model, research protocol and explicit pivot/blocking conditions.
+
+Read this document for the researched rationale; use those documents for the proposed decisions and next evidence-gathering work. They contain no claim that the proposed capabilities have shipped.
 
 ## The recommendation
 
