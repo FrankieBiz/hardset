@@ -29,13 +29,17 @@ public struct LoadStepSheet: View {
           Text(machineName).font(Tokens.Text.title).foregroundStyle(Tokens.Color.textPrimary)
           Text("Enter the smallest load change this machine actually permits in \(unit.abbreviation). Leave it empty if unknown. This controls inline adjustments and future record comparisons; saved loads stay unchanged.")
             .font(Tokens.Text.provenance).foregroundStyle(Tokens.Color.textSecondary)
-          NumericPad(buffer: $buffer, title: "Load step", unit: unit.abbreviation, onDone: save)
           if failed {
             Text("The load step could not be saved. Try again. No draft or saved load was changed.")
               .font(Tokens.Text.provenance).foregroundStyle(Tokens.Color.error)
           }
-          Button("Save load step", action: save)
-            .buttonStyle(HardsetButtonStyle(.primary, size: .logger)).disabled(!valid)
+          // One commit action: the pad's own footer is the explicit Save. A second "Save" button
+          // under a primary "Done" gave two identical-looking commits, only one of which showed
+          // when the value could not be saved.
+          NumericPad(
+            buffer: $buffer, title: "Load step", unit: unit.abbreviation,
+            doneTitle: "Save load step", isDoneEnabled: valid, onDone: save
+          )
         }.padding(Tokens.Spacing.loose)
       }
       .background(Tokens.Color.background)

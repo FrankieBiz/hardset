@@ -13,9 +13,9 @@ public enum SetRowField: Hashable, Sendable {
 ///
 /// 1. **The prefill is a committed value, never placeholder text.** The reference app put last
 ///    session's numbers in `TextField(prompt:)`, so a row that visibly read "60" reported an
-///    empty field and logged 0 kg. Here the suggestion is written into the buffer, and the
-///    "Last time" column is rendered *outside* the fields — so what looks filled is filled, and
-///    what is only a hint cannot be mistaken for one.
+///    empty field and logged 0 kg. Here the suggestion is written into the draft and the keypad is
+///    seeded from it, and the "Last time" column is rendered *outside* the fields — so what looks
+///    filled is filled, and what is only a hint cannot be mistaken for one.
 /// 2. **The log control cannot fire on an incomplete row.** It is bound to
 ///    `SetEntryDraft.isLoggable`, which is the same predicate `LoggerStore.logSet` enforces. A
 ///    disagreement between them is impossible because there is only one predicate.
@@ -23,18 +23,17 @@ public enum SetRowField: Hashable, Sendable {
 ///    controls per row costs roughly 280 VoiceOver swipes to review. The row reads as a
 ///    sentence and exposes its actions as named custom actions instead.
 ///
+/// The row does not own a keypad. Each row used to present its own, so a tap on another row's
+/// field while one was up highlighted that row and kept typing into the first: digits went into a
+/// set the lifter was not looking at. `SessionView` hosts the only keypad and tells the row which
+/// field it is editing; the row reports taps with `onBeginEditing`.
+///
 /// Two layouts, chosen from Dynamic Type rather than by shrinking text: a single line of columns
 /// at ordinary sizes, and a stacked card at accessibility sizes, where the values take the full
 /// width and carry their own labels.
 public struct SetRowView: View {
   @Binding private var draft: SetEntryDraft
-  @State private var weightBuffer: NumericEntryBuffer
-  @State private var repsBuffer: NumericEntryBuffer
   @State private var adjustmentFeedback = 0
-  @State private var editing: SetRowField?
-  /// The keypad's measured height, so the sheet is exactly as tall as its keys. Seeded with a
-  /// close estimate so the first presentation does not visibly resize.
-  @State private var padHeight: CGFloat = 470
 
   @Environment(\.dynamicTypeSize) private var dynamicTypeSize
   @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -48,13 +47,31 @@ public struct SetRowView: View {
   private let machineIncrementKg: Double?
   private let previous: PriorSetRecord?
   private let priorNote: String?
+  private let editingField: SetRowField?
+  private let editingText: String?
   private let onLog: () -> Void
+  private let onBeginEditing: ((SetRowField) -> Void)?
+  private let onUndo: (() -> Void)?
+  private let onEdit: (() -> Void)?
+  private let onRemove: (() -> Void)?
 
   /// - Parameter isNext: The first unlogged set of its exercise. Its log control is filled rather
   ///   than outlined, so the eye lands on the one tap that matters between sets.
   /// - Parameter showsInlineLabels: Draws "Last time" and the unit inside the row. A caller that
   ///   draws a column header above its rows passes `false`; accessibility sizes always show them,
   ///   because the stacked layout has no columns for a header to label.
+  /// - Parameter editingField: The field the keypad is on, drawn with the focus ring. `nil` when
+  ///   the keypad is elsewhere or closed.
+  /// - Parameter editingText: What has been typed into that field so far, exactly as typed, so
+  ///   "100." reads "100." mid-entry rather than a reformatted number.
+  /// - Parameter onBeginEditing: Asks the host to put its keypad on a field. `nil` leaves the
+  ///   fields as read-only figures.
+  /// - Parameter onUndo: Returns a logged set to unlogged, keeping its numbers. Offered from the
+  ///   row's context menu and as a named VoiceOver action.
+  /// - Parameter onEdit: Undoes a logged set and opens the keypad on it, so a wrong number is
+  ///   corrected and logged again.
+  /// - Parameter onRemove: Removes an unlogged row. A logged row is undone first; it is never
+  ///   removed in one step.
   public init(
     draft: Binding<SetEntryDraft>,
     ordinal: Int,
@@ -66,7 +83,13 @@ public struct SetRowView: View {
     machineIncrementKg: Double? = nil,
     previous: PriorSetRecord? = nil,
     priorNote: String? = nil,
-    onLog: @escaping () -> Void
+    editingField: SetRowField? = nil,
+    editingText: String? = nil,
+    onLog: @escaping () -> Void,
+    onBeginEditing: ((SetRowField) -> Void)? = nil,
+    onUndo: (() -> Void)? = nil,
+    onEdit: (() -> Void)? = nil,
+    onRemove: (() -> Void)? = nil
   ) {
     self._draft = draft
     self.ordinal = ordinal
@@ -78,31 +101,20 @@ public struct SetRowView: View {
     self.machineIncrementKg = machineIncrementKg
     self.previous = previous
     self.priorNote = priorNote
+    self.editingField = editingField
+    self.editingText = editingText
     self.onLog = onLog
-
-    // Seeded once, from whatever the caller already resolved as the suggestion. Note the
-    // conversion: the draft is canonical kilograms, the buffer is what the user reads.
-    self._weightBuffer = State(
-      initialValue: NumericEntryBuffer(
-        value: draft.wrappedValue.weightKg.map(unit.fromKilograms),
-        maximumIntegerDigits: 4,
-        maximumFractionDigits: 2
-      )
-    )
-    self._repsBuffer = State(
-      initialValue: NumericEntryBuffer(
-        value: draft.wrappedValue.reps.map(Double.init),
-        allowsDecimal: false,
-        maximumIntegerDigits: 3,
-        maximumFractionDigits: 0
-      )
-    )
+    self.onBeginEditing = onBeginEditing
+    self.onUndo = onUndo
+    self.onEdit = onEdit
+    self.onRemove = onRemove
   }
 
   /// True at accessibility text sizes, where five columns cannot share one line legibly.
   private var isStacked: Bool { dynamicTypeSize.isAccessibilitySize }
 
   public var body: some View {
+    let shape = RoundedRectangle(cornerRadius: Tokens.Radius.control)
     Group {
       if isStacked {
         VStack(spacing: Tokens.Spacing.snug) {
@@ -120,51 +132,72 @@ public struct SetRowView: View {
     .padding(.vertical, Tokens.Spacing.tight)
     // Opaque. Dense numeric rows are the one surface glass is actively wrong for. A logged row
     // takes the success tint, so a glance down the card shows what is done without reading.
-    .background(
-      isLogged ? Tokens.Color.successSurface : Tokens.Color.surface,
-      in: RoundedRectangle(cornerRadius: Tokens.Radius.control)
-    )
+    .background(isLogged ? Tokens.Color.successSurface : Tokens.Color.surface, in: shape)
     .animation(Tokens.Motion.adaptive(Tokens.Motion.state, reduceMotion: reduceMotion), value: isLogged)
+    // Corrections live behind a long press, the iOS convention for acting on one item in place:
+    // deliberate enough that a hurried tap on the check can never undo or remove a set.
+    .contentShape(.contextMenuPreview, shape)
+    .contextMenu { corrections }
     .sensoryFeedback(.selection, trigger: adjustmentFeedback)
     .accessibilityElement(children: .combine)
     .accessibilityLabel(spokenLabel)
-    .accessibilityHint(isLogged ? "This set is saved." : (draft.isLoggable ? "Double tap to log this set." : "Enter a weight and reps to log."))
+    .accessibilityHint(accessibilityHint)
+    // The default activation does what the hint says. Combining the row's buttons left
+    // double-tap to whichever child VoiceOver chose -- in practice the weight field.
+    .accessibilityAction {
+      guard !isLogged else { return }
+      if draft.isLoggable {
+        onLog()
+      } else {
+        onBeginEditing?(.weight)
+      }
+    }
     .accessibilityActions {
-      if !isLogged {
+      if isLogged {
+        if let onEdit { Button("Edit set", action: onEdit) }
+        if let onUndo { Button("Undo log", action: onUndo) }
+      } else {
         Button("Log set") { if draft.isLoggable { onLog() } }
-        Button("Edit weight") { beginEditing(.weight) }
-        Button("Edit reps") { beginEditing(.reps) }
+        if let onBeginEditing {
+          Button("Edit weight") { onBeginEditing(.weight) }
+          Button("Edit reps") { onBeginEditing(.reps) }
+        }
         if let step = machineIncrementKg, step.isFinite, step > 0 {
           Button("Increase load by one machine step") { adjustLoad(by: step) }
           Button("Decrease load by one machine step") { adjustLoad(by: -step) }
         }
+        if let onRemove { Button("Remove set", action: onRemove) }
       }
     }
-    // One keypad for the whole set. Presented while either field is being edited and retargeted in
-    // place when "Next" moves from weight to reps. Keyed on the field, the sheet was dismissed and
-    // presented again between the two numbers of every set: half a second of sliding keypad, and a
-    // digit typed during it was lost.
-    .sheet(isPresented: isEditing) {
-      padSheet(for: editing ?? .weight)
-    }
-    // Reseeded when the unit changes, because `@State` is initialised once per view identity: the
-    // suffix switched to "kg" while the number stayed in pounds, so a 60 kg set read "132.28 kg".
-    // Editing that row would then have written 132.28 kg to storage — a wrong number the user
-    // never typed. The draft is canonical kilograms, so reseeding from it is always correct.
-    .onChange(of: unit) { editing = nil; reseedBuffers() }
-    .onChange(of: isLogged) { if isLogged { editing = nil; reseedBuffers() } }
-    .onChange(of: draft) {
-      let bufferWeight = weightBuffer.value.map(unit.toKilograms)
-      let bufferReps = repsBuffer.value.map { Int($0) }
-      let loadChanged: Bool
-      if let saved = draft.weightKg, let displayed = bufferWeight {
-        loadChanged = abs(saved - displayed) > unit.toKilograms(0.005) + 1e-10
-      } else { loadChanged = draft.weightKg != bufferWeight }
-      if editing == nil || loadChanged || draft.reps != bufferReps {
-        editing = nil
-        reseedBuffers()
+  }
+
+  /// What a long press offers. A logged set can be undone, or undone and opened for editing; an
+  /// unlogged row can be removed. Nothing here deletes a saved set in one step.
+  @ViewBuilder private var corrections: some View {
+    if isLogged {
+      if let onEdit {
+        Button(action: onEdit) {
+          Label("Edit set", systemImage: "pencil")
+        }
+      }
+      if let onUndo {
+        Button(action: onUndo) {
+          Label("Undo log", systemImage: "arrow.uturn.backward")
+        }
+      }
+    } else if let onRemove {
+      Button(role: .destructive, action: onRemove) {
+        Label("Remove set", systemImage: "trash")
       }
     }
+  }
+
+  private var accessibilityHint: String {
+    if isLogged {
+      return onUndo == nil ? "This set is saved." : "This set is saved. Actions can undo or edit it."
+    }
+    if draft.isLoggable { return "Double tap to log this set." }
+    return onBeginEditing == nil ? "Enter a weight and reps to log." : "Double tap to enter a weight."
   }
 
   // MARK: - Layouts
@@ -179,9 +212,9 @@ public struct SetRowView: View {
       previousColumn
         .frame(width: SetRowMetrics.previousWidth, alignment: .leading)
 
-      valueField(.weight, buffer: weightBuffer, suffix: showsInlineLabels ? unit.abbreviation : nil)
+      valueField(.weight, suffix: showsInlineLabels ? unit.abbreviation : nil)
         .frame(minWidth: SetRowMetrics.weightMinWidth)
-      valueField(.reps, buffer: repsBuffer, suffix: showsInlineLabels ? "reps" : nil)
+      valueField(.reps, suffix: showsInlineLabels ? "reps" : nil)
         .frame(minWidth: SetRowMetrics.repsMinWidth)
 
       logButton
@@ -196,30 +229,22 @@ public struct SetRowView: View {
         ordinalBadge
         previousColumn
       }
-      valueField(.weight, buffer: weightBuffer, suffix: unit.abbreviation)
-      valueField(.reps, buffer: repsBuffer, suffix: "reps")
+      valueField(.weight, suffix: unit.abbreviation)
+      valueField(.reps, suffix: "reps")
       logButton
     }
     .padding(.vertical, Tokens.Spacing.tight)
   }
 
-  /// Rebuilds both display buffers from the draft, in the current unit.
-  private func reseedBuffers() {
-    weightBuffer = NumericEntryBuffer(
-      value: draft.weightKg.map(unit.fromKilograms),
-      maximumIntegerDigits: 4,
-      maximumFractionDigits: 2
-    )
-    repsBuffer = NumericEntryBuffer(
-      value: draft.reps.map(Double.init),
-      allowsDecimal: false,
-      maximumIntegerDigits: 3,
-      maximumFractionDigits: 0
-    )
-  }
-
+  /// The −/+ machine-step pair, on the next set up and on a row being edited only.
+  ///
+  /// Drawn under every unlogged row, the pair nearly doubled a card's height and put a
+  /// neighbouring row's adjuster under the thumb. Every row keeps the same steps as named
+  /// VoiceOver actions.
   @ViewBuilder private var inlineAdjusters: some View {
-    if !isLogged, let step = machineIncrementKg, step.isFinite, step > 0 {
+    if !isLogged, isNext || editingField != nil,
+      let step = machineIncrementKg, step.isFinite, step > 0
+    {
       ViewThatFits(in: .horizontal) {
         HStack(spacing: Tokens.Spacing.snug) {
           loadAdjustment(-step)
@@ -233,22 +258,25 @@ public struct SetRowView: View {
     }
   }
 
+  /// Labelled with the same figure the machine chip shows, so one machine step reads as one
+  /// number on the card.
   private func loadAdjustment(_ delta: Double) -> some View {
-    let label = "\(delta < 0 ? "−" : "+")\(unit.fromKilograms(abs(delta)).formatted(.number.precision(.fractionLength(0...2)))) \(unit.abbreviation)"
+    let step = LoadFigure.text(unit.fromKilograms(abs(delta)))
+    let label = "\(delta < 0 ? "−" : "+")\(step) \(unit.abbreviation)"
     return Button(label) { adjustLoad(by: delta) }
     .buttonStyle(HardsetButtonStyle(.secondary, size: .logger, fullWidth: true))
     .disabled(draft.weightKg == nil || (delta < 0 && draft.weightKg == 0))
-    .accessibilityLabel("\(delta < 0 ? "Decrease" : "Increase") load by \(unit.fromKilograms(abs(delta)).formatted()) \(unit.abbreviation)")
+    .accessibilityLabel("\(delta < 0 ? "Decrease" : "Increase") load by \(step) \(unit.abbreviation)")
   }
 
+  /// Writes canonical kilograms to the draft. A keypad open on this row is reseeded by its host
+  /// when the draft changes underneath it.
   private func adjustLoad(by delta: Double) {
     guard !isLogged, let current = draft.weightKg else { return }
     let updated = max(0, current + delta)
     guard updated.isFinite, updated != current else { return }
     adjustmentFeedback += 1
-    editing = nil
     draft.weightKg = updated
-    reseedBuffers()
   }
 
   // MARK: - Pieces
@@ -284,7 +312,7 @@ public struct SetRowView: View {
           .padding(.bottom, Tokens.Spacing.hairline)
       }
       if let previous {
-        Text(Self.format(unit.fromKilograms(previous.weightKg)))
+        Text(LoadFigure.text(unit.fromKilograms(previous.weightKg)))
           .font(Tokens.Text.figure)
           .foregroundStyle(Tokens.Color.textSecondary)
           .lineLimit(1)
@@ -309,21 +337,30 @@ public struct SetRowView: View {
     }
   }
 
-  private func valueField(
-    _ field: SetRowField,
-    buffer: NumericEntryBuffer,
-    suffix: String?
-  ) -> some View {
-    let isEditing = editing == field
+  /// The figure a field shows: what is being typed while the keypad is on it, otherwise the
+  /// draft, in the display unit, written the way the keypad writes it. `nil` means empty.
+  private func displayText(_ field: SetRowField) -> String? {
+    if editingField == field, let editingText {
+      return editingText.isEmpty ? nil : editingText
+    }
+    switch field {
+    case .weight: return draft.weightKg.map { LoadFigure.text(unit.fromKilograms($0)) }
+    case .reps: return draft.reps.map { String($0) }
+    }
+  }
+
+  private func valueField(_ field: SetRowField, suffix: String?) -> some View {
+    let isEditing = editingField == field
+    let text = displayText(field)
     let shape = RoundedRectangle(cornerRadius: Tokens.Radius.control)
     return Button {
-      beginEditing(field)
+      onBeginEditing?(field)
     } label: {
       HStack(alignment: .firstTextBaseline, spacing: Tokens.Spacing.tight) {
         // An empty field shows an em dash, never "0" — a zero on screen reads as a value.
-        Text(buffer.isEmpty ? "—" : buffer.displayText)
+        Text(text ?? "—")
           .font(Tokens.Text.setEntry)
-          .foregroundStyle(buffer.isEmpty ? Tokens.Color.textSecondary : Tokens.Color.textPrimary)
+          .foregroundStyle(text == nil ? Tokens.Color.textSecondary : Tokens.Color.textPrimary)
           // Condensed tabular figures fit a pound value such as "132.28" at full size on a 375 pt
           // phone. The mild floor below exists only so an extreme value shrinks a little rather
           // than truncating: a number cut to "132.…" is worse than one drawn slightly smaller.
@@ -347,7 +384,7 @@ public struct SetRowView: View {
       .contentShape(shape)
     }
     .buttonStyle(SetReadoutStyle())
-    .disabled(isLogged)
+    .disabled(isLogged || onBeginEditing == nil)
   }
 
   /// The one tap the whole logger is built around.
@@ -408,94 +445,38 @@ public struct SetRowView: View {
     return isReady ? Tokens.Color.accent : Tokens.Color.textSecondary
   }
 
-  /// Whether the keypad is up. Dismissing it, by Done or by dragging, ends editing.
-  private var isEditing: Binding<Bool> {
-    Binding(get: { editing != nil }, set: { if !$0 { editing = nil } })
-  }
-
-  private func padSheet(for field: SetRowField) -> some View {
-    let binding: Binding<NumericEntryBuffer> =
-      field == .weight
-      ? Binding(get: { weightBuffer }, set: { weightBuffer = $0; pushToDraft(.weight) })
-      : Binding(get: { repsBuffer }, set: { repsBuffer = $0; pushToDraft(.reps) })
-
-    return ScrollView {
-      NumericPad(
-        buffer: binding,
-        title: field == .weight ? "Weight" : "Reps",
-        unit: field == .weight ? unit.abbreviation : "reps",
-        onDone: { editing = nil },
-        onNext: field == .weight ? {
-          if !repsBuffer.isEmpty { repsBuffer.replaceOnFirstEntry = true }
-          editing = .reps
-        } : nil
-      )
-      // Measured rather than fixed. A hard-coded 370 pt detent was shorter than the pad's own
-      // minimum (380 pt before any larger text), so the bottom row could clip; the scroll view
-      // keeps every key reachable when the measured height exceeds what the screen offers.
-      .onGeometryChange(for: CGFloat.self) { proxy in
-        proxy.size.height
-      } action: { height in
-        padHeight = height
-      }
-    }
-    .scrollBounceBehavior(.basedOnSize)
-    .background(Tokens.Color.surface)
-    .presentationDetents([.height(padHeight)])
-    .presentationBackground(Tokens.Color.surface)
-    .presentationDragIndicator(.hidden)
-    // The row stays visible and tappable behind the pad, so this reads as a keyboard
-    // replacement rather than a modal that interrupts the set.
-    #if os(iOS)
-      .presentationBackgroundInteraction(.enabled(upThrough: .height(padHeight)))
-      .presentationCornerRadius(Tokens.Radius.card)
-    #endif
-  }
-
-  // MARK: - Wiring
-
-  /// Puts the keypad on a field. A field that already holds a value is armed to be replaced by
-  /// the first digit typed, so retyping a prefilled weight does not mean deleting it first.
-  private func beginEditing(_ field: SetRowField) {
-    guard !isLogged else { return }
-    if field == .weight && !weightBuffer.isEmpty {
-      weightBuffer.replaceOnFirstEntry = true
-    } else if field == .reps && !repsBuffer.isEmpty {
-      repsBuffer.replaceOnFirstEntry = true
-    }
-    editing = field
-  }
-
-  /// Writes only the field being edited. Editing reps must never round-trip an untouched
-  /// canonical load through a rounded pounds display. There is no `?? 0` here: an empty
-  /// buffer stays nil and cannot make a row loggable.
-  private func pushToDraft(_ field: SetRowField) {
-    guard !isLogged else { return }
-    switch field {
-    case .weight: draft.weightKg = weightBuffer.value.map(unit.toKilograms)
-    case .reps: draft.reps = repsBuffer.value.flatMap { Int(exactly: $0) }
-    }
-  }
-
   private var spokenLabel: String {
     var parts: [String] = [isWarmup ? "Warm-up set" : "Set \(ordinal + 1)"]
-    if let weight = weightBuffer.value, let reps = repsBuffer.value {
-      parts.append("\(Self.format(weight)) \(unit.abbreviation), \(Int(reps)) reps")
+    if let weight = draft.weightKg, let reps = draft.reps {
+      parts.append("\(LoadFigure.text(unit.fromKilograms(weight))) \(unit.abbreviation), \(reps) reps")
     } else {
       parts.append("no values entered")
     }
     if let previous {
       parts.append(
-        "last time \(Self.format(unit.fromKilograms(previous.weightKg))) \(unit.abbreviation) for \(previous.reps)"
+        "last time \(LoadFigure.text(unit.fromKilograms(previous.weightKg))) \(unit.abbreviation) for \(previous.reps)"
       )
     }
     if let priorNote { parts.append(priorNote) }
     if isLogged { parts.append("logged") }
     return parts.joined(separator: ", ")
   }
+}
 
-  private static func format(_ value: Double) -> String {
-    value == value.rounded() ? String(Int(value)) : String(format: "%.1f", value)
+/// One way of writing a load, everywhere the logger shows one.
+///
+/// Up to two decimals with trailing zeros trimmed: the precision the keypad accepts and seeds,
+/// so a kilogram load shown in pounds reads "220.46" in the field, under "Last time", on the
+/// machine chip and on the step buttons alike. Three roundings on one card made one load look like
+/// two different numbers. Display only; the draft stays canonical kilograms.
+enum LoadFigure {
+  static func text(_ value: Double) -> String {
+    guard value.isFinite else { return "—" }
+    var text = String(format: "%.2f", value)
+    guard text.contains(".") else { return text }
+    while text.hasSuffix("0") { text.removeLast() }
+    if text.hasSuffix(".") { text.removeLast() }
+    return text
   }
 }
 
@@ -537,7 +518,9 @@ extension SetRowField: Identifiable {
             isLogged: true,
             unit: .kilograms,
             previous: PriorSetRecord(weightKg: 100, reps: 8, completedAt: .distantPast),
-            onLog: {}
+            onLog: {},
+            onUndo: {},
+            onEdit: {}
           )
           // Prefilled from history and next up: loggable immediately, one tap, filled control.
           SetRowView(
@@ -546,11 +529,15 @@ extension SetRowField: Identifiable {
             isNext: true,
             unit: .kilograms,
             previous: PriorSetRecord(weightKg: 105, reps: 6, completedAt: .distantPast),
-            onLog: {}
+            editingField: .weight,
+            editingText: "10",
+            onLog: {},
+            onBeginEditing: { _ in },
+            onRemove: {}
           )
           // No history: genuinely empty, and the log control is disabled rather than
           // silently writing zero.
-          SetRowView(draft: $blank, ordinal: 2, unit: .kilograms, onLog: {})
+          SetRowView(draft: $blank, ordinal: 2, unit: .kilograms, onLog: {}, onBeginEditing: { _ in })
         }
         .padding()
         .background(Tokens.Color.background)
