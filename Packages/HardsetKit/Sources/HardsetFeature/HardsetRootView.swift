@@ -175,7 +175,8 @@ public struct HardsetRootView: View {
           WeeklyVolumeScreen(
             store: environment.volume, onShowSettings: { isShowingSettings = true }
           )
-          .navigationTitle("This week")
+          // Matches the screen's own header: the window is the last 7 days and can step back.
+          .navigationTitle("Volume")
           .hardsetTabRoot()
         }
       }
@@ -183,6 +184,9 @@ public struct HardsetRootView: View {
         NavigationStack {
           HistoryScreen(
             store: environment.history, unit: unit, receipts: environment.receipts,
+            progression: environment.progression,
+            // Deleting a workout or a set there can change which workout is the latest.
+            onHistoryChanged: { Task { await refreshLastWorkout() } },
             onShowSettings: { isShowingSettings = true }
           )
           .navigationTitle("History")
