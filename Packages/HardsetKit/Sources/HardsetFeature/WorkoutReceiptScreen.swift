@@ -252,6 +252,9 @@ struct WorkoutReceiptScreen: View {
   }
 
   private func load() async {
+    // Captured as values, so the read closure holds only Sendable stores and identifiers.
+    let store = store
+    let sessionID = sessionID
     await snapshot.load { try await store.load(sessionID) }
     #if canImport(UIKit)
       guard let receipt = snapshot.value else { return }

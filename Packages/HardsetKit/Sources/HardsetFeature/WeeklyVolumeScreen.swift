@@ -31,7 +31,7 @@ public struct WeeklyVolumeScreen: View {
   private let onShowSettings: (() -> Void)?
 
   /// One entitlement app-wide, shared with Settings.
-  private var lifetime: LifetimeAccess { .shared }
+  private let lifetime = LifetimeAccess.shared
 
   private static let title = "Volume"
   /// How far back the window can step: a year of weeks.
@@ -98,18 +98,19 @@ public struct WeeklyVolumeScreen: View {
     .sheet(isPresented: $isShowingMap) {
       NavigationStack {
         ScrollView {
-          if lifetime.isUnlocked, let window = snapshot.value {
-            // States why the map is open when it was not bought, such as a development build.
-            if let note = lifetime.message {
-              Text(note)
-                .font(Tokens.Text.provenance)
-                .foregroundStyle(Tokens.Color.textSecondary)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding([.horizontal, .top], Tokens.Spacing.loose)
+          // Says it is checking rather than flashing the purchase offer before the entitlement is
+          // known.
+          if !lifetime.hasLoaded {
+            HardsetLoadingState("Checking your purchase…")
+          } else if lifetime.isUnlocked, let window = snapshot.value {
+            VStack(alignment: .leading, spacing: Tokens.Spacing.regular) {
+              // States why the map is open when it was not bought, such as a development build.
+              LifetimeDevelopmentNote(access: lifetime).padding(.horizontal, Tokens.Spacing.loose)
+              MuscleHeatmapView(report: window.report, windowLabel: window.description)
             }
-            MuscleHeatmapView(report: window.report, windowLabel: window.description)
+          } else {
+            LifetimePurchaseSection(access: lifetime).padding(Tokens.Spacing.loose)
           }
-          else { LifetimePurchaseSection(access: lifetime).padding(Tokens.Spacing.loose) }
         }
         .background(Tokens.Color.background)
         .hardsetNavigationTitle("Deep muscle map")
