@@ -17,19 +17,51 @@ public struct ExerciseSectionView: View {
   private let onStartRest: ((Duration) -> Void)?
   private let onSelectMachine: (() -> Void)?
   private let onShowHistory: (() -> Void)?
+  private let lastRest: Duration?
+  private let editingSlotID: UUID?
+  private let editingField: SetRowField?
+  private let editingText: String?
+  private let onBeginEditing: ((SetSlot, SetRowField) -> Void)?
+  private let onUndoSet: ((SetSlot) -> Void)?
+  private let onEditSet: ((SetSlot) -> Void)?
+  private let onRemoveSet: ((SetSlot) -> Void)?
+  private let onMoveUp: (() -> Void)?
+  private let onMoveDown: (() -> Void)?
+  private let onRemove: (() -> Void)?
 
   @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
+  /// Rest durations offered on every card, written the way the rest bar writes time.
+  static let restChoices: [Duration] = [.seconds(60), .seconds(90), .seconds(120), .seconds(180)]
 
   /// - Parameter onSelectMachine: Opens the machine picker. Passing `nil` hides the chip, which is
   ///   correct when no gym is known — an affordance that opens an empty list is worse than none.
   /// - Parameter onShowHistory: Opens this movement's load history. `nil` leaves the name inert.
+  /// - Parameter lastRest: The rest the lifter last chose for this movement. When known, it is
+  ///   offered as one tap; it is never a default the app made up, so with none the card asks.
+  /// - Parameter editingSlotID: The row the session's keypad is on, if it is on this card.
+  /// - Parameter onMoveUp: Moves the card up the workout. `nil` for the first card, which shows
+  ///   the action disabled rather than absent, so the menu keeps its shape.
+  /// - Parameter onRemove: Removes the movement from the workout. The caller confirms first when
+  ///   it has logged sets.
   public init(
     state: Binding<ExerciseLogState>,
     unit: WeightUnit,
     onLogSet: @escaping (SetSlot) -> Void,
     onStartRest: ((Duration) -> Void)? = nil,
     onSelectMachine: (() -> Void)? = nil,
-    onShowHistory: (() -> Void)? = nil
+    onShowHistory: (() -> Void)? = nil,
+    lastRest: Duration? = nil,
+    editingSlotID: UUID? = nil,
+    editingField: SetRowField? = nil,
+    editingText: String? = nil,
+    onBeginEditing: ((SetSlot, SetRowField) -> Void)? = nil,
+    onUndoSet: ((SetSlot) -> Void)? = nil,
+    onEditSet: ((SetSlot) -> Void)? = nil,
+    onRemoveSet: ((SetSlot) -> Void)? = nil,
+    onMoveUp: (() -> Void)? = nil,
+    onMoveDown: (() -> Void)? = nil,
+    onRemove: (() -> Void)? = nil
   ) {
     self._state = state
     self.unit = unit
@@ -37,6 +69,17 @@ public struct ExerciseSectionView: View {
     self.onStartRest = onStartRest
     self.onSelectMachine = onSelectMachine
     self.onShowHistory = onShowHistory
+    self.lastRest = lastRest
+    self.editingSlotID = editingSlotID
+    self.editingField = editingField
+    self.editingText = editingText
+    self.onBeginEditing = onBeginEditing
+    self.onUndoSet = onUndoSet
+    self.onEditSet = onEditSet
+    self.onRemoveSet = onRemoveSet
+    self.onMoveUp = onMoveUp
+    self.onMoveDown = onMoveDown
+    self.onRemove = onRemove
   }
 
   public var body: some View {
@@ -52,6 +95,7 @@ public struct ExerciseSectionView: View {
         }
 
         ForEach($state.slots) { $slot in
+          let isEditingRow = slot.id == editingSlotID
           SetRowView(
             draft: $slot.draft,
             ordinal: ordinal(of: slot),
@@ -65,23 +109,25 @@ public struct ExerciseSectionView: View {
             // The borrowed-history note is shown once in the header, not repeated on every
             // row — an honest caveat that appears five times reads as noise and gets ignored.
             priorNote: nil,
-            onLog: { onLogSet(slot) }
+            editingField: isEditingRow ? editingField : nil,
+            editingText: isEditingRow ? editingText : nil,
+            onLog: { onLogSet(slot) },
+            onBeginEditing: onBeginEditing.map { begin in { field in begin(slot, field) } },
+            onUndo: onUndoSet.map { undo in { undo(slot) } },
+            onEdit: onEditSet.map { edit in { edit(slot) } },
+            onRemove: onRemoveSet.map { remove in { remove(slot) } }
           )
+          // Lets the session scroll a row clear of the keypad.
+          .id(slot.id)
         }
       }
 
-      addSetButtons
+      // Directly under the rows, where the thumb is after the log tap: resting is the next thing
+      // done after nearly every working set.
       if let onStartRest {
-        Menu {
-          ForEach([60, 90, 120, 180], id: \.self) { seconds in
-            Button("\(seconds) seconds") { onStartRest(.seconds(seconds)) }
-          }
-        } label: {
-          Label("Start rest", systemImage: "timer")
-            .frame(maxWidth: .infinity, minHeight: Tokens.loggerTapTarget)
-        }
-        .buttonStyle(HardsetButtonStyle(.secondary, size: .logger))
+        restControl(start: onStartRest)
       }
+      addSetButtons
     }
     .padding(Tokens.Spacing.regular)
     .hardsetCard()
@@ -89,7 +135,7 @@ public struct ExerciseSectionView: View {
 
   private var header: some View {
     VStack(alignment: .leading, spacing: Tokens.Spacing.snug) {
-      HStack(alignment: .firstTextBaseline, spacing: Tokens.Spacing.snug) {
+      HStack(alignment: .top, spacing: Tokens.Spacing.snug) {
         // The name is the way into this movement's load history. Placed here because "how have I
         // been doing on this" is a question asked while standing at the machine, and a chart
         // buried in a separate browse tab does not get looked at mid-set.
@@ -120,7 +166,13 @@ public struct ExerciseSectionView: View {
 
         Spacer(minLength: Tokens.Spacing.snug)
 
-        progress
+        HStack(spacing: Tokens.Spacing.snug) {
+          progress
+          if hasMovementMenu {
+            movementMenu
+          }
+        }
+        .frame(minHeight: Tokens.minimumTapTarget)
       }
       if let onSelectMachine {
         machineChip(action: onSelectMachine)
@@ -135,11 +187,44 @@ public struct ExerciseSectionView: View {
     }
   }
 
+  private var hasMovementMenu: Bool {
+    onMoveUp != nil || onMoveDown != nil || onRemove != nil
+  }
+
+  /// Order and removal: things done to the movement as a whole, rarely, so they sit in one menu
+  /// in the card's corner rather than as buttons repeated on every card.
+  private var movementMenu: some View {
+    HeaderIconMenu(accessibilityLabel: "\(state.exerciseName) options") {
+      Button {
+        onMoveUp?()
+      } label: {
+        Label("Move up", systemImage: "arrow.up")
+      }
+      .disabled(onMoveUp == nil)
+      Button {
+        onMoveDown?()
+      } label: {
+        Label("Move down", systemImage: "arrow.down")
+      }
+      .disabled(onMoveDown == nil)
+      if let onRemove {
+        Divider()
+        Button(role: .destructive, action: onRemove) {
+          Label("Remove movement", systemImage: "trash")
+        }
+      }
+    }
+  }
+
   /// How far through the working sets the lifter is: a pip per set, filled when logged, and the
   /// count in figures beside it. The pips are hidden from VoiceOver, which reads the sentence.
+  ///
+  /// The count turns green only when the number of rows came from this movement's history. With
+  /// no history the rows are whatever the lifter added, and "1/1" in green read as a target met.
   private var progress: some View {
     let working = state.workingSetCount
     let logged = loggedWorkingSets
+    let hasHistory = state.suggestion(forSetIndex: 0) != nil
     return HStack(spacing: Tokens.Spacing.snug) {
       // Beyond eight sets the pips stop being countable at a glance, so only the figure remains.
       if working > 0 && working <= 8 {
@@ -160,7 +245,10 @@ public struct ExerciseSectionView: View {
       }
       Text("\(logged)/\(working)")
         .font(Tokens.Text.figure)
-        .foregroundStyle(logged == working && working > 0 ? Tokens.Color.success : Tokens.Color.textSecondary)
+        .foregroundStyle(
+          hasHistory && logged == working && working > 0
+            ? Tokens.Color.success : Tokens.Color.textSecondary
+        )
     }
     .accessibilityElement(children: .combine)
     .accessibilityLabel("\(logged) of \(working) working sets logged")
@@ -218,10 +306,10 @@ public struct ExerciseSectionView: View {
           // truncating to "Hamm…", because it is how the lifter recognises the machine.
           .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 1)
         if let increment = state.machineIncrementKg {
-          // Shown because it is the constraint on what a suggestion may propose. Rounded to a
-          // tenth before formatting, so 10 kg reads "22 lb steps" rather than "22.0".
-          let step = (unit.fromKilograms(increment) * 10).rounded() / 10
-          Text("\(Self.format(step)) \(unit.abbreviation) steps")
+          // Shown because it is the constraint on what a suggestion may propose. Written with the
+          // same figure as the step buttons and the fields, so 10 kg reads "22.05 lb steps" here
+          // and "+22.05 lb" on the button below it, not 22 in one place and 22.05 in the other.
+          Text("\(LoadFigure.text(unit.fromKilograms(increment))) \(unit.abbreviation) steps")
             .font(Tokens.Text.caption)
             .foregroundStyle(Tokens.Color.textSecondary)
             .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 1)
@@ -252,8 +340,61 @@ public struct ExerciseSectionView: View {
     )
   }
 
-  static func format(_ value: Double) -> String {
-    value == value.rounded() ? String(Int(value)) : String(format: "%.1f", value)
+  /// Starting a rest. Rest begins only from a duration the lifter chose: with one remembered for
+  /// this movement it is a single tap, "Rest 1:30", with the other durations one tap further in
+  /// the menu beside it; with none, the menu asks.
+  ///
+  /// 56 pt like every logger control, and no taller: the label once carried its own minimum height
+  /// inside the style's padding and made rest the largest control on the card.
+  @ViewBuilder private func restControl(start: @escaping (Duration) -> Void) -> some View {
+    if let lastRest {
+      HStack(spacing: Tokens.Spacing.snug) {
+        Button {
+          start(lastRest)
+        } label: {
+          Label("Rest \(lastRest.clockString)", systemImage: "timer")
+            .monospacedDigit()
+        }
+        .buttonStyle(HardsetButtonStyle(.secondary, size: .logger))
+        .accessibilityLabel("Start a rest of \(Self.spoken(lastRest))")
+
+        Menu {
+          restMenuItems(start: start)
+        } label: {
+          Image(systemName: "chevron.down")
+            .frame(minWidth: Tokens.minimumTapTarget)
+        }
+        .buttonStyle(HardsetButtonStyle(.secondary, size: .logger, fullWidth: false))
+        .accessibilityLabel("Other rest durations")
+      }
+    } else {
+      Menu {
+        restMenuItems(start: start)
+      } label: {
+        Label("Start rest", systemImage: "timer")
+      }
+      .buttonStyle(HardsetButtonStyle(.secondary, size: .logger))
+    }
+  }
+
+  @ViewBuilder private func restMenuItems(start: @escaping (Duration) -> Void) -> some View {
+    ForEach(Self.restChoices, id: \.self) { duration in
+      Button {
+        start(duration)
+      } label: {
+        if duration == lastRest {
+          Label(duration.clockString, systemImage: "checkmark")
+        } else {
+          Text(duration.clockString)
+        }
+      }
+      .accessibilityLabel(Self.spoken(duration))
+    }
+  }
+
+  /// "1 minute, 30 seconds": a clock figure such as "1:30" is read aloud as a time of day.
+  static func spoken(_ duration: Duration) -> String {
+    duration.formatted(.units(allowed: [.minutes, .seconds], width: .wide))
   }
 
   private var addSetButtons: some View {
@@ -263,14 +404,14 @@ public struct ExerciseSectionView: View {
       } label: {
         Label("Add set", systemImage: "plus")
       }
-      .buttonStyle(HardsetButtonStyle(.secondary, fullWidth: true))
+      .buttonStyle(HardsetButtonStyle(.secondary, size: .logger, fullWidth: true))
 
       Button {
         state.appendSlot(isWarmup: true)
       } label: {
         Label("Warm-up", systemImage: "plus")
       }
-      .buttonStyle(HardsetButtonStyle(.quiet, fullWidth: false))
+      .buttonStyle(HardsetButtonStyle(.quiet, size: .logger, fullWidth: false))
       .accessibilityLabel("Add warm-up set")
     }
   }
@@ -322,8 +463,12 @@ public struct ExerciseSectionView: View {
               // Stands in for the store write.
               state.markLogged(slotID: slot.id, setID: SetID())
             },
+            onStartRest: { _ in },
             onSelectMachine: {},
-            onShowHistory: {}
+            onShowHistory: {},
+            lastRest: .seconds(90),
+            onMoveDown: {},
+            onRemove: {}
           )
           .padding()
         }

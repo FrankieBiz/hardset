@@ -53,9 +53,6 @@ public struct HeaderIconButton: View {
   private let systemImage: String
   private let accessibilityLabel: String
   private let action: () -> Void
-  /// Scales with the glyph. A fixed 44 pt circle let the symbol spill outside it at accessibility
-  /// text sizes.
-  @ScaledMetric(relativeTo: .headline) private var diameter = Tokens.minimumTapTarget
 
   public init(systemImage: String, accessibilityLabel: String, action: @escaping () -> Void) {
     self.systemImage = systemImage
@@ -65,16 +62,62 @@ public struct HeaderIconButton: View {
 
   public var body: some View {
     Button(action: action) {
-      Image(systemName: systemImage)
-        .font(Tokens.Text.headline)
-        .foregroundStyle(Tokens.Color.textPrimary)
-        .frame(width: diameter, height: diameter)
-        .background(Tokens.Color.surfaceRaised, in: Circle())
-        .overlay(Circle().strokeBorder(Tokens.Color.controlBorder, lineWidth: Tokens.Stroke.hairline))
-        .contentShape(Circle())
+      HeaderIconGlyph(systemImage: systemImage)
     }
     .buttonStyle(.plain)
     .accessibilityLabel(accessibilityLabel)
+  }
+}
+
+/// The same round, outlined control as `HeaderIconButton`, opening a menu of actions instead.
+///
+/// For the handful of actions that belong to a whole thing -- a workout, a movement -- and are not
+/// used every set: they stay one tap away without each taking a full-width button.
+public struct HeaderIconMenu<Content: View>: View {
+  private let systemImage: String
+  private let accessibilityLabel: String
+  private let content: Content
+
+  public init(
+    systemImage: String = "ellipsis",
+    accessibilityLabel: String,
+    @ViewBuilder content: () -> Content
+  ) {
+    self.systemImage = systemImage
+    self.accessibilityLabel = accessibilityLabel
+    self.content = content()
+  }
+
+  public var body: some View {
+    Menu {
+      content
+    } label: {
+      HeaderIconGlyph(systemImage: systemImage)
+    }
+    .buttonStyle(.plain)
+    .accessibilityLabel(accessibilityLabel)
+  }
+}
+
+/// The circle both header controls draw: raised fill, measured control border, a 44 pt target.
+struct HeaderIconGlyph: View {
+  let systemImage: String
+  /// Scales with the glyph. A fixed 44 pt circle let the symbol spill outside it at accessibility
+  /// text sizes.
+  @ScaledMetric(relativeTo: .headline) private var diameter = Tokens.minimumTapTarget
+
+  init(systemImage: String) {
+    self.systemImage = systemImage
+  }
+
+  var body: some View {
+    Image(systemName: systemImage)
+      .font(Tokens.Text.headline)
+      .foregroundStyle(Tokens.Color.textPrimary)
+      .frame(width: diameter, height: diameter)
+      .background(Tokens.Color.surfaceRaised, in: Circle())
+      .overlay(Circle().strokeBorder(Tokens.Color.controlBorder, lineWidth: Tokens.Stroke.hairline))
+      .contentShape(Circle())
   }
 }
 
@@ -386,12 +429,19 @@ public struct HardsetBanner: View {
   private let title: String?
   private let message: String
   private let systemImage: String?
+  private let onDismiss: (() -> Void)?
 
-  public init(_ kind: Kind, title: String? = nil, message: String, systemImage: String? = nil) {
+  /// - Parameter onDismiss: Draws a close control, for a message the reader may put away once
+  ///   read. `nil` leaves the banner until whatever caused it is resolved.
+  public init(
+    _ kind: Kind, title: String? = nil, message: String, systemImage: String? = nil,
+    onDismiss: (() -> Void)? = nil
+  ) {
     self.kind = kind
     self.title = title
     self.message = message
     self.systemImage = systemImage
+    self.onDismiss = onDismiss
   }
 
   public var body: some View {
@@ -412,6 +462,11 @@ public struct HardsetBanner: View {
           .fixedSize(horizontal: false, vertical: true)
       }
       .frame(maxWidth: .infinity, alignment: .leading)
+      if let onDismiss {
+        DismissGlyphButton(action: onDismiss)
+          // Reached through the banner's named action instead, so the message stays one element.
+          .accessibilityHidden(true)
+      }
     }
     .padding(Tokens.Spacing.regular)
     .background(tint, in: RoundedRectangle(cornerRadius: Tokens.Radius.card))
@@ -420,6 +475,11 @@ public struct HardsetBanner: View {
         .strokeBorder(hue.opacity(0.35), lineWidth: Tokens.Stroke.hairline)
     )
     .accessibilityElement(children: .combine)
+    .accessibilityActions {
+      if let onDismiss {
+        Button("Dismiss", action: onDismiss)
+      }
+    }
   }
 
   private var hue: Color {
@@ -447,6 +507,27 @@ public struct HardsetBanner: View {
     case .record: "trophy.fill"
     case .info: "info.circle"
     }
+  }
+}
+
+/// A small close mark with a full 44 pt target, for putting away a message once it is read.
+struct DismissGlyphButton: View {
+  let action: () -> Void
+
+  var body: some View {
+    Button(action: action) {
+      Image(systemName: "xmark")
+        .font(Tokens.Text.caption.weight(.semibold))
+        .foregroundStyle(Tokens.Color.textSecondary)
+        .frame(width: Tokens.minimumTapTarget, height: Tokens.minimumTapTarget)
+        .contentShape(Rectangle())
+    }
+    .buttonStyle(.plain)
+    // Pulled into the surrounding padding, so a one-line message is not made taller by the
+    // mark that closes it; the target keeps its full 44 pt.
+    .padding(.vertical, -Tokens.Spacing.regular)
+    .padding(.trailing, -Tokens.Spacing.snug)
+    .accessibilityLabel("Dismiss")
   }
 }
 

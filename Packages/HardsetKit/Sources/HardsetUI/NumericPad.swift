@@ -17,28 +17,70 @@ import SwiftUI
 public struct NumericPad: View {
   @Binding private var buffer: NumericEntryBuffer
   private let title: String?
+  private let context: String?
   private let unit: String?
+  private let restEndsAt: Date?
+  private let doneTitle: String
+  private let isDoneEnabled: Bool
   private let onDone: (() -> Void)?
   private let onNext: (() -> Void)?
+  private let onLog: (() -> Void)?
+  private let canLog: Bool
 
   /// - Parameter title: What is being edited, such as "Weight". `nil` hides the display.
+  /// - Parameter context: Which set the value belongs to, such as "Leg Press · Set 2". The pad
+  ///   covers the lower half of the screen, so the row it edits may be out of sight; this line is
+  ///   how the lifter knows the digits are going where they mean them to.
   /// - Parameter unit: Drawn beside the value in the display, such as "kg" or "reps".
+  /// - Parameter restEndsAt: A running rest's deadline. The rest bar sits under the pad while it
+  ///   is up, so the countdown is repeated in the display rather than hidden for the whole entry.
+  /// - Parameter doneTitle: The single footer action's title, for a pad whose Done commits, such
+  ///   as the load-step editor's "Save load step".
+  /// - Parameter isDoneEnabled: Disables that action while the value cannot be committed, so a
+  ///   tap that would do nothing looks like it does nothing.
+  /// - Parameter onLog: Puts "Log set" beside Done on the last field of a set, so a changed set
+  ///   is entered and logged without a separate trip back to the row's check.
+  /// - Parameter canLog: Whether the set is complete. The same `SetEntryDraft.isLoggable` the
+  ///   row's check uses; the pad never decides that on its own.
   public init(
     buffer: Binding<NumericEntryBuffer>,
     title: String? = nil,
+    context: String? = nil,
     unit: String? = nil,
+    restEndsAt: Date? = nil,
+    doneTitle: String = "Done",
+    isDoneEnabled: Bool = true,
     onDone: (() -> Void)? = nil,
-    onNext: (() -> Void)? = nil
+    onNext: (() -> Void)? = nil,
+    onLog: (() -> Void)? = nil,
+    canLog: Bool = false
   ) {
     self._buffer = buffer
     self.title = title
+    self.context = context
     self.unit = unit
+    self.restEndsAt = restEndsAt
+    self.doneTitle = doneTitle
+    self.isDoneEnabled = isDoneEnabled
     self.onDone = onDone
     self.onNext = onNext
+    self.onLog = onLog
+    self.canLog = canLog
   }
 
   private var quickAdjusters: [Double] {
     buffer.allowsDecimal ? [-5.0, -2.5, 2.5, 5.0] : [-1.0, 1.0, 2.0]
+  }
+
+  /// A step that would invent a value or overflow the field is disabled rather than applied.
+  ///
+  /// Subtracting from an empty field used to write "0", which reads as a value and made the row
+  /// loggable at a load nobody typed. Adding past the field's digit limit produced a number the
+  /// keys themselves could never enter.
+  private func isAdjusterEnabled(_ delta: Double) -> Bool {
+    if delta < 0 { return buffer.value != nil }
+    let limit = (0..<buffer.maximumIntegerDigits).reduce(1.0) { power, _ in power * 10 }
+    return (buffer.value ?? 0) + delta < limit
   }
 
   private var keys: [[Key]] {
@@ -54,6 +96,9 @@ public struct NumericPad: View {
 
   public var body: some View {
     VStack(spacing: Tokens.Spacing.snug) {
+      if context != nil || restEndsAt != nil {
+        contextLine
+      }
       if let title {
         display(title: title)
       }
@@ -75,6 +120,36 @@ public struct NumericPad: View {
     // Opaque, not glass. Glass cannot sample glass, and a translucent keypad over a dense set
     // grid is unreadable in a bright gym besides.
     .background(Tokens.Color.surface)
+  }
+
+  /// Which set is being edited, and the rest still running, on one line above the value.
+  private var contextLine: some View {
+    HStack(alignment: .firstTextBaseline, spacing: Tokens.Spacing.snug) {
+      if let context {
+        Text(context)
+          .font(Tokens.Text.sectionHeader)
+          .foregroundStyle(Tokens.Color.textPrimary)
+          .lineLimit(2)
+          // Spoken as one phrase, movement first: "Leg Press, Set 2".
+          .accessibilityLabel(context.replacingOccurrences(of: " · ", with: ", "))
+      }
+      Spacer(minLength: Tokens.Spacing.snug)
+      if let restEndsAt {
+        HStack(spacing: Tokens.Spacing.tight) {
+          Image(systemName: "timer")
+            .accessibilityHidden(true)
+          // System-rendered from the deadline, like the rest bar it stands in for.
+          Text(timerInterval: Date()...max(restEndsAt, Date()), countsDown: true)
+            .lineLimit(1)
+            .fixedSize()
+        }
+        .font(Tokens.Text.figure)
+        .foregroundStyle(Tokens.Color.accent)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("Resting")
+      }
+    }
+    .padding(.horizontal, Tokens.Spacing.tight)
   }
 
   /// The value being typed, as large as anything in the app, with what it is and its unit.
@@ -118,6 +193,7 @@ public struct NumericPad: View {
             .foregroundStyle(Tokens.Color.accent)
         }
         .buttonStyle(HardsetKeyStyle())
+        .disabled(!isAdjusterEnabled(delta))
         .accessibilityLabel(
           delta > 0 ? "Add \(formatDelta(delta))" : "Subtract \(formatDelta(-delta))"
         )
@@ -129,11 +205,16 @@ public struct NumericPad: View {
     delta == delta.rounded() ? String(Int(delta)) : String(format: "%.1f", delta)
   }
 
+  /// Two shapes on the logger, one elsewhere: weight offers Done and Next, the last field of a
+  /// set offers Done and Log set, and a pad with only Done makes it the primary commit.
+  ///
+  /// Log set keeps its place whether or not the set is complete yet, and is disabled until it is,
+  /// so the keys do not shift under the thumb at the moment the last digit makes it loggable.
   @ViewBuilder
   private var footerActions: some View {
     if let onDone, let onNext {
       HStack(spacing: Tokens.Spacing.snug) {
-        Button("Done", action: onDone)
+        Button(doneTitle, action: onDone)
           .buttonStyle(HardsetButtonStyle(.secondary, size: .logger))
         Button(action: onNext) {
           HStack(spacing: Tokens.Spacing.tight) {
@@ -146,9 +227,23 @@ public struct NumericPad: View {
         .buttonStyle(HardsetButtonStyle(.primary, size: .logger))
         .accessibilityLabel("Next field")
       }
-    } else if let onDone {
-      Button("Done", action: onDone)
+    } else if let onDone, let onLog {
+      HStack(spacing: Tokens.Spacing.snug) {
+        Button(doneTitle, action: onDone)
+          .buttonStyle(HardsetButtonStyle(.secondary, size: .logger))
+        Button(action: onLog) {
+          Label("Log set", systemImage: "checkmark")
+            .lineLimit(1)
+            .minimumScaleFactor(0.7)
+        }
         .buttonStyle(HardsetButtonStyle(.primary, size: .logger))
+        .disabled(!canLog)
+        .accessibilityLabel("Log set")
+      }
+    } else if let onDone {
+      Button(doneTitle, action: onDone)
+        .buttonStyle(HardsetButtonStyle(.primary, size: .logger))
+        .disabled(!isDoneEnabled)
     }
   }
 
@@ -221,7 +316,10 @@ public struct NumericPad: View {
       )
 
       var body: some View {
-        NumericPad(buffer: $buffer, title: "Weight", unit: "kg", onDone: {}, onNext: {})
+        NumericPad(
+          buffer: $buffer, title: "Weight", context: "Leg Press · Set 2", unit: "kg",
+          restEndsAt: Date().addingTimeInterval(84), onDone: {}, onNext: {}
+        )
       }
     }
     return Harness()
@@ -234,7 +332,10 @@ public struct NumericPad: View {
       )
 
       var body: some View {
-        NumericPad(buffer: $buffer, title: "Reps", unit: "reps", onDone: {})
+        NumericPad(
+          buffer: $buffer, title: "Reps", context: "Leg Press · Set 2", unit: "reps",
+          onDone: {}, onLog: {}, canLog: false
+        )
       }
     }
     return Harness()
