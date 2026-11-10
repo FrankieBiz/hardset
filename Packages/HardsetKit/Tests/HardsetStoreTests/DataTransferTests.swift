@@ -227,4 +227,54 @@ struct DataTransferTests {
       timeZone: TimeZone(identifier: "Pacific/Auckland")!)
     #expect(auckland.lastPathComponent == "Hardset-2026-11-02.sqlite")
   }
+
+  // MARK: - Corrections and order
+
+  /// Deleting an import's workouts in History and choosing the same file again imports it again,
+  /// rather than refusing a file whose workouts are no longer anywhere in the app.
+  @Test("The same file imports again after its workouts were deleted")
+  func reimportAfterDeletion() async throws {
+    let db = try database()
+    let store = DataTransferStore(database: db)
+    let preview = try WorkoutCSVImport.preview(csv, strongUnit: .kilograms)
+    _ = try await store.importWorkouts(preview)
+    await #expect(throws: WorkoutImportError.alreadyImported) { try await store.importWorkouts(preview) }
+    try await db.write { db in
+      try db.execute(sql: "DELETE FROM loggedSets; DELETE FROM sessionExercises; DELETE FROM sessions")
+    }
+    #expect(try await store.importWorkouts(preview) == 2)
+    #expect(try await db.read { try LoggedSet.fetchAll($0).count } == 2)
+    #expect(try await db.read { try Int.fetchOne($0, sql: "SELECT count(*) FROM deviceImportBatches") } == 1)
+  }
+
+  /// Sets leave in the order they were performed. Ordering by the per-movement set number first
+  /// interleaved movements: a workout done Press, Press, Row exported as Press 1, Row 1, Press 2.
+  @Test("CSV export lists sets in the order they were performed")
+  func exportOrder() async throws {
+    let db = try database()
+    let session = UUID()
+    let press = UUID()
+    let row = UUID()
+    let start = Date(timeIntervalSince1970: 1_000_000)
+    try await db.write { db in
+      try Exercise.insert { Exercise.Draft(id: press, name: "Press") }.execute(db)
+      try Exercise.insert { Exercise.Draft(id: row, name: "Row") }.execute(db)
+      try Session.insert {
+        Session.Draft(id: session, startedAt: start, finishedAt: start.addingTimeInterval(3600))
+      }.execute(db)
+      for (exercise, ordinal, minute) in [(press, 1, 1), (press, 2, 5), (row, 1, 9)] {
+        try LoggedSet.insert {
+          LoggedSet.Draft(sessionID: session, exerciseID: exercise, setOrdinal: ordinal, weightKg: 50,
+            reps: 8, completedAt: start.addingTimeInterval(Double(minute) * 60))
+        }.execute(db)
+      }
+    }
+    let folder = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    defer { try? FileManager.default.removeItem(at: folder) }
+    let url = try await DataTransferStore(database: db).export(.csv, directory: folder)
+    let rows = try CSVDocument.decode(String(contentsOf: url, encoding: .utf8))
+    let name = try #require(rows.first?.firstIndex(of: "exerciseName"))
+    let ordinal = try #require(rows.first?.firstIndex(of: "setOrdinal"))
+    #expect(rows.dropFirst().map { "\($0[name]) \($0[ordinal])" } == ["Press 1", "Press 2", "Row 1"])
+  }
 }

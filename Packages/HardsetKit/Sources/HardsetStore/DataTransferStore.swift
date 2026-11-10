@@ -113,8 +113,18 @@ public nonisolated struct DataTransferStore: Sendable {
   public func commit(_ preview: WorkoutImportPreview) async throws -> WorkoutImportResult {
     try Task.checkCancellation()
     return try await database.write { db in
+      // The exact file was imported before. Refuse only while its workouts are all still here:
+      // after the lifter deletes them in History to correct an import, the same file must be
+      // importable again, so the stale record of that import is dropped instead.
       if try Row.fetchOne(db, sql: "SELECT id FROM deviceImportBatches WHERE sourceCSV = ?",
-        arguments: [preview.originalCSV]) != nil { throw WorkoutImportError.alreadyImported }
+        arguments: [preview.originalCSV]) != nil
+      {
+        if try preview.sessions.allSatisfy({ try Self.isAlreadyImported($0, from: preview.source, in: db) }) {
+          throw WorkoutImportError.alreadyImported
+        }
+        try db.execute(sql: "DELETE FROM deviceImportBatches WHERE sourceCSV = ?",
+          arguments: [preview.originalCSV])
+      }
       // Use separate movements for unverified imported equipment. An imported nil machine
       // must never seed the native movement's free-weight or machine benchmark series.
       var exercises: [String: UUID] = [:]
@@ -214,7 +224,7 @@ public nonisolated struct DataTransferStore: Sendable {
       LEFT JOIN sessions s ON s.id = l.sessionID
       LEFT JOIN machines m ON m.id = l.machineID
       LEFT JOIN gyms g ON g.id = s.gymID
-      ORDER BY s.startedAt, s.id, l.setOrdinal, l.completedAt, l.id
+      ORDER BY s.startedAt, s.id, l.completedAt, l.setOrdinal, l.id
       """)
     let columns = ["id", "sessionID", "exerciseID", "machineID", "sessionExerciseID",
       "setOrdinal", "weightKg", "reps", "rpe", "isWarmup", "completedAt", "exerciseName",
