@@ -136,7 +136,10 @@ public struct SetRowView: View {
     .animation(Tokens.Motion.adaptive(Tokens.Motion.state, reduceMotion: reduceMotion), value: isLogged)
     // Corrections live behind a long press, the iOS convention for acting on one item in place:
     // deliberate enough that a hurried tap on the check can never undo or remove a set.
-    .contentShape(.contextMenuPreview, shape)
+    // The preview shape is iOS-only; the macOS host build (tests only) uses the default.
+    #if os(iOS)
+      .contentShape(.contextMenuPreview, shape)
+    #endif
     .contextMenu { corrections }
     .sensoryFeedback(.selection, trigger: adjustmentFeedback)
     .accessibilityElement(children: .combine)
