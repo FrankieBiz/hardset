@@ -15,37 +15,61 @@ import SwiftUI
 ///
 /// When given a `title`, the view draws its own `ScreenHeader` as the first thing in its scroll
 /// content, because the tab that hosts it hides the stock navigation bar.
+///
+/// The window is a rolling seven days, not a calendar week, and the copy says so: `period` is the
+/// phrase every sentence uses ("in the last 7 days"), so a Monday morning never reads as "this
+/// week". `onEarlier` and `onLater` step the window back and forward a week at a time.
 public struct VolumeReportView: View {
   private let report: MuscleVolumeReport
   private let excludedFromGaps: Set<Muscle>
   private let title: String?
   private let subtitle: String?
   private let onExplainCounting: (() -> Void)?
+  private let period: String
+  private let onShowSettings: (() -> Void)?
+  private let onEarlier: (() -> Void)?
+  private let onLater: (() -> Void)?
+  @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
   public init(
     report: MuscleVolumeReport,
     excludedFromGaps: Set<Muscle> = [],
     title: String? = nil,
     subtitle: String? = nil,
-    onExplainCounting: (() -> Void)? = nil
+    onExplainCounting: (() -> Void)? = nil,
+    period: String = "in the last 7 days",
+    onShowSettings: (() -> Void)? = nil,
+    onEarlier: (() -> Void)? = nil,
+    onLater: (() -> Void)? = nil
   ) {
     self.report = report
     self.excludedFromGaps = excludedFromGaps
     self.title = title
     self.subtitle = subtitle
     self.onExplainCounting = onExplainCounting
+    self.period = period
+    self.onShowSettings = onShowSettings
+    self.onEarlier = onEarlier
+    self.onLater = onLater
   }
 
   public var body: some View {
     ScrollView {
       VStack(alignment: .leading, spacing: Tokens.Spacing.section) {
         if let title {
-          ScreenHeader(title, subtitle: subtitle)
+          ScreenHeader(title, subtitle: subtitle) {
+            if let onShowSettings {
+              HeaderIconButton(systemImage: "gearshape", accessibilityLabel: "Settings", action: onShowSettings)
+            }
+          }
         }
         VStack(alignment: .leading, spacing: Tokens.Spacing.section) {
+          if onEarlier != nil || onLater != nil {
+            windowControls
+          }
           if report.hardSets == 0 {
             HardsetEmptyState(
-              title: "Nothing logged this week",
+              title: "Nothing logged \(period)",
               detail: "Sets per muscle appear here once you log a workout.",
               systemImage: "chart.bar"
             )
@@ -64,6 +88,35 @@ public struct VolumeReportView: View {
     .background(Tokens.Color.background)
   }
 
+  // MARK: - Window
+
+  /// Steps the rolling window a week at a time. "Later" is disabled, not hidden, on the newest
+  /// window, so the pair never moves under the lifter's thumb.
+  private var windowControls: some View {
+    HStack(spacing: Tokens.Spacing.snug) {
+      Button {
+        onEarlier?()
+      } label: {
+        Label("Earlier", systemImage: "chevron.left")
+      }
+      .buttonStyle(HardsetButtonStyle(.secondary, fullWidth: false))
+      .disabled(onEarlier == nil)
+      .accessibilityLabel("Earlier 7 days")
+      Spacer(minLength: Tokens.Spacing.snug)
+      Button {
+        onLater?()
+      } label: {
+        HStack(spacing: Tokens.Spacing.tight) {
+          Text("Later")
+          Image(systemName: "chevron.right").accessibilityHidden(true)
+        }
+      }
+      .buttonStyle(HardsetButtonStyle(.secondary, fullWidth: false))
+      .disabled(onLater == nil)
+      .accessibilityLabel("Later 7 days")
+    }
+  }
+
   // MARK: - Header
 
   private var header: some View {
@@ -74,13 +127,13 @@ public struct VolumeReportView: View {
         Text(report.hardSets, format: .number)
           .font(Tokens.Text.hero)
           .foregroundStyle(Tokens.Color.textPrimary)
-        Text(report.hardSets == 1 ? "working set this week" : "working sets this week")
+        Text(verbatim: "\(report.hardSets == 1 ? "working set" : "working sets") \(period)")
           .font(Tokens.Text.unit)
           .foregroundStyle(Tokens.Color.textSecondary)
           .fixedSize(horizontal: false, vertical: true)
       }
       .accessibilityElement(children: .ignore)
-      .accessibilityLabel(Text("^[\(report.hardSets) working set](inflect: true) this week"))
+      .accessibilityLabel(Text("^[\(report.hardSets) working set](inflect: true) \(period)"))
 
       // The lower-bound statement is not a footnote. If some sets could not be attributed, every
       // number below is a floor, and saying so is the whole point of the coverage field.
@@ -118,10 +171,24 @@ public struct VolumeReportView: View {
     let maxSets = max(rows.first?.sets ?? 1, 1)
     return VStack(alignment: .leading, spacing: Tokens.Spacing.regular) {
       VStack(alignment: .leading, spacing: Tokens.Spacing.tight) {
-        SectionLabel("Where the work went", count: rows.count)
+        // The per-muscle figures are fractional credits (an indirect set counts 0.5), an adopted
+        // convention rather than a measurement, so their certainty sits beside them. The hero total
+        // above is an exact count and carries none.
+        let layout =
+          dynamicTypeSize.isAccessibilitySize
+          ? AnyLayout(VStackLayout(alignment: .leading, spacing: Tokens.Spacing.snug))
+          : AnyLayout(HStackLayout(alignment: .center, spacing: Tokens.Spacing.regular))
+        layout {
+          SectionLabel("Where the work went", count: rows.count)
+          CertaintyBadge(
+            level: .moderate,
+            methodology: SetCounting.source.methodology,
+            citation: SetCounting.source.citation
+          )
+        }
         // No goal line, so the scale is the report's own maximum. Stated in the caption rather than
         // left for the user to assume it means something absolute.
-        Text("Bars are relative to your biggest muscle this week. There is no target line, because no weekly set target is established.")
+        Text("Bars are relative to your biggest muscle \(period). There is no target line, because no weekly set target is established.")
           .font(Tokens.Text.caption)
           .foregroundStyle(Tokens.Color.textSecondary)
           .fixedSize(horizontal: false, vertical: true)
@@ -227,9 +294,9 @@ public struct VolumeReportView: View {
             // attributed, "no sets" would overclaim: the muscle may have been trained by one of them.
             Text(
               report.isLowerBound
-                ? "No sets were credited to these this week. Some sets could not be attributed to "
+                ? "No sets were credited to these \(period). Some sets could not be attributed to "
                   + "a muscle, so any of these may still have been trained."
-                : "These had no sets this week. Whether that matters depends on your plan."
+                : "These had no sets \(period). Whether that matters depends on your plan."
             )
               .font(Tokens.Text.caption)
               .foregroundStyle(Tokens.Color.textSecondary)
@@ -322,9 +389,11 @@ struct FlowLayout: Layout {
         setsTouchingGroup: [.chest: 12, .back: 14, .legs: 11, .arms: 12, .shoulders: 6]
       ),
       excludedFromGaps: ExerciseCatalog.unauthoredDirectTokens,
-      title: "This week",
-      subtitle: "Last 7 days",
-      onExplainCounting: {}
+      title: "Volume",
+      subtitle: "Last 7 days, 2 Nov to now",
+      onExplainCounting: {},
+      onShowSettings: {},
+      onEarlier: {}
     )
   }
 
@@ -344,8 +413,8 @@ struct FlowLayout: Layout {
       report: MuscleVolumeReport(
         fractionalSets: [:], hardSets: 0, unattributedHardSets: 0, setsTouchingGroup: [:]
       ),
-      title: "This week",
-      subtitle: "Last 7 days"
+      title: "Volume",
+      subtitle: "Last 7 days, 2 Nov to now"
     )
   }
 #endif

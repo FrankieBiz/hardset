@@ -5,12 +5,17 @@ import SwiftUI
 /// never training quality or an invented optimal target. Unknown attribution stays visible.
 public struct MuscleHeatmapView: View {
   private let report: MuscleVolumeReport
+  private let windowLabel: String
   @Environment(\.dynamicTypeSize) private var typeSize
-  public init(report: MuscleVolumeReport) { self.report = report }
+  /// - Parameter windowLabel: The window the report covers, in words. The sheet presenting the
+  ///   map draws its title, so the view does not repeat it.
+  public init(report: MuscleVolumeReport, windowLabel: String = "Last 7 days") {
+    self.report = report
+    self.windowLabel = windowLabel
+  }
   public var body: some View {
     VStack(alignment: .leading, spacing: Tokens.Spacing.section) {
-      Text("Deep muscle map").font(Tokens.Text.title)
-      Text("Last 7 days · Comparative fractional sets. Bars compare volume with your most-credited muscle; it does not rate whether you trained enough.")
+      Text("\(windowLabel) · Comparative fractional sets. Bars compare volume with your most-credited muscle; it does not rate whether you trained enough.")
         .font(Tokens.Text.provenance).foregroundStyle(Tokens.Color.textSecondary)
       CertaintyBadge(level: .moderate, methodology: SetCounting.source.methodology, citation: SetCounting.source.citation)
       if report.isLowerBound {
