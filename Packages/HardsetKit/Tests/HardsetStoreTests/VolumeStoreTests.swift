@@ -280,4 +280,54 @@ struct VolumeStoreTests {
     // Content debt is never presented as the user's gap.
     #expect(!gaps.contains(.neck))
   }
+
+  // MARK: - Windows aligned to local days
+
+  private var newYork: Calendar {
+    var calendar = Calendar(identifier: .gregorian)
+    calendar.timeZone = TimeZone(identifier: "America/New_York")!
+    return calendar
+  }
+
+  private func local(_ year: Int, _ month: Int, _ day: Int, _ hour: Int = 0) -> Date {
+    newYork.date(from: DateComponents(year: year, month: month, day: day, hour: hour))!
+  }
+
+  /// The labels name whole days, so the counted window must be whole days: a window that began at
+  /// the current time of day moved a Sunday-evening set between two windows that both named that
+  /// Sunday, depending on the hour the lifter looked.
+  @Test("Volume windows start at local midnight and do not overlap")
+  func windowsAreWholeDays() {
+    let morning = local(2025, 11, 9, 8)
+    let current = VolumeWindowRange(endingAt: morning, weeksBack: 0, calendar: newYork)
+    #expect(current.start == local(2025, 11, 3))
+    #expect(current.end == morning)
+    #expect(current.lastDay == morning)
+    let earlier = VolumeWindowRange(endingAt: morning, weeksBack: 1, calendar: newYork)
+    #expect(earlier.start == local(2025, 10, 27))
+    #expect(earlier.end == current.start)
+    #expect(newYork.isDate(earlier.lastDay, inSameDayAs: local(2025, 11, 2)))
+    // Across the 2 November clock change the window is seven local days, not 168 hours.
+    #expect(earlier.end.timeIntervalSince(earlier.start) == 7 * 86_400 + 3600)
+    #expect(VolumeWindowRange(endingAt: morning, weeksBack: 2, calendar: newYork).end == earlier.start)
+    // The same view at a different hour of the same day names the same days.
+    let evening = VolumeWindowRange(endingAt: local(2025, 11, 9, 20), weeksBack: 1, calendar: newYork)
+    #expect(evening.start == earlier.start && evening.end == earlier.end)
+  }
+
+  @Test("A set late on a boundary day stays in the window that names that day")
+  func boundaryDaySetStaysPut() async throws {
+    let (database, store, reports) = try seeded()
+    let press = try exerciseID(database, slug: "barbell-bench-press")
+    let sunday = local(2025, 11, 2, 18)
+    let session = try store.startSession(at: sunday)
+    try log(store, session, press, sets: 3, at: sunday)
+    for hour in [8, 20] {
+      let viewedAt = local(2025, 11, 9, hour)
+      let current = VolumeWindowRange(endingAt: viewedAt, weeksBack: 0, calendar: newYork)
+      let earlier = VolumeWindowRange(endingAt: viewedAt, weeksBack: 1, calendar: newYork)
+      #expect(try await reports.loadReport(in: current).hardSets == 0, "viewed at \(hour):00")
+      #expect(try await reports.loadReport(in: earlier).hardSets == 3, "viewed at \(hour):00")
+    }
+  }
 }

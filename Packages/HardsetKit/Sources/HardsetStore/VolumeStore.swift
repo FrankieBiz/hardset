@@ -65,6 +65,19 @@ public nonisolated struct VolumeStore: Sendable {
     return VolumeAnalyzer.report(sets: sets, attribution: AttributionIndex(entries: entries))
   }
 
+  /// Suspends the caller while GRDB reads the report for `window` from one snapshot.
+  public func loadReport(in window: VolumeWindowRange) async throws -> MuscleVolumeReport {
+    try Task.checkCancellation()
+    let (sets, entries) = try await database.read { db in
+      (
+        try Self.readCountableSets(from: window.start, to: window.end, in: db),
+        try Self.readAttributionEntries(in: db)
+      )
+    }
+    try Task.checkCancellation()
+    return VolumeAnalyzer.report(sets: sets, attribution: AttributionIndex(entries: entries))
+  }
+
   private static func readCountableSets(from: Date, to: Date, in db: Database) throws
     -> [CountableSet]
   {
@@ -88,6 +101,43 @@ public nonisolated struct VolumeStore: Sendable {
   /// the two can never be confused.
   public func rollingWeek(endingAt now: Date) throws -> MuscleVolumeReport {
     try report(from: now.addingTimeInterval(-7 * 86_400), to: now)
+  }
+}
+
+/// Seven local days of volume, rolling rather than a calendar week, aligned to midnight so the
+/// days a heading names are exactly the days counted.
+///
+/// The current window is today and the six days before it, up to `now`. Each earlier window is
+/// the seven whole days before the next one, midnight to midnight, so adjacent windows meet
+/// without overlapping. Days are added with the calendar, so a daylight-saving change moves the
+/// boundary by no wall-clock hour. A window that began at the current time of day instead moved a
+/// set logged on the boundary day between two windows that both named that day.
+public nonisolated struct VolumeWindowRange: Hashable, Sendable {
+  /// Local midnight that opens the window, inclusive.
+  public let start: Date
+  /// Exclusive: `now` for the current window, otherwise the next window's `start`.
+  public let end: Date
+  /// An instant on the last day counted, for labelling: `now`, or noon on the day before `end`.
+  public let lastDay: Date
+  /// Whole weeks before the current window. Zero is the current window.
+  public let weeksBack: Int
+
+  public init(endingAt now: Date, weeksBack: Int, calendar: Calendar = .current) {
+    let today = calendar.startOfDay(for: now)
+    let currentStart = calendar.date(byAdding: .day, value: -6, to: today) ?? today
+    self.weeksBack = max(weeksBack, 0)
+    if self.weeksBack == 0 {
+      start = currentStart
+      end = now
+      lastDay = now
+    } else {
+      let weeks = self.weeksBack
+      let end = calendar.date(byAdding: .day, value: -7 * (weeks - 1), to: currentStart) ?? currentStart
+      self.end = end
+      start = calendar.date(byAdding: .day, value: -7, to: end) ?? end
+      let previousDay = calendar.date(byAdding: .day, value: -1, to: end) ?? end
+      lastDay = calendar.date(byAdding: .hour, value: 12, to: previousDay) ?? previousDay
+    }
   }
 }
 
