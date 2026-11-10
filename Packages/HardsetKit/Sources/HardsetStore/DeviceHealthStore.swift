@@ -66,7 +66,13 @@ public nonisolated struct DeviceHealthStore: Sendable {
   /// Imported files do not establish a training modality and are deliberately excluded.
   public func workoutsToExport() async throws -> [Workout] {
     try await database.read { db in
-      try Session.where { $0.finishedAt.isNot(nil) }.order { ($0.startedAt, $0.id) }.fetchAll(db)
+      // Only workouts with at least one working set. An accidental Start finished empty, or a
+      // session of warm-ups only, is not a strength workout to put in Apple Health.
+      try Session.where { session in
+        session.finishedAt.isNot(nil)
+          && LoggedSet.where { $0.sessionID.eq(session.id) && !$0.isWarmup }.exists()
+      }
+      .order { ($0.startedAt, $0.id) }.fetchAll(db)
         .compactMap { row in
           guard let end = row.finishedAt, !row.notes.hasPrefix("Imported from "),
             end > row.startedAt, end.timeIntervalSince(row.startedAt) <= 6 * 3600 else { return nil }
