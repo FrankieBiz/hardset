@@ -42,7 +42,7 @@ public nonisolated struct ReceiptStore: Sendable {
         let key = ProgressionKey(exerciseID: ExerciseID(rawValue: set.exerciseID), machineID: set.machineID.map(MachineID.init(rawValue:)))
         let machine = set.machineID.flatMap { machineIndex[$0] }
         // The live logger's rule: a set with no machine is compared against the same movement's
-        // other no-machine sets, with no plate increment. Only imports, which never recorded
+        // other no-machine sets, with the detector's default plate step. Only imports, which never recorded
         // equipment, and a set whose machine row is missing make no claim.
         let unknownMachine = set.machineID != nil && machine == nil
         let records = imported || unknownMachine ? [] : PersonalRecordDetector.records(

@@ -56,7 +56,8 @@ public struct PersonalRecord: Sendable, Hashable, Identifiable {
 /// 1. **Never on the first ever set for a lift.** With no history there is nothing to beat, and
 ///    "PR!" on set one of a new movement is noise that devalues every later one.
 /// 2. **A record must beat the old one by a real margin** — the greater of 2.5% and one plate
-///    increment. Matching last week is not a record, and `>=` was the ancestor's actual bug.
+///    increment (the equipment's own step, or one 5 lb plate when it is unknown). Matching last
+///    week is not a record, and `>=` was the ancestor's actual bug.
 /// 3. **Warm-ups are never records**, however heavy the warm-up happened to be.
 /// 4. **Estimated 1RM records require an evaluable estimate on both sides.** A set of 20 reps
 ///    produces `.unevaluated`, and an unevaluated value cannot beat anything.
@@ -67,6 +68,12 @@ public enum PersonalRecordDetector {
   public static let relativeThreshold = 0.025
   /// Matching tolerance shared with the Store's indexed comparison selection.
   public static let loadMatchingTolerance = 0.01
+  /// The plate step assumed when the equipment's own step is unknown: one 5 lb plate, 2.268 kg.
+  ///
+  /// It is the smaller of the two real plate steps, so both a 2.5 kg and a 5 lb jump count while
+  /// sub-plate noise does not. It is unit-neutral on purpose: a receipt's records must not change
+  /// when the display unit does.
+  public static let defaultIncrementKg = WeightUnit.pounds.toKilograms(WeightUnit.pounds.plateIncrement)
 
   /// A completed set being tested.
   public struct Candidate: Sendable, Hashable {
@@ -101,12 +108,14 @@ public enum PersonalRecordDetector {
     guard !history.isEmpty else { return [] }
 
     var records: [PersonalRecord] = []
-    let step = increment ?? WeightUnit.kilograms.plateIncrement
+    let step = increment ?? defaultIncrementKg
 
     // Heaviest load ever lifted for at least one rep.
     if let heaviest = history.map(\.weightKg).max() {
       let margin = max(heaviest * relativeThreshold, step)
-      if candidate.weightKg >= heaviest + margin {
+      // The tolerance lets a typed 165 lb equal 160 lb plus a 5 lb step, which differ in the
+      // last floating-point bit, while sub-plate noise still falls far short.
+      if candidate.weightKg + loadMatchingTolerance >= heaviest + margin {
         records.append(
           PersonalRecord(
             kind: .heaviestLoad,

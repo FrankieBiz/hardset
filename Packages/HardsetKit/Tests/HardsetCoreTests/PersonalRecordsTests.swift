@@ -47,6 +47,27 @@ struct PersonalRecordsTests {
     #expect(kinds.contains(.heaviestLoad))
   }
 
+  /// A pound lifter's ordinary jump is one 5 lb plate, 2.268 kg, which a 2.5 kg default step
+  /// never let count as a heavier load.
+  @Test("A 5 lb jump with no saved step is a heaviest-weight record")
+  func poundPlateJumpIsARecord() {
+    let lb = WeightUnit.pounds
+    #expect(records(lb.toKilograms(140), 8, history: [(lb.toKilograms(135), 8)]).contains(.heaviestLoad))
+    #expect(records(lb.toKilograms(140), 6, history: [(lb.toKilograms(135), 8)]).contains(.heaviestLoad))
+    // 24 to 26 kg dumbbells: +2 kg is below one real plate step in either unit.
+    #expect(!records(26, 8, history: [(24, 8)]).contains(.heaviestLoad))
+  }
+
+  /// A typed 165 lb and a +5 lb tap from 160 lb are the same load and must agree.
+  @Test("A typed load one machine step heavier is a record despite floating-point rounding")
+  func typedStepLoadIsARecord() {
+    let lb = WeightUnit.pounds
+    let step = lb.toKilograms(5)
+    #expect(lb.toKilograms(165) < lb.toKilograms(160) + step)
+    #expect(records(lb.toKilograms(165), 8, history: [(lb.toKilograms(160), 8)], increment: step)
+      .contains(.heaviestLoad))
+  }
+
   /// A coarse stack must not produce records from rounding artefacts.
   @Test("The margin respects the machine's actual increment")
   func marginRespectsIncrement() {
