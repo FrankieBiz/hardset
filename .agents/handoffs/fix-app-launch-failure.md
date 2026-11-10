@@ -49,6 +49,22 @@ movements/recents/rest preferences), B live session UI, B2 pickers, C rest timer
 D root/tabs/accessory, E history/receipts/volume/progress, F settings/import/Health/purchase/gym
 management. File ownership is exclusive per CONTRACT.md.
 
+## Wave 1 progress (2026-11-09 19:40 EST)
+
+- Merged into this branch: B2 (`87f3a16` pickers: recents, honest errors, custom-movement offer, Cancel
+  placement, machine archive), C (`caab271` rest: no stuck 0:00, denied-alarm banner with Open Settings,
+  no dead Skip, journal reset, live VoiceOver time, Live Activity progress, portrait-only), D (`9ac772b`
+  accessory returns to Train, Settings on every tab, tabs usable when preparation fails, Last workout
+  refresh, gym pick restore, gym save copy). `786666a` swaps the root's inline rest banner for C's
+  `RestTimerIssueBanner`. `make check-parse` passes; full `make check` needs A (D uses its APIs).
+- Still running (resumed after usage limits): A, B, E, F. Their worktrees are under
+  `/home/frankbiz/orca/hardset/.claude/worktrees/agent-*` on branches `FrankieBiz/wave1-{A,B,E,F}`.
+- Round 2 audit: feel/motion verified (8 confirmed, 4 plausible); training-logic 9 unverified; lifecycle
+  and accessibility audits re-running. Results JSON: `build/plan/hardset-audit-final.json`.
+- Cross-workstream follow-ups noted: DEVICE-CHECKLIST B "Denied path" wording (C); record portrait-only
+  in DECISIONS.md (C); GymPickerView Cancel placement (B2 suggests); optional `CONTAINS[c] 'gym'` UI test
+  predicate (D).
+
 ## Next steps
 
 1. Merge each wave-1 branch into this branch; replace HardsetRootView's inline rest banner with C's
