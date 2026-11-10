@@ -81,10 +81,7 @@ public struct ProgressionChartView: View {
           metricHeader
           if isUnevaluated {
             // Says why there is no line instead of drawing nothing and letting the user guess.
-            UnevaluatedReadout(
-              explanation: "No estimate is available. A one-rep max is only estimated from sets "
-                + "of twelve reps or fewer, and none of these sessions qualify."
-            )
+            UnevaluatedReadout(explanation: unevaluatedExplanation)
           } else {
             chart(plotted)
           }
@@ -150,16 +147,23 @@ public struct ProgressionChartView: View {
   @ViewBuilder private var certaintyBadge: some View {
     switch metric {
     case .heaviestLoad:
+      // High only for the arithmetic of taking a maximum of what was entered. The load itself is
+      // user-entered and not independently verified, which is what the receipt says too.
       CertaintyBadge(
-        level: .high,
-        methodology: "Verified empirical load logged in active sessions on this specific machine.",
-        citation: "Exact weight recorded by user"
+        level: hasNoAddedLoad ? .unevaluated : .high,
+        methodology: hasNoAddedLoad
+          ? "No added load was recorded for these sets, so there is no load to chart."
+          : "The heaviest load you entered in each session. Each machine is its own line; sets "
+            + "with no machine recorded form a separate line.",
+        citation: "User-entered load"
       )
     case .estimatedOneRepMax:
-      // Moderate when there is an estimate to qualify. With none, there is nothing to be moderately
-      // sure of, and the badge says so rather than vouching for an empty chart.
+      // The weakest certainty among each line's latest estimate, from the reps behind it. With no
+      // estimate there is nothing to be sure of, and the badge says so rather than vouching for an
+      // empty chart.
       CertaintyBadge(
-        level: hasNoEstimates ? .unevaluated : .moderate,
+        level: MethodologySheet.level(
+          for: ProgressionAnalyzer.estimateCertainty(latestOf: series.map(\.points))),
         methodology: ProgressionAnalyzer.source.methodology,
         citation: ProgressionAnalyzer.source.validRange
       )
@@ -263,7 +267,7 @@ public struct ProgressionChartView: View {
           Spacer(minLength: Tokens.Spacing.snug)
           if let latest {
             HStack(alignment: .firstTextBaseline, spacing: Tokens.Spacing.tight) {
-              Text(Self.format(value(latest)))
+              Text(valueText(latest))
                 .font(Tokens.Text.figure)
                 .foregroundStyle(Tokens.Color.textPrimary)
               Text(unit.abbreviation)
@@ -299,7 +303,7 @@ public struct ProgressionChartView: View {
   /// What a legend row says when its machine has nothing to plot for the selected metric.
   private var emptyValueText: String {
     switch metric {
-    case .heaviestLoad: "No sessions"
+    case .heaviestLoad: hasNoAddedLoad ? "No added load" : "No sessions"
     case .estimatedOneRepMax: "No estimate"
     }
   }
@@ -312,7 +316,7 @@ public struct ProgressionChartView: View {
     let date = latest.date.formatted(.dateTime.day().month(.wide))
     // Spoken as an estimate when it is one, so the word travels with the number.
     let kind = metric == .estimatedOneRepMax ? "latest estimate" : "latest"
-    return "\(entry.name), \(shape) points, \(kind) \(Self.format(value(latest))) "
+    return "\(entry.name), \(shape) points, \(kind) \(valueText(latest)) "
       + "\(unit.abbreviation) on \(date)"
   }
 
@@ -385,8 +389,11 @@ public struct ProgressionChartView: View {
     }
   }
 
+  /// `nil` when the selected metric has nothing to show, including a bodyweight line with no added
+  /// load, so the legend says so instead of reading "0 kg".
   private func latestPoint(_ points: [ProgressionPoint]) -> ProgressionPoint? {
-    plottable(points).max { $0.date < $1.date }
+    guard !isUnevaluated else { return nil }
+    return plottable(points).max { $0.date < $1.date }
   }
 
   private func value(_ point: ProgressionPoint) -> Double {
@@ -402,13 +409,39 @@ public struct ProgressionChartView: View {
     }
   }
 
-  /// True when the selected metric has nothing to plot for any machine.
-  private var isUnevaluated: Bool {
-    metric == .estimatedOneRepMax && hasNoEstimates
+  /// Bodyweight work: every session recorded no added load, so a load line would sit flat at
+  /// zero under a confident badge and say nothing.
+  private var hasNoAddedLoad: Bool {
+    ProgressionAnalyzer.hasNoAddedLoad(series.map(\.points))
   }
 
-  private static func format(_ value: Double) -> String {
-    value.formatted(.number.precision(.fractionLength(0...1)))
+  /// True when the selected metric has nothing to plot for any machine.
+  private var isUnevaluated: Bool {
+    switch metric {
+    case .heaviestLoad: hasNoAddedLoad
+    case .estimatedOneRepMax: hasNoEstimates
+    }
+  }
+
+  /// Why nothing is drawn, by cause. Blaming the rep count for pull-ups with no added load would
+  /// be false.
+  private var unevaluatedExplanation: String {
+    if hasNoAddedLoad {
+      return metric == .heaviestLoad
+        ? "No added load was recorded for these sets, so there is no load to chart."
+        : "No added load was recorded, so there is nothing to estimate from."
+    }
+    return "No estimate is available. A one-rep max is only estimated from sets "
+      + "of twelve reps or fewer, and none of these sessions qualify."
+  }
+
+  /// An entered load keeps the precision it was entered with; an estimate is rounded the way
+  /// estimates always are, so neither reads differently here than on the receipt or the logger.
+  private func valueText(_ point: ProgressionPoint) -> String {
+    switch metric {
+    case .heaviestLoad: LoadText.entered(point.heaviestLoadKg, in: unit)
+    case .estimatedOneRepMax: LoadText.estimate(point.bestEstimatedOneRepMaxKg ?? 0, in: unit)
+    }
   }
 
   // MARK: - Series styling
@@ -445,7 +478,7 @@ public struct ProgressionChartView: View {
         sessionID: SessionID(), machineID: nil,
         date: day.addingTimeInterval(Double(n) * 604_800),
         heaviestLoadKg: load, bestEstimatedOneRepMaxKg: estimable ? estimate : nil,
-        workingSets: 3
+        workingSets: 3, bestEstimateCertainty: .moderate
       )
     }
 

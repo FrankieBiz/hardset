@@ -240,6 +240,22 @@ public nonisolated struct SessionSummary: Hashable, Sendable, Identifiable {
   public var hasImplausibleDuration: Bool { timeline.isImplausible }
 }
 
+/// The newest finished sessions, and how many finished sessions exist in total.
+public nonisolated struct HistoryPage: Hashable, Sendable {
+  /// Newest first.
+  public let sessions: [SessionSummary]
+  /// Every finished session, including those beyond this page.
+  public let totalCount: Int
+
+  public init(sessions: [SessionSummary], totalCount: Int) {
+    self.sessions = sessions
+    self.totalCount = totalCount
+  }
+
+  /// True when older finished sessions exist beyond this page.
+  public var hasMore: Bool { sessions.count < totalCount }
+}
+
 /// Reads finished sessions for the history screen.
 public nonisolated struct HistoryStore: Sendable {
   private let database: any DatabaseWriter
@@ -264,6 +280,20 @@ public nonisolated struct HistoryStore: Sendable {
     return rows
   }
 
+  /// The newest `limit` finished sessions and the count of all of them, from one snapshot, so the
+  /// screen can say "latest 50 of 312" and offer the older ones rather than implying fifty is all.
+  public func loadHistory(limit: Int) async throws -> HistoryPage {
+    try Task.checkCancellation()
+    let page = try await database.read { db in
+      HistoryPage(
+        sessions: try Self.readRecentSessions(limit: limit, in: db),
+        totalCount: try Session.where { $0.finishedAt.isNot(nil) }.fetchCount(db)
+      )
+    }
+    try Task.checkCancellation()
+    return page
+  }
+
   private static func readRecentSessions(limit: Int, in db: Database) throws -> [SessionSummary] {
     let sessions = try Session
       .where { $0.finishedAt.isNot(nil) }
@@ -273,9 +303,11 @@ public nonisolated struct HistoryStore: Sendable {
     guard !sessions.isEmpty else { return [] }
 
     let sessionIDs = sessions.map(\.id)
+    // Performed order. Every movement numbers its sets from zero, so ordinal alone leaves the
+    // "first logged" order of two movements to however SQLite returns the tie.
     let sets = try LoggedSet
       .where { $0.sessionID.in(sessionIDs) }
-      .order { $0.setOrdinal }
+      .order { ($0.completedAt, $0.setOrdinal, $0.id) }
       .fetchAll(db)
 
     let exerciseIDs = Array(Set(sets.map(\.exerciseID)))

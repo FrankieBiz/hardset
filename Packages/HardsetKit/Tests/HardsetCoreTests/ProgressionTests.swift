@@ -224,6 +224,75 @@ struct ProgressionTests {
     #expect(change.heaviestLoadDeltaKg == -25)
   }
 
+  // MARK: - Estimate certainty
+
+  /// The badge beside an estimate must not vouch for more than the rep counts allow. Sets of eleven
+  /// and twelve reps are graded low by the estimator, and the point has to carry that.
+  @Test("A session of eleven- and twelve-rep sets carries a low-certainty estimate")
+  func highRepEstimateIsLow() throws {
+    let series = ProgressionAnalyzer.series(
+      from: samples([(1, hammer, 60, 11, 0), (1, hammer, 60, 12, 0)]), exerciseID: exercise)
+    let point = try #require(series.first?.points.first)
+    #expect(point.bestEstimatedOneRepMaxKg != nil)
+    #expect(point.bestEstimateCertainty == .low)
+  }
+
+  @Test("The winning estimate's certainty is the one recorded", arguments: [
+    (5, Certainty.high), (8, Certainty.moderate), (1, Certainty.high),
+  ])
+  func winningCertainty(reps: Int, expected: Certainty) throws {
+    let series = ProgressionAnalyzer.series(
+      from: samples([(1, hammer, 100, reps, 0), (1, hammer, 40, 12, 0)]), exerciseID: exercise)
+    let point = try #require(series.first?.points.first)
+    #expect(point.bestEstimateCertainty == expected)
+  }
+
+  @Test("A session with nothing estimable has no estimate and no certainty")
+  func noEstimateNoCertainty() throws {
+    let series = ProgressionAnalyzer.series(
+      from: samples([(1, nil, 0, 8, 0), (1, nil, 60, 20, 0)]), exerciseID: exercise)
+    let point = try #require(series.first?.points.first)
+    #expect(point.bestEstimatedOneRepMaxKg == nil)
+    #expect(point.bestEstimateCertainty == nil)
+  }
+
+  /// The chart's badge qualifies the latest figure of each line, so it is the weakest of those.
+  @Test("The chart's estimate certainty is the weakest latest estimate across machines")
+  func chartCertaintyIsWeakestLatest() {
+    let all = samples([
+      (1, hammer, 100, 12, 0),  // old and low, superseded below
+      (2, hammer, 100, 5, 7),  // latest on the hammer: high
+      (3, cybex, 70, 9, 8),  // latest on the cybex: moderate
+      (4, cybex, 70, 25, 9),  // newer, but unestimable: does not count
+    ])
+    let series = ProgressionAnalyzer.series(from: all, exerciseID: exercise)
+    #expect(ProgressionAnalyzer.estimateCertainty(latestOf: series.map(\.points)) == .moderate)
+  }
+
+  @Test("No estimate anywhere is unevaluated, and a point that hides its certainty counts as low")
+  func chartCertaintyEdges() {
+    let unestimable = samples([(1, hammer, 0, 8, 0)])
+    let series = ProgressionAnalyzer.series(from: unestimable, exerciseID: exercise)
+    #expect(ProgressionAnalyzer.estimateCertainty(latestOf: series.map(\.points)) == .unevaluated)
+    let silent = ProgressionPoint(
+      sessionID: SessionID(), machineID: nil, date: day(0), heaviestLoadKg: 100,
+      bestEstimatedOneRepMaxKg: 120, workingSets: 1)
+    #expect(silent.bestEstimateCertainty == nil)
+    #expect(ProgressionAnalyzer.estimateCertainty(latestOf: [[silent]]) == .low)
+  }
+
+  /// Bodyweight work has real sets and no added load. A flat line at zero is not a load history.
+  @Test("A history with no added load is recognised as such")
+  func noAddedLoad() {
+    let bodyweight = ProgressionAnalyzer.series(
+      from: samples([(1, nil, 0, 8, 0), (2, nil, 0, 10, 3)]), exerciseID: exercise)
+    #expect(ProgressionAnalyzer.hasNoAddedLoad(bodyweight.map(\.points)))
+    let weighted = ProgressionAnalyzer.series(
+      from: samples([(1, nil, 0, 8, 0), (2, nil, 10, 8, 3)]), exerciseID: exercise)
+    #expect(!ProgressionAnalyzer.hasNoAddedLoad(weighted.map(\.points)))
+    #expect(!ProgressionAnalyzer.hasNoAddedLoad([]))
+  }
+
   @Test("The disclosure states the estimate's limit and the machine caveat")
   func disclosureIsHonest() {
     let range = ProgressionAnalyzer.source.validRange ?? ""
