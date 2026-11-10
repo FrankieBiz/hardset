@@ -352,3 +352,27 @@ To preserve architectural velocity and calibration honesty, this workspace adher
   and verification of a candidate native build, not another speculative feature pillar.
 - Delivery remains on the existing feature branch; no production promotion of the
   earlier implementation is implied by approval of the planning direction.
+
+## Implementation and deployment master plan — 2026-11-09
+
+- Objective: create root `perfect.md` for executing the endorsed strategy through
+  implementation, data deployment, native validation, TestFlight and public rollout.
+- Worktree/branch: `/home/frankbiz/orca/workspaces/hardset/bobtail`, `FrankieBiz/bobtail`.
+- Owned paths: `perfect.md` and this handoff. Planning only; no app behavior changed.
+- Plan covers M0–M8, role ownership, dependencies, acceptance gates, additive/mixed-client
+  data compatibility, current verification commands, missing archive/version pipeline,
+  candidate manifests, internal/external testing, rollout containment and forward fixes.
+- Fresh baseline: PR #1 remains draft/open. Run 42713517490 failed real-app startup;
+  bfe79de run 42729654582 was still in progress at inspection. No cause or native pass
+  inferred. Checked-in app entitlements list HealthKit only; audit effective signed
+  iCloud/push capabilities as an investigation, not a claimed diagnosis.
+- Apple deployment references checked: upload builds, TestFlight, production CloudKit
+  schemas, phased version updates. No store/schema changes, upload, invite or release.
+- Verification: make check exit 0 (181 Core, 204 Store, 12 orchestration tests;
+  127 syntax parses; query/results gate; 172 contrast pairs). Project generation
+  unchanged; all 13 local plan links resolve; stage/placeholder/citation review passed.
+- Next implementation step: inspect final native CI artifacts, reproduce/diagnose
+  startup failure, then audit signing/version/distribution prerequisites while preparing
+  the complete prototype. External research/signing inputs gate only their dependent work.
+- Delivery remains on the feature branch; adding a plan does not promote the existing
+  unverified app implementation to production main.
