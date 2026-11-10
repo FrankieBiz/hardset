@@ -47,7 +47,8 @@ public nonisolated struct ReceiptStore: Sendable {
         let unknownMachine = set.machineID != nil && machine == nil
         let records = imported || unknownMachine ? [] : PersonalRecordDetector.records(
           for: .init(weightKg: set.weightKg, reps: set.reps, isWarmup: set.isWarmup),
-          history: history[key] ?? [], increment: machine?.stackIncrementKg)
+          history: history[key] ?? [], increment: machine?.stackIncrementKg,
+          estimatesOneRepMax: (modalities[set.exerciseID] ?? nil)?.estimatesOneRepMax ?? true)
         let machineName = machine.map { [$0.brand, $0.name].filter { !$0.isEmpty }.joined(separator: " ") }
         lines.append(.init(id: SetID(rawValue: set.id), exerciseID: ExerciseID(rawValue: set.exerciseID),
           exerciseName: names[set.exerciseID] ?? "Unknown movement",

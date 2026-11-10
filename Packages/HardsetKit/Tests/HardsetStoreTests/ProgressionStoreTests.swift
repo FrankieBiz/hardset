@@ -237,6 +237,25 @@ struct ProgressionStoreTests {
     #expect(history.series[0].points[0].heaviestLoadKg == 60)
   }
 
+  /// Body mass is not recorded per set, so a bodyweight movement's chart has no estimate to plot.
+  @Test("A bodyweight movement's history carries no estimate")
+  func bodyweightNoEstimate() async throws {
+    let (database, logger, progression, _, _) = try fixture()
+    let dip = ExerciseID()
+    try await database.write { db in
+      try Exercise.insert { Exercise.Draft(id: dip.rawValue, name: "Dip", modality: "bodyweight") }
+        .execute(db)
+    }
+    try session(logger, dip, nil, sets: [(20, 8)], at: now.addingTimeInterval(-2 * 86_400))
+    try session(logger, dip, nil, sets: [(30, 4)], at: now.addingTimeInterval(-86_400))
+
+    for history in [try progression.history(for: dip), try await progression.loadHistory(for: dip)] {
+      #expect(!history.estimatesOneRepMax)
+      #expect(history.series[0].hasNoEstimates)
+      #expect(history.series[0].points.map(\.heaviestLoadKg) == [20, 30])
+    }
+  }
+
   @Test("An exercise never logged has an empty history rather than an error")
   func emptyHistory() throws {
     let (_, _, progression, exercise, _) = try fixture()

@@ -136,6 +136,25 @@ struct PersonalRecordsTests {
     #expect(records(0, 15, history: [(0, 12)]).contains(.repsAtLoad))
   }
 
+  /// A weighted dip records added load only. Epley on +20 x 8 and +30 x 4 "rises" from 25.3 to
+  /// 34.0 kg while the load actually moved, for an 80 kg lifter, falls from 126.7 to 124.7 kg.
+  /// Body mass is not recorded per set, so the estimate is withheld rather than faked.
+  @Test("Bodyweight work sets no estimated-1RM record, but load and rep records still count")
+  func bodyweightHasNoEstimateRecord() {
+    let kinds = PersonalRecordDetector.records(
+      for: .init(weightKg: 30, reps: 4), history: history([(20, 8)]), estimatesOneRepMax: false
+    ).map(\.kind)
+    #expect(!kinds.contains(.estimatedOneRepMax))
+    #expect(kinds.contains(.heaviestLoad))
+    #expect(records(30, 4, history: [(20, 8)]).contains(.estimatedOneRepMax))
+    let reps = PersonalRecordDetector.records(
+      for: .init(weightKg: 0, reps: 12), history: history([(0, 10)]), estimatesOneRepMax: false
+    ).map(\.kind)
+    #expect(reps == [.repsAtLoad])
+    #expect(!ExerciseModality.bodyweight.estimatesOneRepMax)
+    #expect(ExerciseModality.allCases.filter(\.estimatesOneRepMax).count == ExerciseModality.allCases.count - 1)
+  }
+
   @Test("A big jump can set all three records at once")
   func allThreeAtOnce() {
     let kinds = records(120, 10, history: [(100, 8), (120, 6)])

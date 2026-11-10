@@ -60,7 +60,8 @@ public struct PersonalRecord: Sendable, Hashable, Identifiable {
 ///    week is not a record, and `>=` was the ancestor's actual bug.
 /// 3. **Warm-ups are never records**, however heavy the warm-up happened to be.
 /// 4. **Estimated 1RM records require an evaluable estimate on both sides.** A set of 20 reps
-///    produces `.unevaluated`, and an unevaluated value cannot beat anything.
+///    produces `.unevaluated`, and an unevaluated value cannot beat anything. Bodyweight work,
+///    whose logged load is added load only, has no evaluable estimate at all.
 /// 5. **Reps-at-load compares only the same load**, to the nearest 0.01 kg, so 100 × 9 beating
 ///    100 × 8 is a record and 97.5 × 12 is not compared against it.
 public enum PersonalRecordDetector {
@@ -98,10 +99,14 @@ public enum PersonalRecordDetector {
   ///     count. An arbitrary recent sample cannot justify an all-time claim.
   ///   - increment: The smallest step the equipment actually moves in, so a record on a 5 kg
   ///     stack needs a genuine 5 kg rather than a rounding artefact.
+  ///   - estimatesOneRepMax: `false` for movements whose load is not the load moved, such as
+  ///     bodyweight work (`ExerciseModality.estimatesOneRepMax`). No estimated-1RM record is
+  ///     claimed for them; heaviest-load and reps-at-load records still are.
   public static func records(
     for candidate: Candidate,
     history: [PriorSetRecord],
-    increment: Double? = nil
+    increment: Double? = nil,
+    estimatesOneRepMax: Bool = true
   ) -> [PersonalRecord] {
     guard !candidate.isWarmup, candidate.weightKg >= 0, candidate.reps > 0 else { return [] }
     // Rule 1: nothing to beat.
@@ -142,6 +147,7 @@ public enum PersonalRecordDetector {
     }
 
     // Best estimated one-rep max — only when both sides are evaluable.
+    guard estimatesOneRepMax else { return records }
     let candidateEstimate = StrengthMath.estimatedOneRepMax(
       weightKg: candidate.weightKg, reps: candidate.reps
     )

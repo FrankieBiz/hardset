@@ -125,6 +125,26 @@ struct RecordDetectionTests {
   }
 
   /// A celebration must not linger onto a set that did not earn it.
+  /// A weighted dip's estimate from added load can rise while the load moved falls, so the live
+  /// logger must not announce it.
+  @Test("A bodyweight movement announces no estimated-1RM record")
+  func bodyweightAnnouncesNoEstimate() throws {
+    let database = try migratedDatabase()
+    let store = LoggerStore(database: database)
+    let dip = ExerciseID()
+    try database.write { db in
+      try Exercise.insert { Exercise.Draft(id: dip.rawValue, name: "Dip", modality: "bodyweight") }
+        .execute(db)
+    }
+    try seedHistory(store, exercise: dip, sets: [(20, 8)], at: start.addingTimeInterval(-86_400))
+
+    let live = try coordinator(store, exercise: dip)
+    #expect(log(live, slot: 0, 30, 4))
+    let kinds = live.lastRecords.map(\.kind)
+    #expect(kinds.contains(.heaviestLoad))
+    #expect(!kinds.contains(.estimatedOneRepMax))
+  }
+
   @Test("Records are cleared by the next non-record set")
   func recordsAreCleared() throws {
     let database = try migratedDatabase()

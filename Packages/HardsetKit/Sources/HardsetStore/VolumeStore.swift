@@ -122,36 +122,51 @@ public nonisolated struct ProgressionStore: Sendable {
 
   /// Everything a load-history chart needs, read from one consistent snapshot.
   public func history(for exerciseID: ExerciseID) throws -> ProgressionHistory {
-    let (samples, names) = try database.read { db in
+    let inputs = try database.read { db in
       try Self.readHistoryInputs(for: exerciseID, in: db)
     }
-    return Self.analyze(samples: samples, names: names, exerciseID: exerciseID)
+    return Self.analyze(inputs, exerciseID: exerciseID)
   }
 
   /// Suspends the caller while GRDB reads samples and labels in one snapshot.
   public func loadHistory(for exerciseID: ExerciseID) async throws -> ProgressionHistory {
     try Task.checkCancellation()
-    let (samples, names) = try await database.read { db in
+    let inputs = try await database.read { db in
       try Self.readHistoryInputs(for: exerciseID, in: db)
     }
     try Task.checkCancellation()
-    return Self.analyze(samples: samples, names: names, exerciseID: exerciseID)
+    return Self.analyze(inputs, exerciseID: exerciseID)
+  }
+
+  private struct HistoryInputs: Sendable {
+    let samples: [ProgressionSample]
+    let names: [MachineID: String]
+    let estimatesOneRepMax: Bool
   }
 
   private static func readHistoryInputs(for exerciseID: ExerciseID, in db: Database) throws
-    -> ([ProgressionSample], [MachineID: String])
+    -> HistoryInputs
   {
     let samples = try readSamples(for: exerciseID, limit: Int.max, in: db)
     let ids = Array(Set(samples.compactMap(\.machineID)))
-    return (samples, try readMachineNames(ids, in: db))
+    // The movement's modality decides whether its load may be estimated at all. An unknown or
+    // missing modality is not assumed to be bodyweight.
+    let modality = try Exercise.where { $0.id.eq(exerciseID.rawValue) }.select(\.modality).fetchOne(db)
+    let estimates = modality.flatMap(ExerciseModality.init(rawValue:))?.estimatesOneRepMax ?? true
+    return HistoryInputs(
+      samples: samples, names: try readMachineNames(ids, in: db), estimatesOneRepMax: estimates
+    )
   }
 
-  private static func analyze(
-    samples: [ProgressionSample], names: [MachineID: String], exerciseID: ExerciseID
-  ) -> ProgressionHistory {
-    let series = ProgressionAnalyzer.series(from: samples, exerciseID: exerciseID)
-    let changes = ProgressionAnalyzer.machineChanges(from: samples)
-    return ProgressionHistory(series: series, machineChanges: changes, machineNames: names)
+  private static func analyze(_ inputs: HistoryInputs, exerciseID: ExerciseID) -> ProgressionHistory {
+    let series = ProgressionAnalyzer.series(
+      from: inputs.samples, exerciseID: exerciseID, estimatesOneRepMax: inputs.estimatesOneRepMax
+    )
+    let changes = ProgressionAnalyzer.machineChanges(from: inputs.samples)
+    return ProgressionHistory(
+      series: series, machineChanges: changes, machineNames: inputs.names,
+      estimatesOneRepMax: inputs.estimatesOneRepMax
+    )
   }
 
   private static func readSamples(for exerciseID: ExerciseID, limit: Int, in db: Database) throws
@@ -192,15 +207,20 @@ public nonisolated struct ProgressionHistory: Hashable, Sendable {
   public let series: [ProgressionSeries]
   public let machineChanges: [MachineChange]
   public let machineNames: [MachineID: String]
+  /// `false` for a movement whose logged load is not the load moved, such as bodyweight work, so
+  /// a chart can say why no one-rep max is estimated rather than blame the rep range.
+  public let estimatesOneRepMax: Bool
 
   public init(
     series: [ProgressionSeries],
     machineChanges: [MachineChange],
-    machineNames: [MachineID: String]
+    machineNames: [MachineID: String],
+    estimatesOneRepMax: Bool = true
   ) {
     self.series = series
     self.machineChanges = machineChanges
     self.machineNames = machineNames
+    self.estimatesOneRepMax = estimatesOneRepMax
   }
 
   /// Label for a series. Free-weight work and a deleted machine are named rather than blank.

@@ -133,6 +133,33 @@ struct ReceiptStoreTests {
     #expect(!receipt.text(unit: .kilograms).contains("Unevaluated"))
   }
 
+  /// The receipt repeats the live logger's rule: no estimate for bodyweight work.
+  @Test("A bodyweight receipt states no estimated-1RM record")
+  func bodyweightReceipt() async throws {
+    let (db, logger, _, _) = try Self.fixture()
+    let dip = ExerciseID()
+    try await db.write { db in
+      try Exercise.insert { Exercise.Draft(id: dip.rawValue, name: "Dip", modality: "bodyweight") }
+        .execute(db)
+    }
+    let start = Date(timeIntervalSince1970: 20_000)
+    let earlier = try logger.startSession(at: start)
+    _ = try logger.logSet(
+      sessionID: earlier, exerciseID: dip, draft: SetEntryDraft(weightKg: 20, reps: 8),
+      at: start.addingTimeInterval(60))
+    try logger.finishSession(earlier, at: start.addingTimeInterval(600))
+    let later = try logger.startSession(at: start.addingTimeInterval(86_400))
+    _ = try logger.logSet(
+      sessionID: later, exerciseID: dip, draft: SetEntryDraft(weightKg: 30, reps: 4),
+      at: start.addingTimeInterval(86_460))
+    try logger.finishSession(later, at: start.addingTimeInterval(87_000))
+
+    let receipt = try await ReceiptStore(database: db).load(later)
+    let kinds = try #require(receipt.lines.first).records.map(\.kind)
+    #expect(kinds.contains(.heaviestLoad))
+    #expect(!kinds.contains(.estimatedOneRepMax))
+  }
+
   /// A leg press with no machine recorded is unknown equipment. Its records are still the logger's
   /// (the same comparison is made live), but the receipt does not vouch for the equipment.
   @Test("A machine movement with no machine recorded is unevaluated, not called free weight")

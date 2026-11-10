@@ -142,9 +142,12 @@ public enum ProgressionAnalyzer {
   ///
   /// Warm-ups must be excluded by the caller — they are excluded in SQL upstream, so a warm-up
   /// reaching here is a bug rather than something to filter defensively and hide.
-  public static func series(from samples: [ProgressionSample], exerciseID: ExerciseID)
-    -> [ProgressionSeries]
-  {
+  ///
+  /// `estimatesOneRepMax` is `false` for movements whose logged load is not the load moved, such
+  /// as bodyweight work (`ExerciseModality.estimatesOneRepMax`); no point then carries an estimate.
+  public static func series(
+    from samples: [ProgressionSample], exerciseID: ExerciseID, estimatesOneRepMax: Bool = true
+  ) -> [ProgressionSeries] {
     // Group by machine, then by session within it.
     var byMachine: [MachineID?: [SessionID: [ProgressionSample]]] = [:]
     for sample in samples {
@@ -154,7 +157,12 @@ public enum ProgressionAnalyzer {
     return byMachine
       .map { machineID, sessions in
         let points = sessions
-          .map { sessionID, samples in point(sessionID: sessionID, machineID: machineID, samples: samples) }
+          .map { sessionID, samples in
+            point(
+              sessionID: sessionID, machineID: machineID, samples: samples,
+              estimatesOneRepMax: estimatesOneRepMax
+            )
+          }
           .sorted { $0.date < $1.date }
         return ProgressionSeries(
           key: ProgressionKey(exerciseID: exerciseID, machineID: machineID),
@@ -169,12 +177,14 @@ public enum ProgressionAnalyzer {
   }
 
   private static func point(
-    sessionID: SessionID, machineID: MachineID?, samples: [ProgressionSample]
+    sessionID: SessionID, machineID: MachineID?, samples: [ProgressionSample],
+    estimatesOneRepMax: Bool
   ) -> ProgressionPoint {
     let heaviest = samples.map(\.weightKg).max() ?? 0
     // Only estimable sets contribute. A session of high-rep work yields no estimate at all rather
     // than an extrapolated one.
-    let estimates = samples.compactMap { sample -> (value: Double, certainty: Certainty)? in
+    let estimable = estimatesOneRepMax ? samples : []
+    let estimates = estimable.compactMap { sample -> (value: Double, certainty: Certainty)? in
       let claim = StrengthMath.estimatedOneRepMax(weightKg: sample.weightKg, reps: sample.reps)
       return claim.value.map { ($0, claim.certainty) }
     }

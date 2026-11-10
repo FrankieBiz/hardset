@@ -82,6 +82,19 @@ struct ProgressionTests {
     #expect(!series.hasNoEstimates)
   }
 
+  /// Added load on a dip is not the load moved, so an estimate from it measures nothing.
+  @Test("Bodyweight work carries no estimate, only its added load")
+  func bodyweightHasNoEstimate() throws {
+    let all = samples([(1, nil, 20, 8, 0), (2, nil, 30, 4, 7)])
+    let series = try #require(
+      ProgressionAnalyzer.series(from: all, exerciseID: exercise, estimatesOneRepMax: false).first
+    )
+    #expect(series.hasNoEstimates)
+    #expect(series.points.map(\.heaviestLoadKg) == [20, 30])
+    #expect(series.points.allSatisfy { $0.bestEstimateCertainty == nil })
+    #expect(ProgressionAnalyzer.estimateCertainty(latestOf: [series.points]) == .unevaluated)
+  }
+
   @Test("Points are oldest first, and the most-trained machine leads")
   func orderingIsStable() throws {
     let all = samples([
