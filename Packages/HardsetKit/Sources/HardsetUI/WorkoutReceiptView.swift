@@ -100,7 +100,9 @@ public struct WorkoutReceiptView: View {
           Spacer(minLength: 0)
         }
         ForEach(line.records) { record in
-          Label(record.kind.label, systemImage: "checkmark.seal")
+          // The trophy, as the live session marks records. The seal is the high-certainty
+          // symbol, and in the record hue it read as a mixed certainty claim.
+          Label(record.kind.label, systemImage: "trophy.fill")
             .font(Tokens.Text.provenance)
             .foregroundStyle(Tokens.Color.pr)
         }
