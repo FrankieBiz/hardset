@@ -62,7 +62,7 @@ see §7.
 | Local store | GRDB + SQLiteData (not SwiftData) |
 | Sync | CloudKit private database via `CKSyncEngine`. **No backend for user data in v1** |
 | Accounts | None required. Sign in with Apple only at second-device/restore |
-| Payments | StoreKit 2 + RevenueCat; on-device `currentEntitlements` primary |
+| Payments | StoreKit 2 (RevenueCat is not linked); on-device `currentEntitlements` primary |
 | Rest timer | AlarmKit |
 | Watch | Not in v1. `SessionEngine` seam kept so it is additive later |
 | Price | $3.99/mo founding (grandfathered) → $8.99 standing; $29.99/yr founding |

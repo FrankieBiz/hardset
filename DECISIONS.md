@@ -100,8 +100,9 @@ is a deliberate decision to make with the guideline text in hand.
 ### 6. Privacy manifest is smaller than expected
 
 One required-reason declaration: `NSPrivacyAccessedAPICategoryUserDefaults` / `CA92.1`.
-`NSPrivacyCollectedDataTypes` is **empty** — RevenueCat declares its own purchase-history entry and
-Apple's SDK-inheritance rule means we must not restate it. GRDB ships its own manifest with an
+`NSPrivacyCollectedDataTypes` is **empty**. (This once relied on RevenueCat declaring its own
+purchase-history entry; RevenueCat is not linked — purchases use StoreKit 2 directly — so that must
+be reassessed before any App Store build.) GRDB ships its own manifest with an
 empty accessed-API list and links SQLite dynamically, so no file-timestamp or disk-space
 declaration is warranted. Purchase history still must be disclosed in the App Store Connect
 questionnaire, where the inheritance rule does not apply.
@@ -268,3 +269,19 @@ regression, because across a switch it is neither.
 The ancestor shipped 9,749-minute workouts to its history screen as achievements. `SessionTimeline`
 already refuses to store a duration; `HistoryView` additionally renders "Length unknown" for a span
 longer than any real workout, because the honest statement is that we do not know how long it took.
+
+### 22. A build without an iCloud container opens local-only
+
+A personal development team cannot sign the iCloud entitlement, and SQLiteData refuses to attach its
+metadatabase or build its engine without a container, so such a build used to stop at "Could not open
+Hardset" on every launch. `HardsetDatabase.prepareForLaunch` now resolves the entitled container the
+way SQLiteData does and, when there is none, opens the database with no metadatabase and no engine.
+Settings says "Saved on this iPhone only". An entitled build whose engine fails still stops at the
+startup screen: rows written without the engine's triggers would never upload, so quietly running
+local-only there would lose data from iCloud's point of view.
+
+### 23. Portrait only
+
+The logger is used standing at a machine, phone in one hand. Landscape gained nothing for that and
+rotated the set grid whenever the phone was tilted on a bench, so the iPhone target supports
+portrait only.

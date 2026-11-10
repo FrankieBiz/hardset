@@ -60,7 +60,9 @@
 	<true/>
 
 	<!-- Remote notifications: CKSyncEngine needs them to learn about changes from other
-	     devices. Declared here and enabled as a capability on the target. -->
+	     devices, but only in a build that carries an iCloud container. A personal-team build has
+	     neither the container nor aps-environment, runs local-only, and never receives one; the
+	     key is harmless there and stays so an iCloud-entitled build needs no plist change. -->
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>remote-notification</string>
