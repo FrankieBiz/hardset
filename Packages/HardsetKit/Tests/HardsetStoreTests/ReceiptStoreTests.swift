@@ -91,6 +91,18 @@ struct ReceiptStoreTests {
     #expect(receipt.movements.map(\.exerciseID) == [bench, row])
   }
 
+  /// A receipt opens each movement's load history, so its store must read the same history.
+  @Test("A receipt's load-history reader sees the receipt's own sets")
+  func loadHistoryFromReceipt() async throws {
+    let (db, logger, bench, _) = try Self.fixture()
+    let session = try Self.finishedSession(logger, bench, weight: 100, at: Date(timeIntervalSince1970: 20_000))
+    let store = ReceiptStore(database: db)
+    let movement = try #require(try await store.load(session).movements.first)
+    let history = try await store.progression.loadHistory(for: movement.exerciseID)
+    #expect(history.series.flatMap(\.points).map(\.heaviestLoadKg) == [100])
+    #expect(history.label(for: try #require(history.series.first).key) == "Free weight")
+  }
+
   // MARK: - Equipment and records
 
   /// A barbell set with no machine is free-weight work, and the live logger celebrates its records.

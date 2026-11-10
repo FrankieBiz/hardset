@@ -6,6 +6,10 @@ public nonisolated struct ReceiptStore: Sendable {
   private let database: any DatabaseWriter
   public init(database: any DatabaseWriter) { self.database = database }
 
+  /// Load history over the same database, so a receipt can open each movement's chart without
+  /// its caller wiring a second store.
+  public var progression: ProgressionStore { ProgressionStore(database: database) }
+
   /// Uses complete prior history with no row cap. The receipt is a deliberate read,
   /// independent of logging and never an extra query during a row's render.
   public func load(_ id: SessionID) async throws -> WorkoutReceipt {
