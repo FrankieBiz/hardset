@@ -46,25 +46,42 @@ public struct HistoryRow: Hashable, Sendable, Identifiable {
 /// When given a `title`, the view draws its own `ScreenHeader` as the first thing in its scroll
 /// content, because the tab that hosts it hides the stock navigation bar. With no `subtitle`, the
 /// header says how many workouts are shown.
+///
+/// The list is a page of the newest workouts. When older ones exist, `onShowOlder` draws a quiet
+/// control after the last month that asks for more, so a long or imported history is reachable
+/// rather than silently cut off. `onDelete` offers deleting a workout from a card's context menu;
+/// the caller confirms it.
 public struct HistoryView: View {
   private let rows: [HistoryRow]
   private let unit: WeightUnit
   private let title: String?
   private let subtitle: String?
   private let onSelect: ((HistoryRow) -> Void)?
+  private let onShowOlder: (() -> Void)?
+  private let isLoadingOlder: Bool
+  private let onDelete: ((HistoryRow) -> Void)?
+  private let onShowSettings: (() -> Void)?
 
   public init(
     rows: [HistoryRow],
     unit: WeightUnit,
     title: String? = nil,
     subtitle: String? = nil,
-    onSelect: ((HistoryRow) -> Void)? = nil
+    onSelect: ((HistoryRow) -> Void)? = nil,
+    onShowOlder: (() -> Void)? = nil,
+    isLoadingOlder: Bool = false,
+    onDelete: ((HistoryRow) -> Void)? = nil,
+    onShowSettings: (() -> Void)? = nil
   ) {
     self.rows = rows
     self.unit = unit
     self.title = title
     self.subtitle = subtitle
     self.onSelect = onSelect
+    self.onShowOlder = onShowOlder
+    self.isLoadingOlder = isLoadingOlder
+    self.onDelete = onDelete
+    self.onShowSettings = onShowSettings
   }
 
   public var body: some View {
@@ -72,7 +89,7 @@ public struct HistoryView: View {
       ScrollView {
         VStack(alignment: .leading, spacing: Tokens.Spacing.section) {
           if let title {
-            ScreenHeader(title, subtitle: subtitle)
+            header(title, subtitle: subtitle)
           }
           HardsetEmptyState(
             title: "No workouts yet",
@@ -89,7 +106,7 @@ public struct HistoryView: View {
       ScrollView {
         LazyVStack(alignment: .leading, spacing: Tokens.Spacing.snug, pinnedViews: [.sectionHeaders]) {
           if let title {
-            ScreenHeader(title, subtitle: subtitle ?? Self.countText(rows.count))
+            header(title, subtitle: subtitle ?? Self.countText(rows.count))
           }
           ForEach(Self.monthGroups(rows)) { group in
             Section {
@@ -106,11 +123,32 @@ public struct HistoryView: View {
                 .background(Tokens.Color.background)
             }
           }
+          if let onShowOlder {
+            Button(action: onShowOlder) {
+              Label(
+                isLoadingOlder ? "Reading older workouts…" : "Show older workouts",
+                systemImage: "clock.arrow.circlepath"
+              )
+            }
+            .buttonStyle(HardsetButtonStyle(.quiet))
+            .disabled(isLoadingOlder)
+            .padding(.horizontal, Tokens.Spacing.loose)
+            .padding(.top, Tokens.Spacing.regular)
+          }
         }
         .padding(.top, title == nil ? Tokens.Spacing.snug : 0)
         .padding(.bottom, Tokens.Spacing.block)
       }
       .background(Tokens.Color.background)
+    }
+  }
+
+  /// The screen's header, with the Settings action when one is given, as on the Train tab.
+  private func header(_ title: String, subtitle: String?) -> some View {
+    ScreenHeader(title, subtitle: subtitle) {
+      if let onShowSettings {
+        HeaderIconButton(systemImage: "gearshape", accessibilityLabel: "Settings", action: onShowSettings)
+      }
     }
   }
 
@@ -125,11 +163,13 @@ public struct HistoryView: View {
       }
       .buttonStyle(HistoryRowButtonStyle())
       .accessibilityLabel(Self.spokenLabel(row, unit: unit))
+      .modifier(DeleteWorkoutAction(row: row, onDelete: onDelete))
     } else {
       HistoryRowContent(row: row, unit: unit, showsDisclosure: false)
         .hardsetCard(cornerRadius: Tokens.Radius.control)
         .accessibilityElement(children: .combine)
         .accessibilityLabel(Self.spokenLabel(row, unit: unit))
+        .modifier(DeleteWorkoutAction(row: row, onDelete: onDelete))
     }
   }
 
@@ -178,8 +218,9 @@ public struct HistoryView: View {
       volume.reps == 1 ? "1 rep" : "\(volume.reps) reps",
     ]
     if volume.volumeKg > 0 {
+      // Named as volume, so weight times reps is never read as the load on the bar.
       let displayed = unit.fromKilograms(volume.volumeKg)
-      parts.append("\(Int(displayed.rounded())) \(unit.abbreviation)")
+      parts.append("\(Int(displayed.rounded())) \(unit.abbreviation) volume")
     }
     if volume.warmupSets > 0 { parts.append("\(volume.warmupSets) warm-up") }
     return parts.joined(separator: " · ")
@@ -310,10 +351,11 @@ private struct HistoryRowContent: View {
       FlowLayout(spacing: Tokens.Spacing.regular) {
         figure(volume.workingSets.formatted(), volume.workingSets == 1 ? "set" : "sets")
         figure(volume.reps.formatted(), volume.reps == 1 ? "rep" : "reps")
+        // Labelled "volume": "1 set 8 reps 800 lb" read as an 800 lb set.
         if volume.volumeKg > 0 {
           figure(
             Int(unit.fromKilograms(volume.volumeKg).rounded()).formatted(),
-            unit.abbreviation
+            "\(unit.abbreviation) volume"
           )
         }
         if volume.warmupSets > 0 {
@@ -327,6 +369,7 @@ private struct HistoryRowContent: View {
     HStack(alignment: .firstTextBaseline, spacing: Tokens.Spacing.tight) {
       Text(value)
         .font(Tokens.Text.figure)
+        .monospacedDigit()
         .foregroundStyle(Tokens.Color.textPrimary)
       Text(label)
         .font(Tokens.Text.caption)
@@ -351,6 +394,29 @@ private struct HistoryRowContent: View {
       Text(duration.clockString)
         .font(Tokens.Text.figure)
         .foregroundStyle(Tokens.Color.textSecondary)
+    }
+  }
+}
+
+/// Offers deleting a workout from its card: a context-menu item and a named accessibility action.
+/// The caller confirms before anything is removed.
+private struct DeleteWorkoutAction: ViewModifier {
+  let row: HistoryRow
+  let onDelete: ((HistoryRow) -> Void)?
+
+  @ViewBuilder func body(content: Content) -> some View {
+    if let onDelete {
+      content
+        .contextMenu {
+          Button(role: .destructive) {
+            onDelete(row)
+          } label: {
+            Label("Delete workout…", systemImage: "trash")
+          }
+        }
+        .accessibilityAction(named: "Delete workout") { onDelete(row) }
+    } else {
+      content
     }
   }
 }

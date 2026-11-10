@@ -43,22 +43,38 @@ private struct StartupView: View {
   let startup: AppStartup<HardsetDatabase.Resources>
   let restTimer: RestTimerController
   @State private var timerReady = false
+  @Environment(\.scenePhase) private var scenePhase
 
   var body: some View {
     Group {
       if let resources = startup.resources, timerReady {
-        RootView(database: resources.database, restTimer: restTimer)
-      } else if startup.lastError != nil {
+        RootView(database: resources.database, sync: resources.sync, restTimer: restTimer)
+      } else if let error = startup.lastError {
         // The design system's empty state and primary button, not the stock bordered one, so the
-        // first screen a lifter might ever see already looks like the rest of the app.
-        HardsetEmptyState(
-          title: "Could not open Hardset",
-          detail: "Try again to open your workouts.",
-          systemImage: "exclamationmark.triangle",
-          actionTitle: "Try again",
-          actionSystemImage: "arrow.clockwise",
-          action: { Task { await startup.retry() } }
-        )
+        // first screen a lifter might ever see already looks like the rest of the app. A build
+        // without iCloud no longer lands here: it opens local-only. What remains is a database
+        // that genuinely could not open or migrate, or a sync engine that could not start.
+        VStack(spacing: Tokens.Spacing.regular) {
+          HardsetEmptyState(
+            title: "Could not open Hardset",
+            detail: "Try again to open your workouts.",
+            systemImage: "exclamationmark.triangle",
+            actionTitle: "Try again",
+            actionSystemImage: "arrow.clockwise",
+            action: { Task { await startup.retry() } }
+          )
+          // The error itself, small and selectable. On a phone with no debugger attached this
+          // screen is the only place the cause can be read, and "try again" alone gave nothing
+          // to report when retrying failed the same way.
+          Text(verbatim: String(describing: error))
+            .font(Tokens.Text.provenance)
+            .foregroundStyle(Tokens.Color.textSecondary)
+            .multilineTextAlignment(.center)
+            .lineLimit(6)
+            .textSelection(.enabled)
+            .padding(.horizontal, Tokens.Spacing.section)
+            .accessibilityLabel("Error details: \(String(describing: error))")
+        }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Tokens.Color.background)
       } else {
@@ -77,17 +93,23 @@ private struct StartupView: View {
       }
       timerReady = true
     }
+    // A rest that ended, or was stopped on the Lock Screen, while the app was away clears as soon
+    // as the lifter is back, rather than waiting for the next alarm update.
+    .onChange(of: scenePhase) { _, phase in
+      if phase == .active { restTimer.refresh() }
+    }
   }
 }
 
 @MainActor
 private struct RootView: View {
   let database: any DatabaseWriter
+  let sync: SyncStatus
   let restTimer: RestTimerController
 
   var body: some View {
     HardsetRootView(
-      environment: HardsetEnvironment(database: database),
+      environment: HardsetEnvironment(database: database, sync: sync),
       // No unit passed: the root view infers it from the device locale on first launch and then
       // honours whatever the user chose in Settings. Hardcoding `.kilograms` here meant a US
       // lifter had no way to see pounds at all, though the engine supported it throughout.
@@ -96,7 +118,9 @@ private struct RootView: View {
         state: { restTimer.state },
         metadata: { restTimer.metadata },
         hasError: { restTimer.lastError != nil },
+        issue: { restTimer.issue.map { RestTimerIssue($0) } },
         retry: { restTimer.retry() },
+        resetRestTimer: { restTimer.resetAfterRecoveryFailure() },
         start: { duration, metadata in
           restTimer.start(duration: duration, metadata: metadata)
         },
@@ -113,5 +137,17 @@ private struct RootView: View {
       // per-exercise setting; until then the timer is started explicitly or not at all.
       restAfterSet: nil
     )
+  }
+}
+
+extension RestTimerIssue {
+  /// The controller's issue in the feature layer's terms. The feature layer cannot import the
+  /// AlarmKit-backed module, so the translation lives here with the rest of the wiring.
+  fileprivate init(_ issue: RestTimerController.Issue) {
+    switch issue {
+    case .alarmsDenied: self = .alarmsDenied
+    case .recoveryFailed: self = .recoveryFailed
+    case .failed: self = .unavailable
+    }
   }
 }

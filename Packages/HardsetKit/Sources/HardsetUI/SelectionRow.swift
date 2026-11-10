@@ -206,6 +206,36 @@ struct SelectionIndicator: View {
   }
 }
 
+extension View {
+  /// The one way out of a selection sheet that does not choose anything.
+  ///
+  /// Tapping a row is the confirmation in every picker, so a picker has no confirm button: only
+  /// "Cancel", in the cancellation position. Drawn here rather than by each caller, because three
+  /// callers drew three conventions ("Done" on the cancel side, "Done" on the confirm side, and
+  /// "Cancel"). Nothing is added when `onCancel` is `nil`, so a caller that still draws its own
+  /// toolbar does not get a second button.
+  func pickerCancelAction(_ onCancel: (() -> Void)?) -> some View {
+    modifier(PickerCancelAction(onCancel: onCancel))
+  }
+}
+
+private struct PickerCancelAction: ViewModifier {
+  let onCancel: (() -> Void)?
+
+  @ViewBuilder
+  func body(content: Content) -> some View {
+    if let onCancel {
+      content.toolbar {
+        ToolbarItem(placement: .cancellationAction) {
+          Button("Cancel", action: onCancel)
+        }
+      }
+    } else {
+      content
+    }
+  }
+}
+
 /// A row's leading symbol, set in a small raised square so it reads as an icon rather than text.
 private struct SelectionIconSquare: View {
   let systemImage: String

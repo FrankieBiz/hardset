@@ -23,49 +23,77 @@ public struct MachineOption: Hashable, Sendable, Identifiable {
 /// they are standing at. Other recent machines and the rest of the gym follow as 56 pt selection
 /// rows under sentence-case labels. "Not recorded" stays a real choice, and adding a machine is a
 /// plainly styled action rather than a row pretending to be one.
+///
+/// A failed read or save appears as an error banner above every choice, as in the gym picker, so
+/// an unreadable gym is never presented as a gym with no machines.
 public struct MachinePickerView: View {
   private let recent: [MachineOption]
   private let others: [MachineOption]
   private let selected: MachineID?
   private let unit: WeightUnit
+  private let errorMessage: String?
   private let onSelect: (MachineID?) -> Void
   private let onEditIncrement: ((MachineID) -> Void)?
   private let onAddMachine: (() -> Void)?
+  private let onArchive: ((MachineID) -> Void)?
+  private let onCancel: (() -> Void)?
 
+  /// The machine waiting for the lifter to confirm it should leave this gym's list.
+  @State private var archiveCandidate: MachineOption?
+
+  /// - Parameters:
+  ///   - errorMessage: A failed read or save, in the lifter's words, shown as an error banner.
+  ///     "Not recorded" stays selectable under it, so a failure never blocks logging.
+  ///   - onArchive: Takes a machine off this gym's list after the lifter confirms. Offered from
+  ///     a long press and as a VoiceOver action, never for the machine currently selected.
+  ///   - onCancel: Closes the picker without choosing. When set, the picker draws "Cancel" in the
+  ///     toolbar's cancellation position, so the caller should not draw its own.
   public init(
     recent: [MachineOption],
     others: [MachineOption] = [],
     selected: MachineID?,
     unit: WeightUnit = .kilograms,
+    errorMessage: String? = nil,
     onSelect: @escaping (MachineID?) -> Void,
     onAddMachine: (() -> Void)? = nil,
-    onEditIncrement: ((MachineID) -> Void)? = nil
+    onEditIncrement: ((MachineID) -> Void)? = nil,
+    onArchive: ((MachineID) -> Void)? = nil,
+    onCancel: (() -> Void)? = nil
   ) {
     self.recent = recent
     self.others = others
     self.selected = selected
     self.unit = unit
+    self.errorMessage = errorMessage
     self.onSelect = onSelect
     self.onEditIncrement = onEditIncrement
     self.onAddMachine = onAddMachine
+    self.onArchive = onArchive
+    self.onCancel = onCancel
   }
 
   public var body: some View {
     ScrollView {
       VStack(alignment: .leading, spacing: Tokens.Spacing.section) {
-        Text("Loads are tracked per machine, so weight on different equipment stays separate.")
-          .font(Tokens.Text.label)
-          .foregroundStyle(Tokens.Color.textSecondary)
-          .fixedSize(horizontal: false, vertical: true)
+        VStack(alignment: .leading, spacing: Tokens.Spacing.regular) {
+          if let visibleErrorMessage {
+            HardsetBanner(.error, message: visibleErrorMessage)
+          }
+
+          Text("Loads are tracked per machine, so weight on different equipment stays separate.")
+            .font(Tokens.Text.label)
+            .foregroundStyle(Tokens.Color.textSecondary)
+            .fixedSize(horizontal: false, vertical: true)
+        }
 
         if let hero = recent.first {
           VStack(alignment: .leading, spacing: Tokens.Spacing.snug) {
             SectionLabel("Used last time")
             heroCard(hero)
           }
-        } else if others.isEmpty {
+        } else if others.isEmpty, visibleErrorMessage == nil {
           // True whether the gym has no machines yet or its list could not be read, which is why
-          // it does not claim either.
+          // it does not claim either. Left out under an error banner, which already says which.
           Text("No machines to show for this gym.")
             .font(Tokens.Text.label)
             .foregroundStyle(Tokens.Color.textPrimary)
@@ -80,7 +108,9 @@ public struct MachinePickerView: View {
           machineSection("Also at this gym", options: others)
         }
 
-        if let selected, let onEditIncrement {
+        // Only for a machine on the list: the caller edits the step of a listed option, so for a
+        // machine the list does not hold (after a failed read) the button would do nothing.
+        if let selected, let onEditIncrement, isListed(selected) {
           Button("Set this machine’s load step") { onEditIncrement(selected) }
             .buttonStyle(HardsetButtonStyle(.secondary, size: .logger))
         }
@@ -115,6 +145,64 @@ public struct MachinePickerView: View {
       .padding(.bottom, Tokens.Spacing.section)
     }
     .background(Tokens.Color.background)
+    .pickerCancelAction(onCancel)
+    // Asked once, because nothing in the app brings an archived machine back to the list.
+    .confirmationDialog(
+      archiveTitle,
+      isPresented: isConfirmingArchive,
+      titleVisibility: .visible,
+      presenting: archiveCandidate
+    ) { option in
+      Button("Archive", role: .destructive) { onArchive?(option.id) }
+      Button("Cancel", role: .cancel) {}
+    } message: { _ in
+      Text("It leaves this gym’s list. Sets already logged on it stay in your history.")
+    }
+  }
+
+  private var visibleErrorMessage: String? {
+    guard let errorMessage else { return nil }
+    let trimmed = errorMessage.trimmingCharacters(in: .whitespacesAndNewlines)
+    return trimmed.isEmpty ? nil : trimmed
+  }
+
+  private func isListed(_ id: MachineID) -> Bool {
+    recent.contains { $0.id == id } || others.contains { $0.id == id }
+  }
+
+  // MARK: - Archive
+
+  private var isConfirmingArchive: Binding<Bool> {
+    Binding(get: { archiveCandidate != nil }, set: { if !$0 { archiveCandidate = nil } })
+  }
+
+  private var archiveTitle: String {
+    guard let archiveCandidate else { return "Archive this machine?" }
+    return "Archive \(archiveCandidate.displayName)?"
+  }
+
+  /// Not for the selected machine: the movement is being logged on it right now, and taking it
+  /// off the list would leave a selection the picker could no longer show.
+  private func canArchive(_ option: MachineOption) -> Bool {
+    onArchive != nil && selected != option.id
+  }
+
+  /// A long press, and the same action for VoiceOver, so archiving is reachable without putting a
+  /// destructive control on every row of a screen used one-handed between sets.
+  private func offeringArchive(_ row: some View, for option: MachineOption) -> some View {
+    row
+      .contextMenu {
+        if canArchive(option) {
+          Button("Archive machine", systemImage: "archivebox", role: .destructive) {
+            archiveCandidate = option
+          }
+        }
+      }
+      .accessibilityActions {
+        if canArchive(option) {
+          Button("Archive machine") { archiveCandidate = option }
+        }
+      }
   }
 
   // MARK: - Hero card
@@ -124,6 +212,10 @@ public struct MachinePickerView: View {
   /// Name in the title role and the stack step in the lifter's unit beneath it. Selected uses the
   /// same accent ring, tint and check as every other choice, only bigger.
   private func heroCard(_ hero: MachineOption) -> some View {
+    offeringArchive(heroButton(hero), for: hero)
+  }
+
+  private func heroButton(_ hero: MachineOption) -> some View {
     let isSelected = selected == hero.id
     return Button {
       onSelect(hero.id)
@@ -168,11 +260,14 @@ public struct MachinePickerView: View {
       SectionLabel(title, count: options.count)
 
       ForEach(options) { option in
-        SelectionRow(
-          title: option.displayName,
-          subtitle: option.stackIncrementKg.map { Self.formatStep($0, unit: unit) },
-          isSelected: selected == option.id,
-          action: { onSelect(option.id) }
+        offeringArchive(
+          SelectionRow(
+            title: option.displayName,
+            subtitle: option.stackIncrementKg.map { Self.formatStep($0, unit: unit) },
+            isSelected: selected == option.id,
+            action: { onSelect(option.id) }
+          ),
+          for: option
         )
       }
     }
@@ -202,14 +297,16 @@ public struct MachinePickerView: View {
   private struct MachinePickerHarness: View {
     let unit: WeightUnit
     let isEmpty: Bool
+    let errorMessage: String?
     @State private var selected: MachineID? = nil
     private let hammer = MachineID()
     private let cybex = MachineID()
     private let panatta = MachineID()
 
-    init(unit: WeightUnit = .kilograms, isEmpty: Bool = false) {
+    init(unit: WeightUnit = .kilograms, isEmpty: Bool = false, errorMessage: String? = nil) {
       self.unit = unit
       self.isEmpty = isEmpty
+      self.errorMessage = errorMessage
     }
 
     var body: some View {
@@ -224,8 +321,11 @@ public struct MachinePickerView: View {
           others: isEmpty ? [] : [MachineOption(id: panatta, displayName: "Panatta Leg Press")],
           selected: selected,
           unit: unit,
+          errorMessage: errorMessage,
           onSelect: { selected = $0 },
-          onAddMachine: {}
+          onAddMachine: {},
+          onArchive: { _ in },
+          onCancel: {}
         )
         .hardsetNavigationTitle("Machine")
       }
@@ -242,5 +342,13 @@ public struct MachinePickerView: View {
 
   #Preview("Machine picker, no machines") {
     MachinePickerHarness(isEmpty: true)
+  }
+
+  #Preview("Machine picker, read failed") {
+    // The banner says the list could not be read; "Not recorded" stays selectable beneath it.
+    MachinePickerHarness(
+      isEmpty: true,
+      errorMessage: "This gym’s machines could not be read. You can still log without one."
+    )
   }
 #endif

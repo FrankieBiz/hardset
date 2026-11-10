@@ -14,4 +14,15 @@ struct CSVDocumentTests {
   func malformed(_ text: String) {
     #expect(throws: CSVError.self) { try CSVDocument.decode(text) }
   }
+
+  /// A semicolon file comes from a comma-decimal locale, so callers need the same separator the
+  /// decoder chose to know whether "82,5" can be a number.
+  @Test("The separator the decoder uses is the one reported")
+  func separator() {
+    #expect(CSVDocument.separator(of: "a;b\n82,5;2\n") == ";")
+    #expect(CSVDocument.separator(of: "a,b\n1;2,3\n") == ",")
+    #expect(CSVDocument.separator(of: "\u{FEFF}a;b\n1;2\n") == ";")
+    #expect(CSVDocument.separator(of: "\"a;b\",c\n1,2\n") == ",")
+    #expect(CSVDocument.separator(of: "single\n1\n") == ",")
+  }
 }

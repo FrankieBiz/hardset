@@ -4,9 +4,21 @@ Everything here is device-only. None of it can be checked in the simulator or by
 and Phase 0 stays **open** until every box passes. Record failures inline rather than re-running
 until green.
 
-Prerequisites: an iPhone on iOS 26.1 or later, signed into iCloud, and a free Apple Developer
-account for signing. Set `PRODUCT_BUNDLE_IDENTIFIER` and the iCloud container to values your team
-can sign before starting.
+Prerequisites: an iPhone on iOS 26.1 or later and an Apple Developer account for signing. Install
+with `make install` on the Mac the iPhone is connected to (or `make mac-install` from Linux), which
+builds Release and launches the identifier the build carries.
+
+Personal (free) team builds — the current setup, team 26XMKJFG8P, bundle
+`com.francisbisignano.hardset`:
+
+- They cannot carry the iCloud or push entitlements, so the app opens **local-only**. Settings shows
+  "Saved on this iPhone only". Section C cannot be run until a paid team signs an iCloud container.
+- The provisioning profile expires 7 days after signing and iOS then refuses to open the app.
+  Reinstall over the existing app (same bundle ID and team) to renew it. **Never delete the app
+  first**: with no iCloud, deleting it erases every workout on the phone. Export from Settings first
+  if a copy is needed; an export is a copy, not a restorable backup.
+- The deep muscle map is unlocked in development builds and says so; App Store builds keep the
+  purchase.
 
 ---
 
@@ -50,9 +62,11 @@ line in this document: a rest timer silenced by Focus is the exact defect the po
 on avoiding.
 
 - [ ] **Authorization.** First schedule prompts for alarm permission. Grant it.
-- [ ] **Denied path.** Reinstall, deny permission, schedule a rest timer. The app degrades to a
-      local notification and tells the user plainly — it does not crash and does not silently
-      no-op.
+- [ ] **Denied path.** Reinstall, deny permission, schedule a rest timer. The app tells the lifter
+      plainly that alarms are off for Hardset and offers Open Settings (not a Retry that cannot
+      work), keeps the in-app countdown, and ends it at the deadline instead of sitting at
+      "Resting 0:00". Turning alarms on in Settings schedules the running rest. It does not crash
+      and does not silently no-op.
 - [ ] **Locked screen.** Start a 30 s rest, lock the phone. The countdown renders on the Lock
       Screen and the alert fires.
 - [ ] **Focus breakthrough.** Start a rest, enable Do Not Disturb, wait. The alert still fires
@@ -78,6 +92,10 @@ on avoiding.
       runaway battery drain.
 
 ## C. Two-device CloudKit sync — the replacement for Spike B
+
+**Blocked on a personal team.** It cannot sign the iCloud container, so the app runs local-only and
+none of this section applies until a paid team's build carries the entitlement again. Until then the
+only sync check is that Settings states "Saved on this iPhone only" and the app opens normally.
 
 **Why this section exists.** The brief specified a `CKSyncEngine` conformance harness driving two
 stores through all six documented sync scenarios. That is not achievable: SQLiteData's

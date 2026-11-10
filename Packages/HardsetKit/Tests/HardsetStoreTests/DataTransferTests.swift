@@ -106,4 +106,175 @@ struct DataTransferTests {
     #expect(first != second)
     #expect(try Data(contentsOf: first) == Data(contentsOf: second))
   }
+
+  // MARK: - Overlapping exports
+
+  /// Strong and Hevy export the whole history every time, so a later file repeats every workout
+  /// an earlier one carried. Each workout already imported from the same app is skipped; only the
+  /// new ones are written.
+  @Test("A newer export imports only the workouts not already imported")
+  func overlappingExport() async throws {
+    let db = try database()
+    let store = DataTransferStore(database: db)
+    let utc = TimeZone(secondsFromGMT: 0)!
+    _ = try await store.importWorkouts(try WorkoutCSVImport.preview(csv, strongUnit: .kilograms, timeZone: utc))
+    // A native workout at the same instant and title is the lifter's own, not an import.
+    try await db.write { db in
+      try Session.insert {
+        Session.Draft(id: UUID(), title: "Legs", startedAt: Date(timeIntervalSince1970: 1_793_728_800),
+          finishedAt: Date(timeIntervalSince1970: 1_793_732_400))
+      }.execute(db)
+    }
+    let newer = csv
+      + "2026-11-03 18:00:00,Legs,1h,Squat,1,140,5,,\n2026-11-03 18:00:00,Legs,1h,Squat,2,140,5,,\n"
+      + "2026-11-05 10:00:00,Push,1h,Press,1,105,8,,\n"
+    let preview = try WorkoutCSVImport.preview(newer, strongUnit: .kilograms, timeZone: utc)
+    #expect(try await store.alreadyImportedWorkoutCount(in: preview) == 1)
+
+    let result = try await store.commit(preview)
+    #expect(result == WorkoutImportResult(importedWorkouts: 2, importedSets: 3, skippedWorkouts: 1))
+    let counts = try await db.read { db in
+      (try Session.fetchCount(db), try LoggedSet.fetchCount(db),
+       try Int.fetchOne(db, sql: "SELECT count(*) FROM deviceImportBatches")!,
+       try Exercise.fetchAll(db).map(\.name).sorted())
+    }
+    #expect(counts.0 == 4)
+    #expect(counts.1 == 5)
+    #expect(counts.2 == 2)
+    // The second file's presses join the first file's imported movement instead of starting a
+    // second one with the same name, so imported history is not split in two.
+    #expect(counts.3 == ["Press (Imported • Strong)", "Squat (Imported • Strong)"])
+  }
+
+  @Test("A different file holding only imported workouts writes nothing")
+  func nothingNew() async throws {
+    let db = try database()
+    let store = DataTransferStore(database: db)
+    _ = try await store.importWorkouts(try WorkoutCSVImport.preview(csv, strongUnit: .kilograms))
+    // Same workout, re-exported with Windows line endings: a different file, the same history.
+    let again = try WorkoutCSVImport.preview(csv.replacingOccurrences(of: "\n", with: "\r\n"), strongUnit: .kilograms)
+    #expect(try await store.commit(again) == WorkoutImportResult(importedWorkouts: 0, importedSets: 0, skippedWorkouts: 1))
+    let counts = try await db.read { db in
+      (try LoggedSet.fetchCount(db), try Int.fetchOne(db, sql: "SELECT count(*) FROM deviceImportBatches")!)
+    }
+    #expect(counts.0 == 2)
+    // Nothing was imported from it, so it is not retained as an import.
+    #expect(counts.1 == 1)
+  }
+
+  // MARK: - Rows that are not loaded strength sets
+
+  /// Planks, cardio and unweighted sets carry no load × reps to record. In the lenient mode the
+  /// preview lists them by row and leaves them out; nothing is invented for them.
+  @Test("Timed, distance and unloaded rows are listed and left out, not fatal")
+  func skippedRows() throws {
+    let text = """
+      Date,Workout Name,Duration,Exercise Name,Set Order,Weight,Reps,Distance,Seconds,Notes
+      2026-11-01 10:00:00,Push,1h,Press,1,100,8,0,0,
+      2026-11-01 10:00:00,Push,1h,Plank,1,0,0,0,60,
+      2026-11-01 10:00:00,Push,1h,Pull-up,1,,10,,,
+      2026-11-01 10:00:00,Push,1h,Run,1,,,5,1200,
+
+      """
+    #expect(throws: WorkoutImportError.self) { try WorkoutCSVImport.preview(text, strongUnit: .kilograms) }
+    let preview = try WorkoutCSVImport.preview(text, strongUnit: .kilograms, skippingUnsupportedRows: true)
+    #expect(preview.setCount == 1)
+    #expect(preview.sessions[0].sets.map(\.exercise) == ["Press"])
+    #expect(preview.skipped == [
+      .init(line: 3, reason: .noReps), .init(line: 4, reason: .noLoad), .init(line: 5, reason: .noReps),
+    ])
+  }
+
+  @Test("Malformed rows still stop a lenient preview", arguments: ["nan", "-1", "inf"])
+  func lenientStillRejectsMalformed(_ weight: String) {
+    #expect(throws: WorkoutImportError.self) {
+      try WorkoutCSVImport.preview(csv.replacingOccurrences(of: ",100,", with: ",\(weight),"),
+        strongUnit: .kilograms, skippingUnsupportedRows: true)
+    }
+  }
+
+  @Test("A file with no loaded strength sets says so")
+  func onlyUnsupportedRows() {
+    let text = "Date,Workout Name,Duration,Exercise Name,Set Order,Weight,Reps,Seconds\n2026-11-01 10:00:00,Core,10m,Plank,1,0,0,60\n"
+    #expect(throws: WorkoutImportError.noSupportedSets(skipped: 1)) {
+      try WorkoutCSVImport.preview(text, strongUnit: .kilograms, skippingUnsupportedRows: true)
+    }
+  }
+
+  /// Comma-decimal locales export with semicolons, so "82,5" is a number only in such a file.
+  @Test("Comma decimals are read from semicolon files only")
+  func commaDecimals() throws {
+    let semicolon = "Date;Workout Name;Duration;Exercise Name;Set Order;Weight;Reps;RPE\n2026-11-01 10:00:00;Push;1h;Press;1;82,5;8;7,5\n"
+    let set = try WorkoutCSVImport.preview(semicolon, strongUnit: .kilograms).sessions[0].sets[0]
+    #expect(set.weightKg == 82.5)
+    #expect(set.rpe == 7.5)
+    let comma = "Date,Workout Name,Duration,Exercise Name,Set Order,Weight,Reps\n2026-11-01 10:00:00,Push,1h,Press,1,\"82,5\",8\n"
+    #expect(throws: WorkoutImportError.self) { try WorkoutCSVImport.preview(comma, strongUnit: .kilograms) }
+  }
+
+  // MARK: - Export naming
+
+  @Test("Exports are named by the day they were made")
+  func exportName() async throws {
+    let store = DataTransferStore(database: try database())
+    let folder = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    defer { try? FileManager.default.removeItem(at: folder) }
+    // 23:30 UTC on 1 November is already 2 November in Auckland.
+    let instant = Date(timeIntervalSince1970: 1_793_575_800)
+    let utc = try await store.export(.csv, directory: folder, madeAt: instant, timeZone: TimeZone(secondsFromGMT: 0)!)
+    #expect(utc.lastPathComponent == "Hardset-2026-11-01.csv")
+    let auckland = try await store.export(.sqlite, directory: folder, madeAt: instant,
+      timeZone: TimeZone(identifier: "Pacific/Auckland")!)
+    #expect(auckland.lastPathComponent == "Hardset-2026-11-02.sqlite")
+  }
+
+  // MARK: - Corrections and order
+
+  /// Deleting an import's workouts in History and choosing the same file again imports it again,
+  /// rather than refusing a file whose workouts are no longer anywhere in the app.
+  @Test("The same file imports again after its workouts were deleted")
+  func reimportAfterDeletion() async throws {
+    let db = try database()
+    let store = DataTransferStore(database: db)
+    let preview = try WorkoutCSVImport.preview(csv, strongUnit: .kilograms)
+    _ = try await store.importWorkouts(preview)
+    await #expect(throws: WorkoutImportError.alreadyImported) { try await store.importWorkouts(preview) }
+    try await db.write { db in
+      try db.execute(sql: "DELETE FROM loggedSets; DELETE FROM sessionExercises; DELETE FROM sessions")
+    }
+    #expect(try await store.importWorkouts(preview) == 2)
+    #expect(try await db.read { try LoggedSet.fetchAll($0).count } == 2)
+    #expect(try await db.read { try Int.fetchOne($0, sql: "SELECT count(*) FROM deviceImportBatches") } == 1)
+  }
+
+  /// Sets leave in the order they were performed. Ordering by the per-movement set number first
+  /// interleaved movements: a workout done Press, Press, Row exported as Press 1, Row 1, Press 2.
+  @Test("CSV export lists sets in the order they were performed")
+  func exportOrder() async throws {
+    let db = try database()
+    let session = UUID()
+    let press = UUID()
+    let row = UUID()
+    let start = Date(timeIntervalSince1970: 1_000_000)
+    try await db.write { db in
+      try Exercise.insert { Exercise.Draft(id: press, name: "Press") }.execute(db)
+      try Exercise.insert { Exercise.Draft(id: row, name: "Row") }.execute(db)
+      try Session.insert {
+        Session.Draft(id: session, startedAt: start, finishedAt: start.addingTimeInterval(3600))
+      }.execute(db)
+      for (exercise, ordinal, minute) in [(press, 1, 1), (press, 2, 5), (row, 1, 9)] {
+        try LoggedSet.insert {
+          LoggedSet.Draft(sessionID: session, exerciseID: exercise, setOrdinal: ordinal, weightKg: 50,
+            reps: 8, completedAt: start.addingTimeInterval(Double(minute) * 60))
+        }.execute(db)
+      }
+    }
+    let folder = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    defer { try? FileManager.default.removeItem(at: folder) }
+    let url = try await DataTransferStore(database: db).export(.csv, directory: folder)
+    let rows = try CSVDocument.decode(String(contentsOf: url, encoding: .utf8))
+    let name = try #require(rows.first?.firstIndex(of: "exerciseName"))
+    let ordinal = try #require(rows.first?.firstIndex(of: "setOrdinal"))
+    #expect(rows.dropFirst().map { "\($0[name]) \($0[ordinal])" } == ["Press 1", "Press 2", "Row 1"])
+  }
 }

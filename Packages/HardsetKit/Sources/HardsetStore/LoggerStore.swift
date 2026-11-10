@@ -383,6 +383,190 @@ public nonisolated struct LoggerStore: Sendable {
     }
   }
 
+  // MARK: - Corrections to an open workout
+  //
+  // Every command below validates inside its own write transaction and changes only the open
+  // workout it names, so a mistake can be put right while training without any path for
+  // rewriting finished history. Deletes are plain deletes: with a sync engine running, its
+  // triggers turn them into record deletions; without one there is nothing else to do.
+
+  /// Deletes one saved set of the open workout, so a mistaken log can be taken back.
+  ///
+  /// A set that is already gone, for instance removed on another device, is not an error: the
+  /// outcome asked for holds. A set belonging to a different workout is refused, so naming the
+  /// open workout can never reach into history.
+  public func deleteLoggedSet(_ id: SetID, in sessionID: SessionID) throws {
+    try database.write { db in
+      _ = try Self.requireOpenSession(sessionID, in: db)
+      let owner = try LoggedSet.where { $0.id.eq(id.rawValue) }.select(\.sessionID).fetchOne(db)
+      guard let owner else { return }
+      guard owner == sessionID.rawValue else { throw LoggerStoreError.writeNotApplied }
+      try LoggedSet
+        .where { $0.id.eq(id.rawValue) && $0.sessionID.eq(sessionID.rawValue) }
+        .delete()
+        .execute(db)
+      try Self.requireSingleChange(in: db)
+    }
+  }
+
+  /// Removes a movement from the open workout: its plan row and this workout's sets for it, in
+  /// one transaction, then closes the gap in the remaining positions.
+  ///
+  /// Sets are matched by the plan row they were logged against, plus any ids passed in
+  /// `loggedSetIDs`, which is how a set written before sets recorded their plan row is reached.
+  /// Those ids are limited to this workout and, when `exerciseID` is given, to this movement.
+  /// Sets of the same movement in other workouts are history and are never touched. A plan row
+  /// already removed elsewhere is not an error; its sets here are still cleared.
+  public func removeSessionExercise(
+    rowID: UUID,
+    sessionID: SessionID,
+    exerciseID: ExerciseID? = nil,
+    loggedSetIDs: [SetID] = []
+  ) throws {
+    try database.write { db in
+      _ = try Self.requireOpenSession(sessionID, in: db)
+      let row = try SessionExercise.where { $0.id.eq(rowID) }.fetchOne(db)
+      if let row {
+        guard row.sessionID == sessionID.rawValue else {
+          throw LoggerStoreError.sessionExerciseMismatch
+        }
+        if let exerciseID, row.exerciseID != exerciseID.rawValue {
+          throw LoggerStoreError.sessionExerciseMismatch
+        }
+      }
+      try LoggedSet
+        .where { $0.sessionID.eq(sessionID.rawValue) && $0.sessionExerciseID.eq(rowID) }
+        .delete()
+        .execute(db)
+      let explicit = loggedSetIDs.map(\.rawValue)
+      if !explicit.isEmpty {
+        if let exerciseID {
+          try LoggedSet
+            .where { $0.sessionID.eq(sessionID.rawValue) && $0.id.in(explicit) }
+            .where { $0.exerciseID.eq(exerciseID.rawValue) }
+            .delete()
+            .execute(db)
+        } else {
+          try LoggedSet
+            .where { $0.sessionID.eq(sessionID.rawValue) && $0.id.in(explicit) }
+            .delete()
+            .execute(db)
+        }
+      }
+      if row != nil {
+        try SessionExercise.where { $0.id.eq(rowID) }.delete().execute(db)
+        try Self.requireSingleChange(in: db)
+      }
+      try Self.renumberPlan(of: sessionID, in: db)
+    }
+  }
+
+  /// Rewrites the open workout's plan order. `orderedRowIDs` must name exactly the workout's
+  /// plan rows, each once; anything else means memory and storage disagree, and nothing is
+  /// written.
+  public func setSessionExercisePositions(_ orderedRowIDs: [UUID], in sessionID: SessionID) throws {
+    try database.write { db in
+      _ = try Self.requireOpenSession(sessionID, in: db)
+      let rows = try SessionExercise.where { $0.sessionID.eq(sessionID.rawValue) }.fetchAll(db)
+      guard rows.count == orderedRowIDs.count, Set(rows.map(\.id)) == Set(orderedRowIDs) else {
+        throw LoggerStoreError.sessionExerciseMismatch
+      }
+      let positions = Dictionary(uniqueKeysWithValues: rows.map { ($0.id, $0.position) })
+      for (index, rowID) in orderedRowIDs.enumerated() where positions[rowID] != index {
+        try SessionExercise.where { $0.id.eq(rowID) }.update { $0.position = #bind(index) }.execute(db)
+        try Self.requireSingleChange(in: db)
+      }
+    }
+  }
+
+  /// Records or changes the open workout's gym, so a lifter who started without one, or at the
+  /// wrong one, can still record machines.
+  ///
+  /// Refused with `machineGymMismatch` while any plan row or saved set of this workout carries a
+  /// machine from a different gym (or any machine, when clearing the gym): machines belong to a
+  /// gym, and moving the workout would contradict equipment already recorded. An unknown or
+  /// archived gym is `gymNotFound`.
+  public func setSessionGym(_ sessionID: SessionID, to gymID: GymID?) throws {
+    try database.write { db in
+      _ = try Self.requireOpenSession(sessionID, in: db)
+      if let gymID {
+        let live = try Gym.where { $0.id.eq(gymID.rawValue) && !$0.isArchived }
+          .select(\.id).fetchOne(db)
+        guard live != nil else { throw LoggerStoreError.gymNotFound }
+      }
+      let planned = try SessionExercise.where { $0.sessionID.eq(sessionID.rawValue) }
+        .select(\.machineID).fetchAll(db)
+      let performed = try LoggedSet.where { $0.sessionID.eq(sessionID.rawValue) }
+        .select(\.machineID).fetchAll(db)
+      let machineIDs = Array(Set((planned + performed).compactMap { $0 }))
+      if !machineIDs.isEmpty {
+        let machineGyms = try Machine.where { $0.id.in(machineIDs) }.select(\.gymID).fetchAll(db)
+        guard let gymID, machineGyms.allSatisfy({ $0 == gymID.rawValue }) else {
+          throw LoggerStoreError.machineGymMismatch
+        }
+      }
+      try Session
+        .where { $0.id.eq(sessionID.rawValue) }
+        .update { $0.gymID = #bind(gymID?.rawValue) }
+        .execute(db)
+      try Self.requireSingleChange(in: db)
+    }
+  }
+
+  /// Deletes the open workout with its plan rows and sets, in one transaction, for a workout
+  /// started by mistake. A finished workout is history and is refused with `sessionClosed`.
+  ///
+  /// Children are deleted explicitly rather than left to `ON DELETE CASCADE`: SQLiteData does not
+  /// validate delete actions on tables with two or more foreign keys, which these are.
+  public func discardOpenSession(_ sessionID: SessionID) throws {
+    try database.write { db in
+      _ = try Self.requireOpenSession(sessionID, in: db)
+      try LoggedSet.where { $0.sessionID.eq(sessionID.rawValue) }.delete().execute(db)
+      try SessionExercise.where { $0.sessionID.eq(sessionID.rawValue) }.delete().execute(db)
+      try Session.where { $0.id.eq(sessionID.rawValue) }.delete().execute(db)
+      try Self.requireSingleChange(in: db)
+    }
+  }
+
+  /// Positions are contiguous, so a movement appended at `count` cannot share one with an
+  /// existing row and come back in an arbitrary order after a relaunch.
+  private static func renumberPlan(of sessionID: SessionID, in db: Database) throws {
+    let rows = try SessionExercise
+      .where { $0.sessionID.eq(sessionID.rawValue) }
+      .order { ($0.position, $0.id) }
+      .fetchAll(db)
+    for (index, row) in rows.enumerated() where row.position != index {
+      try SessionExercise.where { $0.id.eq(row.id) }.update { $0.position = #bind(index) }.execute(db)
+      try requireSingleChange(in: db)
+    }
+  }
+
+  /// The machine at `gymID` this movement was most recently logged on, if any and not archived.
+  ///
+  /// Recency is the right rule for the same reason the machine picker uses it: the machine used
+  /// last time is overwhelmingly the one the lifter is standing at. Only this gym's machines are
+  /// considered, so a recent trip elsewhere cannot hide the usual one.
+  public func mostRecentMachine(for exerciseID: ExerciseID, at gymID: GymID) throws -> MachineRecord? {
+    try database.read { db in
+      let machines = try Machine
+        .where { $0.gymID.eq(gymID.rawValue) && !$0.isArchived }
+        .fetchAll(db)
+      var best: (machine: Machine, at: Date)?
+      for machine in machines {
+        let latest = try LoggedSet
+          .where { $0.exerciseID.eq(exerciseID.rawValue) && $0.machineID.eq(machine.id) }
+          .order { $0.completedAt.desc() }
+          .limit(1)
+          .select(\.completedAt)
+          .fetchOne(db)
+        guard let latest else { continue }
+        if let current = best, current.at >= latest { continue }
+        best = (machine, latest)
+      }
+      return best.map { MachineRecord(row: $0.machine) }
+    }
+  }
+
   /// The most recently started session that is still open, if any.
   ///
   /// Used for crash recovery: the app was killed mid-workout and needs to offer to resume.

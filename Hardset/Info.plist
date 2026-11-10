@@ -31,19 +31,38 @@
 		<key>UIColorName</key>
 		<string>LaunchBackground</string>
 	</dict>
+	<!-- Portrait only, by decision. The logger is used one-handed at a machine or lying on a
+	     bench, where a tilted phone would otherwise turn the set grid, keypad sheet and rest bar
+	     into a landscape layout no one has designed or tested, in the middle of a set. iPhone
+	     only (TARGETED_DEVICE_FAMILY 1), so there is no iPad key. -->
+	<key>UISupportedInterfaceOrientations</key>
+	<array>
+		<string>UIInterfaceOrientationPortrait</string>
+	</array>
 
-	<!-- Required for AlarmKit. Without this key AlarmManager cannot schedule at all: the
-	     framework fails at runtime with "Client has not provided an NSAlarmKitUsageDescription
-	     value". There is no AlarmKit entitlement and no Xcode capability to add. -->
 	<key>NSHealthShareUsageDescription</key>
 	<string>Read body mass and workout summaries you choose to share. They remain on this device and never identify a machine.</string>
 	<key>NSHealthUpdateUsageDescription</key>
 	<string>Save completed strength workouts and body mass you enter to Apple Health when you choose.</string>
+	<!-- Required for AlarmKit. Without this key AlarmManager cannot schedule at all: the
+	     framework fails at runtime with "Client has not provided an NSAlarmKitUsageDescription
+	     value". There is no AlarmKit entitlement and no Xcode capability to add. -->
 	<key>NSAlarmKitUsageDescription</key>
 	<string>Hardset uses alarms so your rest timer still alerts you when the app is closed, silenced, or in Focus.</string>
+	<!-- The rest countdown on the Lock Screen and in the Dynamic Island is a Live Activity
+	     (AlarmAttributes is an ActivityKit attribute type) drawn by HardsetWidget. Apple's AlarmKit
+	     guide names only the usage string above, but ActivityKit ties an app's Live Activities,
+	     and its Live Activities switch in Settings, to this key, and working AlarmKit apps declare
+	     it. Harmless if AlarmKit does not need it. Not yet confirmed on a device: see
+	     DEVICE-CHECKLIST B, "Locked screen". No NSSupportsLiveActivitiesFrequentUpdates: the
+	     countdown is drawn by the system from the alarm's own dates, so nothing is pushed. -->
+	<key>NSSupportsLiveActivities</key>
+	<true/>
 
 	<!-- Remote notifications: CKSyncEngine needs them to learn about changes from other
-	     devices. Declared here and enabled as a capability on the target. -->
+	     devices, but only in a build that carries an iCloud container. A personal-team build has
+	     neither the container nor aps-environment, runs local-only, and never receives one; the
+	     key is harmless there and stays so an iCloud-entitled build needs no plist change. -->
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>remote-notification</string>

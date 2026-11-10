@@ -164,12 +164,23 @@ public struct RestBarView: View {
     .accessibilityLabel(accessibilityLabel)
   }
 
-  private var spokenLabel: String {
-    guard let remaining = state.remaining(at: referenceDate) else { return "Not resting" }
-    let status = state.isRunning ? "Resting" : "Rest paused"
-    var parts = ["\(status), \(remaining.clockString) remaining"]
-    if let metadata { parts.append("after \(metadata.exerciseName), \(metadata.setLabel)") }
-    return parts.joined(separator: ", ")
+  /// What VoiceOver reads for the countdown.
+  ///
+  /// The running case embeds the same system-rendered timer as the visible countdown. Nothing
+  /// re-renders this view while a rest runs, so a time computed here would be the time left when
+  /// the bar was drawn, read back unchanged a minute later. The paused remainder is frozen, so a
+  /// fixed string is already correct.
+  private var spokenLabel: Text {
+    let after = metadata.map { ", after \($0.exerciseName), \($0.setLabel)" } ?? ""
+    switch state {
+    case .idle:
+      return Text(verbatim: "Not resting")
+    case .running(let endsAt):
+      let left = Text(timerInterval: referenceDate...max(endsAt, referenceDate), countsDown: true)
+      return Text("Resting, \(left) remaining\(after)")
+    case .paused(let remaining):
+      return Text(verbatim: "Rest paused, \(remaining.clockString) remaining\(after)")
+    }
   }
 
 }

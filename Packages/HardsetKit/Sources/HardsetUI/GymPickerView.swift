@@ -20,8 +20,9 @@ public struct GymOption: Hashable, Sendable, Identifiable {
 /// Sets where the workout happens, enabling per-machine tracking. Saved gyms are 56 pt selection
 /// rows under a sentence-case label; "Not recorded" stays a real choice beneath them, because
 /// training somewhere unsaved is a true answer; and adding a gym is a plainly styled action rather
-/// than a row pretending to be one. A failed save appears as an error banner at the top, where it
-/// cannot be scrolled past.
+/// than a row pretending to be one. An error, such as a saved gym whose list could not be read
+/// back, appears as a banner at the top, where it cannot be scrolled past. A failed save is stated
+/// in the name sheet instead, where the typed name waits for the retry.
 public struct GymPickerView: View {
   private let gyms: [GymOption]
   private let selected: GymID?
@@ -136,10 +137,10 @@ public struct GymPickerView: View {
     ])
   }
 
-  #Preview("Gym picker, save failed") {
+  #Preview("Gym picker, list unreadable") {
     GymPickerHarness(
       gyms: [],
-      errorMessage: "Iron Temple could not be saved. The database is read-only."
+      errorMessage: "The gym was saved, but its list could not be read."
     )
   }
 #endif

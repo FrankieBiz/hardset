@@ -9,15 +9,15 @@
 	<key>NSPrivacyTrackingDomains</key>
 	<array/>
 
-	<!-- Deliberately empty.
-	     Apple: "Your app's privacy manifest file doesn't need to cover data collected by
-	     third-party SDKs that your app links to." RevenueCat declares its own
-	     NSPrivacyCollectedDataTypePurchaseHistory, so restating it here would be wrong.
-	     Purchase history must still be disclosed in the App Store Connect questionnaire --
-	     the SDK-inheritance rule does not apply there, and that is where rejections originate.
+	<!-- Deliberately empty for now.
+	     No third-party SDK is linked: the lifetime purchase uses StoreKit 2 directly and is
+	     verified on the device, and there is no backend or analytics. An earlier version of this
+	     comment relied on RevenueCat declaring purchase history for us; RevenueCat is not linked,
+	     so that reasoning no longer applies.
 
-	     Revisit if we ever pass our own appUserID to Purchases.configure: that would add an
-	     NSPrivacyCollectedDataTypeUserID entry here. -->
+	     Revisit before any App Store build: assess purchase history and, in an iCloud-entitled
+	     build, private-database sync against Apple's definition of collected data, and answer the
+	     App Store Connect privacy questionnaire accordingly. -->
 	<key>NSPrivacyCollectedDataTypes</key>
 	<array/>
 

@@ -183,6 +183,56 @@ struct GymStoreTests {
     #expect(try logger.sets(in: session).count == 1)
   }
 
+  // MARK: - Management
+
+  /// A typo'd name is fixed in place: the same identity, so every logged set keeps its gym.
+  @Test("A gym is renamed in place, trimmed, and a blank name is refused")
+  func renameGym() throws {
+    let (_, gyms, _, _) = try fixture()
+    let gym = try gyms.createGym(name: "Metrflex", now: now)
+    try gyms.renameGym(gym, to: "  Metroflex Gym ")
+    #expect(try gyms.gyms().map(\.name) == ["Metroflex Gym"])
+    #expect(throws: EquipmentNameError.blank) { try gyms.renameGym(gym, to: "   ") }
+    #expect(try gyms.gyms().map(\.name) == ["Metroflex Gym"])
+    #expect(throws: EquipmentNameError.unavailable) { try gyms.renameGym(GymID(), to: "Elsewhere") }
+    try gyms.archiveGym(gym)
+    #expect(throws: EquipmentNameError.unavailable) { try gyms.renameGym(gym, to: "Gone") }
+  }
+
+  @Test("A machine's name and brand are edited in place")
+  func renameMachine() throws {
+    let (_, gyms, _, _) = try fixture()
+    let gym = try gyms.createGym(name: "Gym", now: now)
+    let machine = try gyms.createMachine(at: gym, name: "Leg Pres", brand: "Hammer Strenght", now: now)
+    try gyms.renameMachine(machine, name: " Leg Press ", brand: " Hammer Strength ")
+    #expect(try gyms.machines(at: gym).map(\.displayName) == ["Hammer Strength Leg Press"])
+    try gyms.renameMachine(machine, name: "Leg Press", brand: "")
+    #expect(try gyms.machines(at: gym).map(\.displayName) == ["Leg Press"])
+    #expect(throws: EquipmentNameError.blank) { try gyms.renameMachine(machine, name: " ", brand: "Cybex") }
+    try gyms.archiveMachine(machine)
+    #expect(throws: EquipmentNameError.unavailable) { try gyms.renameMachine(machine, name: "Leg Press", brand: "") }
+  }
+
+  /// Settings lists every live gym with its live machines from one read, so a list can never pair
+  /// a gym with another moment's machines.
+  @Test("The inventory lists live gyms with their live machines, by name")
+  func inventory() async throws {
+    let (_, gyms, _, _) = try fixture()
+    let home = try gyms.createGym(name: "Home", now: now)
+    let away = try gyms.createGym(name: "Away", now: now)
+    let gone = try gyms.createGym(name: "Closed", now: now)
+    try gyms.createMachine(at: home, name: "Squat rack", now: now)
+    try gyms.createMachine(at: home, name: "Leg Press", brand: "Cybex", now: now)
+    let archived = try gyms.createMachine(at: home, name: "Old cable", now: now)
+    try gyms.archiveMachine(archived)
+    try gyms.archiveGym(gone)
+
+    let inventory = try await gyms.inventory()
+    #expect(inventory.map(\.gym.name) == ["Away", "Home"])
+    #expect(inventory.first { $0.gym.id == away }?.machines.isEmpty == true)
+    #expect(inventory.first { $0.gym.id == home }?.machines.map(\.name) == ["Leg Press", "Squat rack"])
+  }
+
   /// The stack increment is what keeps a progression suggestion honest.
   @Test("A machine's stack increment round-trips")
   func stackIncrement() throws {

@@ -27,6 +27,27 @@ public nonisolated struct DeviceHealthStore: Sendable {
     public let end: Date
   }
 
+  /// A body-mass reading kept on this device, read from Apple Health or entered and sent to it.
+  public struct BodyMass: Sendable, Equatable {
+    public let kilograms: Double
+    public let measuredAt: Date
+  }
+
+  /// The body-mass sample this device holds that was measured last, or `nil` when there is none.
+  /// Never a fallback or an average: when Health access was denied, there simply is none.
+  public func latestBodyMass() async throws -> BodyMass? {
+    try await database.read { db in
+      try DeviceHealthSample
+        .where { $0.kind.eq(Self.bodyMassKind) && $0.unit.eq("kg") }
+        .order { ($0.startedAt.desc(), $0.id) }
+        .fetchOne(db)
+        .map { BodyMass(kilograms: $0.value, measuredAt: $0.startedAt) }
+    }
+  }
+
+  /// The kind every body-mass sample is stored under, whether read from or written to Health.
+  public static let bodyMassKind = "apple.bodyMass"
+
   public func save(_ samples: [Sample]) async throws {
     try await database.write { db in
       for sample in samples {
@@ -45,7 +66,13 @@ public nonisolated struct DeviceHealthStore: Sendable {
   /// Imported files do not establish a training modality and are deliberately excluded.
   public func workoutsToExport() async throws -> [Workout] {
     try await database.read { db in
-      try Session.where { $0.finishedAt.isNot(nil) }.order { ($0.startedAt, $0.id) }.fetchAll(db)
+      // Only workouts with at least one working set. An accidental Start finished empty, or a
+      // session of warm-ups only, is not a strength workout to put in Apple Health.
+      try Session.where { session in
+        session.finishedAt.isNot(nil)
+          && LoggedSet.where { $0.sessionID.eq(session.id) && !$0.isWarmup }.exists()
+      }
+      .order { ($0.startedAt, $0.id) }.fetchAll(db)
         .compactMap { row in
           guard let end = row.finishedAt, !row.notes.hasPrefix("Imported from "),
             end > row.startedAt, end.timeIntervalSince(row.startedAt) <= 6 * 3600 else { return nil }

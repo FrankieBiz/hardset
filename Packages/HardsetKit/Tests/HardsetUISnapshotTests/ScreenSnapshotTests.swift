@@ -202,6 +202,13 @@
       try await Snapshot.capture("settings-dark") {
         SettingsSheet(useImperial: .constant(false)) {}
       }
+      // The local-only state a build without iCloud opens in, which every personal-team device
+      // build is. Rendered tall so the section, below the fold on a phone, is in frame.
+      try await Snapshot.capture(
+        "settings-local-only-dark", size: CGSize(width: Snapshot.phone.width, height: 1600)
+      ) {
+        SettingsSheet(useImperial: .constant(false), sync: .localOnly) {}
+      }
     }
 
     /// The app target's startup states, rebuilt from the same components: it cannot be rendered

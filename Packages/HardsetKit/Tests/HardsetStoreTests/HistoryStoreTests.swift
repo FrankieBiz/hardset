@@ -377,6 +377,52 @@ struct HistoryStoreTests {
     }
     #expect(try history.recentSessions(limit: 2).count == 2)
   }
+
+  /// The screen shows the newest page and must know how many exist beyond it, so it can say
+  /// "latest 50 of 312" and offer the rest instead of implying fifty is everything.
+  @Test("A history page knows how many finished workouts exist beyond it")
+  func pageCountsAllFinished() async throws {
+    let (_, logger, history, press, _) = try fixture()
+    for daysAgo in 1...5 {
+      let start = now.addingTimeInterval(Double(-daysAgo) * 86_400)
+      let session = try logger.startSession(title: "Day \(daysAgo)", at: start)
+      _ = try logger.logSet(
+        sessionID: session, exerciseID: press,
+        draft: SetEntryDraft(weightKg: 100, reps: 8), setOrdinal: 0, at: start
+      )
+      try logger.finishSession(session, at: start.addingTimeInterval(3600))
+    }
+    _ = try logger.startSession(at: now)
+    let page = try await history.loadHistory(limit: 2)
+    #expect(page.sessions.map(\.title) == ["Day 1", "Day 2"])
+    #expect(page.totalCount == 5)
+    #expect(page.hasMore)
+    let all = try await history.loadHistory(limit: 10)
+    #expect(all.sessions.count == 5)
+    #expect(!all.hasMore)
+  }
+
+  /// Every movement numbers its sets from zero, so two movements tie on ordinal. The order they
+  /// were performed in is the completion time, not the order SQLite happens to return ties.
+  @Test("First-logged order follows completion time when ordinals tie")
+  func exerciseOrderWithTiedOrdinals() throws {
+    let (database, logger, history, press, curl) = try fixture()
+    let start = now.addingTimeInterval(-86_400)
+    let session = try logger.startSession(at: start)
+    try database.write { db in
+      // Written first, performed second.
+      try LoggedSet.insert {
+        LoggedSet.Draft(id: UUID(), sessionID: session.rawValue, exerciseID: curl.rawValue,
+          setOrdinal: 0, weightKg: 20, reps: 10, completedAt: start.addingTimeInterval(600))
+      }.execute(db)
+      try LoggedSet.insert {
+        LoggedSet.Draft(id: UUID(), sessionID: session.rawValue, exerciseID: press.rawValue,
+          setOrdinal: 0, weightKg: 60, reps: 10, completedAt: start.addingTimeInterval(60))
+      }.execute(db)
+    }
+    try logger.finishSession(session, at: start.addingTimeInterval(3600))
+    #expect(try history.recentSessions()[0].exerciseNames == ["Bench Press", "Barbell Curl"])
+  }
   // Frozen original v1 DDL from c1677fb; SQL comments/indentation removed.
   // Keep independent of current migrations so upgrade coverage cannot drift.
   private static let historicalV1Schema = """

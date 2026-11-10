@@ -46,6 +46,22 @@ struct RestJournalTests {
     #expect(try journal.load() == previous)
   }
 
+  /// The journal outlives app updates on a phone, so a rest written by an older build must still
+  /// load after the payload gains a field. An unreadable row blocks the rest timer until reset.
+  @Test("A rest journalled before the total was recorded still loads")
+  func olderRow() throws {
+    let database = try DatabaseQueue()
+    try HardsetMigrations.migrator().migrate(database)
+    let id = UUID()
+    let json = #"{"state":{"running":{"endsAt":800000000}},"metadata":{"exerciseName":"Press","setOrdinal":2},"alarmID":"\#(id.uuidString)","retiredAlarmIDs":[]}"#
+    try database.write { try $0.execute(sql: "INSERT INTO deviceRestJournal VALUES (1, ?)", arguments: [json]) }
+    let loaded = try RestJournal(database: database).load()
+    #expect(loaded.state == .running(endsAt: Date(timeIntervalSinceReferenceDate: 800_000_000)))
+    #expect(loaded.metadata == RestMetadata(exerciseName: "Press", setOrdinal: 2))
+    #expect(loaded.metadata?.totalRest == nil)
+    #expect(loaded.alarmID == id)
+  }
+
   @Test("Corrupt durable state is surfaced rather than treated as idle")
   func corrupt() throws {
     let database = try DatabaseQueue()

@@ -79,6 +79,37 @@ public nonisolated struct GymStore: Sendable {
     }
   }
 
+  /// Corrects a live gym's name in place. The identity is unchanged, so every session and set
+  /// that names this gym follows the new name.
+  public func renameGym(_ id: GymID, to name: String) throws {
+    let trimmed = try Self.validName(name)
+    try database.write { db in
+      try Gym.where { $0.id.eq(id.rawValue) && !$0.isArchived }
+        .update { $0.name = #bind(trimmed) }.execute(db)
+      guard db.changesCount == 1 else { throw EquipmentNameError.unavailable }
+    }
+  }
+
+  private static func validName(_ name: String) throws -> String {
+    let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !trimmed.isEmpty else { throw EquipmentNameError.blank }
+    return trimmed
+  }
+
+  /// Every live gym with its live machines, by name, from one read. For managing what was
+  /// added, not for choosing: the pickers stay recency-first.
+  public func inventory() async throws -> [GymInventory] {
+    try Task.checkCancellation()
+    return try await database.read { db in
+      let gyms = try Gym.where { !$0.isArchived }.order { ($0.name, $0.id) }.fetchAll(db)
+      let machines = try Machine.where { !$0.isArchived }.order { ($0.name, $0.brand, $0.id) }.fetchAll(db)
+      let byGym = Dictionary(grouping: machines, by: \.gymID)
+      return gyms.map { gym in
+        GymInventory(gym: GymRecord(row: gym), machines: (byGym[gym.id] ?? []).map(MachineRecord.init(row:)))
+      }
+    }
+  }
+
   // MARK: - Machines
 
   public func machines(at gymID: GymID) throws -> [MachineRecord] {
@@ -132,6 +163,22 @@ public nonisolated struct GymStore: Sendable {
   public func archiveMachine(_ id: MachineID) throws {
     try database.write { db in
       try Machine.where { $0.id.eq(id.rawValue) }.update { $0.isArchived = #bind(true) }.execute(db)
+    }
+  }
+
+  /// Corrects a live machine's name and brand in place. A blank brand is allowed, since many
+  /// machines have none; a blank name is not.
+  public func renameMachine(_ id: MachineID, name: String, brand: String) throws {
+    let trimmedName = try Self.validName(name)
+    let trimmedBrand = brand.trimmingCharacters(in: .whitespacesAndNewlines)
+    try database.write { db in
+      try Machine.where { $0.id.eq(id.rawValue) && !$0.isArchived }
+        .update {
+          $0.name = #bind(trimmedName)
+          $0.brand = #bind(trimmedBrand)
+        }
+        .execute(db)
+      guard db.changesCount == 1 else { throw EquipmentNameError.unavailable }
     }
   }
 
@@ -221,4 +268,19 @@ public nonisolated struct GymSelection: Hashable, Sendable {
 
 public nonisolated enum MachineProfileError: Error, Equatable, Sendable {
   case invalidIncrement, machineUnavailable
+}
+
+/// A live gym and the live machines added at it.
+public nonisolated struct GymInventory: Hashable, Sendable, Identifiable {
+  public let gym: GymRecord
+  public let machines: [MachineRecord]
+  public var id: GymID { gym.id }
+}
+
+/// Why a gym or machine could not be renamed.
+public nonisolated enum EquipmentNameError: Error, Equatable, Sendable {
+  /// The name was empty once spaces were trimmed.
+  case blank
+  /// No live gym or machine has this identity: it was archived, or never existed.
+  case unavailable
 }
