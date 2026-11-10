@@ -198,17 +198,14 @@ public nonisolated struct CatalogSeeder: Sendable {
     }
   }
 
-  /// Case- and diacritic-insensitive prefix/substring match on the name.
+  /// Movements matching the names lifters type, best first, by `CatalogSearch`: case,
+  /// diacritics, hyphens, spacing and plurals are folded, curated aliases and abbreviations
+  /// ("rdl", "ohp", "db") are recognised, and a literal substring of the name still matches.
   ///
   /// An empty query returns everything rather than nothing, so clearing the search box restores
   /// the list instead of emptying it.
   public func search(_ query: String) throws -> [CatalogEntry] {
-    let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
-    let all = try selectableExercises()
-    guard !trimmed.isEmpty else { return all }
-    return all.filter {
-      $0.name.range(of: trimmed, options: [.caseInsensitive, .diacriticInsensitive]) != nil
-    }
+    CatalogSearch.rank(try selectableExercises(), query: query)
   }
 
   // MARK: - Imported movements
