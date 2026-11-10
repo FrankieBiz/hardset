@@ -298,3 +298,26 @@ To preserve architectural velocity and calibration honesty, this workspace adher
   upgrade variants now pass. No migration or integrity assertion was weakened.
 - Existing main CI (42541134810, commit 24211fb) fails simulator startup in all UI
   journeys; native compilation passed on that baseline. Feature CI pending separately.
+
+## Researched product strategy — 2026-11-09
+
+- Objective: planning only for major additions and pivots; no further app changes.
+- Worktree/branch: `/home/frankbiz/orca/workspaces/hardset/bobtail`, `FrankieBiz/bobtail`.
+- Deliverable: `docs/HARDSET_STRATEGIC_PLAN.md`, approximately 5,000 words with 18
+  distinct linked web sources, current repository anchors and explicit research limits.
+- Recommendation: a self-directed training workspace connecting plans, physical
+  equipment context and comparable review. Five bets cover routines/blocks, equipment
+  continuity, training reviews, optional explicit progression and migration/ownership.
+- Includes competitive corrections, alternative pivots, business-model options,
+  deferred investments, discovery/prototype/pilot gates and an outcome-based sequence.
+  Recommendations and numerical pilot gates are proposals, not approved implementation
+  or research results. Repeat-workout work is an entry point, not the whole strategy.
+- Research: official competitor documentation, illustrative community accounts and
+  published resistance-training research; no paid trials, interviews or market sizing.
+- Verification: all five local document references exist; source links and attribution
+  reviewed; no placeholders or internal citation IDs; whitespace check passed.
+  Fresh `make check` passed: 181 Core tests, 204 Store tests, 12 orchestration tests,
+  127 syntax parses, query-plan/result checks and 172 contrast pairs.
+- Delivery remains on the feature branch. This planning request does not authorize
+  promoting the previously held app implementation to production. Next step is review
+  of the proposed direction, followed by discovery/prototype work if selected.
