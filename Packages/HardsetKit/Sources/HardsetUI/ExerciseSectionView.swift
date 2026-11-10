@@ -105,7 +105,8 @@ public struct ExerciseSectionView: View {
             showsInlineLabels: false,
             unit: unit,
             machineIncrementKg: state.machineIncrementKg,
-            previous: state.suggestion(forSetIndex: ordinal(of: slot)),
+            // By slot, so a warm-up row is never shown a working set as its "Last time".
+            previous: state.previousSet(forSlotID: slot.id),
             // The borrowed-history note is shown once in the header, not repeated on every
             // row — an honest caveat that appears five times reads as noise and gets ignored.
             priorNote: nil,

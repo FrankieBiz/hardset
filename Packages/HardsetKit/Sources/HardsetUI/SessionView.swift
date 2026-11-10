@@ -227,8 +227,8 @@ public struct SessionView: View {
           Button("Keep it", role: .cancel) {}
         } message: { request in
           Text(
-            "\(request.name) and its \(Self.setCount(request.loggedSets, adjective: "logged")) "
-              + "are deleted from this workout. This cannot be undone."
+            "The \(Self.setCount(request.loggedSets)) logged for \(request.name) in this workout "
+              + "will be deleted. This cannot be undone."
           )
         }
       }
@@ -655,8 +655,10 @@ public struct SessionView: View {
             .foregroundStyle(Tokens.Color.textPrimary)
             .fixedSize(horizontal: false, vertical: true)
           if record.kind == .estimatedOneRepMax {
+            // Graded by the estimate itself, by rep range, as the receipt and the load chart
+            // grade it, rather than one fixed level for every estimate.
             CertaintyBadge(
-              level: .moderate,
+              level: Self.estimateCertainty(record),
               methodology: ProgressionAnalyzer.source.methodology,
               citation: ProgressionAnalyzer.source.validRange
             )
@@ -705,6 +707,16 @@ public struct SessionView: View {
         return "Estimated, up from about \(previousWeight)"
       }
       return "Estimated"
+    }
+  }
+
+  /// The certainty of the estimate behind an estimated-1RM record, from the set that earned it.
+  static func estimateCertainty(_ record: PersonalRecord) -> CertaintyLevel {
+    switch StrengthMath.estimatedOneRepMax(weightKg: record.weightKg, reps: record.reps).certainty {
+    case .high: .high
+    case .moderate: .moderate
+    case .low: .low
+    case .unevaluated: .unevaluated
     }
   }
 
@@ -820,8 +832,8 @@ public struct SessionView: View {
     if logged == 0 {
       return "Nothing has been logged in it, so nothing is lost. It will not appear in History."
     }
-    return "Its \(Self.setCount(logged, adjective: "logged")) will be deleted and it will not "
-      + "appear in History. This cannot be undone."
+    return "The \(Self.setCount(logged)) logged in it will be deleted, and it will not appear in "
+      + "History. This cannot be undone."
   }
 
   private func setConfirming(_ value: Bool) {
@@ -1082,8 +1094,8 @@ public struct SessionView: View {
     return "\(date.formatted(style)) at \(time)"
   }
 
-  static func setCount(_ count: Int, adjective: String) -> String {
-    count == 1 ? "1 \(adjective) set" : "\(count) \(adjective) sets"
+  static func setCount(_ count: Int) -> String {
+    count == 1 ? "1 set" : "\(count) sets"
   }
 }
 
