@@ -16,6 +16,7 @@ public struct CertaintyBadge: View {
   private let methodology: String
   private let citation: String?
   @State private var isShowingDetail = false
+  @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
   public init(level: CertaintyLevel, methodology: String, citation: String? = nil) {
     self.level = level
@@ -38,8 +39,17 @@ public struct CertaintyBadge: View {
     .buttonStyle(CertaintyPressStyle())
     .accessibilityLabel("\(level.label). How this was calculated.")
     .popover(isPresented: $isShowingDetail) {
-      CertaintyDetail(level: level, methodology: methodology, citation: citation)
+      CertaintyDetail(
+        level: level, methodology: methodology, citation: citation,
+        isLargeText: Self.needsSheet(dynamicTypeSize)
+      )
     }
+  }
+
+  /// From Extra Extra Extra Large up, the longest methodologies run taller than an iPhone screen
+  /// in the popover's reading column, so the disclosure opens as a scrolling sheet instead.
+  static func needsSheet(_ size: DynamicTypeSize) -> Bool {
+    size >= .xxxLarge
   }
 }
 
@@ -47,16 +57,56 @@ public struct CertaintyBadge: View {
 ///
 /// Drawn on `surface` rather than the system's translucent popover material, so every text role in
 /// it stays on a background whose contrast has been measured.
+///
+/// At large text sizes the same content is presented as a sheet that scrolls, with a Done button,
+/// because a popover cannot scroll and the disclosure would be cut off for exactly the lifters who
+/// enlarge text. At ordinary sizes it stays the anchored popover.
 private struct CertaintyDetail: View {
   let level: CertaintyLevel
   let methodology: String
   let citation: String?
+  let isLargeText: Bool
+
+  @Environment(\.dismiss) private var dismiss
 
   /// Wide enough for a methodology paragraph to read as prose, narrow enough that the popover
   /// stays anchored to its badge rather than becoming a sheet.
   private static let readingWidth: CGFloat = 320
 
   var body: some View {
+    if isLargeText {
+      ScrollView {
+        content
+          .frame(maxWidth: .infinity, alignment: .leading)
+      }
+      .scrollBounceBehavior(.basedOnSize)
+      // Only consulted where a regular-width popover asks for the content's own size; a sheet
+      // proposes its full size and ignores these.
+      .frame(idealWidth: Self.readingWidth * 1.5, idealHeight: Self.readingWidth * 2)
+      .background(Tokens.Color.surface)
+      .safeAreaInset(edge: .top, spacing: 0) {
+        HStack {
+          Spacer(minLength: 0)
+          Button("Done") { dismiss() }
+            .buttonStyle(HardsetButtonStyle(.quiet, fullWidth: false))
+        }
+        .padding(.horizontal, Tokens.Spacing.snug)
+        .padding(.top, Tokens.Spacing.snug)
+        .background(Tokens.Color.surface)
+      }
+      .presentationCompactAdaptation(.sheet)
+      .presentationDetents([.medium, .large])
+      .presentationDragIndicator(.visible)
+      .presentationBackground(Tokens.Color.surface)
+    } else {
+      content
+        .frame(maxWidth: Self.readingWidth, alignment: .leading)
+        .presentationCompactAdaptation(.popover)
+        .presentationBackground(Tokens.Color.surface)
+    }
+  }
+
+  private var content: some View {
     VStack(alignment: .leading, spacing: Tokens.Spacing.regular) {
       CertaintyCapsule(level: level, isInteractive: false)
       Text("How this is calculated")
@@ -79,9 +129,6 @@ private struct CertaintyDetail: View {
       }
     }
     .padding(Tokens.Spacing.loose)
-    .frame(maxWidth: Self.readingWidth, alignment: .leading)
-    .presentationCompactAdaptation(.popover)
-    .presentationBackground(Tokens.Color.surface)
   }
 }
 
