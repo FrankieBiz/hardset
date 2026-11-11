@@ -220,6 +220,59 @@ struct WorkoutRootModelTests {
     #expect(model.coordinator?.gymID == metroflex)
   }
 
+  @Test("An explicit Not recorded pick survives a gym refresh and the session keeps it")
+  @MainActor
+  func explicitNoGymSurvivesRefresh() async throws {
+    let database = try fixture()
+    let logger = LoggerStore(database: database)
+    let gyms = GymStore(database: database)
+    let home = try gyms.createGym(name: "Home")
+    let metroflex = try gyms.createGym(name: "Metroflex")
+    // A workout at Home makes it the learned default preparation applies.
+    let earlier = try SessionCoordinator.start(store: logger, gymID: home, plan: [], now: { now })
+    try earlier.finish()
+    let model = WorkoutRootModel(
+      logger: logger, catalog: CatalogSeeder(database: database), gyms: gyms, now: { now }
+    )
+    await model.load()
+    #expect(model.selectedGym == home)
+    // "Not recorded" is a real pick, not missing input, so a gym refresh must not revive the
+    // learned default underneath it.
+    #expect(model.restoreGymPick(nil))
+    #expect(model.selectedGym == nil)
+    try model.refreshGyms()
+    #expect(model.selectedGym == nil)
+    #expect(model.gymOptions.map(\.id) == [home, metroflex])
+    try model.startWorkout()
+    #expect(model.coordinator?.gymID == nil)
+    #expect(try logger.openSession()?.gymID == nil)
+  }
+
+  @Test("A refresh keeps a valid pick and drops an archived one without reviving the default")
+  @MainActor
+  func refreshKeepsValidPickAndDropsArchivedGym() async throws {
+    let database = try fixture()
+    let logger = LoggerStore(database: database)
+    let gyms = GymStore(database: database)
+    let home = try gyms.createGym(name: "Home")
+    let metroflex = try gyms.createGym(name: "Metroflex")
+    let earlier = try SessionCoordinator.start(store: logger, gymID: home, plan: [], now: { now })
+    try earlier.finish()
+    let model = WorkoutRootModel(
+      logger: logger, catalog: CatalogSeeder(database: database), gyms: gyms, now: { now }
+    )
+    await model.load()
+    #expect(model.selectedGym == home)
+    #expect(model.restoreGymPick(metroflex))
+    try model.refreshGyms()
+    #expect(model.selectedGym == metroflex)
+    try gyms.archiveGym(metroflex)
+    try model.refreshGyms()
+    // The archived pick is no longer offered, so it is dropped rather than kept unseen.
+    #expect(model.selectedGym == nil)
+    #expect(model.gymOptions.map(\.id) == [home])
+  }
+
   @Test("A disappearing caller cannot abandon recovery for the next appearance")
   @MainActor
   func cancellationCanRetry() async throws {

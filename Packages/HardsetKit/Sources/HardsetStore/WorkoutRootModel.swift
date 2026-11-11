@@ -67,7 +67,7 @@ public final class WorkoutRootModel {
       let selection = try await gyms.loadSelection()
       try Task.checkCancellation()
       coordinator = recovered
-      apply(selection)
+      apply(selection, learningDefault: true)
       isReady = true
     } catch {
       guard !Task.isCancelled, !(error is CancellationError) else { return }
@@ -106,13 +106,17 @@ public final class WorkoutRootModel {
     return true
   }
 
+  /// Re-reads the options after Settings adds or archives a gym. A pick the lifter already made
+  /// stands, including "Not recorded"; only a gym that is no longer offered is dropped. The
+  /// learned default is applied by preparation alone, never as a refresh fallback: `nil` here means
+  /// the lifter chose "Not recorded", not that no choice exists yet.
   public func refreshGyms() throws {
-    apply(try gyms.selection())
+    apply(try gyms.selection(), learningDefault: false)
   }
 
-  private func apply(_ selection: GymSelection) {
+  private func apply(_ selection: GymSelection, learningDefault: Bool) {
     gymOptions = selection.options
-    if selectedGym == nil { selectedGym = selection.lastUsed }
+    if learningDefault, selectedGym == nil { selectedGym = selection.lastUsed }
     if let selectedGym, !gymOptions.contains(where: { $0.id == selectedGym }) {
       self.selectedGym = nil
     }
