@@ -177,12 +177,12 @@ public struct HardsetRootView: View {
       Tab("Volume", systemImage: "chart.bar.xaxis", value: RootTab.volume) {
         NavigationStack {
           // The screen draws its own header; the title stays as the screen's accessible name.
+          // A change saved in Settings re-reads the window on screen, keeping the figures visible
+          // and the window the lifter stepped to while the read runs.
           WeeklyVolumeScreen(
-            store: environment.volume, onShowSettings: { isShowingSettings = true }
+            store: environment.volume, dataRevision: dataRevision,
+            onShowSettings: { isShowingSettings = true }
           )
-          // A new identity re-reads the week after Settings changed saved data. The screen has
-          // no reload input of its own; Settings covers it while the read runs.
-          .id(dataRevision)
           // Matches the screen's own header: the window is the last 7 days and can step back.
           .navigationTitle("Volume")
           .hardsetTabRoot()
