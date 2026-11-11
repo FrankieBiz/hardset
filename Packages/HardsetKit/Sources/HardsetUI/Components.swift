@@ -21,24 +21,42 @@ public struct ScreenHeader<Trailing: View>: View {
     self.trailing = trailing()
   }
 
+  @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
+  /// Title and action share a line at ordinary sizes. At accessibility sizes the action sits on
+  /// its own line above the title, at the trailing edge: beside it, a one-word title such as
+  /// "Workout" in expanded display type had to break mid-word.
   public var body: some View {
-    HStack(alignment: .top, spacing: Tokens.Spacing.regular) {
-      VStack(alignment: .leading, spacing: Tokens.Spacing.tight) {
-        Text(title)
-          .font(Tokens.Text.display)
-          .foregroundStyle(Tokens.Color.textPrimary)
-          .accessibilityAddTraits(.isHeader)
-        if let subtitle, !subtitle.isEmpty {
-          Text(subtitle)
-            .font(Tokens.Text.label)
-            .foregroundStyle(Tokens.Color.textSecondary)
+    Group {
+      if dynamicTypeSize.isAccessibilitySize {
+        VStack(alignment: .trailing, spacing: Tokens.Spacing.snug) {
+          trailing
+          titleBlock
+        }
+      } else {
+        HStack(alignment: .top, spacing: Tokens.Spacing.regular) {
+          titleBlock
+          trailing
         }
       }
-      .frame(maxWidth: .infinity, alignment: .leading)
-      trailing
     }
     .padding(.horizontal, Tokens.Spacing.loose)
     .padding(.top, Tokens.Spacing.snug)
+  }
+
+  private var titleBlock: some View {
+    VStack(alignment: .leading, spacing: Tokens.Spacing.tight) {
+      Text(title)
+        .font(Tokens.Text.display)
+        .foregroundStyle(Tokens.Color.textPrimary)
+        .accessibilityAddTraits(.isHeader)
+      if let subtitle, !subtitle.isEmpty {
+        Text(subtitle)
+          .font(Tokens.Text.label)
+          .foregroundStyle(Tokens.Color.textSecondary)
+      }
+    }
+    .frame(maxWidth: .infinity, alignment: .leading)
   }
 }
 
@@ -64,8 +82,11 @@ public struct HeaderIconButton: View {
     Button(action: action) {
       HeaderIconGlyph(systemImage: systemImage)
     }
-    .buttonStyle(.plain)
+    .buttonStyle(HardsetPressStyle())
     .accessibilityLabel(accessibilityLabel)
+    .accessibilityShowsLargeContentViewer {
+      Label(accessibilityLabel, systemImage: systemImage)
+    }
   }
 }
 
@@ -96,19 +117,36 @@ public struct HeaderIconMenu<Content: View>: View {
     }
     .buttonStyle(.plain)
     .accessibilityLabel(accessibilityLabel)
+    .accessibilityShowsLargeContentViewer {
+      Label(accessibilityLabel, systemImage: systemImage)
+    }
   }
 }
 
 /// The circle both header controls draw: raised fill, measured control border, a 44 pt target.
+///
+/// It grows with text up to the largest ordinary size and stops there, about 60 pt across. Grown
+/// linearly to the largest accessibility size it reached about 137 pt and squeezed the screen
+/// title beside it; past the cap, the Large Content Viewer shows the symbol and its name, as the
+/// system's own bar buttons do.
 struct HeaderIconGlyph: View {
   let systemImage: String
-  /// Scales with the glyph. A fixed 44 pt circle let the symbol spill outside it at accessibility
-  /// text sizes.
-  @ScaledMetric(relativeTo: .headline) private var diameter = Tokens.minimumTapTarget
 
   init(systemImage: String) {
     self.systemImage = systemImage
   }
+
+  var body: some View {
+    HeaderIconGlyphFace(systemImage: systemImage)
+      .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
+  }
+}
+
+private struct HeaderIconGlyphFace: View {
+  let systemImage: String
+  /// Scales with the glyph. A fixed 44 pt circle let the symbol spill outside it at larger text
+  /// sizes.
+  @ScaledMetric(relativeTo: .headline) private var diameter = Tokens.minimumTapTarget
 
   var body: some View {
     Image(systemName: systemImage)
@@ -254,8 +292,41 @@ public struct HardsetChip: View {
         .frame(minHeight: Tokens.minimumTapTarget)
         .contentShape(Rectangle())
     }
-    .buttonStyle(.plain)
+    .buttonStyle(HardsetPressStyle())
     .accessibilityAddTraits(isSelected ? [.isSelected] : [])
+  }
+}
+
+// MARK: - Press style
+
+/// Press feedback for a control that draws its own shape and fill: a chip, a segment, a dashed
+/// slot, a header circle.
+///
+/// The same 0.97 sink on `Motion.press` as `HardsetButtonStyle`, with opacity standing in for a
+/// pressed fill because each of these controls owns its fill. With Reduce Motion the scale is
+/// dropped and only the opacity changes. It never dims a disabled control, so an inert title keeps
+/// its measured contrast.
+public struct HardsetPressStyle: ButtonStyle {
+  public init() {}
+
+  public func makeBody(configuration: Configuration) -> some View {
+    HardsetPressBody(configuration: configuration)
+  }
+}
+
+private struct HardsetPressBody: View {
+  let configuration: ButtonStyleConfiguration
+
+  @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+  var body: some View {
+    configuration.label
+      .scaleEffect(configuration.isPressed && !reduceMotion ? 0.97 : 1)
+      .opacity(configuration.isPressed ? 0.8 : 1)
+      .animation(
+        Tokens.Motion.adaptive(Tokens.Motion.press, reduceMotion: reduceMotion),
+        value: configuration.isPressed
+      )
   }
 }
 
@@ -286,6 +357,7 @@ public struct HardsetSegmentedControl<Value: Hashable>: View {
   private let segments: [HardsetSegment<Value>]
   @Namespace private var indicator
   @Environment(\.accessibilityReduceMotion) private var reduceMotion
+  @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
   public init(selection: Binding<Value>, segments: [HardsetSegment<Value>]) {
     self._selection = selection
@@ -305,9 +377,16 @@ public struct HardsetSegmentedControl<Value: Hashable>: View {
             .foregroundStyle(
               segment.value == selection ? Tokens.Color.onAccent : Tokens.Color.textPrimary
             )
-            .lineLimit(1)
+            // One line at ordinary sizes. At accessibility sizes a segment wraps instead of
+            // truncating, because "Heaviest l…" no longer says which metric is selected.
+            .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 1)
+            .multilineTextAlignment(.center)
+            .fixedSize(horizontal: false, vertical: true)
             .padding(.horizontal, Tokens.Spacing.snug)
-            .frame(maxWidth: .infinity, minHeight: Tokens.minimumTapTarget)
+            .padding(.vertical, dynamicTypeSize.isAccessibilitySize ? Tokens.Spacing.tight : 0)
+            // As tall as the tallest segment, so a wrapped label never leaves its neighbour's
+            // indicator shorter than its own.
+            .frame(maxWidth: .infinity, minHeight: Tokens.minimumTapTarget, maxHeight: .infinity)
             .background {
               if segment.value == selection {
                 RoundedRectangle(cornerRadius: Tokens.Radius.control - Tokens.Spacing.hairline)
@@ -317,10 +396,11 @@ public struct HardsetSegmentedControl<Value: Hashable>: View {
             }
             .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
+        .buttonStyle(HardsetPressStyle())
         .accessibilityAddTraits(segment.value == selection ? [.isSelected] : [])
       }
     }
+    .fixedSize(horizontal: false, vertical: true)
     .padding(Tokens.Spacing.hairline)
     .background(
       Tokens.Color.surfaceRaised,

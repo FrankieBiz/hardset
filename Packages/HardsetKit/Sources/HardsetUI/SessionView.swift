@@ -27,6 +27,8 @@ public struct SessionView: View {
   private let restState: RestTimerState
   private let restMetadata: RestMetadata?
   private let errorMessage: String?
+  private let errorEvent: Int
+  private let restEndsSilently: Bool
   private let records: [PersonalRecord]
   private let recordsExerciseName: String?
   private let lastRest: [UUID: Duration]
@@ -77,6 +79,11 @@ public struct SessionView: View {
   /// be refused or queued while the keypad is still presented.
   @State private var afterKeypadCloses: (() -> Void)?
   @State private var scrollRequest: ScrollRequest?
+  /// Counts taps on the rest controls, so each is felt. Kept here rather than in the rest bar,
+  /// which leaves the hierarchy the moment a −15 or Skip ends the rest.
+  @State private var restControlTaps = 0
+  /// The finish question takes VoiceOver focus when it opens, so it is read rather than skipped.
+  @AccessibilityFocusState private var isFinishQuestionFocused: Bool
 
   @Environment(\.accessibilityReduceMotion) private var reduceMotion
   @Environment(\.dynamicTypeSize) private var dynamicTypeSize
@@ -91,6 +98,11 @@ public struct SessionView: View {
   ///   workout that was left open.
   /// - Parameter isStale: The workout has been open longer than any real session. The caller
   ///   decides by its rule; this view states the fact and offers the choices.
+  /// - Parameter errorEvent: Changes on every failed command, including a retry that fails with
+  ///   the same message. The message alone cannot signal that: a retry clears it and sets the same
+  ///   words in one update, so the error haptic and announcement stayed silent the second time.
+  /// - Parameter restEndsSilently: No system alarm will mark the end of a rest, so the screen
+  ///   does: a haptic and an announcement when the deadline, not the lifter, ends it.
   /// - Parameter records: Records from the set just logged, named after `recordsExerciseName`.
   /// - Parameter lastRest: The rest the lifter last chose per movement, keyed by exercise-state id.
   /// - Parameter onShowSettings: Puts a settings button in the header.
@@ -110,6 +122,8 @@ public struct SessionView: View {
     restState: RestTimerState = .idle,
     restMetadata: RestMetadata? = nil,
     errorMessage: String? = nil,
+    errorEvent: Int = 0,
+    restEndsSilently: Bool = false,
     records: [PersonalRecord] = [],
     recordsExerciseName: String? = nil,
     lastRest: [UUID: Duration] = [:],
@@ -143,6 +157,8 @@ public struct SessionView: View {
     self.restState = restState
     self.restMetadata = restMetadata
     self.errorMessage = errorMessage
+    self.errorEvent = errorEvent
+    self.restEndsSilently = restEndsSilently
     self.records = records
     self.recordsExerciseName = recordsExerciseName
     self.lastRest = lastRest
@@ -181,7 +197,7 @@ public struct SessionView: View {
           if showsStaleNotice {
             staleNotice
               .padding(.horizontal, Tokens.Spacing.regular)
-              .transition(.opacity)
+              .transition(arrival)
           }
 
           ForEach($exercises) { $exercise in
@@ -211,10 +227,6 @@ public struct SessionView: View {
             .id(Self.finishAnchor)
         }
         .padding(.bottom, Tokens.Spacing.section)
-        .animation(
-          Tokens.Motion.adaptive(Tokens.Motion.reveal, reduceMotion: reduceMotion),
-          value: showsStaleNotice
-        )
         .confirmationDialog(
           "Remove this movement?",
           isPresented: isConfirmingRemoval,
@@ -283,10 +295,24 @@ public struct SessionView: View {
     // The buffer is in the display unit; a unit change mid-entry would write pounds as kilograms.
     .onChange(of: unit) { keypad = nil }
     // A failed save is felt as well as read: the check simply not stamping was easy to miss.
-    .sensoryFeedback(.error, trigger: errorMessage) { _, new in new != nil }
-    .onChange(of: errorMessage) { _, message in
-      if let message {
+    // Keyed on the failure as an event, so a retry that fails the same way is felt again.
+    .sensoryFeedback(.error, trigger: errorSignal) { _, new in new.message != nil }
+    .onChange(of: errorSignal) { _, signal in
+      if let message = signal.message {
         AccessibilityNotification.Announcement(message).post()
+      }
+    }
+    // Each rest control is felt, because the lifter pressing −15 or Skip is looking at the bar,
+    // not the phone, between sets. A selection tick, light like the row's machine step.
+    .sensoryFeedback(.selection, trigger: restControlTaps)
+    // A rest ended by its deadline, with no alarm to say so, is felt and announced. Skip, −15 to
+    // zero and a dismissed alarm end it too, but the lifter did those and needs no telling.
+    .sensoryFeedback(trigger: restState) { [restEndsSilently] old, new in
+      Self.restEndedByDeadline(from: old, to: new, alarmless: restEndsSilently) ? .warning : nil
+    }
+    .onChange(of: restState) { old, new in
+      if let announcement = Self.restAnnouncement(from: old, to: new, alarmless: restEndsSilently) {
+        AccessibilityNotification.Announcement(announcement).post()
       }
     }
     .onChange(of: records) { _, records in
@@ -394,10 +420,13 @@ public struct SessionView: View {
       .frame(minHeight: Tokens.minimumTapTarget)
       .contentShape(Rectangle())
     }
-    .buttonStyle(.plain)
+    .buttonStyle(HardsetPressStyle())
+    // Begins with the words on the chip, so a Voice Control user can say what they see.
     .accessibilityLabel(
-      gymName.map { "Gym: \($0). Change." } ?? "No gym recorded. Set one to track machines."
+      gymName.map { "\($0). Change gym." }
+        ?? "Set gym. No gym recorded; machines are tracked per gym."
     )
+    .accessibilityInputLabels(gymName.map { [$0, "Change gym", "Gym"] } ?? ["Set gym", "Gym"])
   }
 
   // MARK: - Stale workout
@@ -445,9 +474,8 @@ public struct SessionView: View {
             .accessibilityLabel("Discard workout")
         }
         Button("Continue workout") {
-          withAnimation(Tokens.Motion.adaptive(Tokens.Motion.state, reduceMotion: reduceMotion)) {
-            isStaleAcknowledged = true
-          }
+          // Leaves at once, and the cards below take its place at once: layout never animates.
+          isStaleAcknowledged = true
         }
         .buttonStyle(HardsetButtonStyle(.secondary, size: .logger))
       }
@@ -556,7 +584,7 @@ public struct SessionView: View {
           )
         )
     }
-    .buttonStyle(.plain)
+    .buttonStyle(HardsetPressStyle())
   }
 
   // MARK: - Feedback beside the thumb
@@ -582,31 +610,73 @@ public struct SessionView: View {
           // so the user can retry rather than discovering the gap days later.
           HardsetBanner(.error, message: errorMessage, onDismiss: onDismissError)
             .padding(.horizontal, Tokens.Spacing.regular)
-            .transition(.opacity)
+            .transition(arrival)
         }
         if !records.isEmpty {
           recordsCard
             .padding(.horizontal, Tokens.Spacing.regular)
-            .transition(.opacity)
+            .transition(arrival)
         }
         RestBarView(
           state: restState,
           metadata: restMetadata,
-          onAdjust: onAdjustRest,
-          onPauseResume: onPauseResumeRest,
-          onSkip: onSkipRest
+          onAdjust: { delta in
+            restControlTaps += 1
+            onAdjustRest(delta)
+          },
+          onPauseResume: {
+            restControlTaps += 1
+            onPauseResumeRest()
+          },
+          onSkip: {
+            restControlTaps += 1
+            onSkipRest()
+          }
         )
       }
       .padding(.bottom, isRestIdle && hasFeedback ? Tokens.Spacing.snug : 0)
-      .animation(
-        Tokens.Motion.adaptive(Tokens.Motion.reveal, reduceMotion: reduceMotion),
-        value: errorMessage
-      )
-      .animation(
-        Tokens.Motion.adaptive(Tokens.Motion.reveal, reduceMotion: reduceMotion),
-        value: records
-      )
     }
+  }
+
+  /// How a message arrives: it fades in where it lands, on `Motion.reveal`, while everything it
+  /// displaces moves at once, and it leaves at once. Layout never animates; an animation keyed on
+  /// the message used to slide the rest bar and every card along with the fade.
+  private var arrival: AnyTransition {
+    .asymmetric(
+      insertion: .opacity.animation(
+        Tokens.Motion.adaptive(Tokens.Motion.reveal, reduceMotion: reduceMotion)
+      ),
+      removal: .identity
+    )
+  }
+
+  /// The failure being shown, and which failure it is.
+  private var errorSignal: ErrorSignal {
+    ErrorSignal(message: errorMessage, event: errorEvent)
+  }
+
+  /// A running rest that reached its deadline and went idle, on a phone with no alarm to mark it.
+  /// A second's grace covers the reconciliation that ends it slightly after the deadline passes.
+  nonisolated static func restEndedByDeadline(
+    from old: RestTimerState, to new: RestTimerState, alarmless: Bool, now: Date = Date()
+  ) -> Bool {
+    guard alarmless, case .running(let end) = old, case .idle = new else { return false }
+    return end <= now.addingTimeInterval(1)
+  }
+
+  /// What VoiceOver is told when a rest starts or runs out on its own. The bar's countdown is not
+  /// focused when it appears, so without this a rest began and ended in silence.
+  static func restAnnouncement(
+    from old: RestTimerState, to new: RestTimerState, alarmless: Bool, now: Date = Date()
+  ) -> String? {
+    if case .idle = old, case .running(let end) = new {
+      let seconds = max(0, end.timeIntervalSince(now)).rounded()
+      return "Resting, \(ExerciseSectionView.spoken(.seconds(seconds)))"
+    }
+    if restEndedByDeadline(from: old, to: new, alarmless: alarmless, now: now) {
+      return "Rest over"
+    }
+    return nil
   }
 
   private var hasFeedback: Bool { errorMessage != nil || !records.isEmpty }
@@ -686,13 +756,10 @@ public struct SessionView: View {
   /// training in pounds that they had set a record of 102 kg, a number they never saw anywhere.
   static func describe(_ record: PersonalRecord, unit: WeightUnit = .kilograms) -> String {
     let weight = "\(Self.trim(unit.fromKilograms(record.weightKg))) \(unit.abbreviation)"
-    let previousWeight = record.previousWeightKg.map {
-      "\(Self.trim(unit.fromKilograms($0))) \(unit.abbreviation)"
-    }
     switch record.kind {
     case .heaviestLoad:
-      if let previousWeight {
-        return "\(weight), up from \(previousWeight)"
+      if let previous = record.previousWeightKg {
+        return "\(weight), up from \(Self.trim(unit.fromKilograms(previous))) \(unit.abbreviation)"
       }
       return weight
     case .repsAtLoad:
@@ -701,10 +768,22 @@ public struct SessionView: View {
       }
       return "\(record.reps) reps at \(weight)"
     case .estimatedOneRepMax:
-      if let previousWeight {
-        return "Estimated, up from about \(previousWeight)"
+      // States the new estimate as well as the old one, so the claim can be checked, and rounds
+      // both as every other estimate in the app is rounded: to 0.5 kg or 1 lb, never to the
+      // two decimals of a typed load, which would read as a measurement.
+      let estimate = StrengthMath.estimatedOneRepMax(weightKg: record.weightKg, reps: record.reps)
+      let estimateText = estimate.value.map {
+        "About \(LoadText.estimate($0, in: unit)) \(unit.abbreviation)"
       }
-      return "Estimated"
+      let previousText = record.previousWeightKg.map {
+        "about \(LoadText.estimate($0, in: unit)) \(unit.abbreviation)"
+      }
+      switch (estimateText, previousText) {
+      case let (estimate?, previous?): return "\(estimate), up from \(previous)"
+      case let (estimate?, nil): return estimate
+      case let (nil, previous?): return "Estimated, up from \(previous)"
+      case (nil, nil): return "Estimated"
+      }
     }
   }
 
@@ -766,7 +845,8 @@ public struct SessionView: View {
           .font(Tokens.Text.provenance)
           .foregroundStyle(Tokens.Color.textPrimary)
           .fixedSize(horizontal: false, vertical: true)
-        if isStale, let lastLoggedAt, let onFinishAt {
+          .accessibilityFocused($isFinishQuestionFocused)
+        if let lastLoggedAt, let onFinishAt, offersFinishAtLastSet(lastLoggedAt) {
           // A workout left open: "now" is not when it ended. Both ends are explicit choices.
           Button {
             setConfirming(false)
@@ -800,7 +880,7 @@ public struct SessionView: View {
           }
         }
       }
-      .transition(.opacity)
+      .transition(arrival)
     } else {
       Button {
         requestFinish()
@@ -808,8 +888,21 @@ public struct SessionView: View {
         Label("Finish workout", systemImage: "flag.checkered")
       }
       .buttonStyle(HardsetButtonStyle(.secondary, size: .logger))
-      .transition(.opacity)
+      .transition(arrival)
     }
+  }
+
+  /// How long after the last logged set "now" stops being an honest end for the workout.
+  ///
+  /// Not a rule the app applies: past it, the confirmation only offers the last set's time beside
+  /// "now", and the lifter chooses. Longer than any rest the app offers, so a lifter finishing
+  /// straight after their last set is asked the plain question.
+  static let lastSetFinishOffer: TimeInterval = 30 * 60
+
+  /// Offers "Finish at last set" for a workout left open, by the stale rule or because the last
+  /// set was logged long enough ago that finishing now would add the idle time to its length.
+  private func offersFinishAtLastSet(_ lastLoggedAt: Date) -> Bool {
+    isStale || Date().timeIntervalSince(lastLoggedAt) >= Self.lastSetFinishOffer
   }
 
   /// Opens the finish confirmation and brings it on screen, wherever it was asked from.
@@ -818,6 +911,8 @@ public struct SessionView: View {
       setConfirming(true)
       revealsFinish = true
       scrollRequest = ScrollRequest(target: .finish, anchor: .bottom)
+      // The menu or button that asked has gone; VoiceOver lands on the question it opened.
+      isFinishQuestionFocused = true
     }
   }
 
@@ -834,10 +929,10 @@ public struct SessionView: View {
       + "History. This cannot be undone."
   }
 
+  /// No animated transaction: the confirmation fades in through its own transition while the
+  /// summary takes its new height at once.
   private func setConfirming(_ value: Bool) {
-    withAnimation(Tokens.Motion.adaptive(Tokens.Motion.state, reduceMotion: reduceMotion)) {
-      isConfirmingFinish = value
-    }
+    isConfirmingFinish = value
   }
 
   private func ledgerItems(_ volume: SessionVolume) -> [StatLedger.Item] {
@@ -1102,6 +1197,13 @@ private struct KeypadTarget: Hashable {
   let exerciseID: UUID
   let slotID: UUID
   let field: SetRowField
+}
+
+/// A failure message together with the event that produced it, so two failures with the same
+/// words are still two changes.
+private struct ErrorSignal: Equatable {
+  let message: String?
+  let event: Int
 }
 
 /// A movement waiting on the lifter's confirmation before its logged sets are deleted.

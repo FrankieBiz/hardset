@@ -132,8 +132,20 @@ public struct SetRowView: View {
     .padding(.vertical, Tokens.Spacing.tight)
     // Opaque. Dense numeric rows are the one surface glass is actively wrong for. A logged row
     // takes the success tint, so a glance down the card shows what is done without reading.
-    .background(isLogged ? Tokens.Color.successSurface : Tokens.Color.surface, in: shape)
-    .animation(Tokens.Motion.adaptive(Tokens.Motion.state, reduceMotion: reduceMotion), value: isLogged)
+    //
+    // The tint is a layer that fades in place; only its opacity is animated. An animation on the
+    // whole row also animated its height when the step buttons left it, so the shrinking tint
+    // and the fading buttons were drawn over the next row, which had already moved up.
+    .background {
+      ZStack {
+        shape.fill(Tokens.Color.surface)
+        shape.fill(Tokens.Color.successSurface)
+          .opacity(isLogged ? 1 : 0)
+      }
+      .animation(
+        Tokens.Motion.adaptive(Tokens.Motion.state, reduceMotion: reduceMotion), value: isLogged
+      )
+    }
     // Corrections live behind a long press, the iOS convention for acting on one item in place:
     // deliberate enough that a hurried tap on the check can never undo or remove a set.
     // The preview shape is iOS-only; the macOS host build (tests only) uses the default.
@@ -145,6 +157,9 @@ public struct SetRowView: View {
     .accessibilityElement(children: .combine)
     .accessibilityLabel(spokenLabel)
     .accessibilityHint(accessibilityHint)
+    // Voice Control speaks what it can name. The row's check has no words on it, so "Tap Log set"
+    // found nothing; these names reach the row's default action, which logs a complete set.
+    .accessibilityInputLabels(voiceControlNames)
     // The default activation does what the hint says. Combining the row's buttons left
     // double-tap to whichever child VoiceOver chose -- in practice the weight field.
     .accessibilityAction {
@@ -344,7 +359,7 @@ public struct SetRowView: View {
   /// draft, in the display unit, written the way the keypad writes it. `nil` means empty.
   private func displayText(_ field: SetRowField) -> String? {
     if editingField == field, let editingText {
-      return editingText.isEmpty ? nil : editingText
+      return editingText.isEmpty ? nil : LoadFigure.typed(editingText)
     }
     switch field {
     case .weight: return draft.weightKg.map { LoadFigure.text(unit.fromKilograms($0)) }
@@ -395,36 +410,58 @@ public struct SetRowView: View {
   /// Four states, each drawn differently so none is mistaken for another: incomplete (dashed, and
   /// disabled), ready (outlined), next up (filled with the accent), and logged (the success
   /// stamp). The stamp is the app's one spring; with Reduce Motion it simply appears.
+  ///
+  /// Logged and next up differ in shape, not only in hue. Both used to be a filled square with the
+  /// same check, about 1.1:1 apart in luminance, so in glare or with a colour-vision deficiency a
+  /// set waiting to be logged looked saved. A key face (square, check) means "tap to log"; a
+  /// logged set loses its key face and wears a round seal, which nothing tappable in the logger
+  /// uses. At accessibility sizes the control also says which it is in words.
   private var logButton: some View {
     let shape = RoundedRectangle(cornerRadius: Tokens.Radius.control)
     let isReady = draft.isLoggable
     return Button(action: onLog) {
-      Image(systemName: "checkmark")
-        .font(Tokens.Text.headline.weight(.bold))
-        .foregroundStyle(logSymbolColor(isReady: isReady))
-        .scaleEffect(isLogged || reduceMotion ? 1 : 0.85)
-        .frame(
-          maxWidth: isStacked ? .infinity : Tokens.loggerTapTarget,
-          minHeight: Tokens.loggerTapTarget
-        )
-        .frame(width: isStacked ? nil : Tokens.loggerTapTarget)
-        .background(logFill(isReady: isReady), in: shape)
-        .overlay {
-          if !isLogged && !(isReady && isNext) {
-            shape.strokeBorder(
-              isReady ? Tokens.Color.accent : Tokens.Color.controlBorder,
-              style: StrokeStyle(
-                lineWidth: isReady ? Tokens.Stroke.selected : Tokens.Stroke.hairline,
-                dash: isReady ? [] : [4, 3]
-              )
-            )
-          }
+      HStack(spacing: Tokens.Spacing.snug) {
+        ZStack {
+          Image(systemName: "checkmark")
+            .font(Tokens.Text.headline.weight(.bold))
+            .foregroundStyle(logSymbolColor(isReady: isReady))
+            .opacity(isLogged ? 0 : 1)
+          Image(systemName: "checkmark.circle.fill")
+            .font(Tokens.Text.readout)
+            .foregroundStyle(Tokens.Color.success)
+            .opacity(isLogged ? 1 : 0)
+            .scaleEffect(isLogged || reduceMotion ? 1 : 0.6)
         }
-        .contentShape(shape)
+        // Only the glyphs spring. The key face below changes at once, so nothing is laid out
+        // twice and the stamp stays the one moving thing.
         .animation(
           Tokens.Motion.adaptive(Tokens.Motion.stamp, reduceMotion: reduceMotion),
           value: isLogged
         )
+        if isStacked {
+          Text(isLogged ? "Logged" : "Log set")
+            .font(Tokens.Text.headline)
+            .foregroundStyle(isLogged ? Tokens.Color.success : logSymbolColor(isReady: isReady))
+        }
+      }
+      .frame(
+        maxWidth: isStacked ? .infinity : Tokens.loggerTapTarget,
+        minHeight: Tokens.loggerTapTarget
+      )
+      .frame(width: isStacked ? nil : Tokens.loggerTapTarget)
+      .background(logFill(isReady: isReady), in: shape)
+      .overlay {
+        if !isLogged && !(isReady && isNext) {
+          shape.strokeBorder(
+            isReady ? Tokens.Color.accent : Tokens.Color.controlBorder,
+            style: StrokeStyle(
+              lineWidth: isReady ? Tokens.Stroke.selected : Tokens.Stroke.hairline,
+              dash: isReady ? [] : [4, 3]
+            )
+          )
+        }
+      }
+      .contentShape(shape)
     }
     .buttonStyle(SetReadoutStyle())
     // The same predicate the store enforces. There is no second definition of "complete".
@@ -435,25 +472,31 @@ public struct SetRowView: View {
     .sensoryFeedback(.success, trigger: isLogged) { !$0 && $1 }
   }
 
+  /// A logged set has no key face: its seal sits straight on the row's success tint.
   private func logFill(isReady: Bool) -> Color {
-    if isLogged { return Tokens.Color.success }
+    if isLogged { return .clear }
     if isReady && isNext { return Tokens.Color.accentFill }
     return Tokens.Color.surfaceRaised
   }
 
   private func logSymbolColor(isReady: Bool) -> Color {
-    // `onAccent` is dark on the dark-mode fills and white on the light-mode ones, which is the
-    // pairing that clears 7:1 on both the accent and the success fill.
-    if isLogged || (isReady && isNext) { return Tokens.Color.onAccent }
+    // `onAccent` is dark on the dark-mode accent fill and white on the light-mode one, which is
+    // the pairing that clears 7:1 on it.
+    if isReady && isNext { return Tokens.Color.onAccent }
     return isReady ? Tokens.Color.accent : Tokens.Color.textSecondary
   }
 
   private var spokenLabel: String {
     var parts: [String] = [isWarmup ? "Warm-up set" : "Set \(ordinal + 1)"]
-    if let weight = draft.weightKg, let reps = draft.reps {
-      parts.append("\(LoadFigure.text(unit.fromKilograms(weight))) \(unit.abbreviation), \(reps) reps")
-    } else {
-      parts.append("no values entered")
+    // Each half is spoken on its own. A row with a weight and no reps used to be read as "no
+    // values entered" while its field visibly showed the weight.
+    let weight = draft.weightKg.map { "\(LoadFigure.text(unit.fromKilograms($0))) \(unit.abbreviation)" }
+    let reps = draft.reps.map { $0 == 1 ? "1 rep" : "\($0) reps" }
+    switch (weight, reps) {
+    case let (weight?, reps?): parts.append("\(weight), \(reps)")
+    case let (weight?, nil): parts.append("\(weight), reps not entered")
+    case let (nil, reps?): parts.append("weight not entered, \(reps)")
+    case (nil, nil): parts.append("no values entered")
     }
     if let previous {
       parts.append(
@@ -461,8 +504,25 @@ public struct SetRowView: View {
       )
     }
     if let priorNote { parts.append(priorNote) }
-    if isLogged { parts.append("logged") }
+    if isLogged {
+      parts.append("logged")
+    } else if isNext {
+      // The filled check says this to the eye; VoiceOver says it too.
+      parts.append("next to log")
+    }
     return parts.joined(separator: ", ")
+  }
+
+  /// What Voice Control can call the row. The first is the name "Show names" displays.
+  private var voiceControlNames: [String] {
+    let name = isWarmup ? "Warm-up set" : "Set \(ordinal + 1)"
+    var names = [name]
+    if !isLogged {
+      names.append(isWarmup ? "Log warm-up set" : "Log set \(ordinal + 1)")
+      // The one row the filled check marks also answers to the bare command.
+      if isNext { names += ["Log set", "Log"] }
+    }
+    return names
   }
 }
 
@@ -472,14 +532,22 @@ public struct SetRowView: View {
 /// so a kilogram load shown in pounds reads "220.46" in the field, under "Last time", on the
 /// machine chip and on the step buttons alike. Three roundings on one card made one load look like
 /// two different numbers. Display only; the draft stays canonical kilograms.
+///
+/// Written with the locale's decimal separator, as the keypad's separator key is labelled, and
+/// without grouping, as the keypad types it: "82,5" on a comma-locale phone, and "1002.5" rather
+/// than "1,002.5" for a load typed as 1002.5.
 enum LoadFigure {
-  static func text(_ value: Double) -> String {
+  static func text(_ value: Double, locale: Locale = .current) -> String {
     guard value.isFinite else { return "—" }
-    var text = String(format: "%.2f", value)
-    guard text.contains(".") else { return text }
-    while text.hasSuffix("0") { text.removeLast() }
-    if text.hasSuffix(".") { text.removeLast() }
-    return text
+    return value.formatted(
+      .number.precision(.fractionLength(0...2)).grouping(.never).locale(locale)
+    )
+  }
+
+  /// Keypad text, which is always stored with ".", written with the locale's separator.
+  static func typed(_ text: String, locale: Locale = .current) -> String {
+    let separator = locale.decimalSeparator ?? "."
+    return separator == "." ? text : text.replacingOccurrences(of: ".", with: separator)
   }
 }
 
@@ -552,6 +620,29 @@ extension SetRowField: Identifiable {
 
 /// Disabled saved rows retain measured text contrast; only actions are disabled.
 /// Incomplete log controls still apply their explicit disabled opacity above.
+///
+/// Pressed, a field or the check sinks to 0.97 and dims slightly, as every other control does: the
+/// most frequent tap in the app gave no touch-down feedback at all. Each control draws its own
+/// fill and shape, so the press is carried by opacity rather than a second fill. A disabled
+/// button never reports a press, so saved rows keep their full contrast.
 private struct SetReadoutStyle: ButtonStyle {
-  func makeBody(configuration: ButtonStyleConfiguration) -> some View { configuration.label }
+  func makeBody(configuration: ButtonStyleConfiguration) -> some View {
+    SetReadoutBody(configuration: configuration)
+  }
+}
+
+private struct SetReadoutBody: View {
+  let configuration: ButtonStyleConfiguration
+
+  @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+  var body: some View {
+    configuration.label
+      .scaleEffect(configuration.isPressed && !reduceMotion ? 0.97 : 1)
+      .opacity(configuration.isPressed ? 0.85 : 1)
+      .animation(
+        Tokens.Motion.adaptive(Tokens.Motion.press, reduceMotion: reduceMotion),
+        value: configuration.isPressed
+      )
+  }
 }
