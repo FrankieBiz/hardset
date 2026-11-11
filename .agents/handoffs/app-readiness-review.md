@@ -123,3 +123,46 @@
 - Remaining: commit UI/error fixes + owned docs after final check; push combined
   review branch for native CI; verify screenshots/new relaunch test; then update
   review/handoff with final evidence and advance main only with green checks.
+
+## Local implementation complete; native follow-up active — 2026-11-11
+
+- Final fresh make check after strengthened persistence assertions passed:141 Swift
+  parses,232 Core/29 suites,299 Store/30 suites,12 offline orchestration tests,
+  query gate and172 contrast pairs. Generator unchanged; whitespace clean.
+- Commit1a0029c includes primary alert fixes, root comment, stronger Store assertions,
+  full readiness review and local policy/support drafts. Correct author/committer.
+- Feature branch pushed to origin/FrankieBiz/app-readiness-review at
+  1a0029c954941b7cae343322c0a373de01968b02. No main update yet.
+- Combined native CI: https://github.com/FrankieBiz/hardset/actions/runs/43114752712 .
+  Initial f2b1c3a run43111642053 is superseded; do not use it as evidence for1a0029c.
+- Sent read-only follow-up to journey worker dispatch ctx_4d9535776101 to wait for
+  exact run43114752712 with gh run watch, inspect actual logs/counts/new recovery
+  screenshot/audit output, download artifacts to /tmp/hardset-readiness-final, then
+  report via worker_done. This will wake the coordinator; no need to poll mail.
+- Reopened follow-up receipt: active dispatch ctx_796119a0c101, task
+  task_dffbe4b67072. Address this new dispatch for any CI follow-up messages.
+- Next: on CI report inspect actual evidence. Fix any native failure, verify anew.
+  If green, visually inspect new recovery screenshot, update review final evidence,
+  commit owned final docs, fetch/compare main, integrate safely, run finish gate and
+  advance main under existing user protocol. Do not publish pages or submit app.
+
+## Combined native verification passed — 2026-11-11 23:23 UTC
+
+- CI43114752712 succeeded at exact1a0029c954941b7cae343322c0a373de01968b02.
+  Coordinator independently checked gh run SHA/all steps and actual artifact logs.
+- Debug/Release app+widget builds passed; feature60/8, app1/1, snapshot/controller36/2,
+  actual-app dark4 and light1 all passed. Relaunch journey passed and log proves
+  exactly one saved100lb/8rep logged row after termination/relaunch, with no Start
+  workout over the live session. Coordinator inspected14b-session-resumed.png.
+- Final artifact path /tmp/hardset-readiness-final. No crash reports. Accessibility
+  reports remain non-clean: keyboard-obscured picker rows, chrome Dynamic Type,
+  clipped/description findings, disabled Later contrast, and now off-screen volume
+  tags near the fixed footer (audit completed rather than timed out). Require
+  visible-row/device checks; do not claim global accessibility clearance.
+- New native alerts compiled but failure-injection interactions were not exercised.
+  Signed StoreKit/AlarmKit/Health and public policy/support/contact setup remain open.
+- Only docs/APP_READINESS_REVIEW.md and this handoff are changing after verified1a0029c.
+  Run final make check/whitespace, commit these owned evidence updates, fetch/confirm
+  main remains an ancestor, then fast-forward push main under explicit finish rules.
+  The main workflow will run for the documentation update; app source stays identical
+  to the successful native run. Never force push; no public pages/app submission.

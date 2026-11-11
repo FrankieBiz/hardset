@@ -1,7 +1,8 @@
 # Hardset user experience and publication review
 
 Review date: 11 November 2026. Baseline: `e24bc5f` on
-`FrankieBiz/app-readiness-review` in the `searobin` workspace.
+`FrankieBiz/app-readiness-review` in the `searobin` workspace. Verified final app
+source: `1a0029c`; the final evidence update changes documentation only.
 
 **Decision: continue product review; do not submit to the App Store yet.** The
 basic logging journey has automated and visual evidence, but public policy and
@@ -111,10 +112,25 @@ troubleshooting step for someone who needs to retain their training history.
   text/description findings, a disabled Later button contrast report, and a volume
   audit timeout. Some are likely presentation/system artifacts; they are not
   silently dismissed as false positives or all proven application defects.
-- Native verification for review commit `f2b1c3a` is running in
-  [CI run 43111642053](https://github.com/FrankieBiz/hardset/actions/runs/43111642053).
-  The new relaunch assertion and SwiftUI change are not claimed to pass until
-  that lane completes.
+- Final native verification **passed** for `1a0029c954941b7cae343322c0a373de01968b02`
+  in [CI run 43114752712](https://github.com/FrankieBiz/hardset/actions/runs/43114752712).
+  The coordinator checked the run's SHA, every step result, and the downloaded
+  logs: Debug and Release app/widget builds, 60 feature tests in 8 suites, one app
+  smoke test, 36 screen/controller tests in 2 suites, and all 5 actual-app UI
+  journeys passed. This supersedes the intermediate `f2b1c3a` run.
+- The strengthened workout journey passed: it logged 100 lb and 8 reps, terminated
+  and relaunched the app, found exactly one `Set 1, 100 lb, 8 reps, logged` row,
+  and confirmed that a new workout was not offered over the open workout. The
+  coordinator inspected `14b-session-resumed.png` in
+  `/tmp/hardset-readiness-final/app-screens`; it shows the recovered set and the
+  matching 800 lb volume. Recovery is proven by the test assertions/log, rather
+  than inferred from the image alone.
+- The final volume audit completed and also flagged muscle tags below the visible
+  scroll area, near the fixed map button/tab bar. Picker rows behind the keyboard
+  were flagged again. These reports need visible-row/device inspection; no blanket
+  accessibility pass is claimed. Light-mode and correction-menu audit reports were
+  clean in this run. Native failure injection for the new alerts and signed-device
+  StoreKit, AlarmKit and Health behavior remain unverified.
 
 ## Independent review results
 
