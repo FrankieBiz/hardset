@@ -28,6 +28,9 @@ public struct WeeklyVolumeScreen: View {
 
   private let store: VolumeStore
   private let now: () -> Date
+  /// Changes whenever data was written elsewhere, such as an import from Settings, so the window
+  /// on screen is read again while its current figures stay visible.
+  private let dataRevision: Int
   private let onShowSettings: (() -> Void)?
 
   /// One entitlement app-wide, shared with Settings.
@@ -38,10 +41,12 @@ public struct WeeklyVolumeScreen: View {
   private static let maximumWeeksBack = 52
 
   public init(
-    store: VolumeStore, now: @escaping () -> Date = { Date() }, onShowSettings: (() -> Void)? = nil
+    store: VolumeStore, now: @escaping () -> Date = { Date() }, dataRevision: Int = 0,
+    onShowSettings: (() -> Void)? = nil
   ) {
     self.store = store
     self.now = now
+    self.dataRevision = dataRevision
     self.onShowSettings = onShowSettings
   }
 
@@ -119,9 +124,12 @@ public struct WeeklyVolumeScreen: View {
       }
       .hardsetSheet()
     }
-    // Keyed on the window and the foreground token, so stepping or returning re-reads, and a
-    // superseded read is cancelled.
-    .task(id: WindowKey(weeksBack: weeksBack, token: reloadToken)) { await load() }
+    // Keyed on the window, the foreground token and the data revision, so stepping, returning or
+    // a write elsewhere re-reads, and a superseded read is cancelled. The loader keeps the
+    // current figures on screen while it reads.
+    .task(id: WindowKey(weeksBack: weeksBack, token: reloadToken, dataRevision: dataRevision)) {
+      await load()
+    }
     .refreshable { await load() }
     .onChange(of: scenePhase) { _, phase in
       if phase == .active { reloadToken &+= 1 }
@@ -176,4 +184,5 @@ private nonisolated struct VolumeWindow: Sendable {
 private nonisolated struct WindowKey: Hashable, Sendable {
   let weeksBack: Int
   let token: Int
+  let dataRevision: Int
 }
