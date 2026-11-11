@@ -8,12 +8,19 @@ import SwiftUI
 public struct HardsetSearchField: View {
   @Binding private var text: String
   private let prompt: String
+  private let requestsFocus: Bool
 
   @FocusState private var isFocused: Bool
 
-  public init(text: Binding<String>, prompt: String = "Search movements") {
+  /// - Parameter requestsFocus: Focuses the field, raising the keyboard, whenever this becomes
+  ///   true, including on first appearance. A screen whose answer is usually typed passes true;
+  ///   one that is browsed first leaves it false, so the keyboard does not cover the list.
+  public init(
+    text: Binding<String>, prompt: String = "Search movements", requestsFocus: Bool = false
+  ) {
     self._text = text
     self.prompt = prompt
+    self.requestsFocus = requestsFocus
   }
 
   public var body: some View {
@@ -61,6 +68,9 @@ public struct HardsetSearchField: View {
     .padding(.vertical, Tokens.Spacing.tight)
     .entryFieldChrome(isFocused: isFocused)
     .onTapGesture { isFocused = true }
+    .onChange(of: requestsFocus, initial: true) { _, requested in
+      if requested { isFocused = true }
+    }
   }
 }
 
