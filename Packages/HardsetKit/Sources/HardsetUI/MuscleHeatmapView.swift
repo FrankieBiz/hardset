@@ -13,11 +13,26 @@ public struct MuscleHeatmapView: View {
     self.report = report
     self.windowLabel = windowLabel
   }
+  /// The map's one badge states the weakest certainty among the muscles it actually credits,
+  /// as `SetCounting` grades each one, rather than a fixed "Moderate" for every cell. With nothing
+  /// credited there is nothing to be certain about.
+  private var certainty: Certainty {
+    let credited = Muscle.allCases.filter { report.sets(for: $0) > 0 }
+    guard !credited.isEmpty else { return .unevaluated }
+    return Certainty.combine(credited.map {
+      SetCounting.certaintyCeiling(for: $0, fractionalSets: report.sets(for: $0))
+    })
+  }
+
+  private func isUncatalogued(_ muscle: Muscle) -> Bool {
+    report.sets(for: muscle) == 0 && ExerciseCatalog.unauthoredDirectTokens.contains(muscle)
+  }
+
   public var body: some View {
     VStack(alignment: .leading, spacing: Tokens.Spacing.section) {
       Text("\(windowLabel) · Comparative fractional sets. Bars compare volume with your most-credited muscle; it does not rate whether you trained enough.")
         .font(Tokens.Text.provenance).foregroundStyle(Tokens.Color.textSecondary)
-      CertaintyBadge(level: .moderate, methodology: SetCounting.source.methodology, citation: SetCounting.source.citation)
+      CertaintyBadge(level: certainty, methodology: SetCounting.source.methodology, citation: SetCounting.source.citation)
       if report.isLowerBound {
         HardsetBanner(.caveat, message: "\(report.unattributedHardSets) working sets have unknown attribution. All muscle counts are lower bounds.")
       }
@@ -25,8 +40,15 @@ public struct MuscleHeatmapView: View {
         ForEach(Muscle.allCases, id: \.self) { muscle in
           VStack(alignment: .leading, spacing: Tokens.Spacing.snug) {
             Text(ExercisePickerView.displayName(MuscleKey(muscle))).font(Tokens.Text.headline)
-            Text("\(report.isLowerBound ? "≥ " : "")\(report.sets(for: muscle).formatted(.number.precision(.fractionLength(0...1)))) fractional sets")
-              .font(Tokens.Text.figure).monospacedDigit()
+            if isUncatalogued(muscle) {
+              // No catalogue movement credits it directly, so a zero here is the catalogue's gap,
+              // not the lifter's.
+              Text("No catalogue movement credits this yet")
+                .font(Tokens.Text.caption).foregroundStyle(Tokens.Color.textSecondary)
+            } else {
+              Text("\(report.isLowerBound ? "≥ " : "")\(report.sets(for: muscle).formatted(.number.precision(.fractionLength(0...1)))) fractional sets")
+                .font(Tokens.Text.figure).monospacedDigit()
+            }
             if muscle.tier == .counted { Text("Counted, not modelled").font(Tokens.Text.caption) }
             ProgressView(value: report.sets(for: muscle), total: max(report.fractionalSets.values.max() ?? 0, 1))
               .tint(Tokens.Color.accent)
