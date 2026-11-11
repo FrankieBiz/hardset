@@ -303,18 +303,21 @@ struct LoggerStoreTests {
     let database = try migratedDatabase()
     let store = LoggerStore(database: database)
     let exercise = try seedExercise(database)
-    let session = try store.startSession(at: start)
+    // History from an earlier session, so the first-session rule does not withhold claims.
+    let earlier = try store.startSession(at: start.addingTimeInterval(-86_400))
     let weights: [Double] = [0, 50, 99.99, 99.995, 100, 100.005, 100.01, 100.015, 110, 999, 1000, 1001]
     let historicalReps = [12, 12, 8, 8, 8, 9, 10, 7, 1, 13, 20, 1]
     try database.write { db in
       for (ordinal, weight) in weights.enumerated() {
         try LoggedSet.insert {
-          LoggedSet.Draft(sessionID: session.rawValue, exerciseID: exercise.rawValue,
+          LoggedSet.Draft(sessionID: earlier.rawValue, exerciseID: exercise.rawValue,
                          setOrdinal: ordinal, weightKg: weight, reps: historicalReps[ordinal],
-                         completedAt: self.start)
+                         completedAt: self.start.addingTimeInterval(-86_000))
         }.execute(db)
       }
     }
+    try store.finishSession(earlier, at: start.addingTimeInterval(-82_800))
+    let session = try store.startSession(at: start)
     let key = ProgressionKey(exerciseID: exercise)
     var observedKinds = Set<PersonalRecordKind>()
     for weight in weights + [1100] {
@@ -339,9 +342,11 @@ struct LoggerStoreTests {
     let database = try migratedDatabase()
     let store = LoggerStore(database: database)
     let exercise = try seedExercise(database)
+    let earlier = try store.startSession(at: start.addingTimeInterval(-86_400))
+    _ = try store.logSet(sessionID: earlier, exerciseID: exercise,
+                         draft: SetEntryDraft(weightKg: 100, reps: 8), at: start.addingTimeInterval(-86_000))
+    try store.finishSession(earlier, at: start.addingTimeInterval(-82_800))
     let session = try store.startSession(at: start)
-    _ = try store.logSet(sessionID: session, exerciseID: exercise,
-                         draft: SetEntryDraft(weightKg: 100, reps: 8), at: start)
     let statements = Mutex<[String]>([])
     try database.writeWithoutTransaction { db in
       db.trace { event in

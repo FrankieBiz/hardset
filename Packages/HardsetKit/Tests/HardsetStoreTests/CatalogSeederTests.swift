@@ -173,6 +173,24 @@ struct CatalogSeederTests {
     #expect(try seeder.search("deadlift").isEmpty)
   }
 
+  /// The picker's search goes through the store. Each of these found nothing with a literal
+  /// substring, so the picker claimed the movement was not in the catalogue.
+  @Test("Searching the seeded catalogue finds gym names and abbreviations")
+  func searchingTypedNames() throws {
+    let database = try migratedDatabase()
+    let seeder = CatalogSeeder(database: database)
+    try seeder.seed(now: now)
+    let cases = [
+      ("rdl", "Romanian Deadlift"), ("ohp", "Overhead Press"), ("pull up", "Pull-up"),
+      ("seated row", "Seated Cable Row"), ("incline bench", "Incline Barbell Bench Press"),
+      ("db bench", "Dumbbell Bench Press"), ("squats", "Barbell Back Squat"),
+    ]
+    for (query, expected) in cases {
+      #expect(try seeder.search(query).first?.name == expected, "\(query)")
+    }
+    #expect(try seeder.search("benhc").isEmpty)
+  }
+
   @Test("The real catalogue seeds cleanly")
   func realCatalogueSeeds() throws {
     let database = try migratedDatabase()

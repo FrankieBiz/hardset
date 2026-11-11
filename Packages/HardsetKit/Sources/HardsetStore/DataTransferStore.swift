@@ -45,6 +45,7 @@ public nonisolated struct DataTransferStore: Sendable {
     _ format: Format, directory: URL, madeAt: Date = Date(), timeZone: TimeZone = .current
   ) async throws -> URL {
     try Task.checkCancellation()
+    Self.removeStaleExports(in: directory, now: Date())
     let folder = directory.appendingPathComponent(UUID().uuidString, isDirectory: true)
     try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
     let destination = folder.appendingPathComponent(
@@ -73,6 +74,27 @@ public nonisolated struct DataTransferStore: Sendable {
     }
   }
 
+  /// How long an earlier export's folder is kept, so a share sheet still reading it is not cut off.
+  static let staleExportAge: TimeInterval = 3600
+
+  /// Best-effort removal of folders earlier exports made in `directory`: only UUID-named folders,
+  /// which is how `export` names them, and only once older than `staleExportAge`. Each SQLite
+  /// export is a whole copy of the database, so they must not pile up. Failure removes nothing
+  /// more and never blocks the new export.
+  private static func removeStaleExports(in directory: URL, now: Date) {
+    let manager = FileManager.default
+    guard let entries = try? manager.contentsOfDirectory(
+      at: directory, includingPropertiesForKeys: [.isDirectoryKey, .contentModificationDateKey])
+    else { return }
+    for entry in entries where UUID(uuidString: entry.lastPathComponent) != nil {
+      guard let values = try? entry.resourceValues(forKeys: [.isDirectoryKey, .contentModificationDateKey]),
+        values.isDirectory == true, let modified = values.contentModificationDate,
+        now.timeIntervalSince(modified) > staleExportAge
+      else { continue }
+      try? manager.removeItem(at: entry)
+    }
+  }
+
   private static func fileStem(madeAt: Date, timeZone: TimeZone) -> String {
     let formatter = DateFormatter()
     formatter.locale = Locale(identifier: "en_US_POSIX")
@@ -95,7 +117,9 @@ public nonisolated struct DataTransferStore: Sendable {
     try Task.checkCancellation()
     return try await database.read { db in
       var count = 0
-      for workout in preview.sessions where try Self.isAlreadyImported(workout, from: preview.source, in: db) {
+      var zones = EarlierZones()
+      for workout in preview.sessions
+      where try Self.isAlreadyImported(workout, from: preview.source, zones: &zones, in: db) {
         count += 1
       }
       return count
@@ -112,18 +136,25 @@ public nonisolated struct DataTransferStore: Sendable {
   /// retained as an import.
   public func commit(_ preview: WorkoutImportPreview) async throws -> WorkoutImportResult {
     try Task.checkCancellation()
+    // The file is recognised by its SHA-256 digest and length; only those are kept.
+    let file = Data(preview.originalCSV.utf8)
+    let digest = SHA256Digest.hex(of: file)
+    let byteCount = file.count
     return try await database.write { db in
       // The exact file was imported before. Refuse only while its workouts are all still here:
       // after the lifter deletes them in History to correct an import, the same file must be
       // importable again, so the stale record of that import is dropped instead.
-      if try Row.fetchOne(db, sql: "SELECT id FROM deviceImportBatches WHERE sourceCSV = ?",
-        arguments: [preview.originalCSV]) != nil
+      if try Row.fetchOne(db, sql: "SELECT id FROM deviceImportBatches WHERE sourceDigest = ? AND byteCount = ?",
+        arguments: [digest, byteCount]) != nil
       {
-        if try preview.sessions.allSatisfy({ try Self.isAlreadyImported($0, from: preview.source, in: db) }) {
+        var zones = EarlierZones()
+        if try preview.sessions.allSatisfy({
+          try Self.isAlreadyImported($0, from: preview.source, zones: &zones, in: db)
+        }) {
           throw WorkoutImportError.alreadyImported
         }
-        try db.execute(sql: "DELETE FROM deviceImportBatches WHERE sourceCSV = ?",
-          arguments: [preview.originalCSV])
+        try db.execute(sql: "DELETE FROM deviceImportBatches WHERE sourceDigest = ? AND byteCount = ?",
+          arguments: [digest, byteCount])
       }
       // Use separate movements for unverified imported equipment. An imported nil machine
       // must never seed the native movement's free-weight or machine benchmark series.
@@ -131,8 +162,9 @@ public nonisolated struct DataTransferStore: Sendable {
       var importedWorkouts = 0
       var importedSets = 0
       var skippedWorkouts = 0
+      var zones = EarlierZones()
       for workout in preview.sessions {
-        if try Self.isAlreadyImported(workout, from: preview.source, in: db) {
+        if try Self.isAlreadyImported(workout, from: preview.source, zones: &zones, in: db) {
           skippedWorkouts += 1
           continue
         }
@@ -185,8 +217,10 @@ public nonisolated struct DataTransferStore: Sendable {
           arguments: [". Set timestamps are unavailable; grouped at workout start.", session.uuidString.lowercased()])
       }
       if importedWorkouts > 0 {
-        try db.execute(sql: "INSERT INTO deviceImportBatches(id, sourceCSV) VALUES (?, ?)",
-          arguments: [UUID().uuidString.lowercased(), preview.originalCSV])
+        // A digest, not the file: re-exports repeat the whole history, so copies added up.
+        try db.execute(
+          sql: "INSERT INTO deviceImportBatches(id, sourceCSV, sourceDigest, byteCount) VALUES (?, '', ?, ?)",
+          arguments: [UUID().uuidString.lowercased(), digest, byteCount])
       }
       return WorkoutImportResult(
         importedWorkouts: importedWorkouts, importedSets: importedSets, skippedWorkouts: skippedWorkouts)
@@ -204,14 +238,42 @@ public nonisolated struct DataTransferStore: Sendable {
 
   /// An imported session from the same app with the same start and title. Imported sessions are
   /// the only ones whose notes begin "Imported from <app> ", which `commit` writes.
+  ///
+  /// "The same start" is decided in the zone the earlier import used, which its notes record. A
+  /// date without an offset is a wall-clock time, so after the phone changes zone the same text
+  /// parses to a different instant; comparing instants alone would import every workout again.
+  /// A start read as the same instant also matches, which covers dates with an offset and an
+  /// exporting app that rewrote its wall-clock text for the new zone.
   private static func isAlreadyImported(
-    _ workout: WorkoutImportPreview.Workout, from source: String, in db: Database
+    _ workout: WorkoutImportPreview.Workout, from source: String, zones: inout EarlierZones,
+    in db: Database
   ) throws -> Bool {
     let startedAt = workout.startedAt
     let title = workout.title
-    return try Session
-      .where { $0.startedAt.eq(startedAt) && $0.title.eq(title) && $0.notes.like("Imported from \(source) %") }
-      .fetchCount(db) > 0
+    // Zone offsets span UTC-12 to UTC+14, so a reinterpreted start lies within this window.
+    let earliest = startedAt.addingTimeInterval(-27 * 3600)
+    let latest = startedAt.addingTimeInterval(27 * 3600)
+    let candidates = try Session
+      .where { $0.startedAt >= earliest && $0.startedAt <= latest }
+      .where { $0.title.eq(title) && $0.notes.like("Imported from \(source) %") }
+      .select { ($0.startedAt, $0.notes) }
+      .fetchAll(db)
+    for candidate in candidates {
+      if candidate.0 == startedAt { return true }
+      guard let zone = WorkoutCSVImport.interpretedTimeZone(inNotes: candidate.1) else { continue }
+      if zones.date(workout.startText, in: zone) == candidate.0 { return true }
+    }
+    return false
+  }
+
+  /// Date parsers for the zones earlier imports were read in, built once per check rather than
+  /// once per workout, since building formatters is the expensive part of parsing.
+  nonisolated struct EarlierZones {
+    private var parsers: [String: WorkoutCSVImport.DateParser] = [:]
+
+    mutating func date(_ text: String, in zone: TimeZone) -> Date? {
+      parsers[zone.identifier, default: WorkoutCSVImport.DateParser(timeZone: zone)].date(text)
+    }
   }
 
   private static func csv(in db: Database) throws -> Data {

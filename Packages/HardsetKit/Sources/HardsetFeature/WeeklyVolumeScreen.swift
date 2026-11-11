@@ -144,11 +144,11 @@ public struct WeeklyVolumeScreen: View {
 
   private func load() async {
     let store = store
-    let weeksBack = weeksBack
-    let end = now().addingTimeInterval(-Double(weeksBack) * 7 * 86_400)
+    // Whole local days, so the dates in the heading are exactly the days counted.
+    let range = VolumeWindowRange(endingAt: now(), weeksBack: weeksBack)
     await snapshot.load {
-      let report = try await store.loadRollingWeek(endingAt: end)
-      return VolumeWindow(report: report, end: end, weeksBack: weeksBack)
+      let report = try await store.loadReport(in: range)
+      return VolumeWindow(report: report, range: range)
     }
   }
 }
@@ -157,22 +157,20 @@ public struct WeeklyVolumeScreen: View {
 /// window whose numbers are on screen, even while the next one is being read.
 private nonisolated struct VolumeWindow: Sendable {
   let report: MuscleVolumeReport
-  let end: Date
-  let weeksBack: Int
+  let range: VolumeWindowRange
 
-  var start: Date { end.addingTimeInterval(-7 * 86_400) }
-
-  /// "Last 7 days, 2 Nov to now", or "7 days, 26 Oct to 2 Nov" for an earlier window.
+  /// "Last 7 days, 3 Nov to now", or "7 days, 27 Oct to 2 Nov" for an earlier window. Both name
+  /// days counted in full, and adjacent windows never name the same day.
   var description: String {
     let day = Date.FormatStyle.dateTime.day().month(.abbreviated)
-    let from = start.formatted(day)
-    return weeksBack == 0
+    let from = range.start.formatted(day)
+    return range.weeksBack == 0
       ? "Last 7 days, \(from) to now"
-      : "7 days, \(from) to \(end.formatted(day))"
+      : "7 days, \(from) to \(range.lastDay.formatted(day))"
   }
 
   /// The phrase every sentence on the screen uses for this window.
-  var period: String { weeksBack == 0 ? "in the last 7 days" : "in these 7 days" }
+  var period: String { range.weeksBack == 0 ? "in the last 7 days" : "in these 7 days" }
 }
 
 private nonisolated struct WindowKey: Hashable, Sendable {

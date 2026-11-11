@@ -68,6 +68,14 @@ public enum ExerciseModality: String, Sendable, CaseIterable, Codable {
     case .bodyweight: "Bodyweight"
     }
   }
+
+  /// Whether a one-rep max may be estimated from this modality's logged load.
+  ///
+  /// A bodyweight set records added load only, and body mass is not recorded with each set, so
+  /// an estimate from the added load measures nothing: across rep counts it can rise while the
+  /// load actually moved falls. Such estimates are unevaluated rather than guessed. An unknown
+  /// modality is not assumed to be bodyweight.
+  public var estimatesOneRepMax: Bool { self != .bodyweight }
 }
 
 /// The v1 seed catalogue.

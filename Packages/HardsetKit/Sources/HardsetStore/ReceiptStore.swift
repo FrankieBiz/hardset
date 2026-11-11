@@ -36,18 +36,22 @@ public nonisolated struct ReceiptStore: Sendable {
       var history = Dictionary(grouping: prior) {
         ProgressionKey(exerciseID: ExerciseID(rawValue: $0.exerciseID), machineID: $0.machineID.map(MachineID.init(rawValue:)))
       }.mapValues { $0.map { PriorSetRecord(weightKg: $0.weightKg, reps: $0.reps, completedAt: $0.completedAt) } }
+      // The live logger's first-session rule: a lift with no working set from an earlier session
+      // has no baseline, so this session's own ramp makes no claim on it.
+      let establishedKeys = Set(history.keys)
       let imported = session.notes.hasPrefix("Imported from ")
       var lines: [WorkoutReceipt.Line] = []
       for set in sets {
         let key = ProgressionKey(exerciseID: ExerciseID(rawValue: set.exerciseID), machineID: set.machineID.map(MachineID.init(rawValue:)))
         let machine = set.machineID.flatMap { machineIndex[$0] }
         // The live logger's rule: a set with no machine is compared against the same movement's
-        // other no-machine sets, with no plate increment. Only imports, which never recorded
+        // other no-machine sets, with the detector's default plate step. Only imports, which never recorded
         // equipment, and a set whose machine row is missing make no claim.
         let unknownMachine = set.machineID != nil && machine == nil
-        let records = imported || unknownMachine ? [] : PersonalRecordDetector.records(
+        let records = imported || unknownMachine || !establishedKeys.contains(key) ? [] : PersonalRecordDetector.records(
           for: .init(weightKg: set.weightKg, reps: set.reps, isWarmup: set.isWarmup),
-          history: history[key] ?? [], increment: machine?.stackIncrementKg)
+          history: history[key] ?? [], increment: machine?.stackIncrementKg,
+          estimatesOneRepMax: (modalities[set.exerciseID] ?? nil)?.estimatesOneRepMax ?? true)
         let machineName = machine.map { [$0.brand, $0.name].filter { !$0.isEmpty }.joined(separator: " ") }
         lines.append(.init(id: SetID(rawValue: set.id), exerciseID: ExerciseID(rawValue: set.exerciseID),
           exerciseName: names[set.exerciseID] ?? "Unknown movement",
