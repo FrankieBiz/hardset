@@ -33,6 +33,9 @@ public struct ProgressionChartView: View {
   private let machineChanges: [MachineChange]
   private let unit: WeightUnit
   private let onExplain: (() -> Void)?
+  /// `false` for movements whose logged load is not the load moved (bodyweight work), where no
+  /// one-rep max is ever estimated. Says so instead of blaming the rep count.
+  private let estimatesOneRepMax: Bool
   @State private var metric: ProgressionMetric = .heaviestLoad
   @Environment(\.dynamicTypeSize) private var dynamicTypeSize
   /// Grows with the axis labels, so larger text does not squeeze the plot itself.
@@ -54,8 +57,10 @@ public struct ProgressionChartView: View {
     series: [SeriesInput],
     machineChanges: [MachineChange] = [],
     unit: WeightUnit,
+    estimatesOneRepMax: Bool = true,
     onExplain: (() -> Void)? = nil
   ) {
+    self.estimatesOneRepMax = estimatesOneRepMax
     self.series = series
     self.machineChanges = machineChanges
     self.unit = unit
@@ -450,6 +455,10 @@ public struct ProgressionChartView: View {
       return metric == .heaviestLoad
         ? "No added load was recorded for these sets, so there is no load to chart."
         : "No added load was recorded, so there is nothing to estimate from."
+    }
+    if metric == .estimatedOneRepMax && !estimatesOneRepMax {
+      return "Body mass is not recorded with each set, so a one-rep max is not estimated for "
+        + "bodyweight movements."
     }
     return "No estimate is available. A one-rep max is only estimated from sets "
       + "of twelve reps or fewer, and none of these sessions qualify."
