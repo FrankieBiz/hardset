@@ -27,6 +27,9 @@ public struct LiveSessionScreen: View {
   /// What the lifter last asked for, so a failure is described as the thing that failed: a
   /// movement that could not be added is not "That set could not be saved".
   @State private var lastOperation: SessionOperation = .log
+  /// Counts failed commands. The session's error haptic and announcement follow this rather than
+  /// the message, because a retry that fails the same way leaves the message unchanged.
+  @State private var failedCommands = 0
   @State private var pickerQuery = ""
   @State private var pickerEntries: [CatalogEntry] = []
   @State private var pickerRecent: [CatalogEntry] = []
@@ -112,6 +115,9 @@ public struct LiveSessionScreen: View {
       restState: hooks.state(),
       restMetadata: hooks.metadata() ?? restMetadata,
       errorMessage: errorMessage,
+      errorEvent: failedCommands,
+      // Without a working alarm nothing else marks the end of a rest, so the screen does.
+      restEndsSilently: hooks.issue() != nil,
       records: recordsDismissed ? [] : coordinator.lastRecords,
       recordsExerciseName: recordsExerciseName,
       lastRest: lastRestByCard,
@@ -133,19 +139,19 @@ public struct LiveSessionScreen: View {
       onChangeGym: gyms == nil ? nil : { isChoosingGym = true },
       onUndoSet: { exerciseStateID, slot in
         begin(.undoSet)
-        return coordinator.undoSet(slotID: slot.id, inExercise: exerciseStateID)
+        return noteOutcome(coordinator.undoSet(slotID: slot.id, inExercise: exerciseStateID))
       },
       onRemoveSet: { exerciseStateID, slot in
         begin(.removeSet)
-        coordinator.removeSlot(slotID: slot.id, inExercise: exerciseStateID)
+        noteOutcome(coordinator.removeSlot(slotID: slot.id, inExercise: exerciseStateID))
       },
       onRemoveExercise: { exerciseStateID in
         begin(.removeMovement)
-        coordinator.removeExercise(exerciseStateID)
+        noteOutcome(coordinator.removeExercise(exerciseStateID))
       },
       onMoveExercise: { exerciseStateID, offset in
         begin(.moveMovement)
-        coordinator.moveExercise(exerciseStateID, by: offset)
+        noteOutcome(coordinator.moveExercise(exerciseStateID, by: offset))
       },
       onDismissError: dismissError,
       onDismissRecords: { recordsDismissed = true },
@@ -338,12 +344,19 @@ public struct LiveSessionScreen: View {
     finishError = nil
   }
 
+  /// Counts a command that did not succeed, and passes its result through.
+  @discardableResult
+  private func noteOutcome(_ succeeded: Bool) -> Bool {
+    if !succeeded { failedCommands += 1 }
+    return succeeded
+  }
+
   // MARK: - Logging and rest
 
   private func logSet(_ slot: SetSlot, inExercise exerciseStateID: UUID) {
     begin(.log)
     recordsDismissed = false
-    if coordinator.logSet(slotID: slot.id, inExercise: exerciseStateID) {
+    if noteOutcome(coordinator.logSet(slotID: slot.id, inExercise: exerciseStateID)) {
       recordsExerciseName = coordinator.exercises.first { $0.id == exerciseStateID }?.exerciseName
     }
   }
@@ -388,7 +401,7 @@ public struct LiveSessionScreen: View {
 
   private func addMovement(_ entry: CatalogEntry) {
     begin(.addMovement)
-    if coordinator.addExercise(entry) {
+    if noteOutcome(coordinator.addExercise(entry)) {
       isPickerPresented = false
     } else {
       // The picker stays open with the reason, rather than closing as if the movement had been
@@ -412,9 +425,10 @@ public struct LiveSessionScreen: View {
       return
     } catch {
       pickerError = "“\(trimmed)” could not be added. Try again."
+      noteOutcome(false)
       return
     }
-    if coordinator.addExercise(entry) {
+    if noteOutcome(coordinator.addExercise(entry)) {
       isPickerPresented = false
     } else {
       pickerError = failureMessage(for: .addMovement)
@@ -485,7 +499,9 @@ public struct LiveSessionScreen: View {
     begin(.changeMachine)
     // The coordinator persists before it mutates memory, and reads the increment from the machines
     // table itself, so nothing here needs to know either.
-    if coordinator.changeMachine(to: machineID, machineName: resolvedName, inExercise: target) {
+    if noteOutcome(
+      coordinator.changeMachine(to: machineID, machineName: resolvedName, inExercise: target)
+    ) {
       machineError = nil
       return true
     }
@@ -505,6 +521,7 @@ public struct LiveSessionScreen: View {
       // stays up with the name still typed and says so; closing it silently made the tap look
       // like it had worked.
       machineNameError = "“\(name)” could not be saved. Try again."
+      noteOutcome(false)
       return
     }
     isAddingMachine = false
@@ -546,7 +563,7 @@ public struct LiveSessionScreen: View {
       return
     }
     begin(.setGym)
-    if coordinator.setGym(id) {
+    if noteOutcome(coordinator.setGym(id)) {
       gymError = nil
       isChoosingGym = false
     } else {
@@ -645,6 +662,13 @@ public struct LiveSessionScreen: View {
         return operation.failure
       }
     }
+    // The clock is blamed only when the clock is the cause. A full disk used to be reported as a
+    // date-and-time problem, sending the lifter to the wrong setting.
+    if let timelineError = error as? SessionTimelineError, timelineError == .finishedBeforeStart {
+      return "This workout could not be finished, because your device's clock reads earlier than "
+        + "its start. It is still open, and your logged sets are saved. Check your device's date "
+        + "and time, then try again."
+    }
     return operation.failure
   }
 
@@ -678,6 +702,7 @@ public struct LiveSessionScreen: View {
       // `finishedBeforeStart` is the realistic trigger: the device clock moving backwards, from a
       // timezone or NTP correction, makes `now()` precede `startedAt`.
       finishError = Self.message(for: error, during: .finish)
+      noteOutcome(false)
     }
   }
 
@@ -697,6 +722,7 @@ public struct LiveSessionScreen: View {
         return
       }
       finishError = Self.message(for: error, during: .discard)
+      noteOutcome(false)
     }
   }
 }
@@ -768,7 +794,7 @@ private enum SessionOperation {
       "The workout's gym could not be changed. Nothing was changed."
     case .finish:
       "This workout could not be finished, so it is still open. Your logged sets are saved. "
-        + "Check your device's date and time, then try again."
+        + "Try again."
     case .discard:
       "This workout could not be discarded. It is still open, and its sets are saved."
     }
