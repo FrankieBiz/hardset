@@ -66,6 +66,14 @@ struct WorkoutReceiptScreen: View {
         }
       }
       .task { await load() }
+      .alert(
+        "Could not change this workout",
+        isPresented: Binding(get: { correctionError != nil }, set: { if !$0 { correctionError = nil } })
+      ) {
+        Button("OK", role: .cancel) {}
+      } message: {
+        Text(correctionError ?? "")
+      }
     }
   }
 
@@ -74,10 +82,6 @@ struct WorkoutReceiptScreen: View {
       ScrollView {
         VStack(alignment: .leading, spacing: 0) {
           Color.clear.frame(height: 0).id(Self.topID)
-          if let correctionError {
-            HardsetBanner(.error, message: correctionError)
-              .padding([.horizontal, .top], Tokens.Spacing.loose)
-          }
           if isEditing {
             HardsetBanner(
               .caveat, title: "Removing sets",

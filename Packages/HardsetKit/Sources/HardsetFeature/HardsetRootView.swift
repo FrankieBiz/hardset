@@ -147,7 +147,7 @@ public struct HardsetRootView: View {
           // An import adds finished workouts, so the start screen's last workout may have
           // changed underneath the sheet, which does not make the start screen appear again.
           // A gym renamed or archived in Settings changes the names the start screen and the gym
-          // picker show; an archived pick falls back to the learned default in the model.
+          // picker show; an archived pick is cleared, and an explicit Not recorded pick stays.
           onDataChanged: {
             dataRevision &+= 1
             Task { await refreshLastWorkout() }

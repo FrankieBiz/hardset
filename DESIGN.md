@@ -235,3 +235,7 @@ components rather than native spinners.
 - The Lifetime section always offers an explicit restore action to a locked App Store
   build, including when storefront product information is unavailable. Restore uses
   the existing secondary button and busy state; product retry remains a separate action.
+- Failed receipt corrections and gym/machine changes use native alerts, so the
+  failure remains visible and accessible regardless of scroll position. A failed
+  rename keeps the sheet and typed values available for retry. These reuse system
+  presentation and add no custom motion.

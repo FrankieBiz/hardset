@@ -29,10 +29,6 @@ struct GymManagementScreen: View {
           .foregroundStyle(Tokens.Color.textSecondary)
           .fixedSize(horizontal: false, vertical: true)
 
-        if let failure {
-          HardsetBanner(.error, message: failure)
-        }
-
         if let inventory {
           if inventory.isEmpty {
             HardsetEmptyState(
@@ -82,6 +78,16 @@ struct GymManagementScreen: View {
     } message: { request in
       Text(request.message)
     }
+    .alert(
+      "Could not update your gyms and machines",
+      // A rename sheet presents its own save error. A failed background refresh waits until
+      // that sheet closes, so two presenters never compete for the same alert.
+      isPresented: Binding(get: { failure != nil && editing == nil }, set: { if !$0 { failure = nil } })
+    ) {
+      Button("OK", role: .cancel) {}
+    } message: {
+      Text(failure ?? "")
+    }
   }
 
   // MARK: - Rows
@@ -130,7 +136,7 @@ struct GymManagementScreen: View {
     }
   }
 
-  private func rename(_ edit: EquipmentEdit, name: String, brand: String) {
+  private func rename(_ edit: EquipmentEdit, name: String, brand: String) -> String? {
     do {
       switch edit {
       case .gym(let gym): try store.renameGym(gym.id, to: name)
@@ -140,12 +146,12 @@ struct GymManagementScreen: View {
       failure = nil
       onChanged()
       Task { await load() }
+      return nil
     } catch EquipmentNameError.blank {
-      failure = "A name cannot be blank."
+      return "A name cannot be blank."
     } catch {
-      editing = nil
-      failure = "Could not save the new name. It may have been archived; the list has been refreshed."
       Task { await load() }
+      return "Could not save the new name. It may have been archived. Your changes are still here to retry."
     }
   }
 
@@ -260,16 +266,17 @@ private struct ManagedRow: View {
 /// an empty string. Starts from the current name, since a rename is usually a one-letter fix.
 private struct EquipmentRenameSheet: View {
   let edit: EquipmentEdit
-  let onSave: (_ name: String, _ brand: String) -> Void
+  let onSave: (_ name: String, _ brand: String) -> String?
   let onCancel: () -> Void
 
   @State private var name: String
   @State private var brand: String
+  @State private var saveFailure: String?
   @FocusState private var focus: Field?
 
   private nonisolated enum Field: Hashable { case name, brand }
 
-  init(edit: EquipmentEdit, onSave: @escaping (_ name: String, _ brand: String) -> Void, onCancel: @escaping () -> Void) {
+  init(edit: EquipmentEdit, onSave: @escaping (_ name: String, _ brand: String) -> String?, onCancel: @escaping () -> Void) {
     self.edit = edit
     self.onSave = onSave
     self.onCancel = onCancel
@@ -328,6 +335,14 @@ private struct EquipmentRenameSheet: View {
         }
       }
       .onAppear { focus = .name }
+      .alert(
+        "Could not save this name",
+        isPresented: Binding(get: { saveFailure != nil }, set: { if !$0 { saveFailure = nil } })
+      ) {
+        Button("OK", role: .cancel) {}
+      } message: {
+        Text(saveFailure ?? "")
+      }
     }
     .presentationDetents([.medium, .large])
     // A brushed swipe must not discard an edit in progress; Cancel is the explicit way out.
@@ -368,6 +383,6 @@ private struct EquipmentRenameSheet: View {
       Task { focus = .name }
       return
     }
-    onSave(trimmedName, brand.trimmingCharacters(in: .whitespacesAndNewlines))
+    saveFailure = onSave(trimmedName, brand.trimmingCharacters(in: .whitespacesAndNewlines))
   }
 }

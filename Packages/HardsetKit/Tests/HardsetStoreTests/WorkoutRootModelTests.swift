@@ -244,8 +244,11 @@ struct WorkoutRootModelTests {
     #expect(model.selectedGym == nil)
     #expect(model.gymOptions.map(\.id) == [home, metroflex])
     try model.startWorkout()
-    #expect(model.coordinator?.gymID == nil)
-    #expect(try logger.openSession()?.gymID == nil)
+    let coordinator = try #require(model.coordinator)
+    #expect(coordinator.gymID == nil)
+    let session = try logger.openSession()
+    let saved = try #require(session)
+    #expect(saved.gymID == nil)
   }
 
   @Test("A refresh keeps a valid pick and drops an archived one without reviving the default")
