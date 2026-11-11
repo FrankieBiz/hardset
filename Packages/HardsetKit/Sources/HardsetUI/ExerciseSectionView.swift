@@ -30,6 +30,7 @@ public struct ExerciseSectionView: View {
   private let onRemove: (() -> Void)?
 
   @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+  @Environment(\.accessibilityShowButtonShapes) private var showsButtonShapes
 
   /// Rest durations offered on every card, written the way the rest bar writes time.
   static let restChoices: [Duration] = [.seconds(60), .seconds(90), .seconds(120), .seconds(180)]
@@ -136,44 +137,34 @@ public struct ExerciseSectionView: View {
 
   private var header: some View {
     VStack(alignment: .leading, spacing: Tokens.Spacing.snug) {
-      HStack(alignment: .top, spacing: Tokens.Spacing.snug) {
-        // The name is the way into this movement's load history. Placed here because "how have I
-        // been doing on this" is a question asked while standing at the machine, and a chart
-        // buried in a separate browse tab does not get looked at mid-set.
-        Button {
-          onShowHistory?()
-        } label: {
-          HStack(alignment: .firstTextBaseline, spacing: Tokens.Spacing.snug) {
-            Text(state.exerciseName)
-              .font(Tokens.Text.title)
-              .foregroundStyle(Tokens.Color.textPrimary)
-              .multilineTextAlignment(.leading)
-            if onShowHistory != nil {
-              Image(systemName: "chart.xyaxis.line")
-                .font(Tokens.Text.caption.weight(.semibold))
-                .foregroundStyle(Tokens.Color.accent)
+      // At accessibility sizes the name takes the full width and the progress and menu sit on
+      // the line below; sharing one line, a name such as "Dumbbell" broke mid-word.
+      if dynamicTypeSize.isAccessibilitySize {
+        VStack(alignment: .leading, spacing: Tokens.Spacing.snug) {
+          nameButton
+          HStack(spacing: Tokens.Spacing.snug) {
+            progress
+            Spacer(minLength: Tokens.Spacing.snug)
+            if hasMovementMenu {
+              movementMenu
             }
           }
-          .frame(minHeight: Tokens.minimumTapTarget, alignment: .leading)
-          .contentShape(Rectangle())
+          .frame(minHeight: Tokens.minimumTapTarget)
         }
-        .buttonStyle(.plain)
-        .disabled(onShowHistory == nil)
-        .accessibilityLabel(
-          onShowHistory == nil
-            ? state.exerciseName : "\(state.exerciseName). Show load history."
-        )
-        .accessibilityAddTraits(.isHeader)
+      } else {
+        HStack(alignment: .top, spacing: Tokens.Spacing.snug) {
+          nameButton
 
-        Spacer(minLength: Tokens.Spacing.snug)
+          Spacer(minLength: Tokens.Spacing.snug)
 
-        HStack(spacing: Tokens.Spacing.snug) {
-          progress
-          if hasMovementMenu {
-            movementMenu
+          HStack(spacing: Tokens.Spacing.snug) {
+            progress
+            if hasMovementMenu {
+              movementMenu
+            }
           }
+          .frame(minHeight: Tokens.minimumTapTarget)
         }
-        .frame(minHeight: Tokens.minimumTapTarget)
       }
       if let onSelectMachine {
         machineChip(action: onSelectMachine)
@@ -186,6 +177,38 @@ public struct ExerciseSectionView: View {
         )
       }
     }
+  }
+
+  /// The name is the way into this movement's load history. Placed here because "how have I been
+  /// doing on this" is a question asked while standing at the machine, and a chart buried in a
+  /// separate browse tab does not get looked at mid-set.
+  ///
+  /// With Button Shapes on, the name is underlined: the small chart glyph alone did not say that
+  /// the title can be tapped.
+  private var nameButton: some View {
+    let isLink = onShowHistory != nil
+    return Button {
+      onShowHistory?()
+    } label: {
+      HStack(alignment: .firstTextBaseline, spacing: Tokens.Spacing.snug) {
+        Text(state.exerciseName)
+          .font(Tokens.Text.title)
+          .foregroundStyle(Tokens.Color.textPrimary)
+          .underline(isLink && showsButtonShapes)
+          .multilineTextAlignment(.leading)
+        if isLink {
+          Image(systemName: "chart.xyaxis.line")
+            .font(Tokens.Text.caption.weight(.semibold))
+            .foregroundStyle(Tokens.Color.accent)
+        }
+      }
+      .frame(minHeight: Tokens.minimumTapTarget, alignment: .leading)
+      .contentShape(Rectangle())
+    }
+    .buttonStyle(HardsetPressStyle())
+    .disabled(!isLink)
+    .accessibilityLabel(isLink ? "\(state.exerciseName). Show load history." : state.exerciseName)
+    .accessibilityAddTraits(.isHeader)
   }
 
   private var hasMovementMenu: Bool {
@@ -335,10 +358,20 @@ public struct ExerciseSectionView: View {
       .frame(minHeight: Tokens.minimumTapTarget)
       .contentShape(Rectangle())
     }
-    .buttonStyle(.plain)
-    .accessibilityLabel(
-      state.machineName.map { "Machine: \($0). Change." } ?? "No machine recorded. Choose one."
+    .buttonStyle(HardsetPressStyle())
+    // Begins with the words on the chip, so "Tap Choose machine" works for Voice Control, and
+    // includes the load step the chip shows.
+    .accessibilityLabel(machineChipLabel)
+    .accessibilityInputLabels(
+      state.machineName.map { [$0, "Change machine", "Machine"] } ?? ["Choose machine", "Machine"]
     )
+  }
+
+  private var machineChipLabel: String {
+    guard let name = state.machineName else { return "Choose machine. No machine recorded." }
+    guard let increment = state.machineIncrementKg else { return "\(name). Change machine." }
+    let step = "\(LoadFigure.text(unit.fromKilograms(increment))) \(unit.abbreviation) steps"
+    return "\(name), \(step). Change machine."
   }
 
   /// Starting a rest. Rest begins only from a duration the lifter chose: with one remembered for
