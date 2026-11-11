@@ -195,12 +195,19 @@ public struct ProgressionChartView: View {
           )
           .foregroundStyle(by: .value("Machine", entry.name))
           .lineStyle(StrokeStyle(lineWidth: lineWidth))
+          // One spoken element per session, on the line: the machine and the date, then the value
+          // at the legend's precision with its unit, and the word "estimate" with its confidence
+          // when it is one. Charts' automatic labels read the raw plotted number with no unit.
+          .accessibilityLabel(pointLabel(entry, point))
+          .accessibilityValue(pointValue(point))
           PointMark(
             x: .value("Date", point.date),
             y: .value(metric.label, value(point))
           )
           .foregroundStyle(by: .value("Machine", entry.name))
           .symbol(by: .value("Machine", entry.name))
+          // The same session as the line mark above; read once, not twice.
+          .accessibilityHidden(true)
         }
       }
       // A switch is drawn on the chart, not just described below it, so the eye meets the caveat
@@ -210,6 +217,8 @@ public struct ProgressionChartView: View {
         RuleMark(x: .value("Machine change", change.date))
           .foregroundStyle(caveat)
           .lineStyle(StrokeStyle(lineWidth: lineWidth, dash: [4, 3]))
+          .accessibilityLabel("Machine change")
+          .accessibilityValue(change.date.formatted(.dateTime.day().month(.wide).year()))
           .annotation(position: .top, alignment: .leading) {
             Image(systemName: "arrow.triangle.branch")
               .font(axisFont)
@@ -318,6 +327,17 @@ public struct ProgressionChartView: View {
     let kind = metric == .estimatedOneRepMax ? "latest estimate" : "latest"
     return "\(entry.name), \(shape) points, \(kind) \(valueText(latest)) "
       + "\(unit.abbreviation) on \(date)"
+  }
+
+  private func pointLabel(_ entry: PlottedSeries, _ point: ProgressionPoint) -> String {
+    "\(entry.name), \(point.date.formatted(.dateTime.day().month(.wide).year()))"
+  }
+
+  private func pointValue(_ point: ProgressionPoint) -> String {
+    let figure = "\(valueText(point)) \(unit.abbreviation)"
+    guard metric == .estimatedOneRepMax else { return figure }
+    let confidence = point.bestEstimateCertainty.map { MethodologySheet.level(for: $0).label }
+    return [figure, "estimate", confidence].compactMap { $0 }.joined(separator: ", ")
   }
 
   // MARK: - Machine changes

@@ -50,16 +50,28 @@ struct HealthSettingsSection: View {
           .buttonStyle(HardsetButtonStyle(.secondary)).disabled(bridge.isWorking)
         Button("Send completed workouts to Health") { Task { await bridge.writeWorkouts() } }
           .buttonStyle(HardsetButtonStyle(.secondary)).disabled(bridge.isWorking)
-        TextField("Body mass (\(unit.abbreviation))", text: $bodyMass)
+        // A visible label that stays once typing starts, so the unit being entered is never in
+        // doubt; the prompt is drawn in the measured secondary text colour, not the system's
+        // unmeasured placeholder grey.
+        VStack(alignment: .leading, spacing: Tokens.Spacing.tight) {
+          Text("Body mass (\(unit.abbreviation))")
+            .font(Tokens.Text.caption).foregroundStyle(Tokens.Color.textSecondary)
+            .accessibilityHidden(true)
+          TextField(
+            text: $bodyMass,
+            prompt: Text("Body mass (\(unit.abbreviation))").foregroundStyle(Tokens.Color.textSecondary)
+          ) {
+            Text("Body mass")
+          }
           .keyboardType(.decimalPad)
           .focused($bodyMassFocused)
-          .font(Tokens.Text.label.monospacedDigit()).padding(Tokens.Spacing.regular)
+          .font(Tokens.Text.label.monospacedDigit())
+          .foregroundStyle(Tokens.Color.textPrimary)
+          .tint(Tokens.Color.accent)
+          .padding(Tokens.Spacing.regular)
           .frame(minHeight: Tokens.minimumTapTarget)
-          .background(Tokens.Color.surfaceRaised, in: RoundedRectangle(cornerRadius: Tokens.Radius.control))
-          .overlay {
-            RoundedRectangle(cornerRadius: Tokens.Radius.control)
-              .strokeBorder(Tokens.Color.controlBorder, lineWidth: Tokens.Stroke.hairline)
-          }
+          .hardsetEntryField(isFocused: bodyMassFocused)
+          .onTapGesture { bodyMassFocused = true }
           .accessibilityLabel("Body mass in \(unit == .kilograms ? "kilograms" : "pounds")")
           // The decimal pad has no return key, so the keyboard gets its own way to close.
           .toolbar {
@@ -68,6 +80,7 @@ struct HealthSettingsSection: View {
               Button("Done") { bodyMassFocused = false }
             }
           }
+        }
         if showsRangeHint {
           Text(rangeText)
             .font(Tokens.Text.caption).foregroundStyle(Tokens.Color.error)

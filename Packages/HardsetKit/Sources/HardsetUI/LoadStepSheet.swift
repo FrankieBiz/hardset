@@ -47,6 +47,8 @@ public struct LoadStepSheet: View {
       .hardsetNavigationTitle("Machine load step")
       .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Cancel", action: onCancel) } }
     }
+    // A step typed but not yet saved survives a brushed swipe; Cancel is the explicit way out.
+    .interactiveDismissDisabled(buffer.text != seedText)
   }
   private func save() {
     guard valid else { return }

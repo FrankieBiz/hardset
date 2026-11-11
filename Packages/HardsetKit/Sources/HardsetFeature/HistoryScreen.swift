@@ -36,6 +36,9 @@ public struct HistoryScreen: View {
   private let progression: ProgressionStore?
   private let onHistoryChanged: (() -> Void)?
   private let onShowSettings: (() -> Void)?
+  /// Changes when saved history changed somewhere this screen cannot see, such as an import in
+  /// Settings presented over this tab. Each change re-reads, keeping the current list on screen.
+  private let dataRevision: Int
 
   private static let title = "History"
   private static let pageSize = 50
@@ -46,14 +49,17 @@ public struct HistoryScreen: View {
   ///   - onHistoryChanged: Called after a workout or set was deleted, so other screens showing
   ///     history, such as the start screen's last workout, can re-read.
   ///   - onShowSettings: Draws the Settings button in the header, as the Train tab does.
+  ///   - dataRevision: Bumped by the caller after an outside change to saved workouts.
   public init(
     store: HistoryStore,
     unit: WeightUnit,
     receipts: ReceiptStore? = nil,
     progression: ProgressionStore? = nil,
     onHistoryChanged: (() -> Void)? = nil,
-    onShowSettings: (() -> Void)? = nil
+    onShowSettings: (() -> Void)? = nil,
+    dataRevision: Int = 0
   ) {
+    self.dataRevision = dataRevision
     self.receipts = receipts
     self.store = store
     self.unit = unit
@@ -103,7 +109,7 @@ public struct HistoryScreen: View {
     }
     // Keyed on the page size and the reload token, so asking for older workouts, a correction and
     // a return to the foreground each re-read, and a superseded read is cancelled.
-    .task(id: LoadKey(limit: limit, token: reloadToken)) { await load() }
+    .task(id: LoadKey(limit: limit, token: reloadToken, revision: dataRevision)) { await load() }
     .refreshable { await load() }
     .onChange(of: scenePhase) { _, phase in
       if phase == .active { reloadToken &+= 1 }
@@ -126,7 +132,8 @@ public struct HistoryScreen: View {
       Button("Delete workout", role: .destructive) { Task { await delete(row) } }
       Button("Cancel", role: .cancel) {}
     } message: { row in
-      Text(row.date.formatted(.dateTime.weekday(.wide).day().month(.wide)) + ". "
+      // With the year whenever it is not this one: years of imported history repeat every date.
+      Text(HistoryView.fullDateText(row.date) + ". "
         + WorkoutReceiptScreen.workoutDeletionMessage(
           setCount: row.volume.workingSets + row.volume.warmupSets))
     }
@@ -208,4 +215,5 @@ private nonisolated struct HistoryListing: Sendable {
 private nonisolated struct LoadKey: Hashable, Sendable {
   let limit: Int
   let token: Int
+  let revision: Int
 }
