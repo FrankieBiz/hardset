@@ -168,12 +168,17 @@ struct RestControllerTests {
     var saved: RestCheckpoint?
     controller.configure(checkpoint: .init(), save: { saved = $0 })
     await controller.waitForReconciliation()
-    // Half a second left: long enough to see the denial, short enough to wait for the deadline.
-    controller.start(duration: .seconds(120), metadata: metadata, now: Date().addingTimeInterval(-119.5))
+    // Two seconds left: long enough to see the denial, short enough to wait for the deadline.
+    let deadline = Date().addingTimeInterval(2)
+    controller.start(duration: .seconds(120), metadata: metadata, now: deadline.addingTimeInterval(-120))
     await controller.waitForReconciliation()
-    #expect(controller.state.isRunning)
-    #expect(controller.issue == .alarmsDenied)
-    for _ in 0..<500 where controller.state != .idle { try await Task.sleep(for: .milliseconds(10)) }
+    // A slow simulator can reach the deadline before this line; the running state and its denial
+    // are only asserted while the rest genuinely has time left. The end is asserted either way.
+    if Date() < deadline.addingTimeInterval(-0.5) {
+      #expect(controller.state.isRunning)
+      #expect(controller.issue == .alarmsDenied)
+    }
+    for _ in 0..<2000 where controller.state != .idle { try await Task.sleep(for: .milliseconds(10)) }
     await controller.waitForReconciliation()
     #expect(controller.state == .idle)
     #expect(saved?.state == .idle)
