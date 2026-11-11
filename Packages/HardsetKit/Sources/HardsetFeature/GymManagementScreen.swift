@@ -290,6 +290,14 @@ private struct EquipmentRenameSheet: View {
 
   private var trimmedName: String { name.trimmingCharacters(in: .whitespacesAndNewlines) }
 
+  /// Whether either field differs from what the sheet opened with, so a swipe would lose typing.
+  private var isEdited: Bool {
+    switch edit {
+    case .gym(let gym): name != gym.name
+    case .machine(let machine): name != machine.name || brand != machine.brand
+    }
+  }
+
   var body: some View {
     NavigationStack {
       ScrollView {
@@ -322,6 +330,8 @@ private struct EquipmentRenameSheet: View {
       .onAppear { focus = .name }
     }
     .presentationDetents([.medium, .large])
+    // A brushed swipe must not discard an edit in progress; Cancel is the explicit way out.
+    .interactiveDismissDisabled(isEdited)
   }
 
   private func field(_ label: String, text: Binding<String>, focus field: Field) -> some View {
@@ -337,6 +347,7 @@ private struct EquipmentRenameSheet: View {
       .foregroundStyle(Tokens.Color.textPrimary)
       .tint(Tokens.Color.accent)
       .focused($focus, equals: field)
+      .hardsetNameInput()
       .submitLabel(isMachine && field == .name ? .next : .done)
       .onSubmit {
         if isMachine && field == .name { focus = .brand } else { save() }
@@ -344,19 +355,19 @@ private struct EquipmentRenameSheet: View {
       .padding(.horizontal, Tokens.Spacing.regular)
       .padding(.vertical, Tokens.Spacing.snug)
       .frame(maxWidth: .infinity, minHeight: Tokens.loggerTapTarget, alignment: .leading)
-      .background(Tokens.Color.surfaceRaised, in: RoundedRectangle(cornerRadius: Tokens.Radius.control))
-      .overlay {
-        RoundedRectangle(cornerRadius: Tokens.Radius.control)
-          .strokeBorder(focus == field ? Tokens.Color.accent : Tokens.Color.controlBorder,
-            lineWidth: focus == field ? Tokens.Stroke.selected : Tokens.Stroke.hairline)
-      }
-      .contentShape(RoundedRectangle(cornerRadius: Tokens.Radius.control))
+      // The same outline as the name entry and search fields, focus ring included.
+      .hardsetEntryField(isFocused: focus == field)
       .onTapGesture { focus = field }
     }
   }
 
   private func save() {
-    guard !trimmedName.isEmpty else { return }
+    guard !trimmedName.isEmpty else {
+      // Return with no name: put the caret back in the name field rather than closing the
+      // keyboard beside a disabled Save. Deferred, because the field resigns after submitting.
+      Task { focus = .name }
+      return
+    }
     onSave(trimmedName, brand.trimmingCharacters(in: .whitespacesAndNewlines))
   }
 }

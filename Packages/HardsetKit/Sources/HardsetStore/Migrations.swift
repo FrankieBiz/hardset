@@ -1,4 +1,5 @@
 import Foundation
+import GRDB
 import SQLiteData
 
 /// The frozen v1 schema and additive forward migrations.
@@ -447,6 +448,31 @@ public nonisolated enum HardsetMigrations {
           WHERE NOT isWarmup
         """
       ).execute(db)
+    }
+
+    // The replay ledger kept a full copy of every imported file. Strong and Hevy re-export the
+    // whole history each time, so every catch-up import added another copy of up to 20 MB, and
+    // JSON and SQLite exports carried them all. A digest and byte count recognise the same file;
+    // existing copies are hashed and then emptied. The table is device-local and never synced,
+    // so this changes no shared schema. `sourceCSV` stays, empty, rather than being dropped.
+    migrator.registerMigration("v10_importLedgerDigests") { db in
+      try #sql(
+        """
+        ALTER TABLE deviceImportBatches ADD COLUMN sourceDigest TEXT NOT NULL DEFAULT ''
+        """
+      ).execute(db)
+      try #sql(
+        """
+        ALTER TABLE deviceImportBatches ADD COLUMN byteCount INTEGER NOT NULL DEFAULT 0
+        """
+      ).execute(db)
+      let stored = try Row.fetchAll(db, sql: "SELECT id, sourceCSV FROM deviceImportBatches")
+      for row in stored {
+        let bytes = Data((row["sourceCSV"] as String).utf8)
+        try db.execute(
+          sql: "UPDATE deviceImportBatches SET sourceDigest = ?, byteCount = ?, sourceCSV = '' WHERE id = ?",
+          arguments: [SHA256Digest.hex(of: bytes), bytes.count, row["id"] as String])
+      }
     }
 
     return migrator

@@ -60,8 +60,10 @@ public struct ExercisePickerView: View {
     VStack(spacing: 0) {
       // Search and the region rail stay put while the list scrolls beneath them.
       VStack(alignment: .leading, spacing: Tokens.Spacing.tight) {
-        HardsetSearchField(text: $query, prompt: "Search movements")
-          .padding(.horizontal, Tokens.Spacing.loose)
+        HardsetSearchField(
+          text: $query, prompt: "Search movements", requestsFocus: searchesFirst
+        )
+        .padding(.horizontal, Tokens.Spacing.loose)
 
         filterRail
 
@@ -375,6 +377,13 @@ public struct ExercisePickerView: View {
   /// state before a read has succeeded.
   private var isAwaitingFirstRead: Bool {
     entries.isEmpty && recent.isEmpty && trimmedQuery.isEmpty && visibleErrorMessage == nil
+  }
+
+  /// With no recent movements to tap, the answer is typed, so the field takes focus once the first
+  /// read is back: a newcomer facing some sixty movements by muscle no longer taps the field
+  /// before searching. With recents the picker stays browse-first and the keyboard stays down.
+  private var searchesFirst: Bool {
+    !isAwaitingFirstRead && trimmedQuery.isEmpty && recent.isEmpty
   }
 
   private var emptyStateDetail: String {

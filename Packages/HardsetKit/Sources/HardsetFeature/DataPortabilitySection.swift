@@ -131,7 +131,7 @@ struct DataPortabilitySection: View {
       }
       Text(preview.interpretation).font(Tokens.Text.provenance).foregroundStyle(Tokens.Color.textSecondary)
         .fixedSize(horizontal: false, vertical: true)
-      Text("Imported • Unevaluated Machine. Imported movements stay separate from your machine-specific history. Set times are unavailable and will be grouped at workout start. The original file is kept on this device so the same file is never imported twice.")
+      Text("Imported • Unevaluated Machine. Imported movements stay separate from your machine-specific history. Set times are unavailable and will be grouped at workout start. A fingerprint of the file is kept on this device so the same file is never imported twice.")
         .font(Tokens.Text.provenance)
         .foregroundStyle(Tokens.Color.textSecondary)
         .fixedSize(horizontal: false, vertical: true)

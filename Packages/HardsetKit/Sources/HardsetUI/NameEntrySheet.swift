@@ -97,6 +97,9 @@ public struct NameEntrySheet: View {
       }
     }
     .presentationDetents([.medium])
+    // A brushed swipe must not throw away a typed name. Cancel stays the explicit way out, and an
+    // empty field can still be swiped away, because there is nothing to lose.
+    .interactiveDismissDisabled(!trimmed.isEmpty)
   }
 
   private var nameField: some View {
@@ -107,6 +110,7 @@ public struct NameEntrySheet: View {
     .foregroundStyle(Tokens.Color.textPrimary)
     .tint(Tokens.Color.accent)
     .focused($isFocused)
+    .hardsetNameInput()
     .submitLabel(.done)
     .onSubmit(confirm)
     .padding(.horizontal, Tokens.Spacing.regular)
@@ -117,8 +121,35 @@ public struct NameEntrySheet: View {
   }
 
   private func confirm() {
-    guard !trimmed.isEmpty else { return }
+    guard !trimmed.isEmpty else {
+      // Return on an empty field: keep the keyboard up beside the field still waiting for a name,
+      // instead of closing it next to a disabled button. Deferred one turn, because the field
+      // resigns focus after its submit action runs.
+      Task { isFocused = true }
+      return
+    }
     onConfirm(trimmed)
+  }
+}
+
+public extension View {
+  /// Input traits for a proper name: a gym, a machine, a brand.
+  ///
+  /// Each word capitalised, because these are names ("Hammer Strength", not "Hammer strength"),
+  /// and no autocorrection, because Return accepts a pending correction and brands such as
+  /// Panatta or Cybex are exactly the words a dictionary rewrites.
+  func hardsetNameInput() -> some View {
+    #if os(iOS)
+      return self.textInputAutocapitalization(.words).autocorrectionDisabled()
+    #else
+      return self.autocorrectionDisabled()
+    #endif
+  }
+
+  /// The outline every text entry field wears, for fields drawn outside this module: the raised
+  /// fill, the measured control border, and the 2 pt accent ring while focused.
+  func hardsetEntryField(isFocused: Bool) -> some View {
+    entryFieldChrome(isFocused: isFocused)
   }
 }
 

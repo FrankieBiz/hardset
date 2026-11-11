@@ -15,6 +15,8 @@ public struct HardsetEmptyState: View {
   private let actionTitle: String?
   private let actionSystemImage: String
   private let action: (() -> Void)?
+  /// The dashed socket grows with its Title 3 glyph, so large text never spills past the outline.
+  @ScaledMetric(relativeTo: .title3) private var socketSize = Tokens.loggerTapTarget
 
   /// - Parameter actionSystemImage: The action's symbol. A plus by default, because most empty
   ///   states are filled by adding something; a retry passes `arrow.clockwise`.
@@ -40,7 +42,7 @@ public struct HardsetEmptyState: View {
         Image(systemName: systemImage)
           .font(Tokens.Text.title)
           .foregroundStyle(Tokens.Color.textSecondary)
-          .frame(width: Tokens.loggerTapTarget, height: Tokens.loggerTapTarget)
+          .frame(width: socketSize, height: socketSize)
           .background(
             Tokens.Color.surfaceRaised,
             in: RoundedRectangle(cornerRadius: Tokens.Radius.card)

@@ -224,6 +224,41 @@ struct ExerciseCorrectionTests {
     #expect(state.previousSet(forSlotID: UUID()) == nil)
   }
 
+  /// "Last time" is a historical fact. A row beyond last session's count had no counterpart, so
+  /// showing last session's final set again states a set that was never performed.
+  @Test("A row beyond last session's count shows no last-time set")
+  func extraRowHasNoPreviousSet() {
+    let history = prior([(100, 10), (100, 8)], machineID: machine)
+    var state = ExerciseLogState.build(
+      exerciseID: exercise, machineID: machine, exerciseName: "Press", snapshot: snapshot(history)
+    )
+    state.appendSlot()
+    #expect(state.slots.count == 3)
+    #expect(state.previousSet(forSlotID: state.slots[1].id)?.reps == 8)
+    #expect(state.previousSet(forSlotID: state.slots[2].id) == nil)
+    // The draft may still open at the last set; only the historical column is withheld.
+    #expect(state.slots[2].draft.weightKg == 100)
+    #expect(history.recorded(atSetIndex: 1)?.reps == 8)
+    #expect(history.recorded(atSetIndex: 2) == nil)
+  }
+
+  /// A warm-up added before the machine is chosen opens empty, and must stay a warm-up: a working
+  /// load in it is one tap from recording a warm-up at working weight.
+  @Test("Choosing a machine does not prefill an unlogged warm-up with a working load")
+  func machineChoiceLeavesWarmupDraft() {
+    var state = ExerciseLogState.build(
+      exerciseID: exercise, exerciseName: "Press", snapshot: .empty(capturedAt: now)
+    )
+    state.appendSlot(isWarmup: true)
+    #expect(state.slots.map(\.isWarmup) == [true, false])
+    let history = prior([(140, 10), (150, 8), (160, 6)], machineID: machine)
+    state.changeMachine(to: machine, machineName: "Hammer", machineIncrementKg: nil, prior: history)
+    #expect(state.slots[0].isWarmup)
+    #expect(state.slots[0].draft.weightKg == nil)
+    #expect(state.slots[0].draft.reps == nil)
+    #expect(state.slots.filter { !$0.isWarmup }.map(\.draft.weightKg) == [140, 150, 160])
+  }
+
   // MARK: - Choosing the machine late
 
   @Test("Choosing a machine before any working set restores last time's row count there")

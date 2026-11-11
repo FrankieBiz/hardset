@@ -217,7 +217,7 @@ public nonisolated struct LoggerStore: Sendable {
         return
       }
       let gymID = try Self.requireOpenSession(sessionID, in: db)
-      try Self.requireExercise(exerciseID, in: db)
+      let modality = try Self.requireExercise(exerciseID, in: db)
       if let sessionExerciseID {
         let row = try SessionExercise.where { $0.id.eq(sessionExerciseID) }.fetchOne(db)
         guard let row else { throw LoggerStoreError.sessionExerciseNotFound }
@@ -231,8 +231,15 @@ public nonisolated struct LoggerStore: Sendable {
         let key = ProgressionKey(exerciseID: exerciseID, machineID: machineID)
         // These are real representative sets, not a recent sample. A failed
         // comparison read cannot justify a claim, but must not lose a workout.
-        if let history = try? Self.recordComparisonSets(in: db, for: key, candidate: candidate) {
-          records = PersonalRecordDetector.records(for: candidate, history: history, increment: recordIncrement)
+        let estimates = modality?.estimatesOneRepMax ?? true
+        if let history = try? Self.recordComparisonSets(
+          in: db, for: key, candidate: candidate, excludingFirstSession: sessionID,
+          estimatesOneRepMax: estimates
+        ) {
+          records = PersonalRecordDetector.records(
+            for: candidate, history: history, increment: recordIncrement,
+            estimatesOneRepMax: estimates
+          )
         }
       }
       // Derived inside the write, so two sets logged in quick succession cannot collide.
@@ -280,9 +287,12 @@ public nonisolated struct LoggerStore: Sendable {
     return context.0
   }
 
-  private static func requireExercise(_ id: ExerciseID, in db: Database) throws {
-    let exercise = try Exercise.where { $0.id.eq(id.rawValue) }.select(\.id).fetchOne(db)
-    guard exercise != nil else { throw LoggerStoreError.exerciseNotFound }
+  /// Returns the exercise's stored modality, which decides whether its load may be estimated.
+  @discardableResult
+  private static func requireExercise(_ id: ExerciseID, in db: Database) throws -> ExerciseModality? {
+    let modality = try Exercise.where { $0.id.eq(id.rawValue) }.select(\.modality).fetchOne(db)
+    guard let modality else { throw LoggerStoreError.exerciseNotFound }
+    return ExerciseModality(rawValue: modality)
   }
 
   private static func requireMachine(_ id: MachineID?, at gymID: UUID?, in db: Database) throws {
@@ -304,13 +314,22 @@ public nonisolated struct LoggerStore: Sendable {
   private static func recordComparisonSets(
     in db: Database,
     for key: ProgressionKey,
-    candidate: PersonalRecordDetector.Candidate
+    candidate: PersonalRecordDetector.Candidate,
+    excludingFirstSession sessionID: SessionID,
+    estimatesOneRepMax: Bool
   ) throws -> [PriorSetRecord] {
     let machineID = key.machineID?.rawValue
     let history = LoggedSet
       .where { $0.exerciseID.eq(key.exerciseID.rawValue) }
       .where { $0.machineID.is(machineID) }
       .where { !$0.isWarmup }
+    // Rule 1 covers the whole first session on a lift, not only its first set. Until a working
+    // set exists from another session there is no baseline, and an ordinary ramp would announce
+    // a record on every step. Once one exists, this session's earlier sets are history too.
+    let earlierSession = try history
+      .where { $0.sessionID.neq(sessionID.rawValue) }
+      .select(\.id).limit(1).fetchOne(db)
+    guard earlierSession != nil else { return [] }
     var comparisons: [PriorSetRecord] = []
     let heaviest = try history
       .order { ($0.weightKg.desc(), $0.reps.desc(), $0.completedAt.desc(), $0.id.desc()) }
@@ -330,7 +349,9 @@ public nonisolated struct LoggerStore: Sendable {
       .limit(1).fetchOne(db)
     if let mostReps { comparisons.append(record(from: mostReps)) }
 
-    if StrengthMath.estimatedOneRepMax(weightKg: candidate.weightKg, reps: candidate.reps).value != nil {
+    if estimatesOneRepMax,
+      StrengthMath.estimatedOneRepMax(weightKg: candidate.weightKg, reps: candidate.reps).value != nil
+    {
       for reps in 1...StrengthMath.maximumEstimableReps {
         let bestAtReps = try history
           .where { $0.reps.eq(reps) }

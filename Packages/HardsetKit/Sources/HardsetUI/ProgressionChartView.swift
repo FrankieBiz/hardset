@@ -33,6 +33,9 @@ public struct ProgressionChartView: View {
   private let machineChanges: [MachineChange]
   private let unit: WeightUnit
   private let onExplain: (() -> Void)?
+  /// `false` for movements whose logged load is not the load moved (bodyweight work), where no
+  /// one-rep max is ever estimated. Says so instead of blaming the rep count.
+  private let estimatesOneRepMax: Bool
   @State private var metric: ProgressionMetric = .heaviestLoad
   @Environment(\.dynamicTypeSize) private var dynamicTypeSize
   /// Grows with the axis labels, so larger text does not squeeze the plot itself.
@@ -54,8 +57,10 @@ public struct ProgressionChartView: View {
     series: [SeriesInput],
     machineChanges: [MachineChange] = [],
     unit: WeightUnit,
+    estimatesOneRepMax: Bool = true,
     onExplain: (() -> Void)? = nil
   ) {
+    self.estimatesOneRepMax = estimatesOneRepMax
     self.series = series
     self.machineChanges = machineChanges
     self.unit = unit
@@ -195,12 +200,19 @@ public struct ProgressionChartView: View {
           )
           .foregroundStyle(by: .value("Machine", entry.name))
           .lineStyle(StrokeStyle(lineWidth: lineWidth))
+          // One spoken element per session, on the line: the machine and the date, then the value
+          // at the legend's precision with its unit, and the word "estimate" with its confidence
+          // when it is one. Charts' automatic labels read the raw plotted number with no unit.
+          .accessibilityLabel(pointLabel(entry, point))
+          .accessibilityValue(pointValue(point))
           PointMark(
             x: .value("Date", point.date),
             y: .value(metric.label, value(point))
           )
           .foregroundStyle(by: .value("Machine", entry.name))
           .symbol(by: .value("Machine", entry.name))
+          // The same session as the line mark above; read once, not twice.
+          .accessibilityHidden(true)
         }
       }
       // A switch is drawn on the chart, not just described below it, so the eye meets the caveat
@@ -210,6 +222,8 @@ public struct ProgressionChartView: View {
         RuleMark(x: .value("Machine change", change.date))
           .foregroundStyle(caveat)
           .lineStyle(StrokeStyle(lineWidth: lineWidth, dash: [4, 3]))
+          .accessibilityLabel("Machine change")
+          .accessibilityValue(change.date.formatted(.dateTime.day().month(.wide).year()))
           .annotation(position: .top, alignment: .leading) {
             Image(systemName: "arrow.triangle.branch")
               .font(axisFont)
@@ -318,6 +332,17 @@ public struct ProgressionChartView: View {
     let kind = metric == .estimatedOneRepMax ? "latest estimate" : "latest"
     return "\(entry.name), \(shape) points, \(kind) \(valueText(latest)) "
       + "\(unit.abbreviation) on \(date)"
+  }
+
+  private func pointLabel(_ entry: PlottedSeries, _ point: ProgressionPoint) -> String {
+    "\(entry.name), \(point.date.formatted(.dateTime.day().month(.wide).year()))"
+  }
+
+  private func pointValue(_ point: ProgressionPoint) -> String {
+    let figure = "\(valueText(point)) \(unit.abbreviation)"
+    guard metric == .estimatedOneRepMax else { return figure }
+    let confidence = point.bestEstimateCertainty.map { MethodologySheet.level(for: $0).label }
+    return [figure, "estimate", confidence].compactMap { $0 }.joined(separator: ", ")
   }
 
   // MARK: - Machine changes
@@ -430,6 +455,10 @@ public struct ProgressionChartView: View {
       return metric == .heaviestLoad
         ? "No added load was recorded for these sets, so there is no load to chart."
         : "No added load was recorded, so there is nothing to estimate from."
+    }
+    if metric == .estimatedOneRepMax && !estimatesOneRepMax {
+      return "Body mass is not recorded with each set, so a one-rep max is not estimated for "
+        + "bodyweight movements."
     }
     return "No estimate is available. A one-rep max is only estimated from sets "
       + "of twelve reps or fewer, and none of these sessions qualify."

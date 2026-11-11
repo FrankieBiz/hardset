@@ -284,12 +284,10 @@ public struct MachinePickerView: View {
     return parts.joined(separator: ", ")
   }
 
+  /// The logger's load figure, so a 10 kg step reads "22.05 lb" here, on the card's machine chip
+  /// and on its step buttons alike, rather than "22" in the picker and "22.05" on the card.
   static func formatStep(_ incrementKg: Double, unit: WeightUnit) -> String {
-    let displayValue = unit.fromKilograms(incrementKg)
-    let rounded = (displayValue * 10).rounded() / 10
-    let isWhole = rounded == rounded.rounded()
-    let stepString = isWhole ? "\(Int(rounded))" : String(format: "%.1f", rounded)
-    return "moves in \(stepString) \(unit.abbreviation) steps"
+    "moves in \(LoadFigure.text(unit.fromKilograms(incrementKg))) \(unit.abbreviation) steps"
   }
 }
 

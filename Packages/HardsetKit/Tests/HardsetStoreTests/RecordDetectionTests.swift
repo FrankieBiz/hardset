@@ -105,6 +105,21 @@ struct RecordDetectionTests {
     #expect(live.lastRecords.isEmpty)
   }
 
+  /// Rule 1 extended to the whole first session: an ordinary pyramid on a new lift or a new
+  /// machine is not a run of records, and announcing each step devalues the real ones.
+  @Test("A first-session ramp on a new lift announces nothing")
+  func firstSessionRampIsNotARecord() throws {
+    let database = try migratedDatabase()
+    let store = LoggerStore(database: database)
+    let exercise = try seedExercise(database)
+
+    let live = try coordinator(store, exercise: exercise)
+    for (index, set) in [(60.0, 10), (80, 8), (100, 6)].enumerated() {
+      #expect(log(live, slot: index, set.0, set.1))
+      #expect(live.lastRecords.isEmpty)
+    }
+  }
+
   /// Sets logged earlier in the same workout are history too.
   @Test("A set beats what was logged earlier in the same session")
   func beatsEarlierInSameSession() throws {
@@ -125,6 +140,26 @@ struct RecordDetectionTests {
   }
 
   /// A celebration must not linger onto a set that did not earn it.
+  /// A weighted dip's estimate from added load can rise while the load moved falls, so the live
+  /// logger must not announce it.
+  @Test("A bodyweight movement announces no estimated-1RM record")
+  func bodyweightAnnouncesNoEstimate() throws {
+    let database = try migratedDatabase()
+    let store = LoggerStore(database: database)
+    let dip = ExerciseID()
+    try database.write { db in
+      try Exercise.insert { Exercise.Draft(id: dip.rawValue, name: "Dip", modality: "bodyweight") }
+        .execute(db)
+    }
+    try seedHistory(store, exercise: dip, sets: [(20, 8)], at: start.addingTimeInterval(-86_400))
+
+    let live = try coordinator(store, exercise: dip)
+    #expect(log(live, slot: 0, 30, 4))
+    let kinds = live.lastRecords.map(\.kind)
+    #expect(kinds.contains(.heaviestLoad))
+    #expect(!kinds.contains(.estimatedOneRepMax))
+  }
+
   @Test("Records are cleared by the next non-record set")
   func recordsAreCleared() throws {
     let database = try migratedDatabase()

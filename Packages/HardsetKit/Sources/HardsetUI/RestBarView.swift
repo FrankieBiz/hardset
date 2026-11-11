@@ -67,7 +67,7 @@ public struct RestBarView: View {
       .padding(.horizontal, Tokens.Spacing.regular)
       .padding(.bottom, Tokens.Spacing.snug)
       // The countdown is one element and each control is its own, so a VoiceOver user can hear
-      // the time and still reach "Add 15 seconds" directly. Combining the whole bar made the
+      // the time and still reach "Plus 15 seconds" directly. Combining the whole bar made the
       // controls unreachable.
       .accessibilityElement(children: .contain)
     }
@@ -114,17 +114,21 @@ public struct RestBarView: View {
     }
   }
 
+  /// The ±15 labels begin with what the keys show, "−15" read as "Minus 15", so a Voice Control
+  /// user can say what they see; the older "Subtract 15 seconds" still answers.
   private var controls: some View {
     HStack(spacing: Tokens.Spacing.snug) {
       control(
         title: "−15",
         systemImage: nil,
-        accessibilityLabel: "Subtract 15 seconds"
+        accessibilityLabel: "Minus 15 seconds",
+        inputLabels: ["Minus 15", "Subtract 15 seconds"]
       ) { onAdjust(.seconds(-15)) }
       control(
         title: "+15",
         systemImage: nil,
-        accessibilityLabel: "Add 15 seconds"
+        accessibilityLabel: "Plus 15 seconds",
+        inputLabels: ["Plus 15", "Add 15 seconds"]
       ) { onAdjust(.seconds(15)) }
       control(
         title: nil,
@@ -146,6 +150,7 @@ public struct RestBarView: View {
     title: String?,
     systemImage: String?,
     accessibilityLabel: String,
+    inputLabels: [String] = [],
     action: @escaping () -> Void
   ) -> some View {
     Button(action: action) {
@@ -162,6 +167,7 @@ public struct RestBarView: View {
     }
     .buttonStyle(HardsetKeyStyle())
     .accessibilityLabel(accessibilityLabel)
+    .accessibilityInputLabels(inputLabels.isEmpty ? [accessibilityLabel] : inputLabels)
   }
 
   /// What VoiceOver reads for the countdown.

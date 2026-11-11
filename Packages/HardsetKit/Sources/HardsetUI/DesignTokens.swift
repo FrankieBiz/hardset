@@ -431,6 +431,10 @@ private struct HardsetButtonBody: View {
 
   @Environment(\.isEnabled) private var isEnabled
   @Environment(\.accessibilityReduceMotion) private var reduceMotion
+  /// Button Shapes. A custom style bypasses the system's own rendering of it, so a quiet button,
+  /// accent text with no fill, stayed indistinguishable from coloured text for exactly the people
+  /// who asked to see the difference. With it on, a quiet button wears the secondary outline.
+  @Environment(\.accessibilityShowButtonShapes) private var showsButtonShapes
 
   var body: some View {
     let shape = RoundedRectangle(cornerRadius: Tokens.Radius.control)
@@ -446,7 +450,7 @@ private struct HardsetButtonBody: View {
       )
       .background(fill, in: shape)
       .overlay {
-        if role == .secondary {
+        if role == .secondary || (role == .quiet && showsButtonShapes) {
           shape.strokeBorder(Tokens.Color.controlBorder, lineWidth: Tokens.Stroke.hairline)
         }
       }

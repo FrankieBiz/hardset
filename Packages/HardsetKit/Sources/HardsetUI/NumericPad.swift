@@ -27,6 +27,12 @@ public struct NumericPad: View {
   private let onLog: (() -> Void)?
   private let canLog: Bool
 
+  @Environment(\.accessibilityVoiceOverEnabled) private var voiceOverEnabled
+  @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+  /// Moved to the display when the pad changes field, so a VoiceOver user who pressed Next hears
+  /// which value they are now entering instead of losing their place when Next is replaced.
+  @AccessibilityFocusState private var isDisplayFocused: Bool
+
   /// - Parameter title: What is being edited, such as "Weight". `nil` hides the display.
   /// - Parameter context: Which set the value belongs to, such as "Leg Press · Set 2". The pad
   ///   covers the lower half of the screen, so the row it edits may be out of sight; this line is
@@ -120,6 +126,43 @@ public struct NumericPad: View {
     // Opaque, not glass. Glass cannot sample glass, and a translucent keypad over a dense set
     // grid is unreadable in a bright gym besides.
     .background(Tokens.Color.surface)
+    .onChange(of: title) {
+      if voiceOverEnabled { isDisplayFocused = true }
+    }
+  }
+
+  /// A prefilled value the next digit or separator will replace, as selected text would be.
+  private var replacesPrefill: Bool {
+    buffer.replaceOnFirstEntry && !buffer.isEmpty
+  }
+
+  /// The value as VoiceOver should say it: no dangling separator, and the unit.
+  private func spokenValue(_ buffer: NumericEntryBuffer) -> String {
+    guard !buffer.isEmpty else { return "empty" }
+    var text = buffer.displayText
+    if text.hasSuffix(".") { text.removeLast() }
+    return LoadFigure.typed(text) + (unit.map { " \($0)" } ?? "")
+  }
+
+  /// Says what a key did. The keys are labelled "1" or "Delete", and the value lives in the
+  /// display, so without this a VoiceOver user had to swipe back to the display after every key
+  /// to learn what had been entered, or that the first digit had replaced the prefill.
+  private func announceChange(from before: NumericEntryBuffer, to after: NumericEntryBuffer) {
+    guard voiceOverEnabled, before.text != after.text else { return }
+    let now = spokenValue(after)
+    let replaced = before.replaceOnFirstEntry && !before.isEmpty && !after.replaceOnFirstEntry
+    AccessibilityNotification.Announcement(
+      replaced ? "Replaced \(spokenValue(before)). \(now)" : now
+    ).post()
+  }
+
+  /// Applies an edit through the binding and announces its result.
+  private func edit(_ change: (inout NumericEntryBuffer) -> Void) {
+    let before = buffer
+    var after = buffer
+    change(&after)
+    buffer = after
+    announceChange(from: before, to: after)
   }
 
   /// Which set is being edited, and the rest still running, on one line above the value.
@@ -160,13 +203,26 @@ public struct NumericPad: View {
         .foregroundStyle(Tokens.Color.textSecondary)
       Spacer(minLength: Tokens.Spacing.snug)
       // An empty buffer shows an em dash, never "0": nothing typed is not a value.
-      Text(buffer.isEmpty ? "—" : buffer.displayText)
+      Text(buffer.isEmpty ? "—" : LoadFigure.typed(buffer.displayText))
         .font(Tokens.Text.hero)
         .foregroundStyle(buffer.isEmpty ? Tokens.Color.textSecondary : Tokens.Color.textPrimary)
         .lineLimit(1)
         // A readout must show the whole number: at the largest text sizes it scales down rather
         // than clip "1002.5" to "100…". The row's own field keeps the full-size figure.
         .minimumScaleFactor(0.5)
+        // Padded whether or not it is highlighted, so the highlight never moves the figure.
+        .padding(.horizontal, Tokens.Spacing.snug)
+        .background {
+          // A prefill the next key will replace is drawn as selected, the way iOS marks text
+          // about to be typed over. Pressing "." on a highlighted "100" then reads as starting a
+          // new number, not as a bug that turned 100 into "0.". Static: nothing animates.
+          if replacesPrefill {
+            let shape = RoundedRectangle(cornerRadius: Tokens.Radius.control - Tokens.Spacing.tight)
+            shape
+              .fill(Tokens.Color.accentSurface)
+              .overlay(shape.strokeBorder(Tokens.Color.accent, lineWidth: Tokens.Stroke.hairline))
+          }
+        }
       if let unit {
         Text(unit)
           .font(Tokens.Text.unit)
@@ -175,34 +231,61 @@ public struct NumericPad: View {
     }
     .padding(.horizontal, Tokens.Spacing.tight)
     .accessibilityElement(children: .combine)
-    .accessibilityLabel(
-      "\(title), \(buffer.isEmpty ? "empty" : buffer.displayText)\(unit.map { " \($0)" } ?? "")"
-    )
+    .accessibilityLabel("\(title), \(spokenValue(buffer))")
+    .accessibilityHint(replacesPrefill ? "The next digit you type replaces this value." : "")
+    .accessibilityFocused($isDisplayFocused)
   }
 
-  private var adjustersRow: some View {
-    HStack(spacing: Tokens.Spacing.snug) {
-      ForEach(quickAdjusters, id: \.self) { delta in
-        Button {
-          buffer.adjust(by: delta)
-        } label: {
-          // A real minus sign, not a hyphen: at this size the difference is visible, and a
-          // hyphen next to a plus reads as a dash.
-          Text(delta > 0 ? "+\(formatDelta(delta))" : "−\(formatDelta(-delta))")
-            .font(Tokens.Text.setEntry)
-            .foregroundStyle(Tokens.Color.accent)
+  /// One row of quick steps at ordinary sizes; two rows of two at accessibility sizes, where
+  /// "−2.5" in four columns no longer fits its key and wrapped to "−2." over "5".
+  @ViewBuilder private var adjustersRow: some View {
+    if dynamicTypeSize.isAccessibilitySize {
+      VStack(spacing: Tokens.Spacing.snug) {
+        ForEach(Array(stride(from: 0, to: quickAdjusters.count, by: 2)), id: \.self) { start in
+          HStack(spacing: Tokens.Spacing.snug) {
+            ForEach(quickAdjusters[start..<min(start + 2, quickAdjusters.count)], id: \.self) {
+              adjuster($0)
+            }
+          }
         }
-        .buttonStyle(HardsetKeyStyle())
-        .disabled(!isAdjusterEnabled(delta))
-        .accessibilityLabel(
-          delta > 0 ? "Add \(formatDelta(delta))" : "Subtract \(formatDelta(-delta))"
-        )
+      }
+    } else {
+      HStack(spacing: Tokens.Spacing.snug) {
+        ForEach(quickAdjusters, id: \.self) { adjuster($0) }
       }
     }
   }
 
+  private func adjuster(_ delta: Double) -> some View {
+    let figure = formatDelta(abs(delta))
+    return Button {
+      edit { $0.adjust(by: delta) }
+    } label: {
+      // A real minus sign, not a hyphen: at this size the difference is visible, and a
+      // hyphen next to a plus reads as a dash.
+      Text(delta > 0 ? "+\(figure)" : "−\(figure)")
+        .font(Tokens.Text.setEntry)
+        .foregroundStyle(Tokens.Color.accent)
+        .lineLimit(1)
+    }
+    .buttonStyle(HardsetKeyStyle())
+    .disabled(!isAdjusterEnabled(delta))
+    // Begins with what the key shows, "+2.5" read as "Plus 2.5", so a Voice Control user can say
+    // what they see; the unit says what is being stepped.
+    .accessibilityLabel("\(delta > 0 ? "Plus" : "Minus") \(figure)\(spokenUnit(for: delta))")
+    .accessibilityInputLabels(
+      delta > 0 ? ["Plus \(figure)", "Add \(figure)"] : ["Minus \(figure)", "Subtract \(figure)"]
+    )
+  }
+
+  private func spokenUnit(for delta: Double) -> String {
+    guard let unit else { return "" }
+    if unit == "reps", abs(delta) == 1 { return " rep" }
+    return " \(unit)"
+  }
+
   private func formatDelta(_ delta: Double) -> String {
-    delta == delta.rounded() ? String(Int(delta)) : String(format: "%.1f", delta)
+    LoadFigure.text(delta)
   }
 
   /// Two shapes on the logger, one elsewhere: weight offers Done and Next, the last field of a
@@ -265,6 +348,18 @@ public struct NumericPad: View {
     .opacity(key == .disabledDecimal ? 0 : 1)
     .accessibilityHidden(key == .disabledDecimal)
     .accessibilityLabel(accessibilityLabel(for: key))
+    .accessibilityHint(keyHint(for: key))
+  }
+
+  /// A digit or separator pressed on a highlighted prefill starts a new number; the hint says so
+  /// before the key is pressed, as the highlight does.
+  private func keyHint(for key: Key) -> String {
+    switch key {
+    case .digit, .decimal:
+      replacesPrefill ? "Replaces \(spokenValue(buffer))" : ""
+    case .disabledDecimal, .delete:
+      ""
+    }
   }
 
   /// The user's locale decides how a decimal point looks, even though the stored buffer is
@@ -283,10 +378,10 @@ public struct NumericPad: View {
 
   private func apply(_ key: Key) {
     switch key {
-    case .digit(let value): buffer.append(digit: value)
-    case .decimal: buffer.appendDecimalSeparator()
+    case .digit(let value): edit { $0.append(digit: value) }
+    case .decimal: edit { $0.appendDecimalSeparator() }
     case .disabledDecimal: break
-    case .delete: buffer.deleteBackward()
+    case .delete: edit { $0.deleteBackward() }
     }
   }
 

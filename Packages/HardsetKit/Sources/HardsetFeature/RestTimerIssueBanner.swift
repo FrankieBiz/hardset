@@ -14,8 +14,15 @@ import SwiftUI
 ///
 /// Appears and disappears without animation, like the banner it replaces, so Reduce Motion needs
 /// no separate path.
+///
+/// It sits in a top inset that does not scroll, above every tab. At accessibility text sizes the
+/// full message and its buttons filled most of the screen, and at the largest sizes pushed the
+/// fixing button off it, so there it shrinks to one control naming the problem, which opens the
+/// whole message and its actions in a sheet that scrolls.
 struct RestTimerIssueBanner: View {
   @Environment(\.openURL) private var openURL
+  @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+  @State private var isShowingDetails = false
   private let issue: RestTimerIssue
   private let retry: () -> Void
   private let reset: () -> Void
@@ -28,12 +35,85 @@ struct RestTimerIssueBanner: View {
   }
 
   var body: some View {
+    Group {
+      if dynamicTypeSize.isAccessibilitySize {
+        compact
+      } else {
+        details
+      }
+    }
+    .padding(Tokens.Spacing.regular)
+    .background(Tokens.Color.background)
+  }
+
+  private var details: some View {
     VStack(alignment: .leading, spacing: Tokens.Spacing.snug) {
       banner
       actions
     }
-    .padding(Tokens.Spacing.regular)
-    .background(Tokens.Color.background)
+  }
+
+  /// One control in the inset: the problem's symbol in its hue and its name, so the kind is still
+  /// carried by shape and word as well as colour. The message and the fix are one tap away.
+  private var compact: some View {
+    Button {
+      isShowingDetails = true
+    } label: {
+      HStack(alignment: .firstTextBaseline, spacing: Tokens.Spacing.snug) {
+        Image(systemName: symbolName)
+          .foregroundStyle(hue)
+          .accessibilityHidden(true)
+        Text(shortTitle)
+          .multilineTextAlignment(.leading)
+          .frame(maxWidth: .infinity, alignment: .leading)
+        Image(systemName: "chevron.right")
+          .font(Tokens.Text.caption.weight(.semibold))
+          .foregroundStyle(Tokens.Color.textSecondary)
+          .accessibilityHidden(true)
+      }
+    }
+    .buttonStyle(HardsetButtonStyle(.secondary))
+    .accessibilityHint("Shows what happened and how to fix it")
+    .sheet(isPresented: $isShowingDetails) {
+      NavigationStack {
+        ScrollView {
+          details
+            .padding(Tokens.Spacing.loose)
+        }
+        .scrollBounceBehavior(.basedOnSize)
+        .background(Tokens.Color.background)
+        .hardsetNavigationTitle("Rest timer")
+        .toolbar {
+          ToolbarItem(placement: .confirmationAction) {
+            Button("Done") { isShowingDetails = false }
+          }
+        }
+      }
+      .hardsetSheet()
+    }
+  }
+
+  /// The problem in a few words, for the compact control.
+  private var shortTitle: String {
+    switch issue {
+    case .alarmsDenied: "Rest alerts are off"
+    case .unavailable: "Rest timer could not be saved or scheduled"
+    case .recoveryFailed: "Rest timer could not be recovered"
+    }
+  }
+
+  private var symbolName: String {
+    switch issue {
+    case .alarmsDenied: "bell.slash"
+    case .unavailable, .recoveryFailed: "exclamationmark.triangle.fill"
+    }
+  }
+
+  private var hue: Color {
+    switch issue {
+    case .alarmsDenied: Tokens.Color.warning
+    case .unavailable, .recoveryFailed: Tokens.Color.error
+    }
   }
 
   @ViewBuilder private var banner: some View {
