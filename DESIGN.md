@@ -104,6 +104,16 @@ Pressed controls scale to 0.97 and swap to their pressed fill. With Reduce Motio
 spring are dropped and only the fill or opacity changes, instantly or with `Motion.state`. Only
 `transform` and `opacity` style properties animate; layout never does.
 
+In practice: a message or inline confirmation arrives with an insertion-only opacity transition
+carrying `Motion.reveal`, and no animated transaction, so what it displaces moves at once and it
+leaves at once. A logged row's tint is a layer whose opacity fades on `Motion.state`; the row's
+height is never animated.
+
+Haptics follow the same restraint. `success` belongs to the log tap alone. `error` follows every
+failed command, a repeated failure included. `selection` answers the row's machine step and the
+rest bar's −15, +15, pause and skip. `warning` marks a rest that ran out on its own when no alarm
+can mark it (alarms denied or unavailable). Selection rows, the unit switch and pickers stay silent.
+
 ## Components and states
 
 - **Buttons** (`HardsetButtonStyle`): `primary` (accent fill), `secondary` (raised fill, control
@@ -132,7 +142,22 @@ spring are dropped and only the fill or opacity changes, instantly or with `Moti
 - **Text entry** (`entryFieldChrome`): raised fill, control border, and a 2 pt accent ring that
   fades in on focus. Used by the search field and the name entry sheet.
 - **Set log control**: four states, never confused: incomplete (dashed, disabled), ready
-  (accent outline), next up (accent fill), logged (success fill, the stamp).
+  (accent outline), next up (accent fill), logged (the stamp). The first three are square key
+  faces with a check; a logged set loses its key face and wears a round `success` seal
+  (`checkmark.circle.fill`) on the row's `successSurface` tint, so logged and next up differ by
+  shape, not only by hue. At accessibility sizes the control also reads "Log set" or "Logged",
+  and VoiceOver hears "next to log" on the next-up row. Voice Control answers to "Set 2",
+  "Log set 2", and, on the next-up row, "Log set".
+- **Press feedback on self-drawn controls** (`HardsetPressStyle`, and the set row's fields and
+  check): controls that draw their own fill and shape (chips, segments, the dashed "Add movement"
+  slot, header circles, the machine and gym chips) sink to 0.97 and drop to 80–85% opacity on
+  `Motion.press`, in place of a pressed fill. Reduce Motion keeps only the opacity. Disabled
+  controls are never dimmed by it, so saved rows and inert titles keep full contrast.
+- **Replaceable prefill**: when the keypad opens on a value the next key will replace, its display
+  draws that value on `accentSurface` with a hairline `accent` ring, as selected text, until the
+  first edit. Static; no motion.
+- **Button Shapes**: with the system setting on, `quiet` buttons wear the `secondary` control
+  border and the exercise name (the load-history link) is underlined.
 - **Volume bars**: square-ended gauges scaled to the week's own maximum, never to a target.
   Modelled muscles are solid accent; muscles that are counted but not modelled are hollow (accent
   outline on `accentSurface`) and say so in words beside the bar.
@@ -143,7 +168,11 @@ spring are dropped and only the fill or opacity changes, instantly or with `Moti
 
 7:1 text contrast, 3:1 control boundaries, Dynamic Type through every role, adaptive layouts in
 place of shrinking text, one combined accessibility element per set row with named actions, and
-Reduce Motion honoured in every animation. Native verification of resolved colours, hit regions,
+Reduce Motion honoured in every animation. At accessibility sizes screen headers put their
+action on its own line above the title, exercise headers put progress and menu below the name,
+keypad quick steps form a two-by-two grid, segments and selection tags wrap, and header circles
+stop growing at xxxLarge with the Large Content Viewer in their place. Accessible names begin with
+the words a control shows (WCAG 2.5.3), so Voice Control users can say what they see. Native verification of resolved colours, hit regions,
 and Dynamic Type layouts happens on the Mac; see `docs/MAC-VERIFICATION.md`.
 
 ## Loading and startup
