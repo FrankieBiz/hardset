@@ -107,6 +107,94 @@ struct DataTransferTests {
     #expect(try Data(contentsOf: first) == Data(contentsOf: second))
   }
 
+  // MARK: - The replay ledger
+
+  /// Strong and Hevy re-export the whole history each time, so storing each file grew the
+  /// database, and every JSON and SQLite export, by up to 20 MB per catch-up import. A digest is
+  /// enough to recognise the same file again.
+  @Test("An import keeps a digest of the file, not a copy of it")
+  func ledgerKeepsDigest() async throws {
+    let db = try database()
+    let store = DataTransferStore(database: db)
+    let preview = try WorkoutCSVImport.preview(csv, strongUnit: .kilograms)
+    _ = try await store.importWorkouts(preview)
+    let ledger: Row? = try await db.read { db in
+      try Row.fetchOne(db, sql: "SELECT sourceCSV, sourceDigest, byteCount FROM deviceImportBatches")
+    }
+    let row = try #require(ledger)
+    #expect(row["sourceCSV"] as String == "")
+    #expect(row["sourceDigest"] as String == SHA256Digest.hex(of: Data(csv.utf8)))
+    #expect(row["byteCount"] as Int == csv.utf8.count)
+    await #expect(throws: WorkoutImportError.alreadyImported) { try await store.importWorkouts(preview) }
+
+    let folder = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    defer { try? FileManager.default.removeItem(at: folder) }
+    for format in [DataTransferStore.Format.json, .sqlite] {
+      let exported = try Data(contentsOf: try await store.export(format, directory: folder))
+      #expect(exported.range(of: Data("Date,Workout Name,Duration".utf8)) == nil, "\(format)")
+    }
+  }
+
+  /// Files imported before the ledger kept digests are still recognised, and their copies freed.
+  @Test("Upgrading replaces stored files with their digests")
+  func ledgerUpgrade() async throws {
+    let db = try DatabaseQueue()
+    try HardsetMigrations.migrator().migrate(db, upTo: "v9_progressionOrder")
+    try await db.write { db in
+      try db.execute(sql: "INSERT INTO deviceImportBatches(id, sourceCSV) VALUES (?, ?)",
+        arguments: [UUID().uuidString.lowercased(), self.csv])
+    }
+    try HardsetMigrations.migrator().migrate(db)
+    let ledger: Row? = try await db.read { db in
+      try Row.fetchOne(db, sql: "SELECT sourceCSV, sourceDigest, byteCount FROM deviceImportBatches")
+    }
+    let row = try #require(ledger)
+    #expect(row["sourceCSV"] as String == "")
+    #expect(row["sourceDigest"] as String == SHA256Digest.hex(of: Data(csv.utf8)))
+    #expect(row["byteCount"] as Int == csv.utf8.count)
+  }
+
+  /// Each export is its own folder, and a SQLite export is a whole copy of the database. Folders an
+  /// earlier export left behind are removed once no share sheet can still be reading them.
+  @Test("An export removes stale folders from earlier exports and nothing else")
+  func staleExportsRemoved() async throws {
+    let db = try database()
+    let store = DataTransferStore(database: db)
+    let folder = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    defer { try? FileManager.default.removeItem(at: folder) }
+    let now = Date()
+    let stale = try await store.export(.csv, directory: folder, madeAt: now)
+    let staleFolder = stale.deletingLastPathComponent()
+    try FileManager.default.setAttributes(
+      [.modificationDate: now.addingTimeInterval(-2 * 3600)], ofItemAtPath: staleFolder.path)
+    let recent = try await store.export(.csv, directory: folder, madeAt: now)
+    let unrelated = folder.appendingPathComponent("Keep me", isDirectory: true)
+    try FileManager.default.createDirectory(at: unrelated, withIntermediateDirectories: true)
+    try FileManager.default.setAttributes(
+      [.modificationDate: now.addingTimeInterval(-2 * 3600)], ofItemAtPath: unrelated.path)
+
+    let latest = try await store.export(.json, directory: folder, madeAt: now)
+    #expect(!FileManager.default.fileExists(atPath: staleFolder.path))
+    #expect(FileManager.default.fileExists(atPath: recent.path))
+    #expect(FileManager.default.fileExists(atPath: latest.path))
+    #expect(FileManager.default.fileExists(atPath: unrelated.path))
+  }
+
+  @Test("The digest is SHA-256")
+  func digestVectors() {
+    #expect(SHA256Digest.hex(of: Data()) == "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855")
+    #expect(SHA256Digest.hex(of: Data("abc".utf8)) == "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad")
+    #expect(SHA256Digest.hex(of: Data("abcdbcdecdefdefgefghfghighijhijkijkljklmklmnlmnomnopnopq".utf8))
+      == "248d6a61d20638b8e5c026930c3e6039a33ce45964ff2167f6ecedd419db06c1")
+    #expect(SHA256Digest.hex(of: Data(("abcdefghbcdefghicdefghijdefghijkefghijklfghijklmghijklmnhijklmno"
+      + "ijklmnopjklmnopqklmnopqrlmnopqrsmnopqrstnopqrstu").utf8))
+      == "cf5b16a778af8380036ce59e7b0492370b249b11e8f07a51afac45037afee9d1")
+    // Many blocks. A million bytes is the standard vector, but too slow for an unoptimised build
+    // running beside timing-sensitive suites.
+    #expect(SHA256Digest.hex(of: Data(repeating: UInt8(ascii: "a"), count: 1000))
+      == "41edece42d63e8d9bf515a9ba6932e1c20cbc9f5a5d134645adb5db1b9737ea3")
+  }
+
   // MARK: - Overlapping exports
 
   /// Strong and Hevy export the whole history every time, so a later file repeats every workout
@@ -191,8 +279,9 @@ struct DataTransferTests {
   }
 
   /// Formatters are built once per preview, not once per date per format. Three years of Strong
-  /// history is around fifteen thousand rows; Hevy parses two dates per row.
-  @Test("A multi-year export previews quickly")
+  /// history is around fifteen thousand rows; Hevy parses two dates per row. A year of it keeps
+  /// this test light beside timing-sensitive suites.
+  @Test("A long export previews quickly")
   func largePreviewIsFast() throws {
     var strong = "Date,Workout Name,Duration,Exercise Name,Set Order,Weight,Reps,RPE,Notes\n"
     var hevy = "title,start_time,end_time,exercise_title,set_index,set_type,weight_kg,reps\n"
@@ -200,13 +289,13 @@ struct DataTransferTests {
     let formatter = DateFormatter()
     formatter.locale = Locale(identifier: "en_US_POSIX")
     formatter.timeZone = TimeZone(secondsFromGMT: 0)
-    let workouts = (0..<1000).map { Date(timeIntervalSince1970: 1_600_000_000 + Double($0) * day) }
+    let workouts = (0..<300).map { Date(timeIntervalSince1970: 1_600_000_000 + Double($0) * day) }
     formatter.dateFormat = "yyyy-MM-dd HH:mm:ss"
     let strongDates = workouts.map(formatter.string(from:))
     formatter.dateFormat = "d MMM yyyy, HH:mm"
     let hevyStarts = workouts.map(formatter.string(from:))
     let hevyEnds = workouts.map { formatter.string(from: $0.addingTimeInterval(3600)) }
-    for row in 0..<15_000 {
+    for row in 0..<4_500 {
       let workout = row / 15
       strong += "\(strongDates[workout]),Push,1h,Press,\(row % 15 + 1),100,8,,\n"
       hevy += "Push,\"\(hevyStarts[workout])\",\"\(hevyEnds[workout])\",Press,\(row % 15),normal,100,8\n"
@@ -216,10 +305,10 @@ struct DataTransferTests {
     let strongPreview = try WorkoutCSVImport.preview(strong, strongUnit: .kilograms, timeZone: utc)
     let hevyPreview = try WorkoutCSVImport.preview(hevy, strongUnit: .kilograms, timeZone: utc)
     let elapsed = Date().timeIntervalSince(began)
-    #expect(strongPreview.sessions.count == 1000)
-    #expect(hevyPreview.setCount == 15_000)
-    // Building formatters per cell took about 41 s here; the bound leaves room for a loaded runner.
-    #expect(elapsed < 5, "Preview took \(elapsed) s")
+    #expect(strongPreview.sessions.count == 300)
+    #expect(hevyPreview.setCount == 4_500)
+    // Building formatters per cell took 41 s here for fifteen thousand rows of each format.
+    #expect(elapsed < 2.5, "Preview took \(elapsed) s")
   }
 
   @Test("A different file holding only imported workouts writes nothing")

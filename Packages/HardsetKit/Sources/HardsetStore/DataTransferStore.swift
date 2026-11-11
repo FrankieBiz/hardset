@@ -45,6 +45,7 @@ public nonisolated struct DataTransferStore: Sendable {
     _ format: Format, directory: URL, madeAt: Date = Date(), timeZone: TimeZone = .current
   ) async throws -> URL {
     try Task.checkCancellation()
+    Self.removeStaleExports(in: directory, now: Date())
     let folder = directory.appendingPathComponent(UUID().uuidString, isDirectory: true)
     try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
     let destination = folder.appendingPathComponent(
@@ -70,6 +71,27 @@ public nonisolated struct DataTransferStore: Sendable {
     } catch {
       try? FileManager.default.removeItem(at: folder)
       throw error
+    }
+  }
+
+  /// How long an earlier export's folder is kept, so a share sheet still reading it is not cut off.
+  static let staleExportAge: TimeInterval = 3600
+
+  /// Best-effort removal of folders earlier exports made in `directory`: only UUID-named folders,
+  /// which is how `export` names them, and only once older than `staleExportAge`. Each SQLite
+  /// export is a whole copy of the database, so they must not pile up. Failure removes nothing
+  /// more and never blocks the new export.
+  private static func removeStaleExports(in directory: URL, now: Date) {
+    let manager = FileManager.default
+    guard let entries = try? manager.contentsOfDirectory(
+      at: directory, includingPropertiesForKeys: [.isDirectoryKey, .contentModificationDateKey])
+    else { return }
+    for entry in entries where UUID(uuidString: entry.lastPathComponent) != nil {
+      guard let values = try? entry.resourceValues(forKeys: [.isDirectoryKey, .contentModificationDateKey]),
+        values.isDirectory == true, let modified = values.contentModificationDate,
+        now.timeIntervalSince(modified) > staleExportAge
+      else { continue }
+      try? manager.removeItem(at: entry)
     }
   }
 
@@ -114,12 +136,16 @@ public nonisolated struct DataTransferStore: Sendable {
   /// retained as an import.
   public func commit(_ preview: WorkoutImportPreview) async throws -> WorkoutImportResult {
     try Task.checkCancellation()
+    // The file is recognised by its SHA-256 digest and length; only those are kept.
+    let file = Data(preview.originalCSV.utf8)
+    let digest = SHA256Digest.hex(of: file)
+    let byteCount = file.count
     return try await database.write { db in
       // The exact file was imported before. Refuse only while its workouts are all still here:
       // after the lifter deletes them in History to correct an import, the same file must be
       // importable again, so the stale record of that import is dropped instead.
-      if try Row.fetchOne(db, sql: "SELECT id FROM deviceImportBatches WHERE sourceCSV = ?",
-        arguments: [preview.originalCSV]) != nil
+      if try Row.fetchOne(db, sql: "SELECT id FROM deviceImportBatches WHERE sourceDigest = ? AND byteCount = ?",
+        arguments: [digest, byteCount]) != nil
       {
         var zones = EarlierZones()
         if try preview.sessions.allSatisfy({
@@ -127,8 +153,8 @@ public nonisolated struct DataTransferStore: Sendable {
         }) {
           throw WorkoutImportError.alreadyImported
         }
-        try db.execute(sql: "DELETE FROM deviceImportBatches WHERE sourceCSV = ?",
-          arguments: [preview.originalCSV])
+        try db.execute(sql: "DELETE FROM deviceImportBatches WHERE sourceDigest = ? AND byteCount = ?",
+          arguments: [digest, byteCount])
       }
       // Use separate movements for unverified imported equipment. An imported nil machine
       // must never seed the native movement's free-weight or machine benchmark series.
@@ -191,8 +217,10 @@ public nonisolated struct DataTransferStore: Sendable {
           arguments: [". Set timestamps are unavailable; grouped at workout start.", session.uuidString.lowercased()])
       }
       if importedWorkouts > 0 {
-        try db.execute(sql: "INSERT INTO deviceImportBatches(id, sourceCSV) VALUES (?, ?)",
-          arguments: [UUID().uuidString.lowercased(), preview.originalCSV])
+        // A digest, not the file: re-exports repeat the whole history, so copies added up.
+        try db.execute(
+          sql: "INSERT INTO deviceImportBatches(id, sourceCSV, sourceDigest, byteCount) VALUES (?, '', ?, ?)",
+          arguments: [UUID().uuidString.lowercased(), digest, byteCount])
       }
       return WorkoutImportResult(
         importedWorkouts: importedWorkouts, importedSets: importedSets, skippedWorkouts: skippedWorkouts)
