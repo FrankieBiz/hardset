@@ -87,3 +87,24 @@ management. File ownership is exclusive per CONTRACT.md.
   (adds a Linux-only OpenCombine pin). Restore it before committing; never stage it.
 - CI run on main also showed a one-off "application is installing, cannot launch" race in
   `testGymPickerDark`; not seen on the fix branch run.
+
+## Delivered (2026-11-11)
+
+- Wave 1 merged to main via PR #2 (`0fac424`); wave 2 via PR #3 (`ff54c1b`), then a fix-forward
+  for two macOS-host compile errors (`59d549e`, merged as `bd4fd3d`). CI run 43016366146 on main
+  `bd4fd3d`: every step passed, including all five real-app journeys (start/tabs, workout journey,
+  corrections and discard, gym picker, light mode). Screenshots reviewed.
+- `make check` on the final tree: 141 Swift files parsed, 232 Core tests, 297 Store tests in 30
+  suites, query plans, 172 contrast pairs.
+- Install: reinstall over the existing app with `make install` on the Mac (or `make mac-install`
+  from a `main` checkout here). Never delete the app first; local-only data lives only on the phone.
+
+## Still open
+
+- Physical-device checks in DEVICE-CHECKLIST.md (alarm when locked/Focus, Lock Screen countdown,
+  Health prompt, accessibility-size layouts, VoiceOver/Voice Control, haptics).
+- Deferred audit items: re-uploading rows written while a previously synced database ran local-only
+  (needs a metadata backfill design); dropping two redundant loggedSets indexes; async rest journal
+  writes (unmeasured); a finish haptic and a Start-failure announcement in the root.
+- `AppStartupTests` "Overlapping scenes share preparation" is flaky under CPU load (5 s semaphore);
+  the installed `hardset-check` is stale (5 Store suites); use `make check` / `Tools/hardset_check.py`.
