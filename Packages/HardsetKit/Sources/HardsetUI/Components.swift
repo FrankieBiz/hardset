@@ -84,9 +84,12 @@ public struct HeaderIconButton: View {
     }
     .buttonStyle(HardsetPressStyle())
     .accessibilityLabel(accessibilityLabel)
-    .accessibilityShowsLargeContentViewer {
-      Label(accessibilityLabel, systemImage: systemImage)
-    }
+    // The Large Content Viewer is iOS-only; the macOS host build (tests only) goes without it.
+    #if os(iOS)
+      .accessibilityShowsLargeContentViewer {
+        Label(accessibilityLabel, systemImage: systemImage)
+      }
+    #endif
   }
 }
 
@@ -117,9 +120,12 @@ public struct HeaderIconMenu<Content: View>: View {
     }
     .buttonStyle(.plain)
     .accessibilityLabel(accessibilityLabel)
-    .accessibilityShowsLargeContentViewer {
-      Label(accessibilityLabel, systemImage: systemImage)
-    }
+    // The Large Content Viewer is iOS-only; the macOS host build (tests only) goes without it.
+    #if os(iOS)
+      .accessibilityShowsLargeContentViewer {
+        Label(accessibilityLabel, systemImage: systemImage)
+      }
+    #endif
   }
 }
 

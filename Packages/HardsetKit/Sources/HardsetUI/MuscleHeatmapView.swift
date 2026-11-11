@@ -32,7 +32,7 @@ public struct MuscleHeatmapView: View {
     VStack(alignment: .leading, spacing: Tokens.Spacing.section) {
       Text("\(windowLabel) · Comparative fractional sets. Bars compare volume with your most-credited muscle; it does not rate whether you trained enough.")
         .font(Tokens.Text.provenance).foregroundStyle(Tokens.Color.textSecondary)
-      CertaintyBadge(level: certainty, methodology: SetCounting.source.methodology, citation: SetCounting.source.citation)
+      CertaintyBadge(level: MethodologySheet.level(for: certainty), methodology: SetCounting.source.methodology, citation: SetCounting.source.citation)
       if report.isLowerBound {
         HardsetBanner(.caveat, message: "\(report.unattributedHardSets) working sets have unknown attribution. All muscle counts are lower bounds.")
       }
