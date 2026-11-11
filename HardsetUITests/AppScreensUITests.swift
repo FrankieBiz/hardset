@@ -93,7 +93,25 @@ final class AppScreensUITests: XCTestCase {
     capture(app, "13b-keypad-reps")
     app.buttons["Done"].tap()
     row.coordinate(withNormalizedOffset: CGVector(dx: 0.93, dy: 0.5)).tap()
+    let loggedRow = app.descendants(matching: .any)
+      .matching(NSPredicate(format: "label BEGINSWITH 'Set 1,' AND label CONTAINS ', logged'"))
+      .firstMatch
+    XCTAssertTrue(loggedRow.waitForExistence(timeout: 5), "The entered set must actually be saved.")
+    let savedLabel = loggedRow.label
+    XCTAssertTrue(savedLabel.contains("100 "), "The saved load must match the keypad entry.")
+    XCTAssertTrue(savedLabel.contains(", 8 reps"), "The saved reps must match the keypad entry.")
     capture(app, "14-session-logged")
+
+    // Recovery must read the committed set from disk, with its values and logged state intact.
+    // Relaunching a real app exercises the startup and view wiring that Store tests cannot.
+    app.terminate()
+    launch(app, appearance: .dark)
+    let recoveredRows = app.descendants(matching: .any)
+      .matching(NSPredicate(format: "label == %@", savedLabel))
+    XCTAssertTrue(recoveredRows.firstMatch.waitForExistence(timeout: 30))
+    XCTAssertEqual(recoveredRows.count, 1, "Relaunch must recover exactly one copy of the saved set.")
+    XCTAssertFalse(app.buttons["Start workout"].exists, "A live workout must resume before offering a new one.")
+    capture(app, "14b-session-resumed")
 
     // Finish asks once, then the workout is on the start screen and in history.
     let finish = app.buttons["Finish workout"]

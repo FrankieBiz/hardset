@@ -232,3 +232,6 @@ components rather than native spinners.
 - Saved logger facts retain full foreground contrast even though their actions are
   disabled. Confidence labels wrap at large Dynamic Type sizes instead of truncating
   the word that qualifies a claim. Neither change introduces motion or new tokens.
+- The Lifetime section always offers an explicit restore action to a locked App Store
+  build, including when storefront product information is unavailable. Restore uses
+  the existing secondary button and busy state; product retry remains a separate action.

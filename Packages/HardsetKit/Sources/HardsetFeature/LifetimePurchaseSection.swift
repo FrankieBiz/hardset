@@ -26,12 +26,11 @@ struct LifetimePurchaseSection: View {
           .fixedSize(horizontal: false, vertical: true)
       }
       if !access.isDevelopmentBuild && !access.isUnlocked {
-        // Restore asks for the Apple Account password, so it is offered only when there is a
-        // product to restore. With none loaded, the honest next step is to try the load again.
-        if access.product != nil {
-          Button("Restore purchases") { Task { await access.restore() } }
-            .buttonStyle(HardsetButtonStyle(.secondary)).disabled(access.isWorking)
-        } else if access.hasLoaded && !access.isWorking {
+        // Restoring an existing entitlement does not need the storefront product to load.
+        // Keep this user-initiated action available during a product outage or delisting.
+        Button("Restore purchases") { Task { await access.restore() } }
+          .buttonStyle(HardsetButtonStyle(.secondary)).disabled(access.isWorking)
+        if access.product == nil && access.hasLoaded && !access.isWorking {
           Button("Try again") { Task { await access.load() } }
             .buttonStyle(HardsetButtonStyle(.quiet))
         }
