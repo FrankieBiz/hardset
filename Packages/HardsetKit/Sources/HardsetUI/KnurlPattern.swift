@@ -20,12 +20,14 @@ public struct KnurlPattern: View {
   }
 
   public var body: some View {
-    let pitch = pitch
-    let opacity = opacity
+    // Resolve everything the renderer needs before the closure: it may run off the main actor,
+    // so it must not touch `Tokens` or read this view's properties.
+    let step = pitch
+    let stroke = Tokens.Color.chalk.opacity(opacity)
     Canvas { context, size in
-      guard pitch > 0, size.width > 0, size.height > 0 else { return }
+      guard step > 0, size.width > 0, size.height > 0 else { return }
       var path = Path()
-      for offset in stride(from: -size.height, through: size.width, by: pitch) {
+      for offset in stride(from: -size.height, through: size.width, by: step) {
         // Rising at +45 degrees: bottom-left to top-right.
         path.move(to: CGPoint(x: offset, y: size.height))
         path.addLine(to: CGPoint(x: offset + size.height, y: 0))
@@ -33,15 +35,17 @@ public struct KnurlPattern: View {
         path.move(to: CGPoint(x: offset, y: 0))
         path.addLine(to: CGPoint(x: offset + size.height, y: size.height))
       }
-      context.stroke(path, with: .color(Tokens.Color.chalk.opacity(opacity)), lineWidth: 0.5)
+      context.stroke(path, with: .color(stroke), lineWidth: 0.5)
     }
     .accessibilityHidden(true)
   }
 }
 
 public extension View {
-  /// Overlays a knurl on the view, clipped to its bounds and transparent to touches so it never
-  /// changes what a tap hits. Do not use it on a view that carries body text.
+  /// Overlays a knurl on the view, clipped to the view's rectangular bounds and transparent to
+  /// touches so it never changes what a tap hits. A view with a rounded shape must clip itself
+  /// with `clipShape` so the pattern does not show past the corners. Do not use it on a view that
+  /// carries body text.
   func knurl(opacity: Double = 0.08) -> some View {
     overlay(KnurlPattern(opacity: opacity).clipped().allowsHitTesting(false))
   }
