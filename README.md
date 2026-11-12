@@ -1,21 +1,23 @@
 # Hardset
 
-A hypertrophy logger for intermediate lifters. Local-first, CloudKit-synced, no accounts.
+A hypertrophy logger for intermediate lifters. Local-only for now, no accounts. CloudKit sync code
+exists but is frozen until the developer membership decision in `docs/ROADMAP.md`.
 
 Three things it is trying to be, in order: honest about what it knows, aware of the specific
 machines you train on, and fast to log a set.
 
-**Status: the logger and the analysis layer work, in the package.** Sessions, sets, prefill from
-history, the rest bar, recovery of an interrupted workout, personal records, a 50-movement seed
-catalogue and a picker; plus the permanent muscle vocabulary, fractional sets-per-muscle-per-week
-with coverage, per-machine load history, and a session history screen. 256 tests across 32 suites
-run on the host in about two tenths of a second.
+**Status: the logger and the analysis layer work.** Sessions, sets, prefill from history, the
+rest bar, recovery of an interrupted workout, personal records, a 50-movement seed catalogue and a
+picker; plus the permanent muscle vocabulary, fractional sets-per-muscle-per-week with coverage,
+per-machine load history, and a session history screen. Scope and order of further work are in
+`docs/ROADMAP.md`.
 
-**Not yet true:** the app and widget targets have never been compiled. `xcodebuild` fails here
-because the Swift macro plugin server does not survive the shell sandbox, so everything real lives
-in package targets that build with `swift build`, and the `.xcodeproj` app target is a thin shell.
-Unblocking it is a one-time Trust & Enable inside Xcode — see `DEVICE-CHECKLIST.md`. Nothing in
-this repo has run on a device.
+**What is verified where:** on Linux, `make check` parses every Swift file, runs the Core and
+portable Store suites, and gates query plans and palette contrast. It cannot compile SwiftUI,
+WidgetKit or AlarmKit. The app and widget are compiled in CI on a macOS runner, and the UI tests
+there drive the real app on the iOS Simulator. Device behaviour such as alarms, haptics and glare
+is checked by hand and recorded in `DEVICE-CHECKLIST.md`. The tools print the test counts they
+actually ran; none are quoted in this repository.
 
 ## Layout
 

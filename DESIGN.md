@@ -201,7 +201,7 @@ components rather than native spinners.
   caller does not abandon recovery. Later appearances preserve live drafts and
   finished-state transitions instead of replaying an old snapshot.
 
-## Handout feature additions
+## Logger, rest, settings and history additions
 
 - Logger rows expose −/+ controls only when an explicit positive machine increment
   exists. They add/subtract canonical kilograms and convert only the label. Each

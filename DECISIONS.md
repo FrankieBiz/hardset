@@ -115,7 +115,7 @@ importing AlarmKit, which ships only in the iPhoneOS SDK and is unavailable on m
 Core would stop building for macOS. Since `AlarmMetadata` requires nothing beyond
 `Codable & Hashable & Sendable`, the conformance is a free retroactive extension in a small
 iOS-only target. The payoff is concrete: the engine and store suites run on the host with
-`swift test`, no simulator — which is how 54 tests run in ~0.1 s despite the brief expecting tests
+`swift test`, no simulator — which is how the suites run in a fraction of a second despite the brief expecting tests
 couldn't run locally at all.
 
 **GRDB declared directly.** Already transitively present and inside the locked "GRDB 7.11+ with
@@ -155,7 +155,7 @@ rejected: it buys coverage of someone else's code at the cost of owning a fork o
 
 ### 8. The app target cannot be compiled from a sandboxed command line
 
-`swift test --disable-sandbox` runs the full package suite (54 tests, 7 suites) because SwiftPM's
+`swift test --disable-sandbox` runs the full package suite because SwiftPM's
 own `--disable-sandbox` lets the macro plugin server run. `xcodebuild` has no equivalent flag —
 `-disable-sandbox` is rejected as an invalid option — and fails with
 `error: external macro implementation type 'SwiftMacros.TaskLocalMacro' could not be found ...
