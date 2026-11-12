@@ -19,81 +19,107 @@ import SwiftUI
 /// the check can see it.
 public enum Tokens {
   public enum Color {
-    // Defined in code rather than in an asset catalogue, which these two colours used to live
-    // in. A catalogue inside a package target means a resource bundle, a bundle means an
-    // `actool` step, and that step is what broke the first build of the app ever attempted here:
-    // it is denied write access to its own output when the package sits under a symlinked path.
-    // Two colours are not worth a resource bundle, and this version has no build step to fail.
-    public static let background = swatch(
-      light: 0xF9F9FA, dark: 0x0E0E10, highLight: 0xFFFFFF, highDark: 0x000000
+    // Defined in code rather than in an asset catalogue, which these colours used to live in. A
+    // catalogue inside a package target means a resource bundle, a bundle means an `actool` step,
+    // and that step is what broke the first build of the app ever attempted here: it is denied
+    // write access to its own output when the package sits under a symlinked path. A handful of
+    // colours are not worth a resource bundle, and this version has no build step to fail.
+
+    // MARK: Steel: canvas, surfaces and edges
+
+    /// The screen canvas: the deepest graphite in dark, a faint chalk-white in light.
+    public static let canvas = swatch(
+      light: 0xF6F6F8, dark: 0x0C0D10, highLight: 0xFFFFFF, highDark: 0x000000
     )
-    public static let surface = swatch(
-      light: 0xFFFFFF, dark: 0x1C1C1F, highLight: 0xFFFFFF, highDark: 0x000000
+    /// Cards, rows and the content of sheets.
+    public static let steel = swatch(
+      light: 0xFFFFFF, dark: 0x17181D, highLight: 0xFFFFFF, highDark: 0x000000
     )
-    /// Subtle charcoal hairline for cards, rows, and dividers.
-    ///
-    /// Decorative grouping only. Anything whose boundary is the thing that tells the lifter "this
-    /// is tappable" uses `controlBorder`, which is measured at 3:1.
-    public static let border = swatch(
-      light: 0xE0E0E4, dark: 0x323238, highLight: 0x595964, highDark: 0x9B9BA5
-    )
-    /// Elevated or pressed surface fill, one step above `surface`.
-    public static let surfaceRaised = swatch(
-      light: 0xF1F1F4, dark: 0x28282D, highLight: 0xFFFFFF, highDark: 0x000000
+    /// Elevated or pressed surface fill, one step above `steel`: fields, keys, chips and
+    /// secondary buttons.
+    public static let steelRaised = swatch(
+      light: 0xEEEEF2, dark: 0x22242B, highLight: 0xFFFFFF, highDark: 0x000000
     )
     /// The momentary fill of a pressed key or secondary button. Opaque, so text on it stays
     /// measurable rather than depending on what happens to be underneath.
-    public static let surfacePressed = swatch(
-      light: 0xEBEBEF, dark: 0x2E2E33, highLight: 0xE6E6EA, highDark: 0x26262B
+    public static let steelPressed = swatch(
+      light: 0xE6E6EB, dark: 0x2B2D35, highLight: 0xE6E6EA, highDark: 0x26262B
+    )
+    /// The lit top edge of a raised face, written as an opaque value rather than an alpha.
+    ///
+    /// Pre-blended over `steelRaised`: 60% `#3A3D47` in dark, 80% white in light. It stays opaque
+    /// so the edge is the same colour wherever the face is drawn; do not turn it into an alpha.
+    public static let edgeLight = swatch(light: 0xFCFCFD, dark: 0x30333C)
+    /// The shaded bottom edge of a raised face, written as an opaque value rather than an alpha.
+    ///
+    /// Pre-blended over `steelRaised`: 50% black in dark, 8% black in light. It stays opaque so
+    /// the edge is the same colour wherever the face is drawn; do not turn it into an alpha.
+    public static let edgeShadow = swatch(light: 0xDBDBDF, dark: 0x111216)
+    /// Subtle charcoal hairline for cards, rows, and dividers.
+    ///
+    /// Decorative grouping only. Anything whose boundary is the thing that tells the lifter "this
+    /// is tappable" uses `controlEdge`, which is measured at 3:1.
+    public static let hairline = swatch(
+      light: 0xDEDEE4, dark: 0x2E3039, highLight: 0x595964, highDark: 0x9B9BA5
     )
     /// The boundary that identifies a control: fields, keys, chips, secondary buttons. At least
-    /// 3:1 against `background`, `surface` and `surfaceRaised`.
-    public static let controlBorder = swatch(
-      light: 0x80808A, dark: 0x777782, highLight: 0x595964, highDark: 0x9B9BA5
+    /// 3:1 against `canvas`, `steel` and `steelRaised`.
+    public static let controlEdge = swatch(
+      light: 0x7E8190, dark: 0x7B7E8C, highLight: 0x595964, highDark: 0x9B9BA5
     )
 
-    /// Readout cyan: the one hue that means "you can act on this".
+    // MARK: Chalk: text
+
+    /// Body text and values: chalk in dark, graphite in light.
+    public static let chalk = swatch(
+      light: 0x141519, dark: 0xF3F3F5, highLight: 0x000000, highDark: 0xFFFFFF
+    )
+    /// Supporting text, units and provenance.
+    public static let chalkDim = swatch(
+      light: 0x4B4D58, dark: 0xB6B8C3, highLight: 0x3B3D47, highDark: 0xDADCE4
+    )
+
+    // MARK: Plate colours: evidence, never decoration
+
+    /// Plate blue: the one hue that means "you can act on this".
     ///
     /// Deliberately not the system accent. The asset-catalogue blue measured 3.5:1 on the light
     /// background, failing even ordinary-text AA, and it is the colour of every stock app. This is
-    /// at least 7:1 as text on every surface, in both appearances.
-    public static let accent = swatch(
-      light: 0x00515E, dark: 0x5ED3E6, highLight: 0x003A44, highDark: 0x9BE9F4
+    /// a deeper, tuned blue that is at least 7:1 as text on every surface, in both appearances.
+    public static let plateBlue = swatch(
+      light: 0x084A95, dark: 0x6FB7FF, highLight: 0x063A75, highDark: 0x9FD0FF
     )
-    /// The fill of a primary button. Paired only with `onAccent` text.
-    public static let accentFill = swatch(
-      light: 0x00515E, dark: 0x5ED3E6, highLight: 0x003A44, highDark: 0x9BE9F4
+    /// The fill of a primary button. Paired only with `onPlateBlue` text.
+    public static let plateBlueFill = swatch(
+      light: 0x084A95, dark: 0x6FB7FF, highLight: 0x063A75, highDark: 0x9FD0FF
     )
-    public static let accentFillPressed = swatch(
-      light: 0x003D47, dark: 0x4ABFD3, highLight: 0x002B33, highDark: 0x7FDCEA
+    public static let plateBlueFillPressed = swatch(
+      light: 0x063C7A, dark: 0x5AA6F0, highLight: 0x052E5E, highDark: 0x86C2FF
     )
-    /// Text and symbols drawn on `accentFill`.
-    public static let onAccent = swatch(
-      light: 0xFFFFFF, dark: 0x0E0E10, highLight: 0xFFFFFF, highDark: 0x000000
+    /// Text and symbols drawn on `plateBlueFill`.
+    public static let onPlateBlue = swatch(
+      light: 0xFFFFFF, dark: 0x0C0D10, highLight: 0xFFFFFF, highDark: 0x000000
     )
-    /// The tint behind a selected or focused element. `accent` text stays above 7:1 on it.
-    public static let accentSurface = swatch(
-      light: 0xE2F4F7, dark: 0x10292E, highLight: 0xD5EEF2, highDark: 0x0B2125
-    )
-
-    public static let textPrimary = swatch(
-      light: 0x151518, dark: 0xF5F5F7, highLight: 0x000000, highDark: 0xFFFFFF
-    )
-    public static let textSecondary = swatch(
-      light: 0x4D4D56, dark: 0xB9B9C2, highLight: 0x3D3D44, highDark: 0xDDDDE4
+    /// The tint behind a selected or focused element. `plateBlue` text stays above 7:1 on it.
+    public static let plateBlueSurface = swatch(
+      light: 0xE3EFFC, dark: 0x10233A, highLight: 0xD6E8FA, highDark: 0x0A1A2C
     )
 
-    public static let success = swatch(light: 0x155B28, dark: 0x8DE5A2)
+    /// Logged, and high certainty.
+    public static let plateGreen = swatch(light: 0x0F5A27, dark: 0x8FE3A3)
+    /// Records, and moderate certainty.
+    public static let plateYellow = swatch(light: 0x604A00, dark: 0xFFD86B)
+    /// Failed writes.
+    public static let plateRed = swatch(light: 0x9A1B24, dark: 0xFF9A9A)
+    /// Caveats, and low certainty.
     public static let warning = swatch(light: 0x7A3A00, dark: 0xFFB27A)
-    public static let error = swatch(light: 0x981C29, dark: 0xFF9AA2)
-    public static let pr = swatch(light: 0x5F4B00, dark: 0xFFD873)
 
-    /// Tinted backgrounds for banners and row states. Each keeps its own hue, `textPrimary` and
-    /// `textSecondary` above 7:1.
-    public static let successSurface = swatch(light: 0xE6F4EA, dark: 0x13281A)
+    /// Tinted backgrounds for banners and row states. Each keeps its own hue, `chalk` and
+    /// `chalkDim` above 7:1.
+    public static let plateGreenSurface = swatch(light: 0xE5F5EA, dark: 0x122A1A)
+    public static let plateYellowSurface = swatch(light: 0xFBF3DA, dark: 0x2B2410)
+    public static let plateRedSurface = swatch(light: 0xFBEAEA, dark: 0x2E1516)
     public static let warningSurface = swatch(light: 0xFCEEE3, dark: 0x2C1D12)
-    public static let errorSurface = swatch(light: 0xFBEAEB, dark: 0x2E1517)
-    public static let prSurface = swatch(light: 0xFBF3DC, dark: 0x2A2410)
 
     /// One colour per machine series in a progression chart, in legend order.
     ///
@@ -101,7 +127,7 @@ public enum Tokens {
     /// symbol, so two machines are never told apart by hue alone. Neither green, amber, orange nor
     /// red appears here: those already mean something.
     public static let series: [SwiftUI.Color] = [
-      accent,
+      plateBlue,
       swatch(light: 0x3A3A42, dark: 0xE7E7EC),
       swatch(light: 0x5236B8, dark: 0xB9A8FF),
       swatch(light: 0x9A1F66, dark: 0xFF9DD6),
@@ -111,22 +137,44 @@ public enum Tokens {
     /// colour-only signal is inaccessible and, for a claim about someone's training, unclear.
     public static func certainty(_ level: CertaintyLevel) -> SwiftUI.Color {
       switch level {
-      case .high: success
-      case .moderate: pr
+      case .high: plateGreen
+      case .moderate: plateYellow
       case .low: warning
-      case .unevaluated: textSecondary
+      case .unevaluated: chalkDim
       }
     }
 
     /// The tint a certainty chip sits on, matched to `certainty(_:)`.
     public static func certaintySurface(_ level: CertaintyLevel) -> SwiftUI.Color {
       switch level {
-      case .high: successSurface
-      case .moderate: prSurface
+      case .high: plateGreenSurface
+      case .moderate: plateYellowSurface
       case .low: warningSurface
-      case .unevaluated: surfaceRaised
+      case .unevaluated: steelRaised
       }
     }
+
+    // MARK: - Transitional aliases (deleted in phase 7)
+
+    public static let background = canvas
+    public static let surface = steel
+    public static let surfaceRaised = steelRaised
+    public static let surfacePressed = steelPressed
+    public static let border = hairline
+    public static let controlBorder = controlEdge
+    public static let textPrimary = chalk
+    public static let textSecondary = chalkDim
+    public static let accent = plateBlue
+    public static let accentFill = plateBlueFill
+    public static let accentFillPressed = plateBlueFillPressed
+    public static let onAccent = onPlateBlue
+    public static let accentSurface = plateBlueSurface
+    public static let success = plateGreen
+    public static let successSurface = plateGreenSurface
+    public static let pr = plateYellow
+    public static let prSurface = plateYellowSurface
+    public static let error = plateRed
+    public static let errorSurface = plateRedSurface
   }
 
   /// A colour that follows the system appearance and the Increase Contrast setting, in sRGB.

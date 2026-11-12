@@ -24,26 +24,27 @@ SWATCH = re.compile(
 SERIES = re.compile(r"swatch\(light: 0x([0-9A-Fa-f]{6}), dark: 0x([0-9A-Fa-f]{6})\)")
 
 # Text and symbol roles: 7:1 (WCAG 2.2 SC 1.4.6) against every listed surface.
+SURFACES = ["canvas", "steel", "steelRaised"]
 TEXT_ON = {
-    "textPrimary": ["background", "surface", "surfaceRaised"],
-    "textSecondary": ["background", "surface", "surfaceRaised"],
-    "accent": ["background", "surface", "surfaceRaised", "accentSurface"],
-    "success": ["background", "surface", "surfaceRaised", "successSurface"],
-    "warning": ["background", "surface", "surfaceRaised", "warningSurface"],
-    "error": ["background", "surface", "surfaceRaised", "errorSurface"],
-    "pr": ["background", "surface", "surfaceRaised", "prSurface"],
-    "onAccent": ["accentFill"],
+    "chalk": SURFACES,
+    "chalkDim": SURFACES,
+    "plateBlue": SURFACES + ["plateBlueSurface"],
+    "plateGreen": SURFACES + ["plateGreenSurface"],
+    "plateYellow": SURFACES + ["plateYellowSurface"],
+    "plateRed": SURFACES + ["plateRedSurface"],
+    "warning": SURFACES + ["warningSurface"],
+    "onPlateBlue": ["plateBlueFill"],
 }
 # Body text drawn on the tinted state surfaces.
-TINTS = ["accentSurface", "successSurface", "warningSurface", "errorSurface", "prSurface"]
+TINTS = ["plateBlueSurface", "plateGreenSurface", "plateYellowSurface", "plateRedSurface", "warningSurface"]
 # Momentary pressed fills: AA (4.5:1) is the floor while a finger is down.
 PRESSED = {
-    "textPrimary": ["surfacePressed"],
-    "textSecondary": ["surfacePressed"],
-    "onAccent": ["accentFillPressed"],
+    "chalk": ["steelPressed"],
+    "chalkDim": ["steelPressed"],
+    "onPlateBlue": ["plateBlueFillPressed"],
 }
 # Boundaries that identify a control: 3:1 (SC 1.4.11).
-BOUNDARY_ON = {"controlBorder": ["background", "surface", "surfaceRaised"]}
+BOUNDARY_ON = {"controlEdge": SURFACES}
 
 
 def linear(channel):
@@ -83,7 +84,7 @@ def load(path):
 def main():
     path = Path(sys.argv[1]) if len(sys.argv) > 1 else DEFAULT
     palette, series = load(path)
-    required = set(TEXT_ON) | set(BOUNDARY_ON) | set(TINTS) | {"background", "surface"}
+    required = set(TEXT_ON) | set(BOUNDARY_ON) | set(TINTS) | {"canvas", "steel"}
     missing = sorted(name for name in required if name not in palette)
     if missing:
         print(f"Missing swatches in {path}: {', '.join(missing)}")
@@ -103,7 +104,7 @@ def main():
         for bg in backgrounds:
             check(fg, bg, 7.0)
     for tint in TINTS:
-        for fg in ("textPrimary", "textSecondary"):
+        for fg in ("chalk", "chalkDim"):
             check(fg, tint, 7.0)
     for fg, backgrounds in PRESSED.items():
         for bg in backgrounds:
@@ -112,7 +113,7 @@ def main():
         for bg in backgrounds:
             check(fg, bg, 3.0)
     for index, (light, dark) in enumerate(series):
-        for bg in ("background", "surface"):
+        for bg in ("canvas", "steel"):
             for value, appearance in ((light, "light"), (dark, "dark")):
                 checked += 1
                 measured = ratio(value, palette[bg][appearance])
