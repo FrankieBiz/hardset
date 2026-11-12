@@ -2,7 +2,7 @@
 
 Date: 2026-11-12
 Branch: `FrankieBiz/premium-frontend-design-plan`
-Status: draft for approval
+Status: approved by the owner on 2026-11-12
 
 ## Intent
 
@@ -401,8 +401,7 @@ and rest bar; the rebuild changes these things:
   2026-11-11 roadmap and a second tap after every set contradicts "one tap per set". The
   explicit chooser remains: a movement with no duration yet asks once, the rest bar's drag-up
   changes the duration for the next set, and the durable rest state and retry banner behave
-  exactly as today. Nothing else on the screen moves. (Pending owner confirmation; see
-  "Decisions".)
+  exactly as today. Nothing else on the screen moves.
 - "Finish" lives in the header menu and in the bottom accessory on other tabs. Finishing
   zooms into the receipt.
 
@@ -561,8 +560,8 @@ rendered PNGs before the next begins.
 - Three tabs, non-modal workout and Settings as a sheet kept as-is. (My call, since the owner
   did not object to the structure, only the feel.)
 - Rest starts automatically when a set is logged, with the explicit chooser kept for a
-  movement's first rest and for changing the duration. (My recommendation; open with the owner
-  because it reverses a recorded product decision.)
+  movement's first rest and for changing the duration. (Settled 2026-11-12: the owner
+  delegated the call; this reverses the earlier explicit-choice decision.)
 - Deprecated token aliases during the rebuild, deleted in the final phase. Pitch 2 driven by the
   engine's real reps-based certainty rule. Volume report badge replaced by per-muscle certainty.
   Existing installs see the tour but get a pre-filled Setup page. All existing behaviours listed
