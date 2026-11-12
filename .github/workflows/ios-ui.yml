@@ -12,6 +12,7 @@ on:
     # main too: Core and Store changes land there from other worktrees, and one already broke the
     # UI's compile without anything on Linux noticing.
     branches: ["main", "FrankieBiz/**"]
+  pull_request:
   workflow_dispatch:
 
 permissions:
@@ -45,8 +46,25 @@ jobs:
         run: |
           set -o pipefail
           swift test --package-path Packages/HardsetKit \
-            --filter 'CSVDocumentTests|SetCommandTests|DataTransferTests|RestJournalTests|ReceiptStoreTests|DeviceHealthStoreTests|MachineIncrementTests|ProgressionStoreTests' \
+            --filter 'CSVDocumentTests|SetCommandTests|DataTransferTests|RestJournalTests|ReceiptStoreTests|DeviceHealthStoreTests|MachineIncrementTests|ProgressionStoreTests|SchemaTests|AccountChangePolicyTests' \
             2>&1 | tee portable-feature-tests.log | tail -50
+
+      - name: Test sync engine guarantees in isolated processes
+        run: |
+          set -o pipefail
+          # SQLiteData's non-live SyncEngine shares an in-memory metadatabase path, so each
+          # engine-dependent test needs a fresh process even when its suite is serialized.
+          failures=0
+          for test in signOutPreservesData switchAccountsPreservesData accountChangeIsReported \
+            retainedEngineAllowsWrites; do
+            log="sync-${test}.log"
+            swift test --package-path Packages/HardsetKit --filter "$test" \
+              2>&1 | tee "$log" | tail -50 || failures=1
+            # A misspelled or removed filter must fail instead of silently running no tests.
+            grep -Eq 'Test run with [1-9][0-9]* tests? in [1-9][0-9]* suites? passed' "$log" \
+              || failures=1
+          done
+          exit "$failures"
 
       - name: Build the app and widget for the iOS Simulator
         run: |

@@ -16,7 +16,7 @@ from pathlib import Path
 # Reuse the installed, pinned Swift toolchain and official SQLite UUID support;
 # source selection and test coverage are versioned with the repository.
 TOOLING = Path(os.environ.get("HARDSET_TOOLING_ROOT", Path.home() / ".local/share/hardset-tooling"))
-# These four suites require the Apple-only Database/SyncSetup implementations.
+# These suites require the Apple-only Database/SyncSetup implementations.
 # Every other Store test is selected automatically, including future additions.
 APPLE_STORE_TESTS = frozenset({
     "SchemaTests.swift", "SyncDelegateTests.swift", "SyncEngineRetentionTests.swift",
@@ -98,8 +98,13 @@ def run_logged(command, cwd, environment, log, title):
                                 stdout=output, stderr=subprocess.STDOUT)
     lines = log.read_text(errors="replace").splitlines()
     for line in lines:
-        if "Build complete!" in line or "Test run with" in line:
+        if "Build complete!" in line:
             print(line, flush=True)
+        summary = re.search(r"Test run with (\d+) tests?(?: in (\d+) suites?)? (passed|failed)\b", line)
+        if summary:
+            tests, suites, status = summary.groups()
+            scope = f"{tests} tests" + (f" in {suites} suites" if suites is not None else "")
+            print(f"Swift Testing: {scope} {status}", flush=True)
     if result.returncode:
         print("\n".join(lines[-35:]), file=sys.stderr)
         raise CheckError(f"{title} failed (exit {result.returncode}); full output: {log}")
@@ -211,11 +216,13 @@ def test(kind, package, swift, cache, shared, refresh):
         selected = {item.name for item in tests.glob("*.swift")} - APPLE_STORE_TESTS
         if not selected:
             raise CheckError("No portable Store test files found.")
-        print(f"Store coverage: {len(selected)} portable test files; "
-              f"Apple-only exclusions: {', '.join(sorted(APPLE_STORE_TESTS))}", flush=True)
-        excluded = tuple(item.relative_to(tests).as_posix() for item in tests.rglob("*.swift")
+        test_files = tuple(tests.rglob("*.swift"))
+        excluded = tuple(item.relative_to(tests).as_posix() for item in test_files
                          if item.name not in selected)
-        copy_exact(tests, workspace / "Tests/HardsetStoreTests", excluded=excluded)
+        portable_tests = workspace / "Tests/HardsetStoreTests"
+        copy_exact(tests, portable_tests, excluded=excluded)
+        print(f"Store coverage: {len(tuple(portable_tests.rglob('*.swift')))} portable Store files "
+              f"of {len(test_files)}; Apple-only exclusions: {', '.join(sorted(APPLE_STORE_TESTS))}", flush=True)
     write_if_changed(workspace / "Package.swift", package_manifest(kind, pins))
     environment = os.environ.copy()
     environment["XDG_CACHE_HOME"] = str(shared / "xdg")
@@ -245,7 +252,7 @@ def test(kind, package, swift, cache, shared, refresh):
 
 def main():
     parser = argparse.ArgumentParser(prog="hardset-check", description="Linux subset checks for Hardset; this is not an iOS build.",
-        epilog="core: all Core tests. store: 5 local Store suites. parse: syntax only. all: all three. SwiftUI, Charts, CloudKit, AlarmKit, widgets and device behavior require Xcode/iOS verification.")
+        epilog="core: all Core tests. store: all portable Store tests. parse: syntax only. all: every check. SwiftUI, Charts, CloudKit, AlarmKit, widgets and device behavior require Xcode/iOS verification.")
     parser.add_argument("command", choices=("core", "store", "parse", "all"))
     parser.add_argument("--repo", type=Path, default=Path.cwd(), help="Checkout path (default: current directory; searches parents)")
     parser.add_argument("--cache-dir", type=Path, help="Cache root (default: XDG_CACHE_HOME/hardset-check)")

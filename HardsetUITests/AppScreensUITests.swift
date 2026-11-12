@@ -11,6 +11,7 @@ import XCTest
 /// Audit issues are recorded rather than failing the run, so one finding cannot hide the screens
 /// after it; the report is written next to the screenshots. With `HARDSET_UI_SHOT_DIR` set (CI
 /// passes it through `TEST_RUNNER_`), screenshots and the report land in that directory.
+/// Unexpected issues now also fail the test; `continueAfterFailure` keeps later screens running.
 final class AppScreensUITests: XCTestCase {
   private var auditReport: [String] = []
 
@@ -318,11 +319,43 @@ final class AppScreensUITests: XCTestCase {
         self?.auditReport.append(
           "[\(screen)] \(issue.compactDescription) | \(label) | \(frame) | \(issue.detailedDescription)"
         )
-        return true
+        return self?.isAcceptedAccessibilityIssue(issue, in: app, screen: screen) ?? false
       }
     } catch {
       auditReport.append("[\(screen)] audit could not run: \(error)")
+      XCTFail("[\(screen)] accessibility audit failed: \(error)")
     }
+  }
+
+  /// Only the intentional exceptions recorded in the UI elevation handoff may be ignored.
+  @MainActor
+  private func isAcceptedAccessibilityIssue(
+    _ issue: XCUIAccessibilityAuditIssue, in app: XCUIApplication, screen: String
+  ) -> Bool {
+    guard let element = issue.element, !element.label.isEmpty else { return false }
+    let isNavigationBarElement = app.navigationBars.descendants(matching: .any)
+      .allElementsBoundByIndex.contains {
+        $0.elementType == element.elementType && $0.label == element.label
+          && $0.frame == element.frame
+      }
+    let acceptedIssues: [String: Bool] = [
+      // Bar titles cap text size and provide the Large Content Viewer at accessibility sizes.
+      "barTitleDynamicType": issue.auditType == .dynamicType
+        && element.elementType == .staticText && isNavigationBarElement,
+      // The system navigation-bar Done button follows UIKit's capped bar-item scaling.
+      "systemDoneButtonDynamicType": issue.auditType == .dynamicType
+        && element.elementType == .button && element.label == "Done" && isNavigationBarElement,
+      // The movement search field intentionally stays on one line as its text size grows.
+      "singleLineSearchField": (issue.auditType == .textClipped || issue.auditType == .dynamicType)
+        && element.elementType == .textField && element.label == "Search movements",
+      // Set rows speak these column names already, so the visual header is intentionally hidden.
+      "hiddenColumnHeader": issue.auditType == .elementDetection
+        && (screen == "session with a movement" || screen == "keypad")
+        && (element.elementType == .staticText || element.elementType == .other)
+        && ["Set", "Last time", "kg", "lb", "Reps", "Set, Last time, kg, Reps",
+          "Set, Last time, lb, Reps"].contains(element.label),
+    ]
+    return acceptedIssues.values.contains(true)
   }
 
   @MainActor
