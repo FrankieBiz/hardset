@@ -204,7 +204,7 @@ Daily app (the instrument). Motion answers a touch or shows a change, nothing el
 | `Motion.reveal` | 280 ms ease-out, opacity only | Banners and inline confirmations appearing |
 | `Motion.stamp` | spring, response 0.30, bounce 0.30 | The log check, and nothing else |
 | `Motion.zoom` | system zoom transition | Opening a receipt, an exercise's progress, a machine's detail: the card the lifter tapped grows into the screen and shrinks back to the same card |
-| `Motion.throw` | spring, response 0.35, damping 0.80, velocity from the gesture | Only on gesture release: the keypad sheet, the rest bar's drag, the tour's page swipe |
+| `Motion.fling` | spring, response 0.35, damping 0.80, velocity from the gesture | Only on gesture release: the keypad sheet, the rest bar's drag, the tour's page swipe |
 
 Rules carried from the apple-design foundations and already partly in `DESIGN.md`:
 
@@ -264,7 +264,7 @@ the shaft with a chrome gradient and the knurl shader, shapes for the sleeves an
 seen side-on. Five plates rest below it in a tray, drawn as rounded rectangles seen edge-on with
 their plate colour and a white mass stamp ("25", "20", "15", "10", "5"), each a 56 pt target.
 
-Interaction: tap or drag a plate and it rises to the sleeve with `Motion.throw`, inheriting the
+Interaction: tap or drag a plate and it rises to the sleeve with `Motion.fling`, inheriting the
 drag velocity, and lands with `clank`. Plates stack outward in the order chosen. The bar shaft
 bends a few points in the middle in proportion to total mass (a `keyframeAnimator` on a
 quadratic control point) and settles with a critically damped spring. Dragging a loaded plate
@@ -388,12 +388,12 @@ and rest bar; the rebuild changes these things:
   with the unit in `unit`. The log control keeps its four states (incomplete dashed, ready
   outline, next-up filled, logged seal), with next-up in `plateBlue` and the seal in
   `plateGreen` over the knurl texture.
-- The keypad opens as a sheet from the tapped field with `Motion.throw`, stays up across Next
+- The keypad opens as a sheet from the tapped field with `Motion.fling`, stays up across Next
   between weight and reps, and shows the replaceable prefill as selected text on
   `plateBlueSurface`. Keys are machined and sink on touch-down. Quick steps (−/+ by the
   machine increment) sit above the digits.
 - The rest bar is opaque, pinned above the accessory, with the countdown in `hero` over the
-  knurl texture at 8% opacity and the four controls in a row. It drags up with `Motion.throw`
+  knurl texture at 8% opacity and the four controls in a row. It drags up with `Motion.fling`
   to reveal duration choices and drags down to dismiss them.
 - Logging a set plays the stamp, `clank`, `success`, and starts rest automatically at the
   movement's last chosen duration. The current product starts rest only from an explicit
