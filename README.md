@@ -40,13 +40,14 @@ Packages/HardsetKit/
 ## Running the tests
 
 ```bash
-./test.sh
+make check
 ```
 
-54 tests, ~0.1 s. The script runs the engine-dependent tests in separate processes: SQLiteData's
-non-live `SyncEngine` attaches an in-memory metadatabase at a fixed shared-cache path, and the task
-local that resets it between constructions is `package`-scoped, so two engines in one process
-contend for the same SQLite file.
+On Linux this parses every Swift file, runs the Core and portable Store suites, and gates query
+plans and palette contrast. It prints the files, suites and tests it actually ran. `make mac-test`
+runs the app target on the Mac's simulator. CI runs the Apple-only Store suites; the sync-engine
+tests each get a fresh process there, because SQLiteData's non-live `SyncEngine` attaches an
+in-memory metadatabase at a fixed shared-cache path and two engines in one process contend for it.
 
 ## Regenerating the project
 

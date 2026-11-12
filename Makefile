@@ -1,6 +1,6 @@
 # Hardset Hypertrophy Logger — Verification Makefile
 .DEFAULT_GOAL := help
-.PHONY: check check-core check-store check-parse check-contrast project install mac-sync-check mac-test mac-install test help
+.PHONY: check check-core check-store check-parse check-contrast project install mac-sync-check mac-test mac-install help
 
 SWIFT := $(shell which swift)
 PY := python3
@@ -42,9 +42,6 @@ check-contrast: ## Verify the HardsetUI palette meets DESIGN.md's 7:1 text and 3
 
 project: ## Regenerate Hardset.xcodeproj from Tools/generate_project.py
 	$(PY) Tools/generate_project.py
-
-test: ## Run the full HardsetKit suite via test.sh
-	./test.sh
 
 help: ## List available targets
 	@awk 'BEGIN { FS = ":.*## " } /^[a-zA-Z_-]+:.*## / { printf "  make %-18s %s\n", $$1, $$2 }' $(MAKEFILE_LIST)
