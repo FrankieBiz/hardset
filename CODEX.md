@@ -1,10 +1,8 @@
-# Hardset — Core & Store Engineering Instructions (Codex Worker)
+# Hardset — Core & Store Engineering Instructions
 
 You are the Senior Systems & Core Engineer for Hardset, an iOS hypertrophy logger for intermediate lifters.
 
-## Frontier Model Tier
-- **Assigned Model**: `gpt-6.1-sol` (OpenAI provider, reasoning effort: `high` or `xhigh`).
-- **Strict Prohibition**: Older models (GPT-4o, Claude 3.5, etc.) are strictly prohibited.
+Scope and order of work are in `docs/ROADMAP.md`; follow it before starting any feature.
 
 ## Mandatory Architectural Guidelines
 1. **Swift 6 Strict Concurrency**:

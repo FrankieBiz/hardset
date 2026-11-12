@@ -12,8 +12,8 @@ Authority: `docs/ROADMAP.md`. Older handoffs, reviews and research are in `docs/
 
 | Task | State |
 | --- | --- |
-| 0.1 merge readiness branch | Done before this work: `1a0029c` and `abe9ec6` are on main. CI on main not re-checked here |
-| 0.2 delete orchestration layer | Done on this branch |
+| 0.1 merge readiness branch | Done: `origin/main` is `abe9ec6`, which contains `1a0029c`; macOS CI run 43120034334 on main succeeded |
+| 0.2 delete process tooling and model docs | Done on this branch |
 | 0.3 collapse handoffs | Done on this branch |
 | 0.4 make every number true | Docs half done here; `hardset_check` half and `test.sh` removal pending |
 | 0.5 trim agent instructions | Done on this branch, plus the model-tier block in `CODEX.md` |

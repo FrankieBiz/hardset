@@ -1,5 +1,9 @@
 # Hardset — Agent Guidelines & Finish Protocol
 
+Scope, order and the frozen list live in [`docs/ROADMAP.md`](docs/ROADMAP.md). Visual decisions
+live in [`DESIGN.md`](DESIGN.md). Current state lives in `.agents/HANDOFF.md`. Read all three
+before starting work; the roadmap overrides anything in `docs/history/`.
+
 ## Architecture
 - **HardsetCore (`Packages/HardsetKit/Sources/HardsetCore`)**: Foundation-only, nonisolated. Engine, exercise log state, timeline logic, volume rollups, and permanent muscle taxonomy.
 - **HardsetStore (`Packages/HardsetKit/Sources/HardsetStore`)**: GRDB and SQLiteData persistence, permanent schema rules, migrations, and session coordinator.
@@ -13,45 +17,22 @@ Before finishing any task, run:
 ```bash
 make check
 ```
-Or individually:
-- `hardset-check core`: 162 Core unit tests in 22 suites
-- `hardset-check store`: 45 Store tests in 5 suites with official SQLite UUID extension loaded
-- `hardset-check parse`: Swift syntax check across all 86 files
+Or individually (each tool prints the counts it actually ran; none are quoted in the repo):
+- `hardset-check core`: Core unit tests
+- `hardset-check store`: portable Store tests with the official SQLite UUID extension loaded
+- `hardset-check parse`: Swift syntax check across all Swift files
 - `python3 Tools/generate_project.py`: Project file regeneration check
 
-## Orchestration Model Rules & Memory
-Detailed orchestration specification: [`docs/ORCA_ORCHESTRATION.md`](docs/ORCA_ORCHESTRATION.md)
+## Rules
+- A behaviour change ships with a test seen red against the old code and green against the new.
+- Existing migration bodies are never edited; schema changes are appended migrations.
+- A delegated worker owns only its assigned paths, does not delegate again, and reports diffs and actual command output to its coordinator. The coordinator owns integration and the finish protocol.
+- Never generate Mermaid diagrams or ASCII/plaintext diagram boxes. Use markdown lists, tables, or prose.
 
-### Workspace quality settings
-- See `docs/MODEL_CONFIGURATION.md` for settings, precedence, and verification limits.
-- Codex: `.codex/config.toml` uses `gpt-6.1-sol` with `xhigh` reasoning; read `CODEX.md` for Core/Store work.
-- Claude: `.claude/settings.json` sets high effort while retaining the user's model selection; `CLAUDE.md` imports the shared rules and design system.
-- OpenCode: `opencode.json` retains the free DeepSeek model and disables the paid DeepSeek provider. Read `docs/MuscleTaxonomy-spec.md` for taxonomy audits; return evidence and reproducible cases for coordinator review.
-- A delegated worker owns only its assigned paths, does not delegate again, and reports diffs and actual verification results to its coordinator. The coordinator owns integration and the finish protocol below; workers do not push production changes.
-
-- **Role of Antigravity**: Antigravity is the Master Orchestrator, not a monolithic heavy lifter. Antigravity plans task specifications, coordinates workers via Orca (`orca orchestration` / `scripts/orchestrate.py`), enforces test gates (`make check`), and handles release.
-- **Response Format Requirement**: The very first block of every single response to the user must explicitly list which models were called and their roles:
-  ```markdown
-  ### Models Used:
-  - **OpenAI GPT-6.1** (`gpt-6.1-sol` via Codex): Core engine & Store engineering...
-  - **Anthropic Claude** (`claude-sonnet-5.5`): Frontend SwiftUI ergonomics...
-  - **DeepSeek** (`deepseek-v4.1-flash`): Taxonomy extraction & fuzzing...
-  - **Antigravity** (`coordinator`): System integration & release verification...
-  ```
-- **Strict Prohibition on Older Models**: Never orchestrate with older or lower-tier models (e.g. no Claude 3.5, no Claude 3.7, no GPT-4o, no legacy tiers).
-- **Mandated Frontier Model Tiers**:
-  1. **OpenAI / Codex**: Use only `gpt-6` or `gpt-6.1` (specifically `gpt-6.1-sol`, `gpt-6-astra`, high effort). Heavy lifter for Core engine, GRDB migrations, Swift 6 strict concurrency (`NonisolatedNonsendingByDefault`), permanent schema rules, and `PriorPerformanceSnapshot` immutability.
-  2. **Anthropic / Claude**: Use only the highest frontier tier (specifically `claude-sonnet-5.5` or `claude-opus-5-5`, high reasoning). Heavy lifter for SwiftUI ergonomics, CertaintyBadge honesty UI, custom numeric pad interaction, and dark palette design tokens.
-  3. **DeepSeek**: Permitted to utilize `deepseek-v4.1-flash` (or DeepSeek V3/R1 flash via `DEEPSEEK_API_KEY`) for high-throughput muscle taxonomy parsing (`docs/MuscleTaxonomy-spec.md`), 50-movement seed catalogue verification, and edge-case fuzzing.
-- **Strict No Diagrams Rule**: Never generate Mermaid diagrams or ASCII/plaintext diagram boxes. All concepts, workflows, and architectures must be presented in markdown lists, tables, or clean prose.
-
-## Mandatory Finish Protocol (Push to Main Production)
-Every single time you finish a task, feature, or fix:
-1. Verify all checks pass (`make check`).
-2. Run `agent-finish "<imperative commit message>"`.
-   Alternatively, manually:
-   - `git add -A`
-   - `git commit -m "<message>"` (Author/Committer: FrankieBiz <frankabisignano@gmail.com>)
-   - `git push origin HEAD:main`
-3. NEVER commit with AI names (Claude, ChatGPT, Gemini, Anthropic, OpenAI) or `Co-Authored-By` lines. All commits must be attributed strictly to `FrankieBiz <frankabisignano@gmail.com>`.
-4. Remote production `main` must always be updated and green.
+## Finish Protocol
+Direct push to `main` after green CI is the project's standing authorization (`docs/ROADMAP.md`, Appendix C).
+1. Verify `make check` exits 0.
+2. Commit with message in the imperative: `git add` only the task's files, `git commit -m "<message>"` (Author/Committer: FrankieBiz <frankabisignano@gmail.com>).
+3. Push the feature branch and wait for the macOS CI run to be green. A cancelled run is not green.
+4. Then update main non-destructively: `git push origin HEAD:main`. Never force push.
+5. NEVER commit with AI names (Claude, ChatGPT, Gemini, Anthropic, OpenAI) or `Co-Authored-By` lines. All commits are attributed strictly to `FrankieBiz <frankabisignano@gmail.com>`.
