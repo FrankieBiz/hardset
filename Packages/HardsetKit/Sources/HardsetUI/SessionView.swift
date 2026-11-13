@@ -296,7 +296,7 @@ public struct SessionView: View {
     .onChange(of: unit) { keypad = nil }
     // A failed save is felt as well as read: the check simply not stamping was easy to miss.
     // Keyed on the failure as an event, so a retry that fails the same way is felt again.
-    .sensoryFeedback(.error, trigger: errorSignal) { _, new in new.message != nil }
+    .sensoryFeedback(Tokens.Haptic.error, trigger: errorSignal) { _, new in new.message != nil }
     .onChange(of: errorSignal) { _, signal in
       if let message = signal.message {
         AccessibilityNotification.Announcement(message).post()
@@ -304,11 +304,11 @@ public struct SessionView: View {
     }
     // Each rest control is felt, because the lifter pressing −15 or Skip is looking at the bar,
     // not the phone, between sets. A selection tick, light like the row's machine step.
-    .sensoryFeedback(.selection, trigger: restControlTaps)
+    .sensoryFeedback(Tokens.Haptic.selection, trigger: restControlTaps)
     // A rest ended by its deadline, with no alarm to say so, is felt and announced. Skip, −15 to
     // zero and a dismissed alarm end it too, but the lifter did those and needs no telling.
     .sensoryFeedback(trigger: restState) { [restEndsSilently] old, new in
-      Self.restEndedByDeadline(from: old, to: new, alarmless: restEndsSilently) ? .warning : nil
+      Self.restEndedByDeadline(from: old, to: new, alarmless: restEndsSilently) ? Tokens.Haptic.warning : nil
     }
     .onChange(of: restState) { old, new in
       if let announcement = Self.restAnnouncement(from: old, to: new, alarmless: restEndsSilently) {

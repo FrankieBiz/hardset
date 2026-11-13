@@ -153,7 +153,7 @@ public struct SetRowView: View {
       .contentShape(.contextMenuPreview, shape)
     #endif
     .contextMenu { corrections }
-    .sensoryFeedback(.selection, trigger: adjustmentFeedback)
+    .sensoryFeedback(Tokens.Haptic.selection, trigger: adjustmentFeedback)
     .accessibilityElement(children: .combine)
     .accessibilityLabel(spokenLabel)
     .accessibilityHint(accessibilityHint)
@@ -469,7 +469,7 @@ public struct SetRowView: View {
     .opacity(isReady || isLogged ? 1 : 0.6)
     .accessibilityLabel(isLogged ? "Logged" : "Log set")
     // Haptics confirm the tap landed without the user looking at the phone.
-    .sensoryFeedback(.success, trigger: isLogged) { !$0 && $1 }
+    .sensoryFeedback(Tokens.Haptic.success, trigger: isLogged) { !$0 && $1 }
   }
 
   /// A logged set has no key face: its seal sits straight on the row's success tint.

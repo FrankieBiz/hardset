@@ -322,11 +322,29 @@ public enum Tokens {
     /// Press feedback on buttons and keys.
     public static let press = Animation.easeOut(duration: 0.12)
     /// In-place state changes: selection, the segment indicator, a row becoming logged.
-    public static let state = Animation.easeInOut(duration: 0.2)
+    ///
+    /// A critically damped spring (damping fraction 1.0) rather than a fixed-duration ease: it
+    /// settles without overshoot, and when a change is reversed mid-flight it carries the
+    /// current velocity into the new target instead of restarting a curve from rest.
+    public static let state = Animation.spring(response: 0.30, dampingFraction: 1.0)
     /// Banners and inline confirmations arriving.
     public static let reveal = Animation.easeOut(duration: 0.28)
-    /// The log check stamping in. The only spring in the app.
+    /// The log check stamping in. The only spring with bounce outside a gesture release.
     public static let stamp = Animation.spring(duration: 0.3, bounce: 0.3)
+
+    /// A release that hands the gesture's own velocity to the settle, such as a sheet or a card
+    /// let go mid-drag.
+    ///
+    /// Interpolating springs are additive, so a new target re-aimed mid-flight keeps the motion
+    /// continuous. Pass the release velocity, normalised by the distance still to travel, so
+    /// the object keeps the speed the finger gave it. Named `fling` because `throw` is a keyword.
+    public static func fling(initialVelocity: Double = 0) -> Animation {
+      .interpolatingSpring(Spring(response: 0.35, dampingRatio: 0.80), initialVelocity: initialVelocity)
+    }
+
+    // Zoom: screen-to-screen zoom uses `navigationTransition(.zoom)` and carries no animation
+    // token. The system owns its timing, interruption and Reduce Motion behaviour, so a token
+    // here would only be a second, competing source of truth.
 
     public static func adaptive(_ animation: Animation, reduceMotion: Bool) -> Animation? {
       reduceMotion ? nil : animation
