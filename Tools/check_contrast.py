@@ -43,8 +43,9 @@ PRESSED = {
     "chalkDim": ["steelPressed"],
     "onPlateBlue": ["plateBlueFillPressed"],
 }
-# Boundaries that identify a control: 3:1 (SC 1.4.11).
-BOUNDARY_ON = {"controlEdge": SURFACES}
+# Boundaries that identify a control: 3:1 (SC 1.4.11). A pressed face keeps its control edge, so
+# `steelPressed` is a surface it must clear too.
+BOUNDARY_ON = {"controlEdge": SURFACES + ["steelPressed"]}
 
 
 def linear(channel):

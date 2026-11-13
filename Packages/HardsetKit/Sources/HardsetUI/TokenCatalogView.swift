@@ -6,7 +6,7 @@ import SwiftUI
 ///
 /// It exists so the design can be reviewed from images. The development machine cannot compile
 /// SwiftUI, so a macOS CI lane renders this view to PNG in each appearance (dark, light, Increase
-/// Contrast, an accessibility text size, Reduce Motion) and the images are what get looked at.
+/// Contrast, an accessibility text size) and the images are what get looked at.
 /// It is static on purpose: no state, no database, no network, so a render is the same every
 /// time. Nothing in the app presents it.
 public struct TokenCatalogView: View {
@@ -326,9 +326,12 @@ private struct ButtonSection: View {
 }
 
 /// One role in both sizes, each beside its pressed state. A `ButtonStyle` cannot be forced
-/// pressed in a render, so the pressed instance is drawn directly with the same face.
+/// pressed in a render, so the pressed instance is the style's own face, `HardsetButtonFace`,
+/// drawn with `isPressed: true`.
 private struct ButtonVariantRows: View {
   let variant: ButtonVariant
+
+  @Environment(\.accessibilityShowButtonShapes) private var showsButtonShapes
 
   var body: some View {
     VStack(alignment: .leading, spacing: Tokens.Spacing.snug) {
@@ -345,68 +348,30 @@ private struct ButtonVariantRows: View {
     return ViewThatFits(in: .horizontal) {
       HStack(spacing: Tokens.Spacing.snug) {
         Button(name) {}.buttonStyle(HardsetButtonStyle(variant.role, size: size))
-        PressedButtonSample(title: name, role: variant.role, size: size)
+        pressed(name, size: size)
       }
       VStack(spacing: Tokens.Spacing.snug) {
         Button(name) {}.buttonStyle(HardsetButtonStyle(variant.role, size: size))
-        PressedButtonSample(title: name, role: variant.role, size: size)
+        pressed(name, size: size)
       }
     }
   }
-}
 
-/// A button's pressed face, drawn directly. Secondary goes through `MachinedModifier` with
-/// `isPressed: true`, which is what the live style does; primary shows its pressed fill, quiet
-/// its dimmed label, and destructive its unchanged face, because those are what the live styles
-/// do on press.
-private struct PressedButtonSample: View {
-  let title: String
-  let role: HardsetButtonStyle.Role
-  let size: HardsetButtonStyle.Size
-
-  var body: some View {
-    let shape = RoundedRectangle(cornerRadius: Tokens.Radius.control)
-    face(label, shape: shape)
-  }
-
-  private var label: some View {
-    Text(title)
-      .font(size == .logger ? Tokens.Text.headline : Tokens.Text.labelEmphasis)
-      .foregroundStyle(foreground)
-      .multilineTextAlignment(.center)
-      .padding(.horizontal, role == .quiet ? Tokens.Spacing.snug : Tokens.Spacing.loose)
-      .padding(.vertical, Tokens.Spacing.snug)
-      .frame(
-        maxWidth: .infinity,
-        minHeight: size == .logger ? Tokens.loggerTapTarget : Tokens.minimumTapTarget
-      )
-  }
-
-  @ViewBuilder
-  private func face<Content: View>(_ content: Content, shape: RoundedRectangle) -> some View {
-    switch role {
-    case .primary:
-      content.background(Tokens.Color.plateBlueFillPressed, in: shape)
-    case .secondary:
-      content.modifier(MachinedModifier(shape: shape, isPressed: true, outlined: false))
-    case .quiet:
-      content.opacity(0.6)
-    case .destructive:
-      content.background(Tokens.Color.plateRedSurface, in: shape)
-    }
-  }
-
-  private var foreground: Color {
-    switch role {
-    case .primary: Tokens.Color.onPlateBlue
-    case .secondary: Tokens.Color.chalk
-    case .quiet: Tokens.Color.plateBlue
-    case .destructive: Tokens.Color.plateRed
+  private func pressed(_ name: String, size: HardsetButtonStyle.Size) -> some View {
+    HardsetButtonFace(
+      role: variant.role,
+      size: size,
+      fullWidth: true,
+      isPressed: true,
+      isEnabled: true,
+      showsButtonShapes: showsButtonShapes
+    ) {
+      Text(name)
     }
   }
 }
 
-/// A row of three keypad keys, then the same three drawn pressed.
+/// A row of three keypad keys, then the same three drawn pressed with the style's own face.
 private struct KeyRows: View {
   private static let digits = ["7", "8", "9"]
 
@@ -426,17 +391,9 @@ private struct KeyRows: View {
       }
       HStack(spacing: Tokens.Spacing.snug) {
         ForEach(Self.digits, id: \.self) { digit in
-          Text(digit)
-            .font(Tokens.Text.setEntry)
-            .foregroundStyle(Tokens.Color.chalk)
-            .frame(maxWidth: .infinity, minHeight: Tokens.loggerTapTarget)
-            .modifier(
-              MachinedModifier(
-                shape: RoundedRectangle(cornerRadius: Tokens.Radius.control),
-                isPressed: true,
-                outlined: false
-              )
-            )
+          HardsetKeyFace(isPressed: true, isEnabled: true) {
+            Text(digit).font(Tokens.Text.setEntry)
+          }
         }
       }
     }

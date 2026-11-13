@@ -1,8 +1,9 @@
 # Hardset design system
 
 Source of truth for every visual decision in the app. The implementation lives in
-`Packages/HardsetKit/Sources/HardsetUI/DesignTokens.swift` and `Components.swift`; this file
-explains the choices, and `Tools/check_contrast.py` verifies the palette numbers below against the
+`Packages/HardsetKit/Sources/HardsetUI/`: `DesignTokens.swift`, `Components.swift`,
+`Machined.swift`, `KnurlPattern.swift`, `TypeRole.swift` and `Haptic.swift`; this file explains
+the choices, and `Tools/check_contrast.py` verifies the palette numbers below against the
 Swift source so the two cannot drift.
 
 ## Point of view
@@ -33,7 +34,8 @@ blue) are not arbitrary; they carry a story the lifter already knows.
 ## Palette
 
 Normal appearance values. All text roles are at least 7:1 against `canvas`, `steel` and
-`steelRaised` in both appearances; `controlEdge` is at least 3:1 against all three. Dark is the
+`steelRaised` in both appearances; `controlEdge` is at least 3:1 against all three and against
+`steelPressed`, because a pressed face keeps it. Dark is the
 primary appearance; light is derived from the same roles and held to the same floor.
 
 | Token | Dark | Light | Role |
@@ -41,7 +43,7 @@ primary appearance; light is derived from the same roles and held to the same fl
 | `canvas` | `#0C0D10` | `#F6F6F8` | Screen canvas: rubber-matting black, chalk white |
 | `steel` | `#17181D` | `#FFFFFF` | Cards, rows, sheets' content |
 | `steelRaised` | `#22242B` | `#EEEEF2` | Fields, keys, chips, secondary buttons |
-| `steelPressed` | `#2B2D35` | `#E6E6EB` | Momentary pressed fill |
+| `steelPressed` | `#1B1C22` | `#E6E6EB` | Momentary pressed fill, darker than `steelRaised` so a press sinks |
 | `edgeLight` | `#30333C` | `#FCFCFD` | Lit top edge of a raised face; decorative, never a boundary |
 | `edgeShadow` | `#111216` | `#DBDBDF` | Shaded bottom edge of a raised face; decorative |
 | `hairline` | `#2E3039` | `#DEDEE4` | Decorative hairline grouping only |
@@ -130,7 +132,7 @@ font and tracking together from `Tokens.Text.Role`; the static fonts carry no tr
 | `Motion.reveal` | 280 ms ease-out | Banners and inline confirmations appearing |
 | `Motion.stamp` | 300 ms spring, bounce 0.3 | The log check, and nothing else |
 | `Motion.fling(initialVelocity:)` | spring, response 0.35, damping 0.80 | Gesture release only, carrying the gesture's velocity |
-| `Motion.zoom` | system zoom transition | A card growing into its screen and back |
+| `zoom` (no Swift symbol; `navigationTransition(.zoom)` at the call site) | system zoom transition | A card growing into its screen and back |
 
 `state` is critically damped, so it settles without overshoot and carries velocity into a
 reversed target. `zoom` is the system's `navigationTransition(.zoom)` and has no animation value
@@ -158,11 +160,15 @@ Selection rows, the unit switch and pickers stay silent.
 - **Buttons** (`HardsetButtonStyle`): `primary` (plate blue fill), `secondary` (raised steel),
   `quiet` (plate blue text, no fill), `destructive` (red text on the error surface). Sizes `logger`
   (56 pt) and `regular` (44 pt). States: default, pressed, disabled (40% opacity), focused (system
-  focus ring). The look is machined: a secondary button is raised steel with a light top edge, a
-  shadowed bottom edge and the control edge, and sinks to the pressed fill with no edge when
-  pressed. Primary keeps its plate blue fill and wears the edge gradient while raised.
-- **Keys** (`HardsetKeyStyle`): the same machined face as a secondary button, raised steel with the
-  edge gradient and control edge, sinking to the pressed fill with no edge, plus a 0.96 scale.
+  focus ring). The look is machined: a secondary button is raised steel with the control edge at
+  its boundary and, one hairline inside it, a light top edge and a shadowed bottom edge. Pressed,
+  it keeps the control edge, so the 3:1 boundary never disappears, loses the edge light, and sinks
+  to `steelPressed`, which in dark is darker than `steelRaised`. Primary is a solid plate blue
+  fill, swapping to its pressed fill, with no edge gradient: the edge colours are pre-blended for
+  steel and read wrong on plate blue.
+- **Keys** (`HardsetKeyStyle`): the same machined face as a secondary button: raised steel with the
+  control edge and the edge light inside it, and pressed, the control edge kept, the edge light
+  dropped and the darker pressed fill, plus a 0.96 scale.
 - **Knurl** (`KnurlPattern`, `.knurl(opacity:)`): a `Canvas` crosshatch for a control's face or a
   hero figure's backing, never behind text. It fills rectangular bounds, so callers with rounded
   shapes clip it themselves.

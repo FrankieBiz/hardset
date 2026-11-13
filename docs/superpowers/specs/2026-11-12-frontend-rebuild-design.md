@@ -117,7 +117,7 @@ and 3:1 control.
 | `canvas` | `#0C0D10` | `#F6F6F8` | The floor. Rubber matting black with a cold cast. |
 | `steel` | `#17181D` | `#FFFFFF` | Cards, rows, sheet content. The base material. |
 | `steelRaised` | `#22242B` | `#EEEEF2` | Fields, keys, chips, secondary buttons. |
-| `steelPressed` | `#2B2D35` | `#E6E6EB` | Momentary pressed fill. |
+| `steelPressed` | `#1B1C22` | `#E6E6EB` | Momentary pressed fill, darker than `steelRaised` so a press sinks. |
 | `edgeLight` | `#3A3D47` at 60% | `#FFFFFF` at 80% | A 1 pt top-edge highlight that makes a raised surface catch light. Decorative, never a boundary. |
 | `edgeShadow` | `#000000` at 50% | `#000000` at 8% | A 1 pt bottom edge for the same purpose. |
 | `hairline` | `#2E3039` | `#DEDEE4` | Decorative grouping rules. |
@@ -160,6 +160,12 @@ The current app is flat. The rebuild gives surfaces weight without noise:
   under cards.
 - Keys on the keypad and the set-row fields are machined: raised fill, edge light, and on press
   they sink to `steelPressed` and lose the edge light, so the press reads as the key going down.
+  A pressed face keeps its `controlEdge` outline, so the 3:1 boundary never disappears; only the
+  edge light goes. In dark, `steelPressed` is darker than `steelRaised`, so the press sinks rather
+  than lights up. An outlined face draws the edge light one hairline inside the control edge.
+- The primary button has no edge gradient. The edge colours are pre-blended over steel and read
+  wrong on plate blue, so primary is a solid `plateBlueFill` that swaps to
+  `plateBlueFillPressed`.
 - Liquid Glass is used for system chrome only: the tab bar, the live-workout bottom accessory,
   toolbars, and the tour's floating callout card. Content never sits on glass. The keypad, set
   rows and rest bar stay opaque, as today, because they are read under glare and sweat.

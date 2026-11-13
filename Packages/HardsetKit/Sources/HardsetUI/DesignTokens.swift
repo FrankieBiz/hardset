@@ -40,10 +40,11 @@ public enum Tokens {
     public static let steelRaised = swatch(
       light: 0xEEEEF2, dark: 0x22242B, highLight: 0xFFFFFF, highDark: 0x000000
     )
-    /// The momentary fill of a pressed key or secondary button. Opaque, so text on it stays
-    /// measurable rather than depending on what happens to be underneath.
+    /// The momentary fill of a pressed key or secondary button. In both normal appearances it is
+    /// darker than `steelRaised`, so a press sinks rather than lights up. Opaque, so text on it
+    /// stays measurable rather than depending on what happens to be underneath.
     public static let steelPressed = swatch(
-      light: 0xE6E6EB, dark: 0x2B2D35, highLight: 0xE6E6EA, highDark: 0x26262B
+      light: 0xE6E6EB, dark: 0x1B1C22, highLight: 0xE6E6EA, highDark: 0x26262B
     )
     /// The lit top edge of a raised face, written as an opaque value rather than an alpha.
     ///
@@ -63,7 +64,8 @@ public enum Tokens {
       light: 0xDEDEE4, dark: 0x2E3039, highLight: 0x595964, highDark: 0x9B9BA5
     )
     /// The boundary that identifies a control: fields, keys, chips, secondary buttons. At least
-    /// 3:1 against `canvas`, `steel` and `steelRaised`.
+    /// 3:1 against `canvas`, `steel`, `steelRaised` and `steelPressed`, since a pressed face keeps
+    /// it.
     public static let controlEdge = swatch(
       light: 0x7E8190, dark: 0x7B7E8C, highLight: 0x595964, highDark: 0x9B9BA5
     )
@@ -504,9 +506,59 @@ private struct HardsetButtonBody: View {
   @Environment(\.accessibilityShowButtonShapes) private var showsButtonShapes
 
   var body: some View {
+    HardsetButtonFace(
+      role: role,
+      size: size,
+      fullWidth: fullWidth,
+      isPressed: configuration.isPressed,
+      isEnabled: isEnabled,
+      showsButtonShapes: showsButtonShapes
+    ) {
+      configuration.label
+    }
+    .scaleEffect(configuration.isPressed && !reduceMotion ? 0.97 : 1)
+    .animation(Tokens.Motion.press, value: configuration.isPressed)
+  }
+}
+
+/// A button's face in a given state: the label set in the role's type and colour, laid out to the
+/// size's tap target, on the role's surface, with the disabled and pressed opacity rules.
+///
+/// `HardsetButtonStyle` draws its live buttons with it, and the token catalogue draws its pressed
+/// samples with it, because a `ButtonStyle` cannot be forced pressed in a render. Sharing the face
+/// keeps the catalogue honest: a sample cannot drift from what a press actually shows. The press
+/// scale and its animation stay in the style, since they are motion rather than a face.
+struct HardsetButtonFace<Label: View>: View {
+  private let role: HardsetButtonStyle.Role
+  private let size: HardsetButtonStyle.Size
+  private let fullWidth: Bool
+  private let isPressed: Bool
+  private let isEnabled: Bool
+  private let showsButtonShapes: Bool
+  private let label: Label
+
+  init(
+    role: HardsetButtonStyle.Role,
+    size: HardsetButtonStyle.Size,
+    fullWidth: Bool,
+    isPressed: Bool,
+    isEnabled: Bool,
+    showsButtonShapes: Bool,
+    @ViewBuilder label: () -> Label
+  ) {
+    self.role = role
+    self.size = size
+    self.fullWidth = fullWidth
+    self.isPressed = isPressed
+    self.isEnabled = isEnabled
+    self.showsButtonShapes = showsButtonShapes
+    self.label = label()
+  }
+
+  var body: some View {
     let shape = RoundedRectangle(cornerRadius: Tokens.Radius.control)
     surface(
-      configuration.label
+      label
         .font(size == .logger ? Tokens.Text.headline : Tokens.Text.labelEmphasis)
         .foregroundStyle(foreground)
         .multilineTextAlignment(.center)
@@ -519,44 +571,32 @@ private struct HardsetButtonBody: View {
       shape: shape
     )
     .contentShape(shape)
-    .scaleEffect(configuration.isPressed && !reduceMotion ? 0.97 : 1)
-    .opacity(isEnabled ? (role == .quiet && configuration.isPressed ? 0.6 : 1) : 0.4)
-    .animation(Tokens.Motion.press, value: configuration.isPressed)
+    .opacity(opacity)
   }
 
-  /// Draws the role's face behind the label. Secondary is a machined key that loses its edge light
-  /// when pressed; primary keeps its solid plate-blue fill and catches the same edge light until
-  /// it is pressed. A modifier that returns `some View` cannot be applied conditionally inline, so
-  /// the choice is made here.
+  /// Disabled dims every role to 40%. A pressed quiet button, which has no fill to swap, dims its
+  /// label to 60% instead.
+  private var opacity: Double {
+    guard isEnabled else { return 0.4 }
+    return role == .quiet && isPressed ? 0.6 : 1
+  }
+
+  /// Draws the role's face behind the label. Secondary is a machined face that keeps its control
+  /// edge and loses its edge light when pressed. Primary is a solid plate-blue fill with no edge
+  /// gradient: the edge colours are pre-blended for steel and read wrong on plate blue. The role
+  /// never changes across a press, so each branch is one view whose pressed state only changes
+  /// its arguments, and the label keeps its identity. A modifier that returns `some View` cannot
+  /// be applied conditionally inline, so the choice is made here.
   @ViewBuilder
   private func surface<Content: View>(_ content: Content, shape: RoundedRectangle) -> some View {
     switch role {
     case .primary:
-      content
-        .background(
-          configuration.isPressed ? Tokens.Color.plateBlueFillPressed : Tokens.Color.plateBlueFill,
-          in: shape
-        )
-        .overlay {
-          if !configuration.isPressed {
-            shape.strokeBorder(
-              LinearGradient(
-                colors: [Tokens.Color.edgeLight, Tokens.Color.edgeShadow],
-                startPoint: .top,
-                endPoint: .bottom
-              ),
-              lineWidth: Tokens.Stroke.hairline
-            )
-          }
-        }
-    case .secondary:
-      content.modifier(
-        MachinedModifier(
-          shape: shape,
-          isPressed: configuration.isPressed,
-          outlined: !configuration.isPressed
-        )
+      content.background(
+        isPressed ? Tokens.Color.plateBlueFillPressed : Tokens.Color.plateBlueFill,
+        in: shape
       )
+    case .secondary:
+      content.modifier(MachinedModifier(shape: shape, isPressed: isPressed, outlined: true))
     case .quiet:
       content
         .overlay {
@@ -582,8 +622,8 @@ private struct HardsetButtonBody: View {
 /// A keypad key: a machined raised face, outlined, and pressed in rather than highlighted.
 ///
 /// Pressing it drops the edge light and swaps to the pressed fill, so the key reads as having gone
-/// down. While raised it wears the measured `controlEdge` outline, which is dropped along with the
-/// edge light when pressed. A key identified only by a fill one shade off the pad is a key the
+/// down. It wears the measured `controlEdge` outline in both states, so the boundary never
+/// disappears under a finger. A key identified only by a fill one shade off the pad is a key the
 /// lifter has to look for.
 public struct HardsetKeyStyle: ButtonStyle {
   public init() {}
@@ -600,25 +640,40 @@ private struct HardsetKeyBody: View {
   @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
   var body: some View {
-    let shape = RoundedRectangle(cornerRadius: Tokens.Radius.control)
-    let label = configuration.label
-      .foregroundStyle(Tokens.Color.chalk)
-      .frame(maxWidth: .infinity, minHeight: Tokens.loggerTapTarget)
-    face(label, shape: shape)
-      .scaleEffect(configuration.isPressed && !reduceMotion ? 0.96 : 1)
-      .opacity(isEnabled ? 1 : 0.4)
-      .animation(Tokens.Motion.press, value: configuration.isPressed)
+    HardsetKeyFace(isPressed: configuration.isPressed, isEnabled: isEnabled) {
+      configuration.label
+    }
+    .scaleEffect(configuration.isPressed && !reduceMotion ? 0.96 : 1)
+    .animation(Tokens.Motion.press, value: configuration.isPressed)
+  }
+}
+
+/// A key's face in a given state: chalk label, logger-height frame, the outlined machined face,
+/// and the disabled opacity. Shared by `HardsetKeyStyle` and the token catalogue's pressed keys,
+/// for the same reason as `HardsetButtonFace`. One modifier whose pressed state changes, so the
+/// label keeps its identity across a press instead of being rebuilt in a different branch.
+struct HardsetKeyFace<Label: View>: View {
+  private let isPressed: Bool
+  private let isEnabled: Bool
+  private let label: Label
+
+  init(isPressed: Bool, isEnabled: Bool, @ViewBuilder label: () -> Label) {
+    self.isPressed = isPressed
+    self.isEnabled = isEnabled
+    self.label = label()
   }
 
-  /// The key's machined face. One modifier whose pressed state changes, so the label keeps its
-  /// identity across a press instead of being rebuilt in a different branch.
-  private func face<Content: View>(_ content: Content, shape: RoundedRectangle) -> some View {
-    content.modifier(
-      MachinedModifier(
-        shape: shape,
-        isPressed: configuration.isPressed,
-        outlined: !configuration.isPressed
+  var body: some View {
+    label
+      .foregroundStyle(Tokens.Color.chalk)
+      .frame(maxWidth: .infinity, minHeight: Tokens.loggerTapTarget)
+      .modifier(
+        MachinedModifier(
+          shape: RoundedRectangle(cornerRadius: Tokens.Radius.control),
+          isPressed: isPressed,
+          outlined: true
+        )
       )
-    )
+      .opacity(isEnabled ? 1 : 0.4)
   }
 }
