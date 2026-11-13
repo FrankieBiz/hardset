@@ -341,12 +341,14 @@
       .flatMap { $0.isEmpty ? nil : URL(fileURLWithPath: $0, isDirectory: true) }
 
     /// Hosts `content` in a window of `size`, lets its tasks and first layout run, and writes the
-    /// result at 2x to `<name>.png`.
+    /// result at 2x to `<name>.png`. `contrast` overrides Increase Contrast, so the high-contrast
+    /// palette can be rendered without changing the Simulator's settings.
     static func capture<Content: View>(
       _ name: String,
       size: CGSize = Snapshot.phone,
       style: UIUserInterfaceStyle = .dark,
       typeSize: DynamicTypeSize = .large,
+      contrast: UIAccessibilityContrast = .normal,
       @ViewBuilder _ content: () -> Content
     ) async throws {
       guard let directory else { return }
@@ -358,6 +360,7 @@
           .environment(\.colorScheme, style == .dark ? .dark : .light)
       )
       host.overrideUserInterfaceStyle = style
+      host.traitOverrides.accessibilityContrast = contrast
       let window = UIWindow(frame: CGRect(origin: .zero, size: size))
       window.overrideUserInterfaceStyle = style
       window.rootViewController = host
