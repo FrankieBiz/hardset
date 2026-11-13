@@ -124,11 +124,11 @@ and 3:1 control.
 | `controlEdge` | `#7B7E8C` | `#7E8190` | Boundaries that identify a control (3:1 minimum). |
 | `chalk` | `#F3F3F5` | `#141519` | Primary text and figures. |
 | `chalkDim` | `#B6B8C3` | `#4B4D58` | Units, provenance, supporting text. |
-| `plateBlue` | `#6FB7FF` | `#0A4F9E` | Action, focus, selection, next-up. The 20 kg plate. |
-| `plateBlueFill` | `#6FB7FF` | `#0A4F9E` | Primary button fill. |
+| `plateBlue` | `#6FB7FF` | `#084A95` | Action, focus, selection, next-up. The 20 kg plate. |
+| `plateBlueFill` | `#6FB7FF` | `#084A95` | Primary button fill. |
 | `onPlateBlue` | `#0C0D10` | `#FFFFFF` | Text on the primary fill. |
 | `plateBlueSurface` | `#10233A` | `#E3EFFC` | Selected and focused tint. |
-| `plateGreen` | `#8FE3A3` | `#136B2F` | Logged, high certainty. The 10 kg plate. |
+| `plateGreen` | `#8FE3A3` | `#0F5A27` | Logged, high certainty. The 10 kg plate. |
 | `plateGreenSurface` | `#122A1A` | `#E5F5EA` | Logged row tint. |
 | `plateYellow` | `#FFD86B` | `#604A00` | Records, moderate certainty. The 15 kg plate. |
 | `plateYellowSurface` | `#2B2410` | `#FBF3DA` | Record banner. |
@@ -140,9 +140,6 @@ and 3:1 control.
 Increased Contrast swaps `canvas` and `steel` to pure black and white, `chalk` to pure white and
 black, and strengthens `chalkDim`, `plateBlue` and `controlEdge` exactly as the current system
 does for its equivalents. Reduce Transparency replaces every glass material with `steelRaised`.
-
-Known at writing: the light values of `plateBlue` and `plateGreen` sit just under 7:1 on some
-surfaces and must be darkened by the builder until the checker passes; the dark values pass.
 
 The accent moves from readout cyan to plate blue. This is a deliberate change: cyan reads as a
 dashboard, plate blue reads as iron. The light-appearance blue is deep enough to pass 7:1 on
@@ -167,7 +164,8 @@ The current app is flat. The rebuild gives surfaces weight without noise:
   toolbars, and the tour's floating callout card. Content never sits on glass. The keypad, set
   rows and rest bar stay opaque, as today, because they are read under glare and sweat.
 - Glass gets a `plateBlue` tint on the selected tab and the next-up control, nowhere else.
-- One signature texture: a knurl. A Metal `layerEffect` draws a subtle diagonal crosshatch,
+- One signature texture: a knurl. A `Canvas` pattern (`KnurlPattern`) draws a subtle diagonal
+  crosshatch, because a Metal shader needs a resource bundle and this package has none. It is
   visible only on the welcome bar, the hero figure background of the rest countdown, and the
   logged-set seal. It never appears behind text that must be read.
 

@@ -8,11 +8,19 @@ Swift source so the two cannot drift.
 ## Point of view
 
 Hardset is a calibrated instrument for the gym floor. The product's claim is calibrated honesty,
-so the interface behaves like a measuring device rather than a lifestyle app:
+so the interface behaves like a measuring device rather than a lifestyle app.
 
-- **Colour is evidence, never decoration.** Hue appears only when it says something: an action
-  you can take (readout cyan), a set that is saved (green), a caveat (amber/orange), a failure
-  (red). Everything else is graphite and chalk.
+The visual idea is calibrated iron. Competition plates are colour-coded by mass, and the colours
+are a calibration standard, not decoration: red 25 kg, blue 20 kg, yellow 15 kg, green 10 kg,
+white 5 kg. So the app's colour is the colour of calibrated plates, its surfaces are the materials
+of a serious gym (machined steel, black rubber, chalk), and its typography is the stamped figure
+on a plate. The semantic colours (logged green, record gold, caveat amber, failure red, action
+blue) are not arbitrary; they carry a story the lifter already knows.
+
+- **Colour is evidence, never decoration.** Hue appears only when it says something, and it is a
+  plate colour: an action you can take (plate blue), a set that is saved (plate green), a record
+  (plate yellow), a caveat (warning orange), a failure (plate red). Everything else is steel and
+  chalk.
 - **Numbers are the hero.** Weights, reps and rest are set in SF Pro Condensed with tabular
   figures: large, narrow and steady, like stamped plates or a scale readout. Condensed figures fit
   pound values such as `132.28` at full size, so nothing shrinks to fit.
@@ -24,42 +32,60 @@ so the interface behaves like a measuring device rather than a lifestyle app:
 
 ## Palette
 
-Normal appearance values. All text roles are at least 7:1 against `background`, `surface` and
-`surfaceRaised` in both appearances; `controlBorder` is at least 3:1 against all three.
+Normal appearance values. All text roles are at least 7:1 against `canvas`, `steel` and
+`steelRaised` in both appearances; `controlEdge` is at least 3:1 against all three. Dark is the
+primary appearance; light is derived from the same roles and held to the same floor.
 
 | Token | Dark | Light | Role |
 | --- | --- | --- | --- |
-| `background` | `#0E0E10` | `#F9F9FA` | Screen canvas |
-| `surface` | `#1C1C1F` | `#FFFFFF` | Cards, rows, sheets' content |
-| `surfaceRaised` | `#28282D` | `#F1F1F4` | Fields, keys, chips, secondary buttons |
-| `surfacePressed` | `#2E2E33` | `#EBEBEF` | Momentary pressed fill |
-| `border` | `#323238` | `#E0E0E4` | Decorative hairline grouping only |
-| `controlBorder` | `#777782` | `#80808A` | Boundaries that identify a control |
-| `textPrimary` | `#F5F5F7` | `#151518` | Chalk / graphite body text and values |
-| `textSecondary` | `#B9B9C2` | `#4D4D56` | Supporting text, units, provenance |
-| `accent` | `#5ED3E6` | `#00515E` | Readout cyan: actions, focus, selection |
-| `accentFill` | `#5ED3E6` | `#00515E` | Primary button fill |
-| `accentFillPressed` | `#4ABFD3` | `#003D47` | Primary button pressed |
-| `onAccent` | `#0E0E10` | `#FFFFFF` | Text on `accentFill` |
-| `accentSurface` | `#10292E` | `#E2F4F7` | Selected / focused tint |
-| `success` | `#8DE5A2` | `#155B28` | Logged, high certainty |
-| `successSurface` | `#13281A` | `#E6F4EA` | Logged row tint |
-| `pr` | `#FFD873` | `#5F4B00` | Records, moderate certainty |
-| `prSurface` | `#2A2410` | `#FBF3DC` | Record banner |
-| `warning` | `#FFB27A` | `#7A3A00` | Caveats, low certainty |
+| `canvas` | `#0C0D10` | `#F6F6F8` | Screen canvas: rubber-matting black, chalk white |
+| `steel` | `#17181D` | `#FFFFFF` | Cards, rows, sheets' content |
+| `steelRaised` | `#22242B` | `#EEEEF2` | Fields, keys, chips, secondary buttons |
+| `steelPressed` | `#2B2D35` | `#E6E6EB` | Momentary pressed fill |
+| `edgeLight` | `#30333C` | `#FCFCFD` | Lit top edge of a raised face; decorative, never a boundary |
+| `edgeShadow` | `#111216` | `#DBDBDF` | Shaded bottom edge of a raised face; decorative |
+| `hairline` | `#2E3039` | `#DEDEE4` | Decorative hairline grouping only |
+| `controlEdge` | `#7B7E8C` | `#7E8190` | Boundaries that identify a control |
+| `chalk` | `#F3F3F5` | `#141519` | Chalk / graphite body text and values |
+| `chalkDim` | `#B6B8C3` | `#4B4D58` | Supporting text, units, provenance |
+| `plateBlue` | `#6FB7FF` | `#084A95` | The 20 kg plate: actions, focus, selection, next up |
+| `plateBlueFill` | `#6FB7FF` | `#084A95` | Primary button fill |
+| `plateBlueFillPressed` | `#5AA6F0` | `#063C7A` | Primary button pressed |
+| `onPlateBlue` | `#0C0D10` | `#FFFFFF` | Text on `plateBlueFill` |
+| `plateBlueSurface` | `#10233A` | `#E3EFFC` | Selected / focused tint |
+| `plateGreen` | `#8FE3A3` | `#0F5A27` | The 10 kg plate: logged, high certainty |
+| `plateGreenSurface` | `#122A1A` | `#E5F5EA` | Logged row tint |
+| `plateYellow` | `#FFD86B` | `#604A00` | The 15 kg plate: records, moderate certainty |
+| `plateYellowSurface` | `#2B2410` | `#FBF3DA` | Record banner |
+| `plateRed` | `#FF9A9A` | `#9A1B24` | The 25 kg plate: failed writes |
+| `plateRedSurface` | `#2E1516` | `#FBEAEA` | Error banner |
+| `warning` | `#FFB27A` | `#7A3A00` | Caveats, low certainty; not a plate, the colour of a flagged lift |
 | `warningSurface` | `#2C1D12` | `#FCEEE3` | Caveat banner |
-| `error` | `#FF9AA2` | `#981C29` | Failed writes |
-| `errorSurface` | `#2E1517` | `#FBEAEB` | Error banner |
 
-Increased Contrast swaps `background`/`surface` to pure black/white, `textPrimary` to pure
-white/black, and strengthens `textSecondary` (`#DDDDE4` / `#3D3D44`), `accent` (`#9BE9F4` /
-`#003A44`) and `controlBorder` (`#9B9BA5` / `#595964`). Resolution happens live from the trait
-collection, in code, with no asset catalogue.
+Edges: `edgeLight` and `edgeShadow` are opaque values, pre-blended over `steelRaised` (`edgeLight`
+is 60% `#3A3D47` in dark and 80% white in light; `edgeShadow` is 50% black in dark and 8% black in
+light). They stay opaque so an edge is the same colour wherever a face is drawn; do not turn them
+into alphas.
 
-Certainty maps high → `success`, moderate → `pr`, low → `warning`, unevaluated →
-`textSecondary`, always with its word and symbol so colour is never the only carrier.
+The earlier names (`background`, `surface`, `surfaceRaised`, `surfacePressed`, `border`,
+`controlBorder`, `textPrimary`, `textSecondary`, `accent`, `accentFill`, `accentFillPressed`,
+`onAccent`, `accentSurface`, `success`, `successSurface`, `pr`, `prSurface`, `error`,
+`errorSurface`) remain as aliases of the tokens above during the rebuild and are deleted in its
+final phase.
 
-Chart series (one line per machine, never merged) use `accent`, chalk `#E7E7EC`/`#3A3A42`,
+Increased Contrast swaps `canvas`, `steel` and `steelRaised` to pure white (light) or black (dark)
+and `chalk` to pure black or white. It strengthens `steelPressed` (`#E6E6EA` / `#26262B`),
+`hairline` and `controlEdge` (both `#595964` / `#9B9BA5`), `chalkDim` (`#3B3D47` / `#DADCE4`),
+`plateBlue` and `plateBlueFill` (`#063A75` / `#9FD0FF`), `plateBlueFillPressed` (`#052E5E` /
+`#86C2FF`), `onPlateBlue` (white / black) and `plateBlueSurface` (`#D6E8FA` / `#0A1A2C`). The
+edges, the green, yellow and red plates, `warning` and their surfaces keep their normal values:
+they already clear the floor. Resolution happens live from the trait collection, in code, with no
+asset catalogue.
+
+Certainty maps high → `plateGreen`, moderate → `plateYellow`, low → `warning`, unevaluated →
+`chalkDim`, always with its word and symbol so colour is never the only carrier.
+
+Chart series (one line per machine, never merged) use `plateBlue`, chalk `#E7E7EC`/`#3A3A42`,
 lilac `#B9A8FF`/`#5236B8` and rose `#FF9DD6`/`#9A1F66`, each paired with a distinct point symbol.
 
 ## Typography
@@ -68,8 +94,8 @@ System fonts only, so no resource bundle is needed. Every role is a Dynamic Type
 
 | Token | Style | Use |
 | --- | --- | --- |
-| `display` | Large Title, bold, expanded | Tab screen headers |
-| `title` | Title 3, semibold, expanded | Sheet headers, hero card titles |
+| `display` | Large Title, semibold, condensed | Tab screen headers |
+| `title` | Title 3, semibold | Sheet headers, hero card titles |
 | `headline` | Headline | Card and row titles, primary button labels |
 | `label` | Body | Ordinary text and control labels |
 | `labelEmphasis` | Body, semibold | Emphasised labels |
@@ -82,6 +108,10 @@ System fonts only, so no resource bundle is needed. Every role is a Dynamic Type
 | `setEntry` | Title 2, semibold, condensed, tabular | Weight and reps in a set row |
 | `figure` | Headline, condensed, tabular | Small figures inside ledgers and rows |
 
+Tracking is a ratio of the resolved size, so it follows Dynamic Type: `hero` and `display` -2%,
+`readout` -1%, `caption` and `unit` +1%, every other role 0. `hardsetText(_:)` applies a role's
+font and tracking together from `Tokens.Text.Role`; the static fonts carry no tracking.
+
 ## Spacing, radius, stroke
 
 - Spacing: `hairline 2`, `tight 4`, `snug 8`, `regular 12`, `loose 16`, `section 24`, `block 32`.
@@ -93,12 +123,18 @@ System fonts only, so no resource bundle is needed. Every role is a Dynamic Type
 
 ## Motion
 
-| Token | Duration | Curve | Use |
-| --- | --- | --- | --- |
-| `Motion.press` | 120 ms | ease-out | Button and key press feedback |
-| `Motion.state` | 200 ms | ease-in-out | Selection, segment indicator, row state |
-| `Motion.reveal` | 280 ms | ease-out | Banners and inline confirmations appearing |
-| `Motion.stamp` | 300 ms spring, bounce 0.3 | spring | The log check, and nothing else |
+| Token | Value | Use |
+| --- | --- | --- |
+| `Motion.press` | 120 ms ease-out | Button and key press feedback |
+| `Motion.state` | spring, response 0.30, damping 1.0 | Selection, segment indicator, row state |
+| `Motion.reveal` | 280 ms ease-out | Banners and inline confirmations appearing |
+| `Motion.stamp` | 300 ms spring, bounce 0.3 | The log check, and nothing else |
+| `Motion.fling(initialVelocity:)` | spring, response 0.35, damping 0.80 | Gesture release only, carrying the gesture's velocity |
+| `Motion.zoom` | system zoom transition | A card growing into its screen and back |
+
+`state` is critically damped, so it settles without overshoot and carries velocity into a
+reversed target. `zoom` is the system's `navigationTransition(.zoom)` and has no animation value
+of its own, because the system owns its timing, interruption and Reduce Motion behaviour.
 
 Pressed controls scale to 0.97 and swap to their pressed fill. With Reduce Motion on, scale and
 spring are dropped and only the fill or opacity changes, instantly or with `Motion.state`. Only
@@ -109,58 +145,68 @@ carrying `Motion.reveal`, and no animated transaction, so what it displaces move
 leaves at once. A logged row's tint is a layer whose opacity fades on `Motion.state`; the row's
 height is never animated.
 
-Haptics follow the same restraint. `success` belongs to the log tap alone. `error` follows every
-failed command, a repeated failure included. `selection` answers the row's machine step and the
-rest bar's −15, +15, pause and skip. `warning` marks a rest that ran out on its own when no alarm
-can mark it (alarms denied or unavailable). Selection rows, the unit switch and pickers stay silent.
+Haptics follow the same restraint, and each has a name in `Tokens.Haptic`: `clank`, `success`,
+`error`, `selection` and `warning`. `clank` is a heavy, full-strength impact for a weighty physical
+moment; it is the heavy system impact until the welcome bar introduces CoreHaptics. `success`
+belongs to the log tap alone. `error` follows every failed command, a repeated failure included.
+`selection` answers the row's machine step and the rest bar's −15, +15, pause and skip. `warning`
+marks a rest that ran out on its own when no alarm can mark it (alarms denied or unavailable).
+Selection rows, the unit switch and pickers stay silent.
 
 ## Components and states
 
-- **Buttons** (`HardsetButtonStyle`): `primary` (accent fill), `secondary` (raised fill, control
-  border), `quiet` (accent text, no fill), `destructive` (error text on error surface). Sizes
-  `logger` (56 pt) and `regular` (44 pt). States: default, pressed, disabled (40% opacity),
-  focused (system focus ring).
-- **Keys** (`HardsetKeyStyle`): raised fill, control border, pressed fill plus 0.96 scale.
-- **Cards** (`hardsetCard`): surface fill, decorative border; selected uses a 2 pt accent ring
-  and `accentSurface` fill.
-- **Chips** (`HardsetChip`): capsule, raised fill; selected uses accent fill with `onAccent` text.
+- **Buttons** (`HardsetButtonStyle`): `primary` (plate blue fill), `secondary` (raised steel),
+  `quiet` (plate blue text, no fill), `destructive` (red text on the error surface). Sizes `logger`
+  (56 pt) and `regular` (44 pt). States: default, pressed, disabled (40% opacity), focused (system
+  focus ring). The look is machined: a secondary button is raised steel with a light top edge, a
+  shadowed bottom edge and the control edge, and sinks to the pressed fill with no edge when
+  pressed. Primary keeps its plate blue fill and wears the edge gradient while raised.
+- **Keys** (`HardsetKeyStyle`): the same machined face as a secondary button, raised steel with the
+  edge gradient and control edge, sinking to the pressed fill with no edge, plus a 0.96 scale.
+- **Knurl** (`KnurlPattern`, `.knurl(opacity:)`): a `Canvas` crosshatch for a control's face or a
+  hero figure's backing, never behind text. It fills rectangular bounds, so callers with rounded
+  shapes clip it themselves.
+- **Cards** (`hardsetCard`): `steel` fill, decorative `hairline` border; selected uses a 2 pt
+  `plateBlue` ring and `plateBlueSurface` fill.
+- **Chips** (`HardsetChip`): capsule, raised fill; selected uses `plateBlueFill` with `onPlateBlue`
+  text.
 - **Segmented control** (`HardsetSegmentedControl`): replaces the system segmented picker; the
   selection indicator slides with `Motion.state`.
 - **Screen header** (`ScreenHeader`): display title, one context line, optional trailing action.
 - **Banner** (`HardsetBanner`): record, caveat, and error messages on their tinted surfaces.
 - **Ledger** (`StatLedger`): a row of labelled figures separated by hairlines, used for session
   totals.
-- **Empty and loading states**: explain what is missing and what to do next; loading is a quiet
-  line of text, not a spinner. An empty slot is drawn with a dashed outline, the app's one mark
-  for "nothing here yet": the empty-state socket, the "Add movement" slot, a warm-up's ordinal,
-  an incomplete set's log control, and the rule under "Not evaluated".
+- **Empty and loading states**: explain what is missing and what to do next; loading is a quiet line
+  of text, not a spinner. An empty slot is drawn with a dashed outline, the app's one mark for
+  "nothing here yet": the empty-state socket, the "Add movement" slot, a warm-up's ordinal, an
+  incomplete set's log control, and the rule under "Not evaluated".
 - **Tags versus chips**: a chip can be tapped and wears the control border; a tag (modality,
   "Recent", "Custom", an untrained muscle) is filled only, so it never imitates a control.
-- **Selection** (`SelectionRow`, `SelectionCardButtonStyle`, `SelectionIndicator`): selected
-  choices take the accent ring and `accentSurface`, and the trailing indicator swaps an empty
-  ring for a filled check, so the choice is carried by shape as well as colour.
-- **Text entry** (`entryFieldChrome`): raised fill, control border, and a 2 pt accent ring that
+- **Selection** (`SelectionRow`, `SelectionCardButtonStyle`, `SelectionIndicator`): selected choices
+  take the plate blue ring and `plateBlueSurface`, and the trailing indicator swaps an empty ring
+  for a filled check, so the choice is carried by shape as well as colour.
+- **Text entry** (`entryFieldChrome`): raised fill, control border, and a 2 pt plate blue ring that
   fades in on focus. Used by the search field and the name entry sheet.
-- **Set log control**: four states, never confused: incomplete (dashed, disabled), ready
-  (accent outline), next up (accent fill), logged (the stamp). The first three are square key
-  faces with a check; a logged set loses its key face and wears a round `success` seal
-  (`checkmark.circle.fill`) on the row's `successSurface` tint, so logged and next up differ by
-  shape, not only by hue. At accessibility sizes the control also reads "Log set" or "Logged",
-  and VoiceOver hears "next to log" on the next-up row. Voice Control answers to "Set 2",
-  "Log set 2", and, on the next-up row, "Log set".
+- **Set log control**: four states, never confused: incomplete (dashed, disabled), ready (plate blue
+  outline), next up (plate blue fill), logged (the stamp). The first three are square key faces with
+  a check; a logged set loses its key face and wears a round `plateGreen` seal
+  (`checkmark.circle.fill`) on the row's `plateGreenSurface` tint, so logged and next up differ by
+  shape, not only by hue. At accessibility sizes the control also reads "Log set" or "Logged", and
+  VoiceOver hears "next to log" on the next-up row. Voice Control answers to "Set 2", "Log set 2",
+  and, on the next-up row, "Log set".
 - **Press feedback on self-drawn controls** (`HardsetPressStyle`, and the set row's fields and
   check): controls that draw their own fill and shape (chips, segments, the dashed "Add movement"
   slot, header circles, the machine and gym chips) sink to 0.97 and drop to 80–85% opacity on
   `Motion.press`, in place of a pressed fill. Reduce Motion keeps only the opacity. Disabled
   controls are never dimmed by it, so saved rows and inert titles keep full contrast.
 - **Replaceable prefill**: when the keypad opens on a value the next key will replace, its display
-  draws that value on `accentSurface` with a hairline `accent` ring, as selected text, until the
-  first edit. Static; no motion.
-- **Button Shapes**: with the system setting on, `quiet` buttons wear the `secondary` control
-  border and the exercise name (the load-history link) is underlined.
-- **Volume bars**: square-ended gauges scaled to the week's own maximum, never to a target.
-  Modelled muscles are solid accent; muscles that are counted but not modelled are hollow (accent
-  outline on `accentSurface`) and say so in words beside the bar.
+  draws that value on `plateBlueSurface` with a hairline `plateBlue` ring, as selected text, until
+  the first edit. Static; no motion.
+- **Button Shapes**: with the system setting on, `quiet` buttons wear the `secondary` control border
+  and the exercise name (the load-history link) is underlined.
+- **Volume bars**: square-ended gauges scaled to the week's own maximum, never to a target. Modelled
+  muscles are solid plate blue; muscles that are counted but not modelled are hollow (plate blue
+  outline on `plateBlueSurface`) and say so in words beside the bar.
 - **Charts**: one series per machine with its own colour and point symbol, a custom legend in app
   type, and machine changes as 2 pt dashed `warning` rules.
 
