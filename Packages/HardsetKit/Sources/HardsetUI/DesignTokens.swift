@@ -460,7 +460,7 @@ public struct HardsetButtonStyle: ButtonStyle {
   public enum Role: Sendable, Hashable {
     /// Accent fill. One per screen: the thing the lifter came here to do.
     case primary
-    /// Raised fill and a control border.
+    /// Machined raised face with a control edge.
     case secondary
     /// Accent text with no fill, for low-emphasis actions beside content.
     case quiet
@@ -505,55 +505,83 @@ private struct HardsetButtonBody: View {
 
   var body: some View {
     let shape = RoundedRectangle(cornerRadius: Tokens.Radius.control)
-    configuration.label
-      .font(size == .logger ? Tokens.Text.headline : Tokens.Text.labelEmphasis)
-      .foregroundStyle(foreground)
-      .multilineTextAlignment(.center)
-      .padding(.horizontal, role == .quiet ? Tokens.Spacing.snug : Tokens.Spacing.loose)
-      .padding(.vertical, Tokens.Spacing.snug)
-      .frame(
-        maxWidth: fullWidth ? .infinity : nil,
-        minHeight: size == .logger ? Tokens.loggerTapTarget : Tokens.minimumTapTarget
-      )
-      .background(fill, in: shape)
-      .overlay {
-        if role == .secondary || (role == .quiet && showsButtonShapes) {
-          shape.strokeBorder(Tokens.Color.controlBorder, lineWidth: Tokens.Stroke.hairline)
+    surface(
+      configuration.label
+        .font(size == .logger ? Tokens.Text.headline : Tokens.Text.labelEmphasis)
+        .foregroundStyle(foreground)
+        .multilineTextAlignment(.center)
+        .padding(.horizontal, role == .quiet ? Tokens.Spacing.snug : Tokens.Spacing.loose)
+        .padding(.vertical, Tokens.Spacing.snug)
+        .frame(
+          maxWidth: fullWidth ? .infinity : nil,
+          minHeight: size == .logger ? Tokens.loggerTapTarget : Tokens.minimumTapTarget
+        ),
+      shape: shape
+    )
+    .contentShape(shape)
+    .scaleEffect(configuration.isPressed && !reduceMotion ? 0.97 : 1)
+    .opacity(isEnabled ? (role == .quiet && configuration.isPressed ? 0.6 : 1) : 0.4)
+    .animation(Tokens.Motion.press, value: configuration.isPressed)
+  }
+
+  /// Draws the role's face behind the label. Secondary is a machined key that loses its edge light
+  /// when pressed; primary keeps its solid plate-blue fill and catches the same edge light until
+  /// it is pressed. A modifier that returns `some View` cannot be applied conditionally inline, so
+  /// the choice is made here.
+  @ViewBuilder
+  private func surface<Content: View>(_ content: Content, shape: RoundedRectangle) -> some View {
+    switch role {
+    case .primary:
+      content
+        .background(
+          configuration.isPressed ? Tokens.Color.plateBlueFillPressed : Tokens.Color.plateBlueFill,
+          in: shape
+        )
+        .overlay {
+          if !configuration.isPressed {
+            shape.strokeBorder(
+              LinearGradient(
+                colors: [Tokens.Color.edgeLight, Tokens.Color.edgeShadow],
+                startPoint: .top,
+                endPoint: .bottom
+              ),
+              lineWidth: Tokens.Stroke.hairline
+            )
+          }
         }
+    case .secondary:
+      if configuration.isPressed {
+        content.machinedPressed(shape)
+      } else {
+        content.machinedRaised(shape, outlined: true)
       }
-      .contentShape(shape)
-      .scaleEffect(configuration.isPressed && !reduceMotion ? 0.97 : 1)
-      .opacity(isEnabled ? (role == .quiet && configuration.isPressed ? 0.6 : 1) : 0.4)
-      .animation(Tokens.Motion.press, value: configuration.isPressed)
+    case .quiet:
+      content
+        .overlay {
+          if showsButtonShapes {
+            shape.strokeBorder(Tokens.Color.controlEdge, lineWidth: Tokens.Stroke.hairline)
+          }
+        }
+    case .destructive:
+      content.background(Tokens.Color.plateRedSurface, in: shape)
+    }
   }
 
   private var foreground: Color {
     switch role {
-    case .primary: Tokens.Color.onAccent
-    case .secondary: Tokens.Color.textPrimary
-    case .quiet: Tokens.Color.accent
-    case .destructive: Tokens.Color.error
-    }
-  }
-
-  private var fill: Color {
-    switch role {
-    case .primary:
-      configuration.isPressed ? Tokens.Color.accentFillPressed : Tokens.Color.accentFill
-    case .secondary:
-      configuration.isPressed ? Tokens.Color.surfacePressed : Tokens.Color.surfaceRaised
-    case .quiet:
-      .clear
-    case .destructive:
-      Tokens.Color.errorSurface
+    case .primary: Tokens.Color.onPlateBlue
+    case .secondary: Tokens.Color.chalk
+    case .quiet: Tokens.Color.plateBlue
+    case .destructive: Tokens.Color.plateRed
     }
   }
 }
 
-/// A keypad key: raised, outlined, and pressed in rather than highlighted.
+/// A keypad key: a machined raised face, outlined, and pressed in rather than highlighted.
 ///
-/// The outline is the measured `controlBorder`. A key identified only by a fill one shade off the
-/// pad is a key the lifter has to look for.
+/// Pressing it drops the edge light and swaps to the pressed fill, so the key reads as having gone
+/// down. The outline is the measured `controlEdge`. A key identified only by a fill one shade off
+/// the pad is a key the lifter has to look for.
 public struct HardsetKeyStyle: ButtonStyle {
   public init() {}
 
@@ -570,17 +598,21 @@ private struct HardsetKeyBody: View {
 
   var body: some View {
     let shape = RoundedRectangle(cornerRadius: Tokens.Radius.control)
-    configuration.label
-      .foregroundStyle(Tokens.Color.textPrimary)
+    let label = configuration.label
+      .foregroundStyle(Tokens.Color.chalk)
       .frame(maxWidth: .infinity, minHeight: Tokens.loggerTapTarget)
-      .background(
-        configuration.isPressed ? Tokens.Color.surfacePressed : Tokens.Color.surfaceRaised,
-        in: shape
-      )
-      .overlay(shape.strokeBorder(Tokens.Color.controlBorder, lineWidth: Tokens.Stroke.hairline))
-      .contentShape(shape)
+    face(label, shape: shape)
       .scaleEffect(configuration.isPressed && !reduceMotion ? 0.96 : 1)
       .opacity(isEnabled ? 1 : 0.4)
       .animation(Tokens.Motion.press, value: configuration.isPressed)
+  }
+
+  @ViewBuilder
+  private func face<Content: View>(_ content: Content, shape: RoundedRectangle) -> some View {
+    if configuration.isPressed {
+      content.machinedPressed(shape)
+    } else {
+      content.machinedRaised(shape, outlined: true)
+    }
   }
 }
