@@ -10,23 +10,46 @@ import SwiftUI
 /// It is static on purpose: no state, no database, no network, so a render is the same every
 /// time. Nothing in the app presents it.
 public struct TokenCatalogView: View {
-  public init() {}
+  /// The six catalogue sections, in page order. The snapshot suite renders them one at a time so
+  /// that each image is as tall as its own section and nothing is cropped.
+  public enum Section: String, CaseIterable, Sendable {
+    case palette, machined, type, buttons, certainty, motion
+  }
+
+  private let section: Section?
+
+  /// Pass `nil` for the whole page, which is what previews want; pass a section to render only
+  /// that section under its label.
+  public init(section: Section? = nil) {
+    self.section = section
+  }
 
   public var body: some View {
     ScrollView {
       VStack(alignment: .leading, spacing: Tokens.Spacing.section) {
-        PaletteSection()
-        MachinedSection()
-        TypeSection()
-        ButtonSection()
-        CertaintySection()
-        MotionAndHapticSection()
+        if let section {
+          sectionView(section)
+        } else {
+          ForEach(Section.allCases, id: \.self) { sectionView($0) }
+        }
       }
       .padding(.horizontal, Tokens.Spacing.loose)
       .padding(.vertical, Tokens.Spacing.loose)
       .frame(maxWidth: .infinity, alignment: .leading)
     }
     .background(Tokens.Color.canvas.ignoresSafeArea())
+  }
+
+  @ViewBuilder
+  private func sectionView(_ section: Section) -> some View {
+    switch section {
+    case .palette: PaletteSection()
+    case .machined: MachinedSection()
+    case .type: TypeSection()
+    case .buttons: ButtonSection()
+    case .certainty: CertaintySection()
+    case .motion: MotionAndHapticSection()
+    }
   }
 }
 
@@ -137,12 +160,15 @@ private struct PaletteRow: View {
       .foregroundStyle(Tokens.Color.chalkDim)
   }
 
-  /// A 44 pt swatch on `steel`, then, for text roles, the colour as text on each surface.
+  /// A 44 pt swatch of the colour on a `steel` tile, so surface and edge roles are judged against
+  /// steel rather than the page, then, for text roles, the colour as text on each surface.
   @ViewBuilder
   private var swatchAndSamples: some View {
     RoundedRectangle(cornerRadius: Tokens.Radius.control)
       .fill(entry.color)
       .frame(width: Tokens.minimumTapTarget, height: Tokens.minimumTapTarget)
+      .padding(Tokens.Spacing.tight)
+      .background(Tokens.Color.steel, in: RoundedRectangle(cornerRadius: Tokens.Radius.control))
       .overlay(
         RoundedRectangle(cornerRadius: Tokens.Radius.control)
           .strokeBorder(Tokens.Color.hairline, lineWidth: Tokens.Stroke.hairline)
@@ -162,7 +188,7 @@ private struct PaletteSample: View {
   let surface: Color
 
   var body: some View {
-    Text("Aa 132.3")
+    Text("Aa 1.5")
       .font(Tokens.Text.figure)
       .foregroundStyle(color)
       .lineLimit(1)
@@ -186,8 +212,13 @@ private struct MachinedSection: View {
           MachinedSample(title: "Outlined", style: .outlined)
           MachinedSample(title: "Pressed", style: .pressed)
         }
-        MachinedSample(title: "Knurl", style: .knurled)
-          .frame(width: 120)
+        HStack(spacing: Tokens.Spacing.regular) {
+          MachinedSample(title: "", style: .knurled)
+            .frame(width: 120, height: Tokens.loggerTapTarget)
+          Text("Knurl: texture for a control's face, never behind text")
+            .font(Tokens.Text.caption)
+            .foregroundStyle(Tokens.Color.chalkDim)
+        }
       }
     }
   }
@@ -214,7 +245,8 @@ private struct MachinedSample: View {
       label.machinedPressed(shape)
     case .knurled:
       // The knurl is clipped to rectangular bounds, so the rounded face clips it back to its
-      // corners. The label would normally never sit on a knurl; this sample is texture only.
+      // corners. Its title is empty: the knurl must never sit behind text, so it is labelled
+      // beside the sample instead.
       label.machinedRaised(shape).knurl().clipShape(shape)
     }
   }
