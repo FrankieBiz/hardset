@@ -276,13 +276,14 @@ public enum Tokens {
   /// flourish: a pound value such as "132.28" fits a set-row field at full size, where the rounded
   /// face had to shrink it to 60% -- about 12 pt -- to avoid wrapping.
   public enum Text {
-    /// Tab screen headers. Expanded width reads as an instrument label, and it is used nowhere
-    /// else, so it stays a landmark.
-    public static let display = Font.system(.largeTitle, design: .default, weight: .bold)
-      .width(.expanded)
-    /// Sheet headers and hero card titles.
+    /// Tab screen headers. A stamped plate face in the family of the figures: condensed and
+    /// semibold, so a header reads as the same engraved lettering as the numbers beneath it.
+    /// Expanded width is retired.
+    public static let display = Font.system(.largeTitle, design: .default, weight: .semibold)
+      .width(.condensed)
+    /// Sheet headers and hero card titles. Standard width: expanded width is retired, and the
+    /// condensed face is kept for display and figures.
     public static let title = Font.system(.title3, design: .default, weight: .semibold)
-      .width(.expanded)
     /// Card and row titles, and primary button labels.
     public static let headline = Font.headline
 
