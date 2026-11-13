@@ -9,7 +9,7 @@
   ///
   /// The development machine cannot compile SwiftUI, so the catalogue is how the palette, type,
   /// machined surfaces and controls are seen in every appearance the app supports: dark, light,
-  /// Increase Contrast, an accessibility text size and Reduce Motion. Each section is captured on
+  /// Increase Contrast and an accessibility text size. Each section is captured on
   /// its own, in a window as tall as that section, because one tall image of the whole page would
   /// crop its lower sections. Like the screen suite it is inert unless `HARDSET_SNAPSHOT_DIR` is
   /// set, and it asserts nothing about pixels.
@@ -45,9 +45,8 @@
       }
     }
 
-    /// The two sections whose layout changes at accessibility sizes, and the buttons with Reduce
-    /// Motion on.
-    @Test func accessibilityAndReducedMotion() async throws {
+    /// The two sections whose layout changes at accessibility sizes.
+    @Test func accessibilitySizes() async throws {
       try await Snapshot.capture(
         "tokens-type-dark-ax3",
         size: CGSize(width: Self.width, height: 2200),
@@ -61,12 +60,6 @@
         typeSize: .accessibility3
       ) {
         TokenCatalogView(section: .buttons)
-      }
-      try await Snapshot.capture(
-        "tokens-buttons-dark-reduced-motion",
-        size: CGSize(width: Self.width, height: 1200)
-      ) {
-        TokenCatalogView(section: .buttons).environment(\.accessibilityReduceMotion, true)
       }
     }
   }
