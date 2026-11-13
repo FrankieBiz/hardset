@@ -849,3 +849,9 @@ configuration and physical-device validation remain documented separately.
 - Open: dark `steelPressed` is lighter than `steelRaised`, so a press reads as a highlight rather
   than a sink; decide in phase 2 polish. Physical-device glare and haptic character are owner
   checks. Phase 2 (component kit) is next and gets its own plan.
+- Final review fix wave (2026-11-13): the control edge no longer hides the edge gradient (gradient
+  drawn one hairline inside the outline), pressed faces keep the control edge and lose only the
+  edge light, dark `steelPressed` is `#1B1C22` so a press sinks, primary buttons carry no edge
+  gradient, and `HardsetButtonFace`/`HardsetKeyFace` are shared by the live styles and the
+  catalogue. CI run 43365872815 green; renders reviewed. Contrast gate now also checks
+  `controlEdge` on `steelPressed` (light is 3.11:1).
