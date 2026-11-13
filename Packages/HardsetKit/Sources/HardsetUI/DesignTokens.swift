@@ -550,11 +550,13 @@ private struct HardsetButtonBody: View {
           }
         }
     case .secondary:
-      if configuration.isPressed {
-        content.machinedPressed(shape)
-      } else {
-        content.machinedRaised(shape, outlined: true)
-      }
+      content.modifier(
+        MachinedModifier(
+          shape: shape,
+          isPressed: configuration.isPressed,
+          outlined: !configuration.isPressed
+        )
+      )
     case .quiet:
       content
         .overlay {
@@ -580,8 +582,9 @@ private struct HardsetButtonBody: View {
 /// A keypad key: a machined raised face, outlined, and pressed in rather than highlighted.
 ///
 /// Pressing it drops the edge light and swaps to the pressed fill, so the key reads as having gone
-/// down. The outline is the measured `controlEdge`. A key identified only by a fill one shade off
-/// the pad is a key the lifter has to look for.
+/// down. While raised it wears the measured `controlEdge` outline, which is dropped along with the
+/// edge light when pressed. A key identified only by a fill one shade off the pad is a key the
+/// lifter has to look for.
 public struct HardsetKeyStyle: ButtonStyle {
   public init() {}
 
@@ -607,12 +610,15 @@ private struct HardsetKeyBody: View {
       .animation(Tokens.Motion.press, value: configuration.isPressed)
   }
 
-  @ViewBuilder
+  /// The key's machined face. One modifier whose pressed state changes, so the label keeps its
+  /// identity across a press instead of being rebuilt in a different branch.
   private func face<Content: View>(_ content: Content, shape: RoundedRectangle) -> some View {
-    if configuration.isPressed {
-      content.machinedPressed(shape)
-    } else {
-      content.machinedRaised(shape, outlined: true)
-    }
+    content.modifier(
+      MachinedModifier(
+        shape: shape,
+        isPressed: configuration.isPressed,
+        outlined: !configuration.isPressed
+      )
+    )
   }
 }
