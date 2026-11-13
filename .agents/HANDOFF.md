@@ -822,3 +822,30 @@ configuration and physical-device validation remain documented separately.
 - Delivery: committing owned files and pushing to main as explicitly required by
   the project protocol. Native CI will report separately; no Apple validation is
   claimed by the Linux gate.
+
+## Front-end rebuild, phase 1: design system v2 — 2026-11-13
+
+- Maintainer: FrankieBiz <frankabisignano@gmail.com>.
+- Objective: the first phase of the front-end rebuild approved on 2026-11-12
+  (`docs/superpowers/specs/2026-11-12-frontend-rebuild-design.md`, plan in
+  `docs/superpowers/plans/2026-11-12-frontend-rebuild-phase-1-design-system.md`).
+- Worktree: `/home/frankbiz/orca/workspaces/hardset/cowfish`; branch
+  `FrankieBiz/premium-frontend-design-plan`, pushed; base `abe9ec6` on main.
+- Delivered: the plate palette (23 roles) with the old names kept as transitional aliases,
+  machined surface modifiers and the Canvas knurl pattern, condensed display type and tracked
+  type roles (`hardsetText(_:)`), spring motion tokens with `fling(initialVelocity:)`, the
+  `Tokens.Haptic` vocabulary replacing inline feedback values, machined button and key styles,
+  a per-section `TokenCatalogView` rendered by `TokenCatalogSnapshotTests`, `check_contrast.py`
+  on the new role names, and `DESIGN.md` rewritten to the new system.
+- Verification: Linux `make check` exit 0 (147 files parsed, 232 Core tests, 299 Store tests,
+  query gate, 172 contrast pairs). macOS CI run 43358162292 green: app and widget built in Debug
+  and Release, HardsetTests passed, 38 snapshot tests rendered 56 PNGs, the real-app journey
+  passed in dark and light with the accessibility audit. Reviewed from the artefact: the six
+  catalogue sections in dark, the keypad and the logged session in the real app.
+- Settled: no Metal shader (a `.metal` file needs a resource bundle this package avoids); the
+  reduced-motion catalogue capture was dropped because `accessibilityReduceMotion` cannot be
+  injected through the environment; pressed faces keep one view identity via
+  `MachinedModifier(isPressed:)` so a press never transitions the label.
+- Open: dark `steelPressed` is lighter than `steelRaised`, so a press reads as a highlight rather
+  than a sink; decide in phase 2 polish. Physical-device glare and haptic character are owner
+  checks. Phase 2 (component kit) is next and gets its own plan.
