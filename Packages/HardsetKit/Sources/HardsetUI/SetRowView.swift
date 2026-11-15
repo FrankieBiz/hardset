@@ -131,15 +131,15 @@ public struct SetRowView: View {
     .padding(.horizontal, Tokens.Spacing.tight)
     .padding(.vertical, Tokens.Spacing.tight)
     // Opaque. Dense numeric rows are the one surface glass is actively wrong for. A logged row
-    // takes the success tint, so a glance down the card shows what is done without reading.
+    // takes the logged tint, so a glance down the card shows what is done without reading.
     //
     // The tint is a layer that fades in place; only its opacity is animated. An animation on the
     // whole row also animated its height when the step buttons left it, so the shrinking tint
     // and the fading buttons were drawn over the next row, which had already moved up.
     .background {
       ZStack {
-        shape.fill(Tokens.Color.surface)
-        shape.fill(Tokens.Color.successSurface)
+        shape.fill(Tokens.Color.steel)
+        shape.fill(Tokens.Color.plateGreenSurface)
           .opacity(isLogged ? 1 : 0)
       }
       .animation(
@@ -305,13 +305,13 @@ public struct SetRowView: View {
     let shape = RoundedRectangle(cornerRadius: Tokens.Radius.control - Tokens.Spacing.tight)
     return Text(isWarmup ? "W" : String(ordinal + 1))
       .font(Tokens.Text.figure)
-      .foregroundStyle(isWarmup ? Tokens.Color.textSecondary : Tokens.Color.textPrimary)
+      .foregroundStyle(isWarmup ? Tokens.Color.chalkDim : Tokens.Color.chalk)
       .frame(minWidth: SetRowMetrics.ordinalWidth, minHeight: SetRowMetrics.ordinalWidth)
-      .background(isWarmup ? Color.clear : Tokens.Color.surfaceRaised, in: shape)
+      .background(isWarmup ? Color.clear : Tokens.Color.steelRaised, in: shape)
       .overlay {
         if isWarmup {
           shape.strokeBorder(
-            Tokens.Color.controlBorder,
+            Tokens.Color.controlEdge,
             style: StrokeStyle(lineWidth: Tokens.Stroke.hairline, dash: [3, 2])
           )
         }
@@ -325,26 +325,27 @@ public struct SetRowView: View {
     VStack(alignment: .leading, spacing: 0) {
       if showsInlineLabels || isStacked {
         Text("Last time")
-          .font(Tokens.Text.caption)
-          .foregroundStyle(Tokens.Color.textSecondary)
+          .hardsetText(.caption)
+          .foregroundStyle(Tokens.Color.chalkDim)
           .padding(.bottom, Tokens.Spacing.hairline)
       }
       if let previous {
         Text(LoadFigure.text(unit.fromKilograms(previous.weightKg)))
           .font(Tokens.Text.figure)
-          .foregroundStyle(Tokens.Color.textSecondary)
+          .foregroundStyle(Tokens.Color.chalkDim)
           .lineLimit(1)
           // The one value allowed to give a little: it is a hint, read second, and a long pound
           // figure must not push the fields the lifter types into off the row.
           .minimumScaleFactor(0.8)
         Text("× \(previous.reps)")
-          .font(Tokens.Text.caption.monospacedDigit())
-          .foregroundStyle(Tokens.Color.textSecondary)
+          .hardsetText(.caption)
+          .monospacedDigit()
+          .foregroundStyle(Tokens.Color.chalkDim)
           .lineLimit(1)
       } else {
         Text("—")
           .font(Tokens.Text.figure)
-          .foregroundStyle(Tokens.Color.textSecondary)
+          .foregroundStyle(Tokens.Color.chalkDim)
       }
       if let priorNote {
         // An assumption the user should be able to see, not a number presented as fact.
@@ -369,121 +370,48 @@ public struct SetRowView: View {
 
   private func valueField(_ field: SetRowField, suffix: String?) -> some View {
     let isEditing = editingField == field
-    let text = displayText(field)
-    let shape = RoundedRectangle(cornerRadius: Tokens.Radius.control)
+    let isReadOnly = isLogged || onBeginEditing == nil
     return Button {
       onBeginEditing?(field)
     } label: {
-      HStack(alignment: .firstTextBaseline, spacing: Tokens.Spacing.tight) {
-        // An empty field shows an em dash, never "0" — a zero on screen reads as a value.
-        Text(text ?? "—")
-          .font(Tokens.Text.setEntry)
-          .foregroundStyle(text == nil ? Tokens.Color.textSecondary : Tokens.Color.textPrimary)
-          // Condensed tabular figures fit a pound value such as "132.28" at full size on a 375 pt
-          // phone. The mild floor below exists only so an extreme value shrinks a little rather
-          // than truncating: a number cut to "132.…" is worse than one drawn slightly smaller.
-          .lineLimit(1)
-          .minimumScaleFactor(0.85)
-        if let suffix {
-          Text(suffix)
-            .font(Tokens.Text.unit)
-            .foregroundStyle(Tokens.Color.textSecondary)
-        }
-      }
-      .padding(.horizontal, Tokens.Spacing.tight)
-      .frame(maxWidth: .infinity, minHeight: Tokens.loggerTapTarget)
-      .background(isEditing ? Tokens.Color.accentSurface : Tokens.Color.surfaceRaised, in: shape)
-      .overlay(
-        shape.strokeBorder(
-          isEditing ? Tokens.Color.accent : Tokens.Color.controlBorder,
-          lineWidth: isEditing ? Tokens.Stroke.selected : Tokens.Stroke.hairline
-        )
-      )
-      .contentShape(shape)
+      SetRowFieldValue(text: displayText(field), suffix: suffix)
     }
-    .buttonStyle(SetReadoutStyle())
-    .disabled(isLogged || onBeginEditing == nil)
+    // Machined fields sink on press through their own style; neither `SetReadoutStyle` nor the
+    // opacity press belongs on a steel face, because a dim would fade the boundary.
+    .buttonStyle(SetFieldStyle(isEditing: isEditing, isReadOnly: isReadOnly))
+    .disabled(isReadOnly)
   }
 
   /// The one tap the whole logger is built around.
   ///
   /// Four states, each drawn differently so none is mistaken for another: incomplete (dashed, and
-  /// disabled), ready (outlined), next up (filled with the accent), and logged (the success
-  /// stamp). The stamp is the app's one spring; with Reduce Motion it simply appears.
+  /// disabled), ready (outlined), next up (filled with plate blue), and logged (the plate-green
+  /// seal). The stamp is the app's one spring; with Reduce Motion it simply appears.
   ///
   /// Logged and next up differ in shape, not only in hue. Both used to be a filled square with the
   /// same check, about 1.1:1 apart in luminance, so in glare or with a colour-vision deficiency a
   /// set waiting to be logged looked saved. A key face (square, check) means "tap to log"; a
   /// logged set loses its key face and wears a round seal, which nothing tappable in the logger
   /// uses. At accessibility sizes the control also says which it is in words.
+  ///
+  /// `SetLogControlFace` draws the whole control, so the live button and the catalogue's forced
+  /// states cannot drift. The button's own label is never drawn.
   private var logButton: some View {
-    let shape = RoundedRectangle(cornerRadius: Tokens.Radius.control)
-    let isReady = draft.isLoggable
-    return Button(action: onLog) {
-      HStack(spacing: Tokens.Spacing.snug) {
-        ZStack {
-          Image(systemName: "checkmark")
-            .font(Tokens.Text.headline.weight(.bold))
-            .foregroundStyle(logSymbolColor(isReady: isReady))
-            .opacity(isLogged ? 0 : 1)
-          Image(systemName: "checkmark.circle.fill")
-            .font(Tokens.Text.readout)
-            .foregroundStyle(Tokens.Color.success)
-            .opacity(isLogged ? 1 : 0)
-            .scaleEffect(isLogged || reduceMotion ? 1 : 0.6)
-        }
-        // Only the glyphs spring. The key face below changes at once, so nothing is laid out
-        // twice and the stamp stays the one moving thing.
-        .animation(
-          Tokens.Motion.adaptive(Tokens.Motion.stamp, reduceMotion: reduceMotion),
-          value: isLogged
-        )
-        if isStacked {
-          Text(isLogged ? "Logged" : "Log set")
-            .font(Tokens.Text.headline)
-            .foregroundStyle(isLogged ? Tokens.Color.success : logSymbolColor(isReady: isReady))
-        }
-      }
-      .frame(
-        maxWidth: isStacked ? .infinity : Tokens.loggerTapTarget,
-        minHeight: Tokens.loggerTapTarget
-      )
-      .frame(width: isStacked ? nil : Tokens.loggerTapTarget)
-      .background(logFill(isReady: isReady), in: shape)
-      .overlay {
-        if !isLogged && !(isReady && isNext) {
-          shape.strokeBorder(
-            isReady ? Tokens.Color.accent : Tokens.Color.controlBorder,
-            style: StrokeStyle(
-              lineWidth: isReady ? Tokens.Stroke.selected : Tokens.Stroke.hairline,
-              dash: isReady ? [] : [4, 3]
-            )
-          )
-        }
-      }
-      .contentShape(shape)
+    Button(action: onLog) {
+      EmptyView()
     }
-    .buttonStyle(SetReadoutStyle())
+    .buttonStyle(SetReadoutStyle(state: logState))
     // The same predicate the store enforces. There is no second definition of "complete".
-    .disabled(!isReady || isLogged)
-    .opacity(isReady || isLogged ? 1 : 0.6)
+    .disabled(!draft.isLoggable || isLogged)
     .accessibilityLabel(isLogged ? "Logged" : "Log set")
     // Haptics confirm the tap landed without the user looking at the phone.
     .sensoryFeedback(Tokens.Haptic.success, trigger: isLogged) { !$0 && $1 }
   }
 
-  /// A logged set has no key face: its seal sits straight on the row's success tint.
-  private func logFill(isReady: Bool) -> Color {
-    if isLogged { return .clear }
-    if isReady && isNext { return Tokens.Color.accentFill }
-    return Tokens.Color.surfaceRaised
-  }
-
-  private func logSymbolColor(isReady: Bool) -> Color {
-    // `onAccent` is dark on the dark-mode accent fill and white on the light-mode one, which is
-    // the pairing that clears 7:1 on it.
-    if isReady && isNext { return Tokens.Color.onAccent }
-    return isReady ? Tokens.Color.accent : Tokens.Color.textSecondary
+  private var logState: SetLogState {
+    if isLogged { return .logged }
+    if draft.isLoggable { return isNext ? .nextUp : .ready }
+    return .incomplete
   }
 
   private var spokenLabel: String {
@@ -544,7 +472,7 @@ extension SetRowField: Identifiable {
 
       var body: some View {
         VStack(spacing: Tokens.Spacing.snug) {
-          // Logged: the success stamp, and the row takes the success tint.
+          // Logged: the plate-green seal, and the row takes the logged tint.
           SetRowView(
             draft: $suggested,
             ordinal: 0,
@@ -573,35 +501,295 @@ extension SetRowField: Identifiable {
           SetRowView(draft: $blank, ordinal: 2, unit: .kilograms, onLog: {}, onBeginEditing: { _ in })
         }
         .padding()
-        .background(Tokens.Color.background)
+        .background(Tokens.Color.canvas)
       }
     }
     return Harness()
   }
 #endif
 
-/// Disabled saved rows retain measured text contrast; only actions are disabled.
-/// Incomplete log controls still apply their explicit disabled opacity above.
-///
-/// Pressed, a field or the check sinks to 0.97 and dims slightly, as every other control does: the
-/// most frequent tap in the app gave no touch-down feedback at all. Each control draws its own
-/// fill and shape, so the press is carried by opacity rather than a second fill. A disabled
-/// button never reports a press, so saved rows keep their full contrast.
-private struct SetReadoutStyle: ButtonStyle {
+
+// MARK: - Value fields
+
+/// What a value field is showing: at rest, pressed, under the keypad, or inert. A `ButtonStyle`
+/// cannot be forced pressed in a render, so the catalogue passes this to `SetRowFieldFace`
+/// directly, and the live style derives it from the row.
+enum SetRowFieldState: Sendable {
+  case rest
+  case pressed
+  case editing
+  case readOnly
+}
+
+/// A value field's content: the figure, or an em dash when empty, and its unit beside it. The live
+/// field and the catalogue draw the same view, so a sample cannot drift from the row.
+struct SetRowFieldValue: View {
+  let text: String?
+  let suffix: String?
+
+  var body: some View {
+    HStack(alignment: .firstTextBaseline, spacing: Tokens.Spacing.tight) {
+      // An empty field shows an em dash, never "0" — a zero on screen reads as a value.
+      Text(text ?? "—")
+        .font(Tokens.Text.setEntry)
+        .foregroundStyle(text == nil ? Tokens.Color.chalkDim : Tokens.Color.chalk)
+        // Condensed tabular figures fit a pound value such as "132.28" at full size on a 375 pt
+        // phone. The mild floor below exists only so an extreme value shrinks a little rather
+        // than truncating: a number cut to "132.…" is worse than one drawn slightly smaller.
+        .lineLimit(1)
+        .minimumScaleFactor(0.85)
+      if let suffix {
+        Text(suffix)
+          .hardsetText(.unit)
+          .foregroundStyle(Tokens.Color.chalkDim)
+      }
+    }
+    .padding(.horizontal, Tokens.Spacing.tight)
+    .frame(maxWidth: .infinity, minHeight: Tokens.loggerTapTarget)
+  }
+}
+
+/// A value field's face in a given state. At rest, pressed and read-only it is a raised machined
+/// face with the control edge, which sinks to `steelPressed` and loses its edge light when pressed,
+/// through `MachinedPressFace`: one modifier whose arguments change, so the label keeps its
+/// identity across a press. Under the keypad it is `plateBlueSurface` inside a 2 pt `plateBlue`
+/// ring, flat and without edge light. A read-only field never reports a press, and an editing one
+/// has nothing left to press, so both ignore it.
+struct SetRowFieldFace<Label: View>: View {
+  private let state: SetRowFieldState
+  private let reduceMotion: Bool
+  private let label: Label
+
+  init(state: SetRowFieldState, reduceMotion: Bool, @ViewBuilder label: () -> Label) {
+    self.state = state
+    self.reduceMotion = reduceMotion
+    self.label = label()
+  }
+
+  var body: some View {
+    let shape = RoundedRectangle(cornerRadius: Tokens.Radius.control)
+    if state == .editing {
+      label
+        .background(Tokens.Color.plateBlueSurface, in: shape)
+        .overlay(shape.strokeBorder(Tokens.Color.plateBlue, lineWidth: Tokens.Stroke.selected))
+        .contentShape(shape)
+    } else {
+      MachinedPressFace(
+        shape: shape,
+        outlined: true,
+        isPressed: state == .pressed,
+        reduceMotion: reduceMotion
+      ) {
+        label
+      }
+    }
+  }
+}
+
+/// The button style of a set-row value field. It feeds the row's editing and read-only flags and
+/// `configuration.isPressed` into `SetRowFieldFace` and animates the press through `Motion.press`,
+/// which Reduce Motion replaces with an instant swap.
+private struct SetFieldStyle: ButtonStyle {
+  let isEditing: Bool
+  let isReadOnly: Bool
+
   func makeBody(configuration: ButtonStyleConfiguration) -> some View {
-    SetReadoutBody(configuration: configuration)
+    SetFieldBody(configuration: configuration, isEditing: isEditing, isReadOnly: isReadOnly)
+  }
+}
+
+private struct SetFieldBody: View {
+  let configuration: ButtonStyleConfiguration
+  let isEditing: Bool
+  let isReadOnly: Bool
+
+  @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+  private var state: SetRowFieldState {
+    if isEditing { return .editing }
+    if isReadOnly { return .readOnly }
+    return configuration.isPressed ? .pressed : .rest
+  }
+
+  var body: some View {
+    SetRowFieldFace(state: state, reduceMotion: reduceMotion) {
+      configuration.label
+    }
+    .animation(
+      Tokens.Motion.adaptive(Tokens.Motion.press, reduceMotion: reduceMotion),
+      value: configuration.isPressed
+    )
+  }
+}
+
+// MARK: - Log control
+
+/// The four states of the set log control. The row derives it from the draft, the logged flag and
+/// the next-up flag; the catalogue passes it directly.
+enum SetLogState: Sendable {
+  case incomplete
+  case ready
+  case nextUp
+  case logged
+}
+
+/// The set log control in a given state, drawn whole: the key face and its check, or the seal, and
+/// at accessibility sizes the words "Log set" or "Logged" beside it. The live button and the
+/// catalogue both draw this view, so a forced state cannot drift from what a press shows.
+///
+/// Incomplete is dashed and dimmed to 0.6; ready is outlined in plate blue; next up is an opaque
+/// `plateBlueFill`; logged has no key face and wears a round `plateGreen` seal on the row's tint.
+/// Ready and next up take the opacity press through `HardsetPressFace`: next up keeps its fill
+/// while pressed, with no pressed swap and no edge light. Incomplete and logged are disabled, so
+/// they ignore `isPressed` and show no press.
+///
+/// The seal is three layers. Back to front: a `KnurlPattern` at 8% clipped to a circle of the
+/// control's full 56 pt square, an opaque `plateGreenSurface` disc 48 pt across, and the
+/// `checkmark.circle.fill` glyph in `plateGreen`. The knurl shows only in the 4 pt annulus around
+/// the disc, so the glyph is never over knurl. The glyph's text size stops growing at xxxLarge, at
+/// 34 pt, so its roughly 37 pt bounds stay inside the disc; at larger sizes the words beside the
+/// control carry the state. The ring follows the seal's opacity and never moves: only the disc and
+/// glyph start at 0.6 and settle with the stamp.
+struct SetLogControlFace: View {
+  private let state: SetLogState
+  private let isPressed: Bool
+
+  @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+  @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+  init(state: SetLogState, isPressed: Bool) {
+    self.state = state
+    self.isPressed = isPressed
+  }
+
+  /// A seal's inner disc, inset from the control's square by the knurled annulus.
+  private static let sealDiscDiameter = Tokens.loggerTapTarget - 2 * Tokens.Spacing.tight
+
+  private var isStacked: Bool { dynamicTypeSize.isAccessibilitySize }
+  private var isLogged: Bool { state == .logged }
+
+  private var isPressable: Bool {
+    switch state {
+    case .ready, .nextUp: true
+    case .incomplete, .logged: false
+    }
+  }
+
+  var body: some View {
+    let shape = RoundedRectangle(cornerRadius: Tokens.Radius.control)
+    HardsetPressFace(isPressed: isPressed && isPressable, reduceMotion: reduceMotion) {
+      HStack(spacing: Tokens.Spacing.snug) {
+        ZStack {
+          Image(systemName: "checkmark")
+            .font(Tokens.Text.headline.weight(.bold))
+            .foregroundStyle(symbolColor)
+            .opacity(isLogged ? 0 : 1)
+          seal
+        }
+        // Only the glyphs spring. The key face below changes at once, so nothing is laid out
+        // twice and the stamp stays the one moving thing.
+        .animation(
+          Tokens.Motion.adaptive(Tokens.Motion.stamp, reduceMotion: reduceMotion),
+          value: isLogged
+        )
+        if isStacked {
+          Text(isLogged ? "Logged" : "Log set")
+            .font(Tokens.Text.headline)
+            .foregroundStyle(isLogged ? Tokens.Color.plateGreen : symbolColor)
+        }
+      }
+      .frame(
+        maxWidth: isStacked ? .infinity : Tokens.loggerTapTarget,
+        minHeight: Tokens.loggerTapTarget
+      )
+      .frame(width: isStacked ? nil : Tokens.loggerTapTarget)
+      .background(fill, in: shape)
+      .overlay { outline(shape) }
+      .contentShape(shape)
+    }
+    .opacity(state == .incomplete ? 0.6 : 1)
+  }
+
+  /// The logged seal: knurled ring, opaque disc, glyph. It is always laid out at the control's
+  /// square, so the control does not shift when a set is logged, and fades in as one layer.
+  private var seal: some View {
+    ZStack {
+      Circle()
+        .fill(Tokens.Color.plateGreenSurface)
+        .frame(width: Self.sealDiscDiameter, height: Self.sealDiscDiameter)
+      Image(systemName: "checkmark.circle.fill")
+        .hardsetText(.readout)
+        .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
+        .foregroundStyle(Tokens.Color.plateGreen)
+    }
+    .scaleEffect(isLogged || reduceMotion ? 1 : 0.6)
+    .frame(width: Tokens.loggerTapTarget, height: Tokens.loggerTapTarget)
+    .background {
+      KnurlPattern(opacity: 0.08)
+        .clipShape(Circle())
+    }
+    .opacity(isLogged ? 1 : 0)
+  }
+
+  /// A logged set has no key face: its seal sits straight on the row's logged tint.
+  private var fill: Color {
+    switch state {
+    case .logged: .clear
+    case .nextUp: Tokens.Color.plateBlueFill
+    case .incomplete, .ready: Tokens.Color.steelRaised
+    }
+  }
+
+  @ViewBuilder
+  private func outline(_ shape: RoundedRectangle) -> some View {
+    switch state {
+    case .logged, .nextUp:
+      EmptyView()
+    case .ready:
+      shape.strokeBorder(Tokens.Color.plateBlue, lineWidth: Tokens.Stroke.selected)
+    case .incomplete:
+      shape.strokeBorder(
+        Tokens.Color.controlEdge,
+        style: StrokeStyle(lineWidth: Tokens.Stroke.hairline, dash: [4, 3])
+      )
+    }
+  }
+
+  private var symbolColor: Color {
+    // `onPlateBlue` is dark on the dark-mode plate blue fill and white on the light-mode one,
+    // which is the pairing that clears 7:1 on it.
+    switch state {
+    case .nextUp: Tokens.Color.onPlateBlue
+    case .ready: Tokens.Color.plateBlue
+    case .incomplete, .logged: Tokens.Color.chalkDim
+    }
+  }
+}
+
+/// The log control's button style. Saved rows retain measured text contrast; only actions are
+/// disabled, and the incomplete control's explicit 0.6 lives in `SetLogControlFace`.
+///
+/// Pressed, the check sinks to 0.97 and dims to 80%, as every control that draws its own fill and
+/// shape does: the most frequent tap in the app gave no touch-down feedback at all. The press is
+/// carried by opacity rather than a second fill. A disabled button never reports a press, so saved
+/// rows keep their full contrast. The face draws the whole control and adds no scale or opacity of
+/// its own here; this style only animates the press.
+private struct SetReadoutStyle: ButtonStyle {
+  let state: SetLogState
+
+  func makeBody(configuration: ButtonStyleConfiguration) -> some View {
+    SetReadoutBody(configuration: configuration, state: state)
   }
 }
 
 private struct SetReadoutBody: View {
   let configuration: ButtonStyleConfiguration
+  let state: SetLogState
 
   @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
   var body: some View {
-    configuration.label
-      .scaleEffect(configuration.isPressed && !reduceMotion ? 0.97 : 1)
-      .opacity(configuration.isPressed ? 0.85 : 1)
+    SetLogControlFace(state: state, isPressed: configuration.isPressed)
       .animation(
         Tokens.Motion.adaptive(Tokens.Motion.press, reduceMotion: reduceMotion),
         value: configuration.isPressed
