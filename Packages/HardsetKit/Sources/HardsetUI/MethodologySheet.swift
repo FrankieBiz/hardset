@@ -53,7 +53,7 @@ public struct MethodologySheet: View {
         .padding(.bottom, Tokens.Spacing.block)
         .frame(maxWidth: .infinity, alignment: .leading)
       }
-      .background(Tokens.Color.background)
+      .background(Tokens.Color.canvas)
       .hardsetNavigationTitle(source.title)
       .toolbar {
         ToolbarItem(placement: .confirmationAction) {
@@ -67,11 +67,11 @@ public struct MethodologySheet: View {
     VStack(alignment: .leading, spacing: Tokens.Spacing.snug) {
       Text(heading)
         .font(Tokens.Text.headline)
-        .foregroundStyle(Tokens.Color.textPrimary)
+        .foregroundStyle(Tokens.Color.chalk)
         .accessibilityAddTraits(.isHeader)
       Text(body)
         .font(Tokens.Text.label)
-        .foregroundStyle(Tokens.Color.textPrimary)
+        .foregroundStyle(Tokens.Color.chalk)
         .fixedSize(horizontal: false, vertical: true)
         .textSelection(.enabled)
     }
@@ -86,26 +86,27 @@ public struct MethodologySheet: View {
         Text("Source")
       } icon: {
         Image(systemName: "text.book.closed")
-          .foregroundStyle(Tokens.Color.textSecondary)
+          .foregroundStyle(Tokens.Color.chalkDim)
       }
       .font(Tokens.Text.sectionHeader)
-      .foregroundStyle(Tokens.Color.textPrimary)
+      .foregroundStyle(Tokens.Color.chalk)
       .accessibilityAddTraits(.isHeader)
       Text(citation)
-        .font(Tokens.Text.caption.monospaced())
-        .foregroundStyle(Tokens.Color.textSecondary)
+        .monospaced()
+        .hardsetText(.caption)
+        .foregroundStyle(Tokens.Color.chalkDim)
         .fixedSize(horizontal: false, vertical: true)
         .textSelection(.enabled)
     }
     .padding(Tokens.Spacing.regular)
     .frame(maxWidth: .infinity, alignment: .leading)
     .background(
-      Tokens.Color.surfaceRaised,
+      Tokens.Color.steelRaised,
       in: RoundedRectangle(cornerRadius: Tokens.Radius.card)
     )
     .overlay(
       RoundedRectangle(cornerRadius: Tokens.Radius.card)
-        .strokeBorder(Tokens.Color.border, lineWidth: Tokens.Stroke.hairline)
+        .strokeBorder(Tokens.Color.hairline, lineWidth: Tokens.Stroke.hairline)
     )
   }
 
@@ -135,5 +136,67 @@ public struct MethodologySheet: View {
 
   #Preview("Load history, no certainty") {
     MethodologySheet(source: ProgressionAnalyzer.source)
+  }
+
+  #Preview("Certainty high") {
+    MethodologySheet(source: SetCounting.source, certainty: .high)
+  }
+
+  #Preview("Certainty low") {
+    MethodologySheet(source: SetCounting.source, certainty: .low)
+  }
+
+  #Preview("Valid range absent, citation present") {
+    MethodologySheet(
+      source: EvidenceSource(
+        id: "preview-no-range",
+        title: "Citation only",
+        methodology: PreviewSources.shortMethodology,
+        citation: "Example A, Example B. Journal 2025. DOI 10.0000/example.",
+        validRange: nil
+      ),
+      certainty: .moderate
+    )
+  }
+
+  #Preview("Citation absent, valid range present") {
+    MethodologySheet(source: ProgressionAnalyzer.source, certainty: .moderate)
+  }
+
+  #Preview("Valid range and citation absent") {
+    MethodologySheet(
+      source: EvidenceSource(
+        id: "preview-bare",
+        title: "Method only",
+        methodology: PreviewSources.shortMethodology
+      ),
+      certainty: .high
+    )
+  }
+
+  #Preview("Long methodology") {
+    MethodologySheet(
+      source: EvidenceSource(
+        id: "preview-long",
+        title: "Long methodology",
+        methodology: Array(repeating: PreviewSources.shortMethodology, count: 8)
+          .joined(separator: "\n\n"),
+        citation: SetCounting.source.citation,
+        validRange: SetCounting.source.validRange
+      ),
+      certainty: .moderate
+    )
+  }
+
+  #Preview("Large text") {
+    MethodologySheet(source: SetCounting.source, certainty: .high)
+      .dynamicTypeSize(.accessibility3)
+  }
+
+  private enum PreviewSources {
+    static let shortMethodology =
+      "A completed working set credits one set to each muscle labelled direct on the movement "
+      + "and half a set to each labelled indirect. The counts are stated conventions, and the "
+      + "sheet shows exactly the values the arithmetic uses."
   }
 #endif
