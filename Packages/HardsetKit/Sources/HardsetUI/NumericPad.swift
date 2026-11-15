@@ -125,7 +125,7 @@ public struct NumericPad: View {
     .padding(.bottom, Tokens.Spacing.regular)
     // Opaque, not glass. Glass cannot sample glass, and a translucent keypad over a dense set
     // grid is unreadable in a bright gym besides.
-    .background(Tokens.Color.surface)
+    .background(Tokens.Color.steel)
     .onChange(of: title) {
       if voiceOverEnabled { isDisplayFocused = true }
     }
@@ -171,7 +171,7 @@ public struct NumericPad: View {
       if let context {
         Text(context)
           .font(Tokens.Text.sectionHeader)
-          .foregroundStyle(Tokens.Color.textPrimary)
+          .foregroundStyle(Tokens.Color.chalk)
           .lineLimit(2)
           // Spoken as one phrase, movement first: "Leg Press, Set 2".
           .accessibilityLabel(context.replacingOccurrences(of: " · ", with: ", "))
@@ -187,7 +187,7 @@ public struct NumericPad: View {
             .fixedSize()
         }
         .font(Tokens.Text.figure)
-        .foregroundStyle(Tokens.Color.accent)
+        .foregroundStyle(Tokens.Color.plateBlue)
         .accessibilityElement(children: .combine)
         .accessibilityLabel("Resting")
       }
@@ -200,12 +200,12 @@ public struct NumericPad: View {
     HStack(alignment: .firstTextBaseline, spacing: Tokens.Spacing.snug) {
       Text(title)
         .font(Tokens.Text.sectionHeader)
-        .foregroundStyle(Tokens.Color.textSecondary)
+        .foregroundStyle(Tokens.Color.chalkDim)
       Spacer(minLength: Tokens.Spacing.snug)
       // An empty buffer shows an em dash, never "0": nothing typed is not a value.
       Text(buffer.isEmpty ? "—" : LoadFigure.typed(buffer.displayText))
-        .font(Tokens.Text.hero)
-        .foregroundStyle(buffer.isEmpty ? Tokens.Color.textSecondary : Tokens.Color.textPrimary)
+        .hardsetText(.hero)
+        .foregroundStyle(buffer.isEmpty ? Tokens.Color.chalkDim : Tokens.Color.chalk)
         .lineLimit(1)
         // A readout must show the whole number: at the largest text sizes it scales down rather
         // than clip "1002.5" to "100…". The row's own field keeps the full-size figure.
@@ -219,14 +219,15 @@ public struct NumericPad: View {
           if replacesPrefill {
             let shape = RoundedRectangle(cornerRadius: Tokens.Radius.control - Tokens.Spacing.tight)
             shape
-              .fill(Tokens.Color.accentSurface)
-              .overlay(shape.strokeBorder(Tokens.Color.accent, lineWidth: Tokens.Stroke.hairline))
+              .fill(Tokens.Color.plateBlueSurface)
+              .overlay(
+                shape.strokeBorder(Tokens.Color.plateBlue, lineWidth: Tokens.Stroke.hairline))
           }
         }
       if let unit {
         Text(unit)
-          .font(Tokens.Text.unit)
-          .foregroundStyle(Tokens.Color.textSecondary)
+          .hardsetText(.unit)
+          .foregroundStyle(Tokens.Color.chalkDim)
       }
     }
     .padding(.horizontal, Tokens.Spacing.tight)
@@ -265,7 +266,7 @@ public struct NumericPad: View {
       // hyphen next to a plus reads as a dash.
       Text(delta > 0 ? "+\(figure)" : "−\(figure)")
         .font(Tokens.Text.setEntry)
-        .foregroundStyle(Tokens.Color.accent)
+        .foregroundStyle(Tokens.Color.plateBlue)
         .lineLimit(1)
     }
     .buttonStyle(HardsetKeyStyle())
@@ -341,7 +342,7 @@ public struct NumericPad: View {
         case .delete: Image(systemName: "delete.backward")
         }
       }
-      .font(Tokens.Text.readout)
+      .hardsetText(.readout)
     }
     .buttonStyle(HardsetKeyStyle())
     .disabled(key == .disabledDecimal)
@@ -434,5 +435,113 @@ public struct NumericPad: View {
       }
     }
     return Harness()
+  }
+
+  /// One pad in a given state, for the all-states previews below. The live-timer state is shown
+  /// by "Keypad, weight" above; the context-line preview here is its static equivalent, because a
+  /// preview of a running countdown is never the same twice.
+  private struct KeypadPreview: View {
+    @State private var buffer: NumericEntryBuffer
+    private let title: String
+    private let context: String?
+    private let unit: String
+    private let doneTitle: String
+    private let isDoneEnabled: Bool
+    private let showsNext: Bool
+    private let showsLog: Bool
+    private let canLog: Bool
+
+    init(
+      buffer: NumericEntryBuffer, title: String, context: String? = nil, unit: String,
+      doneTitle: String = "Done", isDoneEnabled: Bool = true, showsNext: Bool = false,
+      showsLog: Bool = false, canLog: Bool = false
+    ) {
+      _buffer = State(initialValue: buffer)
+      self.title = title
+      self.context = context
+      self.unit = unit
+      self.doneTitle = doneTitle
+      self.isDoneEnabled = isDoneEnabled
+      self.showsNext = showsNext
+      self.showsLog = showsLog
+      self.canLog = canLog
+    }
+
+    var body: some View {
+      let onNext: (() -> Void)? = showsNext ? {} : nil
+      let onLog: (() -> Void)? = showsLog ? {} : nil
+      return NumericPad(
+        buffer: $buffer, title: title, context: context, unit: unit, doneTitle: doneTitle,
+        isDoneEnabled: isDoneEnabled, onDone: {}, onNext: onNext, onLog: onLog, canLog: canLog
+      )
+    }
+  }
+
+  private let previewWeight = NumericEntryBuffer(
+    value: 102.5, maximumIntegerDigits: 4, maximumFractionDigits: 2
+  )
+  private let previewEmptyWeight = NumericEntryBuffer(
+    value: nil, maximumIntegerDigits: 4, maximumFractionDigits: 2
+  )
+  private let previewReps = NumericEntryBuffer(
+    value: 8, allowsDecimal: false, maximumIntegerDigits: 3, maximumFractionDigits: 0
+  )
+
+  #Preview("Keypad, weight with Done and Next") {
+    KeypadPreview(
+      buffer: previewWeight, title: "Weight", context: "Leg Press · Set 2", unit: "kg",
+      showsNext: true)
+  }
+
+  #Preview("Keypad, reps with Log enabled") {
+    KeypadPreview(
+      buffer: previewReps, title: "Reps", context: "Leg Press · Set 2", unit: "reps",
+      showsLog: true, canLog: true)
+  }
+
+  #Preview("Keypad, reps with Log disabled") {
+    KeypadPreview(
+      buffer: previewReps, title: "Reps", context: "Leg Press · Set 2", unit: "reps",
+      showsLog: true, canLog: false)
+  }
+
+  #Preview("Keypad, load step with Done enabled") {
+    KeypadPreview(
+      buffer: NumericEntryBuffer(value: 2.5, replaceOnFirstEntry: true), title: "Load step",
+      unit: "kg", doneTitle: "Save load step")
+  }
+
+  #Preview("Keypad, load step with Done disabled") {
+    KeypadPreview(
+      buffer: NumericEntryBuffer(value: 0), title: "Load step", unit: "kg",
+      doneTitle: "Save load step", isDoneEnabled: false)
+  }
+
+  #Preview("Keypad, empty display and disabled negative steps") {
+    KeypadPreview(buffer: previewEmptyWeight, title: "Weight", unit: "kg", showsNext: true)
+  }
+
+  #Preview("Keypad, replaceable prefill") {
+    KeypadPreview(
+      buffer: NumericEntryBuffer(value: 60, replaceOnFirstEntry: true), title: "Weight",
+      unit: "kg", showsNext: true)
+  }
+
+  #Preview("Keypad, context line") {
+    KeypadPreview(
+      buffer: previewWeight, title: "Weight", context: "Leg Press · Set 2", unit: "kg",
+      showsNext: true)
+  }
+
+  #Preview("Keypad, integer field with hidden decimal slot") {
+    KeypadPreview(buffer: previewReps, title: "Reps", unit: "reps", showsNext: true)
+  }
+
+  #Preview("Keypad, accessibility size") {
+    KeypadPreview(
+      buffer: previewWeight, title: "Weight", context: "Leg Press · Set 2", unit: "kg",
+      showsNext: true
+    )
+    .environment(\.dynamicTypeSize, .accessibility3)
   }
 #endif
