@@ -59,10 +59,10 @@ public struct RestBarView: View {
         }
       }
       .padding(Tokens.Spacing.regular)
-      .background(Tokens.Color.surfaceRaised, in: RoundedRectangle(cornerRadius: Tokens.Radius.card))
+      .background(Tokens.Color.steelRaised, in: RoundedRectangle(cornerRadius: Tokens.Radius.card))
       .overlay(
         RoundedRectangle(cornerRadius: Tokens.Radius.card)
-          .strokeBorder(Tokens.Color.border, lineWidth: Tokens.Stroke.hairline)
+          .strokeBorder(Tokens.Color.hairline, lineWidth: Tokens.Stroke.hairline)
       )
       .padding(.horizontal, Tokens.Spacing.regular)
       .padding(.bottom, Tokens.Spacing.snug)
@@ -80,11 +80,11 @@ public struct RestBarView: View {
       VStack(alignment: .leading, spacing: Tokens.Spacing.hairline) {
         Text(state.isRunning ? "Resting" : "Paused")
           .font(Tokens.Text.sectionHeader)
-          .foregroundStyle(state.isRunning ? Tokens.Color.accent : Tokens.Color.textSecondary)
+          .foregroundStyle(state.isRunning ? Tokens.Color.plateBlue : Tokens.Color.chalkDim)
         if let metadata {
           Text("\(metadata.exerciseName), \(metadata.setLabel.lowercased())")
-            .font(Tokens.Text.caption)
-            .foregroundStyle(Tokens.Color.textSecondary)
+            .hardsetText(.caption)
+            .foregroundStyle(Tokens.Color.chalkDim)
             .lineLimit(2)
         }
       }
@@ -93,6 +93,11 @@ public struct RestBarView: View {
     .accessibilityLabel(spokenLabel)
   }
 
+  /// The countdown, in `chalk` whether it runs or is paused: chalk is the only text colour the
+  /// knurl behind it is gated for, so the paused state is carried by the word "Paused" and the
+  /// play key, never by a dimmer colour. The knurl is a backing layer clipped to its own shape,
+  /// above the opaque panel fill and under the glyphs; `.knurl()` is an overlay and would hatch
+  /// the digits, so it is not used here.
   @ViewBuilder private var countdown: some View {
     switch state {
     case .idle:
@@ -101,17 +106,27 @@ public struct RestBarView: View {
       // System-rendered from the deadline. Costs zero updates and survives backgrounding,
       // because there is nothing of ours to keep running.
       Text(timerInterval: referenceDate...max(endsAt, referenceDate), countsDown: true)
-        .font(Tokens.Text.hero)
-        .foregroundStyle(Tokens.Color.textPrimary)
+        .hardsetText(.hero)
+        .foregroundStyle(Tokens.Color.chalk)
         .lineLimit(1)
         .fixedSize()
+        .padding(Tokens.Spacing.snug)
+        .background { countdownBacking }
     case .paused(let remaining):
       Text(remaining.clockString)
-        .font(Tokens.Text.hero)
-        .foregroundStyle(Tokens.Color.textSecondary)
+        .hardsetText(.hero)
+        .foregroundStyle(Tokens.Color.chalk)
         .lineLimit(1)
         .fixedSize()
+        .padding(Tokens.Spacing.snug)
+        .background { countdownBacking }
     }
+  }
+
+  /// The knurl behind the countdown at the pattern's default 8%, clipped to the control radius.
+  private var countdownBacking: some View {
+    KnurlPattern(opacity: 0.08)
+      .clipShape(RoundedRectangle(cornerRadius: Tokens.Radius.control))
   }
 
   /// The ±15 labels begin with what the keys show, "−15" read as "Minus 15", so a Voice Control
@@ -209,6 +224,61 @@ public struct RestBarView: View {
       )
     }
     .padding(.vertical)
-    .background(Tokens.Color.background)
+    .background(Tokens.Color.canvas)
+  }
+
+  private func previewRestBar(paused: Bool = true, withMetadata: Bool = true) -> some View {
+    RestBarView(
+      state: paused
+        ? .paused(remaining: .seconds(96)) : .running(endsAt: Date().addingTimeInterval(96)),
+      metadata: withMetadata
+        ? RestMetadata(
+          exerciseName: "Leg Press", setOrdinal: 2, plannedSets: 4, machineName: "Hammer Strength")
+        : nil,
+      onAdjust: { _ in }, onPauseResume: {}, onSkip: {}
+    )
+  }
+
+  #Preview("Rest bar, paused at 402 pt with metadata (two lines)") {
+    previewRestBar()
+      .frame(width: 402)
+      .padding(.vertical)
+      .background(Tokens.Color.canvas)
+  }
+
+  #Preview("Rest bar, paused at 402 pt without metadata") {
+    previewRestBar(withMetadata: false)
+      .frame(width: 402)
+      .padding(.vertical)
+      .background(Tokens.Color.canvas)
+  }
+
+  #Preview("Rest bar, paused at 440 pt with metadata") {
+    previewRestBar()
+      .frame(width: 440)
+      .padding(.vertical)
+      .background(Tokens.Color.canvas)
+  }
+
+  #Preview("Rest bar, paused at 440 pt without metadata") {
+    previewRestBar(withMetadata: false)
+      .frame(width: 440)
+      .padding(.vertical)
+      .background(Tokens.Color.canvas)
+  }
+
+  #Preview("Rest bar, paused at the largest accessibility size") {
+    previewRestBar()
+      .frame(width: 402)
+      .environment(\.dynamicTypeSize, .accessibility3)
+      .padding(.vertical)
+      .background(Tokens.Color.canvas)
+  }
+
+  #Preview("Rest bar, running at 440 pt") {
+    previewRestBar(paused: false)
+      .frame(width: 440)
+      .padding(.vertical)
+      .background(Tokens.Color.canvas)
   }
 #endif
