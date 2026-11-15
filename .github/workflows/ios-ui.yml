@@ -57,7 +57,7 @@ jobs:
           cd Packages/HardsetKit
           xcodebuild build-for-testing \
             -scheme HardsetKit-Package \
-            -destination 'generic/platform=iOS Simulator' \
+            -destination 'platform=iOS Simulator,name=iPhone 17,OS=latest' \
             -skipMacroValidation -skipPackagePluginValidation \
             2>&1 | tee ../../snapshot-build.log | grep -E "error:|BUILD (SUCCEEDED|FAILED)" || true
           grep -q "BUILD SUCCEEDED" ../../snapshot-build.log
