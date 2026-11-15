@@ -118,7 +118,7 @@ public struct HardsetTextModifier: ViewModifier {
 /// Holds the same `ScaledMetric` size as `HardsetTextModifier`, so the tracking is computed from
 /// the size the text resolves to and matches an unweighted use of the role exactly. A weighted
 /// font is a static `Font` and cannot carry tracking, and a weight modifier chained after
-/// `.hardsetText(_:)` has never compiled in this repository, so a weighted variant of a tracked
+/// `.hardsetText(_:)` is not used in this repository, so a weighted variant of a tracked
 /// role is written through this modifier.
 struct HardsetWeightedTextModifier: ViewModifier {
   private let role: Tokens.Text.Role

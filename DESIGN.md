@@ -162,13 +162,13 @@ Selection rows, the unit switch and pickers stay silent.
 
 - **Buttons** (`HardsetButtonStyle`): `primary` (plate blue fill), `secondary` (raised steel),
   `quiet` (plate blue text, no fill), `destructive` (red text on the error surface, dimmed to 60%
-  while pressed). Sizes `logger` (56 pt) and `regular` (44 pt). States: default, pressed, disabled (40% opacity), focused (system
-  focus ring). The look is machined: a secondary button is raised steel with the control edge at
-  its boundary and, one hairline inside it, a light top edge and a shadowed bottom edge. Pressed,
-  it keeps the control edge, so the 3:1 boundary never disappears, loses the edge light, and sinks
-  to `steelPressed`, which in dark is darker than `steelRaised`. Primary is a solid plate blue
-  fill, swapping to its pressed fill, with no edge gradient: the edge colours are pre-blended for
-  steel and read wrong on plate blue.
+  while pressed). Sizes `logger` (56 pt) and `regular` (44 pt). States: default, pressed, disabled
+  (40% opacity), focused (system focus ring). The look is machined: a secondary button is raised
+  steel with the control edge at its boundary and, one hairline inside it, a light top edge and a
+  shadowed bottom edge. Pressed, it keeps the control edge, so the 3:1 boundary never disappears,
+  loses the edge light, and sinks to `steelPressed`, which in dark is darker than `steelRaised`.
+  Primary is a solid plate blue fill, swapping to its pressed fill, with no edge gradient: the edge
+  colours are pre-blended for steel and read wrong on plate blue.
 - **Keys** (`HardsetKeyStyle`): the same machined face as a secondary button: raised steel with the
   control edge and the edge light inside it, and pressed, the control edge kept, the edge light
   dropped and the darker pressed fill, plus a 0.96 scale.
@@ -208,8 +208,8 @@ Selection rows, the unit switch and pickers stay silent.
   - Machined faces (raised steel with the control edge and the edge light: unselected chips,
     `AssumptionChip`, header circles, the set machine chip, the set row's value fields, keys and
     secondary buttons) sink to `steelPressed`, lose the edge light, keep the control edge and scale
-    to 0.97 (keys 0.96) on `Motion.press`. They never dim, so the 3:1 boundary survives a press. A selected
-    chip swaps `plateBlueFill` to `plateBlueFillPressed`. An editing set-row field is
+    to 0.97 (keys 0.96) on `Motion.press`. They never dim, so the 3:1 boundary survives a press. A
+    selected chip swaps `plateBlueFill` to `plateBlueFillPressed`. An editing set-row field is
     `plateBlueSurface` with a 2 pt `plateBlue` ring and no edge light. A machined control's hit
     region is at least 44 by 44 pt, however compact its face.
   - Controls that draw their own fill and shape with no steel face (segments, the dashed "Add
