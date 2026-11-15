@@ -48,6 +48,20 @@ jobs:
             --filter 'CSVDocumentTests|SetCommandTests|DataTransferTests|RestJournalTests|ReceiptStoreTests|DeviceHealthStoreTests|MachineIncrementTests|ProgressionStoreTests' \
             2>&1 | tee portable-feature-tests.log | tail -50
 
+      # The snapshot target only compiles for the iOS Simulator, and the render step further down is
+      # where it first did, about twenty minutes into a run. Building the package's tests here makes
+      # a test-target compile error fail within minutes of the host build instead.
+      - name: Compile the package tests for the iOS Simulator
+        run: |
+          set -o pipefail
+          cd Packages/HardsetKit
+          xcodebuild build-for-testing \
+            -scheme HardsetKit-Package \
+            -destination 'generic/platform=iOS Simulator' \
+            -skipMacroValidation -skipPackagePluginValidation \
+            2>&1 | tee ../../snapshot-build.log | grep -E "error:|BUILD (SUCCEEDED|FAILED)" || true
+          grep -q "BUILD SUCCEEDED" ../../snapshot-build.log
+
       - name: Build the app and widget for the iOS Simulator
         run: |
           set -o pipefail
