@@ -47,7 +47,7 @@ public struct StatLedger: View {
             .overlay(alignment: .leading) {
               if item.id != items.first?.id {
                 Rectangle()
-                  .fill(Tokens.Color.border)
+                  .fill(Tokens.Color.hairline)
                   .frame(width: Tokens.Stroke.hairline)
               }
             }
@@ -62,17 +62,17 @@ public struct StatLedger: View {
       HStack(alignment: .firstTextBaseline, spacing: Tokens.Spacing.tight) {
         Text(item.value)
           .font(Tokens.Text.setEntry)
-          .foregroundStyle(Tokens.Color.textPrimary)
+          .foregroundStyle(Tokens.Color.chalk)
           .lineLimit(1)
         if let unit = item.unit {
           Text(unit)
-            .font(Tokens.Text.unit)
-            .foregroundStyle(Tokens.Color.textSecondary)
+            .hardsetText(.unit)
+            .foregroundStyle(Tokens.Color.chalkDim)
         }
       }
       Text(item.label)
-        .font(Tokens.Text.caption)
-        .foregroundStyle(Tokens.Color.textSecondary)
+        .hardsetText(.caption)
+        .foregroundStyle(Tokens.Color.chalkDim)
     }
     .accessibilityElement(children: .combine)
   }
@@ -125,7 +125,7 @@ public struct HardsetBanner: View {
         }
         Text(message)
           .font(Tokens.Text.provenance)
-          .foregroundStyle(Tokens.Color.textPrimary)
+          .foregroundStyle(Tokens.Color.chalk)
           .fixedSize(horizontal: false, vertical: true)
       }
       .frame(maxWidth: .infinity, alignment: .leading)
@@ -151,19 +151,19 @@ public struct HardsetBanner: View {
 
   private var hue: Color {
     switch kind {
-    case .error: Tokens.Color.error
+    case .error: Tokens.Color.plateRed
     case .caveat: Tokens.Color.warning
-    case .record: Tokens.Color.pr
-    case .info: Tokens.Color.accent
+    case .record: Tokens.Color.plateYellow
+    case .info: Tokens.Color.plateBlue
     }
   }
 
   private var tint: Color {
     switch kind {
-    case .error: Tokens.Color.errorSurface
+    case .error: Tokens.Color.plateRedSurface
     case .caveat: Tokens.Color.warningSurface
-    case .record: Tokens.Color.prSurface
-    case .info: Tokens.Color.accentSurface
+    case .record: Tokens.Color.plateYellowSurface
+    case .info: Tokens.Color.plateBlueSurface
     }
   }
 
@@ -184,12 +184,12 @@ struct DismissGlyphButton: View {
   var body: some View {
     Button(action: action) {
       Image(systemName: "xmark")
-        .font(Tokens.Text.caption.weight(.semibold))
-        .foregroundStyle(Tokens.Color.textSecondary)
+        .hardsetText(.caption, weight: .semibold)
+        .foregroundStyle(Tokens.Color.chalkDim)
         .frame(width: Tokens.minimumTapTarget, height: Tokens.minimumTapTarget)
         .contentShape(Rectangle())
     }
-    .buttonStyle(.plain)
+    .buttonStyle(HardsetPressStyle())
     // Pulled into the surrounding padding, so a one-line message is not made taller by the
     // mark that closes it; the target keeps its full 44 pt.
     .padding(.vertical, -Tokens.Spacing.regular)
@@ -214,8 +214,40 @@ public struct HardsetLoadingState: View {
   public var body: some View {
     Text(message)
       .font(Tokens.Text.label)
-      .foregroundStyle(Tokens.Color.textSecondary)
+      .foregroundStyle(Tokens.Color.chalkDim)
       .frame(maxWidth: .infinity, maxHeight: .infinity)
-      .background(Tokens.Color.background)
+      .background(Tokens.Color.canvas)
+  }
+}
+
+// MARK: - Arrival
+
+extension View {
+  /// How a message arrives: it fades in where it lands, on `Motion.reveal`, while everything it
+  /// displaces moves at once, and it leaves at once. Layout never animates, and no animated
+  /// transaction is involved, so what the message displaces is not dragged along with the fade.
+  /// Under Reduce Motion the fade is replaced by an instant insertion.
+  ///
+  /// Apply it to the message view where a conditional inserts it. No production code uses it yet;
+  /// the screens adopt it as they are rebuilt.
+  public func hardsetArrival() -> some View {
+    modifier(HardsetArrivalModifier())
+  }
+}
+
+/// The insertion-only reveal behind `hardsetArrival()`. A `View` extension cannot read the
+/// environment, so the modifier reads Reduce Motion and builds the transition from it.
+struct HardsetArrivalModifier: ViewModifier {
+  @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+  func body(content: Content) -> some View {
+    content.transition(
+      .asymmetric(
+        insertion: .opacity.animation(
+          Tokens.Motion.adaptive(Tokens.Motion.reveal, reduceMotion: reduceMotion)
+        ),
+        removal: .identity
+      )
+    )
   }
 }

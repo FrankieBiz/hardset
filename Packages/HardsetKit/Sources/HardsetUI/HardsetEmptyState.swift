@@ -41,16 +41,16 @@ public struct HardsetEmptyState: View {
       VStack(spacing: Tokens.Spacing.regular) {
         Image(systemName: systemImage)
           .font(Tokens.Text.title)
-          .foregroundStyle(Tokens.Color.textSecondary)
+          .foregroundStyle(Tokens.Color.chalkDim)
           .frame(width: socketSize, height: socketSize)
           .background(
-            Tokens.Color.surfaceRaised,
+            Tokens.Color.steelRaised,
             in: RoundedRectangle(cornerRadius: Tokens.Radius.card)
           )
           .overlay(
             RoundedRectangle(cornerRadius: Tokens.Radius.card)
               .strokeBorder(
-                Tokens.Color.controlBorder,
+                Tokens.Color.controlEdge,
                 style: StrokeStyle(lineWidth: Tokens.Stroke.hairline, dash: [4, 3])
               )
           )
@@ -58,13 +58,13 @@ public struct HardsetEmptyState: View {
         VStack(spacing: Tokens.Spacing.tight) {
           Text(title)
             .font(Tokens.Text.headline)
-            .foregroundStyle(Tokens.Color.textPrimary)
+            .foregroundStyle(Tokens.Color.chalk)
             .multilineTextAlignment(.center)
 
           if let detail, !detail.isEmpty {
             Text(detail)
               .font(Tokens.Text.label)
-              .foregroundStyle(Tokens.Color.textSecondary)
+              .foregroundStyle(Tokens.Color.chalkDim)
               .multilineTextAlignment(.center)
               .fixedSize(horizontal: false, vertical: true)
           }
@@ -103,6 +103,6 @@ public struct HardsetEmptyState: View {
       )
     }
     .padding()
-    .background(Tokens.Color.background)
+    .background(Tokens.Color.canvas)
   }
 #endif
