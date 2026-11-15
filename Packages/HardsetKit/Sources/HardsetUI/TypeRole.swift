@@ -113,9 +113,39 @@ public struct HardsetTextModifier: ViewModifier {
   }
 }
 
+/// Applies a type role's font at a different weight, with the role's tracking.
+///
+/// Holds the same `ScaledMetric` size as `HardsetTextModifier`, so the tracking is computed from
+/// the size the text resolves to and matches an unweighted use of the role exactly. A weighted
+/// font is a static `Font` and cannot carry tracking, and a weight modifier chained after
+/// `.hardsetText(_:)` has never compiled in this repository, so a weighted variant of a tracked
+/// role is written through this modifier.
+struct HardsetWeightedTextModifier: ViewModifier {
+  private let role: Tokens.Text.Role
+  private let weight: Font.Weight
+  @ScaledMetric private var size: CGFloat
+
+  init(role: Tokens.Text.Role, weight: Font.Weight) {
+    self.role = role
+    self.weight = weight
+    _size = ScaledMetric(wrappedValue: role.baseSize, relativeTo: role.textStyle)
+  }
+
+  func body(content: Content) -> some View {
+    content
+      .font(role.font.weight(weight))
+      .tracking(size * role.trackingRatio)
+  }
+}
+
 extension View {
   /// Sets the text's font and size-proportional tracking from a design-system type role.
   public func hardsetText(_ role: Tokens.Text.Role) -> some View {
     modifier(HardsetTextModifier(role: role))
+  }
+
+  /// Sets the text from a design-system type role at the given weight, with the role's tracking.
+  public func hardsetText(_ role: Tokens.Text.Role, weight: Font.Weight) -> some View {
+    modifier(HardsetWeightedTextModifier(role: role, weight: weight))
   }
 }

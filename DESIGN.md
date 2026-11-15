@@ -113,6 +113,9 @@ System fonts only, so no resource bundle is needed. Every role is a Dynamic Type
 Tracking is a ratio of the resolved size, so it follows Dynamic Type: `hero` and `display` -2%,
 `readout` -1%, `caption` and `unit` +1%, every other role 0. `hardsetText(_:)` applies a role's
 font and tracking together from `Tokens.Text.Role`; the static fonts carry no tracking.
+`hardsetText(_:weight:)` applies a weighted variant of a role with the same tracking, so a
+semibold caption keeps its +1%; a static weighted font cannot carry tracking, and no modifier
+chained after `hardsetText(_:)` is used to change its weight.
 
 ## Spacing, radius, stroke
 
@@ -158,8 +161,8 @@ Selection rows, the unit switch and pickers stay silent.
 ## Components and states
 
 - **Buttons** (`HardsetButtonStyle`): `primary` (plate blue fill), `secondary` (raised steel),
-  `quiet` (plate blue text, no fill), `destructive` (red text on the error surface). Sizes `logger`
-  (56 pt) and `regular` (44 pt). States: default, pressed, disabled (40% opacity), focused (system
+  `quiet` (plate blue text, no fill), `destructive` (red text on the error surface, dimmed to 60%
+  while pressed). Sizes `logger` (56 pt) and `regular` (44 pt). States: default, pressed, disabled (40% opacity), focused (system
   focus ring). The look is machined: a secondary button is raised steel with the control edge at
   its boundary and, one hairline inside it, a light top edge and a shadowed bottom edge. Pressed,
   it keeps the control edge, so the 3:1 boundary never disappears, loses the edge light, and sinks
@@ -200,11 +203,27 @@ Selection rows, the unit switch and pickers stay silent.
   shape, not only by hue. At accessibility sizes the control also reads "Log set" or "Logged", and
   VoiceOver hears "next to log" on the next-up row. Voice Control answers to "Set 2", "Log set 2",
   and, on the next-up row, "Log set".
-- **Press feedback on self-drawn controls** (`HardsetPressStyle`, and the set row's fields and
-  check): controls that draw their own fill and shape (chips, segments, the dashed "Add movement"
-  slot, header circles, the machine and gym chips) sink to 0.97 and drop to 80–85% opacity on
-  `Motion.press`, in place of a pressed fill. Reduce Motion keeps only the opacity. Disabled
-  controls are never dimmed by it, so saved rows and inert titles keep full contrast.
+- **Press feedback on self-drawn controls** (`HardsetPressStyle`, `MachinedPressStyle` and the set
+  row's own styles): steel faces sink, everything else dims, and no press moves layout.
+  - Machined faces (raised steel with the control edge and the edge light: unselected chips,
+    `AssumptionChip`, header circles, the set machine chip, the set row's value fields, keys and
+    secondary buttons) sink to `steelPressed`, lose the edge light, keep the control edge and scale
+    to 0.97 (keys 0.96) on `Motion.press`. They never dim, so the 3:1 boundary survives a press. A selected
+    chip swaps `plateBlueFill` to `plateBlueFillPressed`. An editing set-row field is
+    `plateBlueSurface` with a 2 pt `plateBlue` ring and no edge light. A machined control's hit
+    region is at least 44 by 44 pt, however compact its face.
+  - Controls that draw their own fill and shape with no steel face (segments, the dashed "Add
+    movement" slot, the exercise-name link, an unset machine chip, the dismiss glyph, the "Clear
+    search" glyph and the certainty badge) sink to 0.97 and drop to 80% opacity on `Motion.press`,
+    in place of a pressed fill.
+  - The set log control draws its own fill and shape: the set row's value fields sink as machined
+    faces; the log control (ready and next up) dims and scales like other self-drawn controls;
+    incomplete and logged show no press. Next up keeps its `plateBlueFill` while pressed.
+  - Flat surfaces take no machined press and carry no edge light: tags, the empty-state socket,
+    entry fields, banners, cards and the rest bar's panel. Tags are filled only and never take the
+    machined face, so a tag never imitates a control.
+  - Reduce Motion drops the scale and keeps only the fill or opacity change. Disabled controls are
+    never dimmed by a press style, so saved rows and inert titles keep full contrast.
 - **Replaceable prefill**: when the keypad opens on a value the next key will replace, its display
   draws that value on `plateBlueSurface` with a hairline `plateBlue` ring, as selected text, until
   the first edit. Static; no motion.

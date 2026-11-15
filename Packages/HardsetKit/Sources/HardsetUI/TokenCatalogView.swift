@@ -53,27 +53,6 @@ public struct TokenCatalogView: View {
   }
 }
 
-// MARK: - Section chrome
-
-/// A catalogue section: the shared section label over its content, so every section reads the
-/// same way and none draws its own heading.
-private struct CatalogSection<Content: View>: View {
-  private let title: String
-  private let content: Content
-
-  init(_ title: String, @ViewBuilder content: () -> Content) {
-    self.title = title
-    self.content = content()
-  }
-
-  var body: some View {
-    VStack(alignment: .leading, spacing: Tokens.Spacing.regular) {
-      SectionLabel(title)
-      content
-    }
-  }
-}
-
 // MARK: - Palette
 
 /// One colour role: its name, its colour, and whether it is a text colour. Text roles are shown

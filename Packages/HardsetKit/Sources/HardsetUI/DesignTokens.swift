@@ -409,13 +409,13 @@ public struct HardsetCardModifier: ViewModifier {
   public func body(content: Content) -> some View {
     content
       .background(
-        isSelected ? Tokens.Color.accentSurface : Tokens.Color.surface,
+        isSelected ? Tokens.Color.plateBlueSurface : Tokens.Color.steel,
         in: RoundedRectangle(cornerRadius: cornerRadius)
       )
       .overlay(
         RoundedRectangle(cornerRadius: cornerRadius)
           .strokeBorder(
-            isSelected ? Tokens.Color.accent : Tokens.Color.border,
+            isSelected ? Tokens.Color.plateBlue : Tokens.Color.hairline,
             lineWidth: isSelected ? Tokens.Stroke.selected : Tokens.Stroke.hairline
           )
       )
@@ -428,15 +428,15 @@ public struct HardsetSheetModifier: ViewModifier {
   public func body(content: Content) -> some View {
     #if os(iOS)
       content
-        .presentationBackground(Tokens.Color.background)
+        .presentationBackground(Tokens.Color.canvas)
         .presentationDragIndicator(.visible)
         .presentationCornerRadius(Tokens.Radius.card)
-        .tint(Tokens.Color.accent)
+        .tint(Tokens.Color.plateBlue)
     #else
       content
-        .presentationBackground(Tokens.Color.background)
+        .presentationBackground(Tokens.Color.canvas)
         .presentationDragIndicator(.visible)
-        .tint(Tokens.Color.accent)
+        .tint(Tokens.Color.plateBlue)
     #endif
   }
 }
@@ -517,7 +517,10 @@ private struct HardsetButtonBody: View {
       configuration.label
     }
     .scaleEffect(configuration.isPressed && !reduceMotion ? 0.97 : 1)
-    .animation(Tokens.Motion.press, value: configuration.isPressed)
+    .animation(
+      Tokens.Motion.adaptive(Tokens.Motion.press, reduceMotion: reduceMotion),
+      value: configuration.isPressed
+    )
   }
 }
 
@@ -574,11 +577,11 @@ struct HardsetButtonFace<Label: View>: View {
     .opacity(opacity)
   }
 
-  /// Disabled dims every role to 40%. A pressed quiet button, which has no fill to swap, dims its
-  /// label to 60% instead.
+  /// Disabled dims every role to 40%. A pressed quiet or destructive button, which has no pressed
+  /// fill to swap, dims to 60%.
   private var opacity: Double {
     guard isEnabled else { return 0.4 }
-    return role == .quiet && isPressed ? 0.6 : 1
+    return (role == .quiet || role == .destructive) && isPressed ? 0.6 : 1
   }
 
   /// Draws the role's face behind the label. Secondary is a machined face that keeps its control
@@ -644,7 +647,10 @@ private struct HardsetKeyBody: View {
       configuration.label
     }
     .scaleEffect(configuration.isPressed && !reduceMotion ? 0.96 : 1)
-    .animation(Tokens.Motion.press, value: configuration.isPressed)
+    .animation(
+      Tokens.Motion.adaptive(Tokens.Motion.press, reduceMotion: reduceMotion),
+      value: configuration.isPressed
+    )
   }
 }
 

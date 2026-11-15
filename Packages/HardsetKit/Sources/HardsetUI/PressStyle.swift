@@ -2,13 +2,19 @@ import SwiftUI
 
 // MARK: - Press style
 
-/// Press feedback for a control that draws its own shape and fill: a chip, a segment, a dashed
-/// slot, a header circle.
+/// Press feedback for a control that draws its own shape and fill and has no steel face: a
+/// segment, the dashed "Add movement" slot, the exercise-name link, the dismiss glyph, an unset
+/// machine chip, the "Clear search" glyph, the certainty badge capsule, and the ready and next-up
+/// set log control.
 ///
 /// The same 0.97 sink on `Motion.press` as `HardsetButtonStyle`, with opacity standing in for a
 /// pressed fill because each of these controls owns its fill. With Reduce Motion the scale is
 /// dropped and only the opacity changes. It never dims a disabled control, so an inert title keeps
 /// its measured contrast.
+///
+/// Steel faces do not use it. Chips, header circles, `AssumptionChip`, a set machine chip and the
+/// set-row value fields are machined faces that sink to `steelPressed`, through
+/// `MachinedPressStyle` or a style of their own, so a press never dims their boundary.
 public struct HardsetPressStyle: ButtonStyle {
   public init() {}
 
@@ -23,12 +29,117 @@ private struct HardsetPressBody: View {
   @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
   var body: some View {
-    configuration.label
-      .scaleEffect(configuration.isPressed && !reduceMotion ? 0.97 : 1)
-      .opacity(configuration.isPressed ? 0.8 : 1)
-      .animation(
-        Tokens.Motion.adaptive(Tokens.Motion.press, reduceMotion: reduceMotion),
-        value: configuration.isPressed
-      )
+    HardsetPressFace(isPressed: configuration.isPressed, reduceMotion: reduceMotion) {
+      configuration.label
+    }
+    .animation(
+      Tokens.Motion.adaptive(Tokens.Motion.press, reduceMotion: reduceMotion),
+      value: configuration.isPressed
+    )
+  }
+}
+
+/// The opacity press in a given state: the label at 0.97 scale and 80% opacity while pressed, the
+/// scale dropped under Reduce Motion. `HardsetPressStyle` draws its live controls with it, and the
+/// surfaces catalogue draws its pressed samples with it, because a `ButtonStyle` cannot be forced
+/// pressed in a render. Sharing the face keeps the catalogue honest: a sample cannot drift from
+/// what a press actually shows. The animation stays in the style, since it is motion rather than a
+/// face.
+struct HardsetPressFace<Label: View>: View {
+  private let isPressed: Bool
+  private let reduceMotion: Bool
+  private let label: Label
+
+  init(isPressed: Bool, reduceMotion: Bool, @ViewBuilder label: () -> Label) {
+    self.isPressed = isPressed
+    self.reduceMotion = reduceMotion
+    self.label = label()
+  }
+
+  var body: some View {
+    label
+      .scaleEffect(isPressed && !reduceMotion ? 0.97 : 1)
+      .opacity(isPressed ? 0.8 : 1)
+  }
+}
+
+/// The machined press in a given state: the label on a raised steel face that sinks to
+/// `steelPressed` and loses its edge light when pressed, scaled to 0.97 unless Reduce Motion is
+/// on. Nothing dims, so a boundary drawn by `outlined` never fades under a finger.
+///
+/// The face owns its control's hit region. After the machined surface it applies the 44 pt
+/// minimum frame and a rectangular content shape, because a frame applied outside a `Button`
+/// reserves space without reliably extending what can be tapped. A compact capsule therefore sits
+/// inside a region of at least 44 by 44 pt, and a header circle, which starts at 44 pt, keeps its
+/// size. The surface is one modifier whose pressed state only changes its arguments, so the label
+/// keeps its identity across a press.
+struct MachinedPressFace<Label: View, S: InsettableShape>: View {
+  private let shape: S
+  private let outlined: Bool
+  private let isPressed: Bool
+  private let reduceMotion: Bool
+  private let label: Label
+
+  init(
+    shape: S,
+    outlined: Bool,
+    isPressed: Bool,
+    reduceMotion: Bool,
+    @ViewBuilder label: () -> Label
+  ) {
+    self.shape = shape
+    self.outlined = outlined
+    self.isPressed = isPressed
+    self.reduceMotion = reduceMotion
+    self.label = label()
+  }
+
+  var body: some View {
+    label
+      .modifier(MachinedModifier(shape: shape, isPressed: isPressed, outlined: outlined))
+      .frame(minWidth: Tokens.minimumTapTarget, minHeight: Tokens.minimumTapTarget)
+      .contentShape(Rectangle())
+      .scaleEffect(isPressed && !reduceMotion ? 0.97 : 1)
+  }
+}
+
+/// The button style for a control with a machined steel face: header circles, `AssumptionChip` and
+/// a set machine chip. It feeds `configuration.isPressed` into `MachinedPressFace` and animates
+/// the press through `Motion.press`, which Reduce Motion replaces with an instant swap. It never
+/// reads `isEnabled`, so a disabled control is not dimmed.
+struct MachinedPressStyle<S: InsettableShape>: ButtonStyle {
+  private let shape: S
+  private let outlined: Bool
+
+  init(shape: S, outlined: Bool) {
+    self.shape = shape
+    self.outlined = outlined
+  }
+
+  func makeBody(configuration: Configuration) -> some View {
+    MachinedPressBody(configuration: configuration, shape: shape, outlined: outlined)
+  }
+}
+
+private struct MachinedPressBody<S: InsettableShape>: View {
+  let configuration: ButtonStyleConfiguration
+  let shape: S
+  let outlined: Bool
+
+  @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+  var body: some View {
+    MachinedPressFace(
+      shape: shape,
+      outlined: outlined,
+      isPressed: configuration.isPressed,
+      reduceMotion: reduceMotion
+    ) {
+      configuration.label
+    }
+    .animation(
+      Tokens.Motion.adaptive(Tokens.Motion.press, reduceMotion: reduceMotion),
+      value: configuration.isPressed
+    )
   }
 }
