@@ -26,15 +26,18 @@ public struct NameEntrySheet: View {
   private let onConfirm: (String) -> Void
   private let onCancel: () -> Void
 
-  @State private var name = ""
+  @State private var name: String
   @FocusState private var isFocused: Bool
 
+  /// - Parameter initialName: Seeds the field, for a caller that reopens the sheet on a name the
+  ///   lifter already typed. Empty by default, which leaves the confirm button disabled.
   public init(
     title: String,
     prompt: String,
     footnote: String? = nil,
     confirmLabel: String = "Add",
     errorMessage: String? = nil,
+    initialName: String = "",
     onConfirm: @escaping (String) -> Void,
     onCancel: @escaping () -> Void
   ) {
@@ -43,6 +46,7 @@ public struct NameEntrySheet: View {
     self.footnote = footnote
     self.confirmLabel = confirmLabel
     self.errorMessage = errorMessage
+    self._name = State(initialValue: initialName)
     self.onConfirm = onConfirm
     self.onCancel = onCancel
   }
@@ -57,6 +61,7 @@ public struct NameEntrySheet: View {
         VStack(alignment: .leading, spacing: Tokens.Spacing.loose) {
           if let errorMessage, !errorMessage.isEmpty {
             HardsetBanner(.error, message: errorMessage)
+              .hardsetArrival()
           }
 
           VStack(alignment: .leading, spacing: Tokens.Spacing.snug) {
@@ -64,8 +69,8 @@ public struct NameEntrySheet: View {
 
             if let footnote, !footnote.isEmpty {
               Text(footnote)
-                .font(Tokens.Text.caption)
-                .foregroundStyle(Tokens.Color.textSecondary)
+                .hardsetText(.caption)
+                .foregroundStyle(Tokens.Color.chalkDim)
                 .fixedSize(horizontal: false, vertical: true)
             }
           }
@@ -82,7 +87,7 @@ public struct NameEntrySheet: View {
         .padding(.bottom, Tokens.Spacing.section)
       }
       .scrollBounceBehavior(.basedOnSize)
-      .background(Tokens.Color.background)
+      .background(Tokens.Color.canvas)
       .hardsetNavigationTitle(title)
       .toolbar {
         ToolbarItem(placement: .cancellationAction) {
@@ -103,12 +108,12 @@ public struct NameEntrySheet: View {
   }
 
   private var nameField: some View {
-    TextField(text: $name, prompt: Text(prompt).foregroundStyle(Tokens.Color.textSecondary)) {
+    TextField(text: $name, prompt: Text(prompt).foregroundStyle(Tokens.Color.chalkDim)) {
       Text(prompt)
     }
     .font(Tokens.Text.label)
-    .foregroundStyle(Tokens.Color.textPrimary)
-    .tint(Tokens.Color.accent)
+    .foregroundStyle(Tokens.Color.chalk)
+    .tint(Tokens.Color.plateBlue)
     .focused($isFocused)
     .hardsetNameInput()
     .submitLabel(.done)
@@ -185,5 +190,56 @@ public extension View {
       onCancel: {}
     )
     .hardsetSheet()
+  }
+
+  #Preview("Name entry, long error") {
+    NameEntrySheet(
+      title: "Add a gym",
+      prompt: "Name",
+      footnote: "Machines are recorded per gym, so this is what groups them.",
+      errorMessage:
+        "“Iron Temple Strength and Conditioning” could not be saved because the database is "
+        + "busy or full. Nothing was lost; the name is still in the field. Try again.",
+      initialName: "Iron Temple Strength and Conditioning",
+      onConfirm: { _ in },
+      onCancel: {}
+    )
+    .hardsetSheet()
+  }
+
+  #Preview("Name entry, typed name") {
+    NameEntrySheet(
+      title: "Add a gym",
+      prompt: "Name",
+      footnote: "Machines are recorded per gym, so this is what groups them.",
+      initialName: "Equinox Hudson Yards",
+      onConfirm: { _ in },
+      onCancel: {}
+    )
+    .hardsetSheet()
+  }
+
+  #Preview("Name entry, disabled confirm") {
+    NameEntrySheet(
+      title: "Add a gym",
+      prompt: "Name",
+      initialName: "   ",
+      onConfirm: { _ in },
+      onCancel: {}
+    )
+    .hardsetSheet()
+  }
+
+  #Preview("Name entry, accessibility size") {
+    NameEntrySheet(
+      title: "Add a machine",
+      prompt: "Name or brand",
+      footnote: "Whatever you'd recognise it by.",
+      errorMessage: "“Iron Temple” could not be saved. Try again.",
+      onConfirm: { _ in },
+      onCancel: {}
+    )
+    .hardsetSheet()
+    .dynamicTypeSize(.accessibility3)
   }
 #endif
