@@ -197,9 +197,10 @@ Selection rows, the unit switch and pickers stay silent.
 - **Screen header** (`ScreenHeader`): display title, one context line, optional trailing action.
 - **Banner** (`HardsetBanner`): record, caveat, and error messages on their tinted surfaces. The
   `info` kind stays as a neutral note and is listed for deletion in the final phase if nothing
-  uses it. A banner's stroke, `hue.opacity(0.35)`, and the static capsule outline at 0.35 on the
-  session screen's status capsules are decorative strokes that never carry meaning: the message
-  words, the symbol and the tinted surface identify the kind, so they are exempt from the 3:1
+  uses it. A banner's stroke, `hue.opacity(0.35)`, the same stroke on the session screen's
+  warning and record cards, and the 0.35 outline on a non-interactive `CertaintyCapsule`,
+  `certainty(level).opacity(0.35)`, are decorative strokes that never carry meaning: the words,
+  the symbol and the tinted surface identify the kind or level, so they are exempt from the 3:1
   boundary rule that applies to controls. A message-only banner speaks only its message to
   VoiceOver, as it does today; speaking the kind is recorded for the accessibility pass.
 - **Arrival** (`hardsetArrival()`): the one public modifier that carries a message's
@@ -219,8 +220,9 @@ Selection rows, the unit switch and pickers stay silent.
   for a filled check, so the choice is carried by shape as well as colour. A pressed selection
   card scales to 0.97 (not 0.98, to match every other pressed face). A disabled selection row
   dims to 0.4, as a disabled control does; saved logger values are never dimmed.
-- **Rest bar** (`RestBarView`): keeps its `ViewThatFits`, and the four controls (−15, +15, pause,
-  skip) stay in one row under the countdown at every size that fits.
+- **Rest bar** (`RestBarView`): keeps its `ViewThatFits`: the countdown and the four controls (−15,
+  +15, pause, skip) share one row when they fit, and otherwise the controls drop to their own
+  single row under the countdown; the four controls never split across rows.
 - **Navigation titles** (`hardsetNavigationTitle`): the one title that may shrink, with
   `minimumScaleFactor(0.8)`, so a long exercise name stays on a single line in a bar. It is a
   documented exception to "adaptive layouts in place of shrinking text".
