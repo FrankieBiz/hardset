@@ -2,10 +2,12 @@ import SwiftUI
 
 // MARK: - Chip
 
-/// A filter or tag chip. Capsule, outlined, and filled with the accent when selected.
+/// A filter or tag chip. A capsule: unselected it is a raised machined face with the control edge
+/// at its boundary, and selected it is a flat `plateBlueFill`.
 ///
 /// The visible capsule is compact so a rail of them reads as one control, but the tappable region
-/// is the full 44 pt minimum.
+/// is the full 44 pt minimum. Unselected, a press sinks the face to `steelPressed`; selected, it
+/// swaps to `plateBlueFillPressed`. Neither dims, so the boundary never fades under a finger.
 public struct HardsetChip: View {
   private let title: String
   private let isSelected: Bool
@@ -20,23 +22,82 @@ public struct HardsetChip: View {
   public var body: some View {
     Button(action: action) {
       Text(title)
-        .font(Tokens.Text.caption.weight(.semibold))
-        .foregroundStyle(isSelected ? Tokens.Color.onAccent : Tokens.Color.textPrimary)
+    }
+    .buttonStyle(HardsetChipStyle(isSelected: isSelected))
+    .accessibilityAddTraits(isSelected ? [.isSelected] : [])
+  }
+}
+
+/// A chip's face in a given state. Shared by `HardsetChip` and the chip catalogue, because a
+/// `ButtonStyle` cannot be forced pressed in a render. Each branch is one view whose pressed state
+/// only changes its arguments, so the label keeps its identity across a press.
+///
+/// The selected face is a plain `plateBlueFill` with no edge gradient: the edge colours are
+/// pre-blended for steel and read wrong on plate blue.
+struct HardsetChipFace<Label: View>: View {
+  private let isSelected: Bool
+  private let isPressed: Bool
+  private let label: Label
+
+  init(isSelected: Bool, isPressed: Bool, @ViewBuilder label: () -> Label) {
+    self.isSelected = isSelected
+    self.isPressed = isPressed
+    self.label = label()
+  }
+
+  var body: some View {
+    surface(
+      label
+        .hardsetText(.caption, weight: .semibold)
+        .foregroundStyle(isSelected ? Tokens.Color.onPlateBlue : Tokens.Color.chalk)
         .lineLimit(1)
         .padding(.horizontal, Tokens.Spacing.regular)
         .padding(.vertical, Tokens.Spacing.snug)
-        .background(isSelected ? Tokens.Color.accentFill : Tokens.Color.surfaceRaised, in: Capsule())
-        .overlay(
-          Capsule().strokeBorder(
-            isSelected ? Tokens.Color.accentFill : Tokens.Color.controlBorder,
-            lineWidth: Tokens.Stroke.hairline
-          )
-        )
-        .frame(minHeight: Tokens.minimumTapTarget)
-        .contentShape(Rectangle())
+    )
+    .frame(minHeight: Tokens.minimumTapTarget)
+    .contentShape(Rectangle())
+  }
+
+  @ViewBuilder
+  private func surface<Content: View>(_ content: Content) -> some View {
+    if isSelected {
+      content.background(
+        isPressed ? Tokens.Color.plateBlueFillPressed : Tokens.Color.plateBlueFill,
+        in: Capsule()
+      )
+    } else {
+      content.modifier(MachinedModifier(shape: Capsule(), isPressed: isPressed, outlined: true))
     }
-    .buttonStyle(HardsetPressStyle())
-    .accessibilityAddTraits(isSelected ? [.isSelected] : [])
+  }
+}
+
+/// The chip's button style: feeds `configuration.isPressed` into `HardsetChipFace`, sinks to 0.97
+/// on `Motion.press` unless Reduce Motion is on, and never reads `isEnabled`, so a disabled chip is
+/// not dimmed. It is not `HardsetPressStyle`, which dims, nor `MachinedPressStyle`, which has no
+/// selected variant: a chip is a machined face when unselected and a flat fill when selected.
+private struct HardsetChipStyle: ButtonStyle {
+  let isSelected: Bool
+
+  func makeBody(configuration: Configuration) -> some View {
+    HardsetChipBody(configuration: configuration, isSelected: isSelected)
+  }
+}
+
+private struct HardsetChipBody: View {
+  let configuration: ButtonStyleConfiguration
+  let isSelected: Bool
+
+  @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+  var body: some View {
+    HardsetChipFace(isSelected: isSelected, isPressed: configuration.isPressed) {
+      configuration.label
+    }
+    .scaleEffect(configuration.isPressed && !reduceMotion ? 0.97 : 1)
+    .animation(
+      Tokens.Motion.adaptive(Tokens.Motion.press, reduceMotion: reduceMotion),
+      value: configuration.isPressed
+    )
   }
 }
 
@@ -60,14 +121,15 @@ public nonisolated struct HardsetSegment<Value: Hashable>: Identifiable {
 /// Replaces the system segmented picker, which renders identically in every app and in a shade of
 /// grey that does not meet this app's contrast floor.
 ///
-/// Each segment is a full-height 44 pt button with the selected trait, and the indicator slides
-/// between them on `Motion.state` -- or simply moves, with Reduce Motion on.
+/// The track is a static raised machined face with the control edge at its boundary. Each segment
+/// is a full-height 44 pt button with the selected trait, and the `plateBlueFill` indicator slides
+/// between them on `Motion.state` -- or simply moves, with Reduce Motion on. A segment draws its
+/// own fill, so a press dims it through `HardsetPressStyle` rather than sinking a steel face.
 public struct HardsetSegmentedControl<Value: Hashable>: View {
   @Binding private var selection: Value
   private let segments: [HardsetSegment<Value>]
   @Namespace private var indicator
   @Environment(\.accessibilityReduceMotion) private var reduceMotion
-  @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
   public init(selection: Binding<Value>, segments: [HardsetSegment<Value>]) {
     self._selection = selection
@@ -82,43 +144,90 @@ public struct HardsetSegmentedControl<Value: Hashable>: View {
             selection = segment.value
           }
         } label: {
-          Text(segment.title)
-            .font(Tokens.Text.label.weight(.semibold))
-            .foregroundStyle(
-              segment.value == selection ? Tokens.Color.onAccent : Tokens.Color.textPrimary
-            )
-            // One line at ordinary sizes. At accessibility sizes a segment wraps instead of
-            // truncating, because "Heaviest l…" no longer says which metric is selected.
-            .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 1)
-            .multilineTextAlignment(.center)
-            .fixedSize(horizontal: false, vertical: true)
-            .padding(.horizontal, Tokens.Spacing.snug)
-            .padding(.vertical, dynamicTypeSize.isAccessibilitySize ? Tokens.Spacing.tight : 0)
-            // As tall as the tallest segment, so a wrapped label never leaves its neighbour's
-            // indicator shorter than its own.
-            .frame(maxWidth: .infinity, minHeight: Tokens.minimumTapTarget, maxHeight: .infinity)
-            .background {
-              if segment.value == selection {
-                RoundedRectangle(cornerRadius: Tokens.Radius.control - Tokens.Spacing.hairline)
-                  .fill(Tokens.Color.accentFill)
-                  .matchedGeometryEffect(id: "indicator", in: indicator)
-              }
-            }
-            .contentShape(Rectangle())
+          HardsetSegmentFace(isSelected: segment.value == selection, indicator: indicator) {
+            Text(segment.title)
+          }
         }
         .buttonStyle(HardsetPressStyle())
         .accessibilityAddTraits(segment.value == selection ? [.isSelected] : [])
       }
     }
-    .fixedSize(horizontal: false, vertical: true)
-    .padding(Tokens.Spacing.hairline)
-    .background(
-      Tokens.Color.surfaceRaised,
-      in: RoundedRectangle(cornerRadius: Tokens.Radius.control)
-    )
-    .overlay(
-      RoundedRectangle(cornerRadius: Tokens.Radius.control)
-        .strokeBorder(Tokens.Color.controlBorder, lineWidth: Tokens.Stroke.hairline)
-    )
+    .hardsetSegmentTrack()
+  }
+}
+
+/// A segment's face in a given selection state: the label, wrapping at accessibility sizes, over
+/// the `plateBlueFill` indicator when selected. It has no press state of its own. The live segment
+/// takes `HardsetPressStyle`, and the catalogue draws a pressed segment by wrapping this face in
+/// `HardsetPressFace(isPressed: true, reduceMotion: false)`.
+///
+/// With a namespace the indicator is the shared geometry that slides between segments; without
+/// one, as in the catalogue, it is drawn in place.
+struct HardsetSegmentFace<Label: View>: View {
+  private let isSelected: Bool
+  private let indicator: Namespace.ID?
+  private let label: Label
+
+  @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
+  init(isSelected: Bool, @ViewBuilder label: () -> Label) {
+    self.isSelected = isSelected
+    self.indicator = nil
+    self.label = label()
+  }
+
+  init(isSelected: Bool, indicator: Namespace.ID, @ViewBuilder label: () -> Label) {
+    self.isSelected = isSelected
+    self.indicator = indicator
+    self.label = label()
+  }
+
+  var body: some View {
+    label
+      .font(Tokens.Text.label.weight(.semibold))
+      .foregroundStyle(isSelected ? Tokens.Color.onPlateBlue : Tokens.Color.chalk)
+      // One line at ordinary sizes. At accessibility sizes a segment wraps instead of
+      // truncating, because "Heaviest l…" no longer says which metric is selected.
+      .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 1)
+      .multilineTextAlignment(.center)
+      .fixedSize(horizontal: false, vertical: true)
+      .padding(.horizontal, Tokens.Spacing.snug)
+      .padding(.vertical, dynamicTypeSize.isAccessibilitySize ? Tokens.Spacing.tight : 0)
+      // As tall as the tallest segment, so a wrapped label never leaves its neighbour's
+      // indicator shorter than its own.
+      .frame(maxWidth: .infinity, minHeight: Tokens.minimumTapTarget, maxHeight: .infinity)
+      .background {
+        if isSelected {
+          indicatorShape
+        }
+      }
+      .contentShape(Rectangle())
+  }
+
+  @ViewBuilder
+  private var indicatorShape: some View {
+    let fill = RoundedRectangle(cornerRadius: Tokens.Radius.control - Tokens.Spacing.hairline)
+      .fill(Tokens.Color.plateBlueFill)
+    if let indicator {
+      fill.matchedGeometryEffect(id: "indicator", in: indicator)
+    } else {
+      fill
+    }
+  }
+}
+
+extension View {
+  /// The segmented control's track: a static raised machined face whose boundary is the control
+  /// edge. Shared by `HardsetSegmentedControl` and the chip catalogue's pressed segments.
+  func hardsetSegmentTrack() -> some View {
+    fixedSize(horizontal: false, vertical: true)
+      .padding(Tokens.Spacing.hairline)
+      .modifier(
+        MachinedModifier(
+          shape: RoundedRectangle(cornerRadius: Tokens.Radius.control),
+          isPressed: false,
+          outlined: true
+        )
+      )
   }
 }
