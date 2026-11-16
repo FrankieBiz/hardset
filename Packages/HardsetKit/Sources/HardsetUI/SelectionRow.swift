@@ -4,8 +4,8 @@ import SwiftUI
 ///
 /// Used across machine and gym selection. Enforces the 56 pt logger tap target, the card surface
 /// with a decorative hairline, clear hierarchy, and accessible traits. Selected rows take the
-/// accent ring and tint, and the indicator on the right swaps an empty ring for a filled check, so
-/// the choice is carried by shape as well as colour.
+/// plate blue ring and tint, and the indicator on the right swaps an empty ring for a filled check,
+/// so the choice is carried by shape as well as colour.
 public struct SelectionRow: View {
   private let title: String
   private let subtitle: String?
@@ -13,8 +13,6 @@ public struct SelectionRow: View {
   private let leadingIcon: String?
   private let isSelected: Bool
   private let action: () -> Void
-
-  @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
   public init(
     title: String,
@@ -34,44 +32,9 @@ public struct SelectionRow: View {
 
   public var body: some View {
     Button(action: action) {
-      HStack(alignment: .center, spacing: Tokens.Spacing.regular) {
-        if let leadingIcon {
-          SelectionIconSquare(systemImage: leadingIcon, isSelected: isSelected)
-        }
-
-        VStack(alignment: .leading, spacing: Tokens.Spacing.hairline) {
-          Text(title)
-            .font(Tokens.Text.headline)
-            .foregroundStyle(Tokens.Color.textPrimary)
-
-          if let visibleSubtitle {
-            Text(visibleSubtitle)
-              .font(Tokens.Text.provenance)
-              .foregroundStyle(Tokens.Color.textSecondary)
-          }
-
-          // At accessibility text sizes the tag moves under the title instead of squeezing it
-          // into a column one word wide.
-          if stacksTag, let visibleBadge {
-            SelectionTag(visibleBadge)
-              .padding(.top, Tokens.Spacing.tight)
-          }
-        }
-        .multilineTextAlignment(.leading)
-        .fixedSize(horizontal: false, vertical: true)
-        .frame(maxWidth: .infinity, alignment: .leading)
-
-        if !stacksTag, let visibleBadge {
-          SelectionTag(visibleBadge)
-        }
-
-        SelectionIndicator(isSelected: isSelected)
-      }
-      .padding(.horizontal, Tokens.Spacing.regular)
-      .padding(.vertical, Tokens.Spacing.snug)
-      // Inside the label, so the 56 pt frame and the tappable shape are the same rectangle.
-      .frame(maxWidth: .infinity, minHeight: Tokens.loggerTapTarget, alignment: .leading)
-      .contentShape(RoundedRectangle(cornerRadius: Tokens.Radius.control))
+      SelectionRowLabel(
+        title: title, subtitle: visibleSubtitle, badge: visibleBadge, leadingIcon: leadingIcon,
+        isSelected: isSelected)
     }
     .buttonStyle(SelectionCardButtonStyle(isSelected: isSelected))
     .accessibilityElement(children: .combine)
@@ -89,8 +52,6 @@ public struct SelectionRow: View {
     return badge
   }
 
-  private var stacksTag: Bool { dynamicTypeSize.isAccessibilitySize }
-
   /// The selected state is spoken by the `.isSelected` trait, so it is not repeated here.
   private var spokenLabel: String {
     var parts = [title]
@@ -98,6 +59,67 @@ public struct SelectionRow: View {
     if let visibleBadge { parts.append(visibleBadge) }
     return parts.joined(separator: ", ")
   }
+}
+
+// MARK: - Row label
+
+/// The content of a selection row: the optional leading icon, the title block, the tag and the
+/// indicator, inside the 56 pt frame. Internal so the selection catalogue can draw a row's label on
+/// a pressed card face, because a `ButtonStyle` cannot be forced pressed in a render.
+///
+/// Takes the subtitle and badge already trimmed of empty strings, so `nil` is the only way a line
+/// is absent.
+struct SelectionRowLabel: View {
+  let title: String
+  let subtitle: String?
+  let badge: String?
+  let leadingIcon: String?
+  let isSelected: Bool
+
+  @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
+  var body: some View {
+    HStack(alignment: .center, spacing: Tokens.Spacing.regular) {
+      if let leadingIcon {
+        SelectionIconSquare(systemImage: leadingIcon, isSelected: isSelected)
+      }
+
+      VStack(alignment: .leading, spacing: Tokens.Spacing.hairline) {
+        Text(title)
+          .font(Tokens.Text.headline)
+          .foregroundStyle(Tokens.Color.chalk)
+
+        if let subtitle {
+          Text(subtitle)
+            .font(Tokens.Text.provenance)
+            .foregroundStyle(Tokens.Color.chalkDim)
+        }
+
+        // At accessibility text sizes the tag moves under the title instead of squeezing it
+        // into a column one word wide.
+        if stacksTag, let badge {
+          SelectionTag(badge)
+            .padding(.top, Tokens.Spacing.tight)
+        }
+      }
+      .multilineTextAlignment(.leading)
+      .fixedSize(horizontal: false, vertical: true)
+      .frame(maxWidth: .infinity, alignment: .leading)
+
+      if !stacksTag, let badge {
+        SelectionTag(badge)
+      }
+
+      SelectionIndicator(isSelected: isSelected)
+    }
+    .padding(.horizontal, Tokens.Spacing.regular)
+    .padding(.vertical, Tokens.Spacing.snug)
+    // Inside the label, so the 56 pt frame and the tappable shape are the same rectangle.
+    .frame(maxWidth: .infinity, minHeight: Tokens.loggerTapTarget, alignment: .leading)
+    .contentShape(RoundedRectangle(cornerRadius: Tokens.Radius.control))
+  }
+
+  private var stacksTag: Bool { dynamicTypeSize.isAccessibilitySize }
 }
 
 // MARK: - Shared picker parts
@@ -108,8 +130,8 @@ public struct SelectionRow: View {
 /// The press and selection treatment for a tappable card in a picker.
 ///
 /// Draws the card itself, so the pressed fill can sit between the card and its content, and the
-/// selected ring stays on top of both. Pressed rows scale to 0.98 and take the pressed fill; with
-/// Reduce Motion on, only the fill changes.
+/// selected ring stays on top of both. Pressed rows scale to 0.97 and take the pressed fill; with
+/// Reduce Motion on, only the fill changes. A disabled row dims to 0.4.
 struct SelectionCardButtonStyle: ButtonStyle {
   let isSelected: Bool
   var cornerRadius: CGFloat = Tokens.Radius.control
@@ -130,20 +152,61 @@ private struct SelectionCardBody: View {
   @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
   var body: some View {
-    configuration.label
+    SelectionCardFace(
+      isSelected: isSelected, isPressed: configuration.isPressed, isEnabled: isEnabled,
+      cornerRadius: cornerRadius
+    ) {
+      configuration.label
+    }
+    .animation(
+      Tokens.Motion.adaptive(Tokens.Motion.press, reduceMotion: reduceMotion),
+      value: configuration.isPressed
+    )
+  }
+}
+
+/// A selection card in a given state: the card, its pressed fill, the selected ring, the 0.97 sink
+/// and the disabled dim. `SelectionCardButtonStyle` draws every live card with it, and the
+/// selection catalogue draws its pressed and disabled samples with it, because a `ButtonStyle`
+/// cannot be forced pressed in a render. The animation stays in the style, since it is motion
+/// rather than a face.
+///
+/// The pressed fill is the one `if` and it sits inside a background, so the label keeps its view
+/// identity across a press. The scale is dropped under Reduce Motion, which leaves only the fill.
+struct SelectionCardFace<Label: View>: View {
+  private let isSelected: Bool
+  private let isPressed: Bool
+  private let isEnabled: Bool
+  private let cornerRadius: CGFloat
+  private let label: Label
+
+  @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+  init(
+    isSelected: Bool,
+    isPressed: Bool,
+    isEnabled: Bool,
+    cornerRadius: CGFloat,
+    @ViewBuilder label: () -> Label
+  ) {
+    self.isSelected = isSelected
+    self.isPressed = isPressed
+    self.isEnabled = isEnabled
+    self.cornerRadius = cornerRadius
+    self.label = label()
+  }
+
+  var body: some View {
+    label
       .background {
-        if configuration.isPressed {
+        if isPressed {
           RoundedRectangle(cornerRadius: cornerRadius)
-            .fill(Tokens.Color.surfacePressed)
+            .fill(Tokens.Color.steelPressed)
         }
       }
       .hardsetCard(selected: isSelected, cornerRadius: cornerRadius)
-      .scaleEffect(configuration.isPressed && !reduceMotion ? 0.98 : 1)
+      .scaleEffect(isPressed && !reduceMotion ? 0.97 : 1)
       .opacity(isEnabled ? 1 : 0.4)
-      .animation(
-        Tokens.Motion.adaptive(Tokens.Motion.press, reduceMotion: reduceMotion),
-        value: configuration.isPressed
-      )
   }
 }
 
@@ -159,10 +222,10 @@ struct SelectionIndicator: View {
   var body: some View {
     ZStack {
       Image(systemName: "circle")
-        .foregroundStyle(Tokens.Color.controlBorder)
+        .foregroundStyle(Tokens.Color.controlEdge)
         .opacity(isSelected ? 0 : 1)
       Image(systemName: "checkmark.circle.fill")
-        .foregroundStyle(Tokens.Color.accent)
+        .foregroundStyle(Tokens.Color.plateBlue)
         .opacity(isSelected ? 1 : 0)
         .scaleEffect(isSelected || reduceMotion ? 1 : 0.6)
     }
@@ -213,14 +276,14 @@ private struct SelectionIconSquare: View {
   var body: some View {
     Image(systemName: systemImage)
       .font(Tokens.Text.headline)
-      .foregroundStyle(isSelected ? Tokens.Color.accent : Tokens.Color.textSecondary)
+      .foregroundStyle(isSelected ? Tokens.Color.plateBlue : Tokens.Color.chalkDim)
       // A minimum rather than a fixed size, so the square grows with the symbol at large text.
       .frame(
         minWidth: Tokens.minimumTapTarget - Tokens.Spacing.snug,
         minHeight: Tokens.minimumTapTarget - Tokens.Spacing.snug
       )
       .background(
-        Tokens.Color.surfaceRaised,
+        Tokens.Color.steelRaised,
         in: RoundedRectangle(cornerRadius: Tokens.Radius.control)
       )
       .accessibilityHidden(true)
@@ -269,6 +332,6 @@ private struct SelectionIconSquare: View {
       }
       .padding(Tokens.Spacing.loose)
     }
-    .background(Tokens.Color.background)
+    .background(Tokens.Color.canvas)
   }
 #endif
