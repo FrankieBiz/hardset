@@ -233,6 +233,11 @@ Selection rows, the unit switch and pickers stay silent.
 - **Navigation titles** (`hardsetNavigationTitle`): the one title that may shrink, with
   `minimumScaleFactor(0.8)`, so a long exercise name stays on a single line in a bar. It is a
   documented exception to "adaptive layouts in place of shrinking text".
+- **Staged phone** (`ScaledPhoneFrame`): a real screen laid out at phone size (402 by 874 pt) and
+  scaled down onto a `steel` plate with a hairline `edgeLight` rim; the first-launch tour stages
+  the app's own screens in it, built from `TourFixtures`. The tour gives it 78% of the screen's
+  width. A frame that is not interactive is inert to touch and hidden from VoiceOver; an interactive
+  one, for the steps that ask the lifter to tap, is neither. It adds no token and no motion.
 - **Text entry** (`entryFieldChrome`): raised fill, control border, and a 2 pt plate blue ring that
   fades in on focus. Used by the search field and the name entry sheet.
 - **Set log control**: four states, never confused: incomplete (dashed, disabled), ready (plate blue
