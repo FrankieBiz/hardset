@@ -22,6 +22,8 @@ public struct GymOption: Hashable, Sendable, Identifiable {
 /// training somewhere unsaved is a true answer; and adding a gym is a plainly styled action rather
 /// than a row pretending to be one. An error, such as a saved gym whose list could not be read
 /// back, appears as a banner at the top, pinned above the list, where it cannot be scrolled past.
+/// At accessibility text sizes the same banner is instead the first thing in the scrolling content,
+/// so a tall banner cannot push every gym off screen; it is never height-capped.
 /// A failed save is stated in the name sheet instead, where the typed name waits for the retry.
 public struct GymPickerView: View {
   private let gyms: [GymOption]
@@ -31,6 +33,8 @@ public struct GymPickerView: View {
   private let errorMessage: String?
   private let isLoading: Bool
   private let onCancel: (() -> Void)?
+
+  @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
   /// - Parameters:
   ///   - isLoading: The saved gyms are still being read. The list says so in place of "No saved
@@ -69,19 +73,35 @@ public struct GymPickerView: View {
     isLoading && gyms.isEmpty
   }
 
+  /// True at accessibility text sizes, where the error banner is the first thing in the scrolling
+  /// content rather than pinned above it: pinned, a banner at those sizes and the intro line could
+  /// fill a phone screen and leave no gym in view. The banner is never height-capped.
+  private var scrollsErrorBanner: Bool { dynamicTypeSize.isAccessibilitySize }
+
+  /// The error banner, drawn pinned or scrolled by this one helper, so the two placements cannot
+  /// drift apart.
+  private func errorBanner(_ message: String) -> some View {
+    HardsetBanner(.error, message: message)
+      .hardsetArrival()
+  }
+
   public var body: some View {
     VStack(spacing: 0) {
       // Pinned above the list rather than scrolled with it, so a failure cannot be scrolled out
-      // of sight however many gyms are saved.
-      if let visibleErrorMessage {
-        HardsetBanner(.error, message: visibleErrorMessage)
-          .hardsetArrival()
+      // of sight however many gyms are saved. At accessibility sizes it scrolls with the list
+      // instead (`scrollsErrorBanner`).
+      if !scrollsErrorBanner, let visibleErrorMessage {
+        errorBanner(visibleErrorMessage)
           .padding(.horizontal, Tokens.Spacing.loose)
           .padding(.top, Tokens.Spacing.regular)
       }
 
       ScrollView {
         VStack(alignment: .leading, spacing: Tokens.Spacing.section) {
+          if scrollsErrorBanner, let visibleErrorMessage {
+            errorBanner(visibleErrorMessage)
+          }
+
           Text("Loads are tracked per machine, and machines belong to a gym.")
             .font(Tokens.Text.label)
             .foregroundStyle(Tokens.Color.chalkDim)

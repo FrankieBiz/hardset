@@ -59,6 +59,9 @@
       )
       // A real presentation applies hardsetSheet()'s plate-blue tint, so Cancel is plate blue.
       .tint(Tokens.Color.plateBlue)
+      // Fills the window with the app canvas, so a sheet shorter than its window leaves no seam
+      // of window background below its content.
+      .background(Tokens.Color.canvas.ignoresSafeArea())
     }
 
     /// The default state, with its footnote and an empty field, in every appearance.
@@ -126,6 +129,10 @@
         )
         .hardsetNavigationTitle("Choose a gym")
       }
+      // Fills the window with the app canvas, so a picker shorter than its window leaves no seam
+      // of window background below its content. This helper sets no tint (the loading capture
+      // adds its own), so the fill goes directly on the root.
+      .background(Tokens.Color.canvas.ignoresSafeArea())
     }
 
     /// The default state, no saved gyms, in every appearance.
@@ -174,8 +181,9 @@
       ) {
         Self.picker(gyms: Self.manyGyms, selected: Self.manyGyms[0].id)
       }
-      // The banner is pinned above the list: in a phone-height window the list must stay
-      // reachable beneath it, which is what this capture is for.
+      // At accessibility sizes the uncapped banner is inside the scrolling content, not pinned
+      // above the list. This phone-height capture checks that, with the banner there, the first
+      // two list rows are visible, which is what it is for.
       try await Snapshot.capture(
         "kit-gym-error-dark-ax3", size: Self.phone, typeSize: .accessibility3
       ) {

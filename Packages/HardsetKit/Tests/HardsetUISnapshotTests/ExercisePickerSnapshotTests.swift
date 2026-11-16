@@ -15,6 +15,10 @@
   @Suite("Exercise picker renders for review", .serialized)
   struct ExercisePickerSnapshotTests {
     private static let phone = CGSize(width: 402, height: 874)
+    /// Phone height plus 160 pt for the browse and recents-first lists, which run past any window:
+    /// at phone height their captures ended mid-row, and this height is meant to show the last row
+    /// in view and its provenance line whole.
+    private static let longList = CGSize(width: 402, height: 1034)
     private static let accessibility = CGSize(width: 402, height: 1800)
 
     private static let curated = ExerciseCatalog.v1.compactMap(\.catalogEntry)
@@ -88,22 +92,25 @@
       }
       // A real presentation applies hardsetSheet()'s plate-blue tint, so Cancel is plate blue.
       .tint(Tokens.Color.plateBlue)
+      // Fills the window with the app canvas, so a picker shorter than its window leaves no seam
+      // of window background below its content.
+      .background(Tokens.Color.canvas.ignoresSafeArea())
     }
 
     /// The default state, browse, in every appearance.
     @Test func browseInEveryAppearance() async throws {
       let name = "kit-exercisepicker-browse"
-      try await Snapshot.capture("\(name)-dark", size: Self.phone) { Self.picker() }
-      try await Snapshot.capture("\(name)-light", size: Self.phone, style: .light) {
+      try await Snapshot.capture("\(name)-dark", size: Self.longList) { Self.picker() }
+      try await Snapshot.capture("\(name)-light", size: Self.longList, style: .light) {
         Self.picker()
       }
-      try await Snapshot.capture("\(name)-dark-contrast", size: Self.phone, contrast: .high) {
+      try await Snapshot.capture("\(name)-dark-contrast", size: Self.longList, contrast: .high) {
         Self.picker()
       }
     }
 
     @Test func recentsFirstAndPartialQuery() async throws {
-      try await Snapshot.capture("kit-exercisepicker-recents-first-dark", size: Self.phone) {
+      try await Snapshot.capture("kit-exercisepicker-recents-first-dark", size: Self.longList) {
         Self.picker(recent: Array(Self.curated.prefix(3)))
       }
       try await Snapshot.capture("kit-exercisepicker-partial-query-dark", size: Self.phone) {
@@ -157,6 +164,18 @@
         "kit-exercisepicker-stacked-tags-dark-ax3", size: Self.accessibility,
         typeSize: .accessibility3
       ) { Self.picker(entries: Self.withCustom) }
+      // At accessibility sizes the uncapped banner is inside the scrolling content, not pinned
+      // under the search field and the rail. This phone-height capture checks that, with the
+      // banner there, the first two list rows are visible, so it can fail. The read-failure
+      // message sits over the browse list, as in the machine and gym pickers' captures, because
+      // with no rows there would be nothing for the check to find.
+      try await Snapshot.capture(
+        "kit-exercisepicker-error-dark-ax3", size: Self.phone, typeSize: .accessibility3
+      ) {
+        Self.picker(
+          errorMessage: "Your movements could not be read. Close this and try again."
+        )
+      }
     }
   }
 #endif

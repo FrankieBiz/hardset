@@ -204,7 +204,10 @@ Selection rows, the unit switch and pickers stay silent.
   `certainty(level).opacity(0.35)`, are decorative strokes that never carry meaning: the words,
   the symbol and the tinted surface identify the kind or level, so they are exempt from the 3:1
   boundary rule that applies to controls. A message-only banner speaks only its message to
-  VoiceOver, as it does today; speaking the kind is recorded for the accessibility pass.
+  VoiceOver, as it does today; speaking the kind is recorded for the accessibility pass. A
+  picker's error banner (gym, machine and exercise pickers) is pinned above the list at ordinary
+  sizes and moves into the scrolling content at accessibility sizes, so a tall banner can never
+  push the list off screen; the banner is never height-capped.
 - **Arrival** (`hardsetArrival()`): the one public modifier that carries a message's
   insertion-only opacity reveal on `Motion.reveal`, with no animated transaction. The pickers and
   the name entry sheet use it; the session and root screens adopt it when they are rebuilt.

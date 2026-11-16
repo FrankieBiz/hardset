@@ -67,6 +67,9 @@
       }
       // A real presentation applies hardsetSheet()'s plate-blue tint, so Cancel is plate blue.
       .tint(Tokens.Color.plateBlue)
+      // Fills the window with the app canvas, so a picker shorter than its window leaves no seam
+      // of window background below its content.
+      .background(Tokens.Color.canvas.ignoresSafeArea())
     }
 
     // MARK: - Default state
@@ -185,8 +188,9 @@
       ) {
         Self.picker(recent: Self.manyRecent, others: [Self.panatta])
       }
-      // The pinned, uncapped banner in a phone-height window: the list of one recent and several
-      // other machines must stay reachable beneath the banner, so this capture can fail.
+      // At accessibility sizes the uncapped banner is inside the scrolling content, not pinned
+      // above it. This phone-height capture checks that, with the banner there, the first two
+      // list rows (of one recent and several other machines) are visible, so it can fail.
       try await Snapshot.capture(
         "kit-machine-error-dark-ax3", size: Self.phone, typeSize: .accessibility3
       ) {

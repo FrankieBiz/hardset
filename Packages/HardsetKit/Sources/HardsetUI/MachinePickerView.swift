@@ -26,7 +26,9 @@ public struct MachineOption: Hashable, Sendable, Identifiable {
 ///
 /// A failed read or save appears as an error banner pinned above the scrolling choices, as in the
 /// gym picker, so it cannot be scrolled past and an unreadable gym is never presented as a gym
-/// with no machines. While the first read is in flight and there is nothing to list yet, a quiet
+/// with no machines. At accessibility text sizes the same banner is instead the first thing in the
+/// scrolling content, so a tall banner cannot push every machine off screen; it is never
+/// height-capped. While the first read is in flight and there is nothing to list yet, a quiet
 /// loading line stands in for the empty message.
 public struct MachinePickerView: View {
   private let recent: [MachineOption]
@@ -43,6 +45,7 @@ public struct MachinePickerView: View {
 
   /// The machine waiting for the lifter to confirm it should leave this gym's list.
   @State private var archiveCandidate: MachineOption?
+  @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
   /// - Parameters:
   ///   - errorMessage: A failed read or save, in the lifter's words, shown as an error banner.
@@ -84,15 +87,19 @@ public struct MachinePickerView: View {
     VStack(spacing: 0) {
       // Above the scroll view rather than in it, so a failure stays in sight whatever the list's
       // length or scroll position. It fades in where it lands and the list below moves at once.
-      if let visibleErrorMessage {
-        HardsetBanner(.error, message: visibleErrorMessage)
-          .hardsetArrival()
+      // At accessibility sizes it scrolls with the choices instead (`scrollsErrorBanner`).
+      if !scrollsErrorBanner, let visibleErrorMessage {
+        errorBanner(visibleErrorMessage)
           .padding(.horizontal, Tokens.Spacing.loose)
           .padding(.top, Tokens.Spacing.regular)
       }
 
       ScrollView {
         VStack(alignment: .leading, spacing: Tokens.Spacing.section) {
+          if scrollsErrorBanner, let visibleErrorMessage {
+            errorBanner(visibleErrorMessage)
+          }
+
           Text("Loads are tracked per machine, so weight on different equipment stays separate.")
             .font(Tokens.Text.label)
             .foregroundStyle(Tokens.Color.chalkDim)
@@ -180,6 +187,18 @@ public struct MachinePickerView: View {
     guard let errorMessage else { return nil }
     let trimmed = errorMessage.trimmingCharacters(in: .whitespacesAndNewlines)
     return trimmed.isEmpty ? nil : trimmed
+  }
+
+  /// True at accessibility text sizes, where the error banner is the first thing in the scrolling
+  /// content rather than pinned above it: pinned, a banner at those sizes and the intro line could
+  /// fill a phone screen and leave no machine in view. The banner is never height-capped.
+  private var scrollsErrorBanner: Bool { dynamicTypeSize.isAccessibilitySize }
+
+  /// The error banner, drawn pinned or scrolled by this one helper, so the two placements cannot
+  /// drift apart.
+  private func errorBanner(_ message: String) -> some View {
+    HardsetBanner(.error, message: message)
+      .hardsetArrival()
   }
 
   private func isListed(_ id: MachineID) -> Bool {

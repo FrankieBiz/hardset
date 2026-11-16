@@ -72,12 +72,12 @@ public struct ExercisePickerView: View {
         filterRail
 
         // Pinned with the search field rather than scrolled with the list, so a failure cannot be
-        // scrolled out of sight.
-        if let visibleErrorMessage {
-          HardsetBanner(.error, message: visibleErrorMessage)
+        // scrolled out of sight. At accessibility sizes it scrolls with the list instead
+        // (`scrollsErrorBanner`); the search field and the rail stay pinned at every size.
+        if !scrollsErrorBanner, let visibleErrorMessage {
+          errorBanner(visibleErrorMessage)
             .padding(.horizontal, Tokens.Spacing.loose)
             .padding(.top, Tokens.Spacing.tight)
-            .hardsetArrival()
         }
       }
       .padding(.top, Tokens.Spacing.snug)
@@ -134,6 +134,13 @@ public struct ExercisePickerView: View {
   private var movementList: some View {
     ScrollView {
       LazyVStack(alignment: .leading, spacing: 0, pinnedViews: [.sectionHeaders]) {
+        // Above the first section, with the pinned placement's spacing around it.
+        if scrollsErrorBanner, let visibleErrorMessage {
+          errorBanner(visibleErrorMessage)
+            .padding(.horizontal, Tokens.Spacing.loose)
+            .padding(.vertical, Tokens.Spacing.tight)
+        }
+
         if !displayedRecent.isEmpty {
           Section {
             rowStack(displayedRecent)
@@ -302,6 +309,10 @@ public struct ExercisePickerView: View {
   private var failureState: some View {
     ScrollView {
       VStack(alignment: .leading, spacing: Tokens.Spacing.snug) {
+        if scrollsErrorBanner, let visibleErrorMessage {
+          errorBanner(visibleErrorMessage)
+        }
+
         if let createAction {
           createButton(createAction)
         }
@@ -367,6 +378,19 @@ public struct ExercisePickerView: View {
     guard let errorMessage else { return nil }
     let trimmed = errorMessage.trimmingCharacters(in: .whitespacesAndNewlines)
     return trimmed.isEmpty ? nil : trimmed
+  }
+
+  /// True at accessibility text sizes, where the error banner is the first thing in the scrolling
+  /// content (the movement list, or the failure state when there are no rows) rather than pinned
+  /// under the rail: pinned, a banner at those sizes under the search field and the rail could
+  /// leave no movement in view. The banner is never height-capped.
+  private var scrollsErrorBanner: Bool { dynamicTypeSize.isAccessibilitySize }
+
+  /// The error banner, drawn pinned or scrolled by this one helper, so the two placements cannot
+  /// drift apart.
+  private func errorBanner(_ message: String) -> some View {
+    HardsetBanner(.error, message: message)
+      .hardsetArrival()
   }
 
   /// True while there is something to list: a recent movement or a match the filter lets through.
