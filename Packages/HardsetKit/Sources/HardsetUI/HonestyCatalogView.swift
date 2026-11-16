@@ -197,6 +197,8 @@ private struct HonestyChipStates: View {
     label: "Assumes intermediate experience and a twelve week training age on every machine",
     correctionPrompt: "Set your training experience")
 
+  @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
   var body: some View {
     CatalogSection("Assumption chip") {
       VStack(alignment: .leading, spacing: Tokens.Spacing.loose) {
@@ -223,10 +225,21 @@ private struct HonestyChipStates: View {
       label: assumption.label, correctionPrompt: assumption.correctionPrompt, onCorrect: {})
   }
 
-  /// The chip's own capsule drawn pressed, around the same label, pencil and padding the live chip
-  /// draws, because a `ButtonStyle` cannot be forced pressed in a render.
+  /// The chip's own face drawn pressed, around the same label, pencil and padding the live chip
+  /// draws, because a `ButtonStyle` cannot be forced pressed in a render. It takes the same shape
+  /// the live chip does: a capsule, and at accessibility sizes the control radius, so wrapped text
+  /// stays inside its outline.
+  @ViewBuilder
   private func pressedFace(_ assumption: Assumption) -> some View {
-    MachinedPressFace(shape: Capsule(), outlined: true, isPressed: true, reduceMotion: false) {
+    if dynamicTypeSize.isAccessibilitySize {
+      pressedFace(assumption, in: RoundedRectangle(cornerRadius: Tokens.Radius.control))
+    } else {
+      pressedFace(assumption, in: Capsule())
+    }
+  }
+
+  private func pressedFace<S: InsettableShape>(_ assumption: Assumption, in shape: S) -> some View {
+    MachinedPressFace(shape: shape, outlined: true, isPressed: true, reduceMotion: false) {
       HStack(spacing: Tokens.Spacing.tight) {
         Text(assumption.label)
           .foregroundStyle(Tokens.Color.chalk)
