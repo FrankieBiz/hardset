@@ -7,9 +7,13 @@ import SwiftUI
 /// target needs a resource bundle, which this package avoids. Every line goes into one path and
 /// one stroke, so it stays cheap on a static surface.
 ///
-/// The pattern is texture for the edges of a control, never a backdrop for text. Never place it
-/// behind body text, values or labels: even at low opacity it costs contrast the palette
-/// guarantees.
+/// The pattern is texture for the edges of a control and, in one gated form, a backing layer: a
+/// `KnurlPattern` inside a `.background { }`, clipped to its own shape, so it sits above the
+/// opaque panel fill and under the glyphs it backs. The allowed uses are that background form
+/// behind the hero rest countdown, and as the logged seal's ring, which never sits under the
+/// glyph (and, from Phase 4, the welcome bar). It is never a backdrop for body text, values or
+/// labels: even at low opacity it costs contrast the palette guarantees, and the contrast checker
+/// gates only `chalk` on the 8% backing, so no other colour is placed on it.
 public struct KnurlPattern: View {
   public let pitch: CGFloat
   public let opacity: Double
@@ -44,8 +48,10 @@ public struct KnurlPattern: View {
 public extension View {
   /// Overlays a knurl on the view, clipped to the view's rectangular bounds and transparent to
   /// touches so it never changes what a tap hits. A view with a rounded shape must clip itself
-  /// with `clipShape` so the pattern does not show past the corners. Do not use it on a view that
-  /// carries body text.
+  /// with `clipShape` so the pattern does not show past the corners. This is an overlay, so it
+  /// draws over its content: keep it off any view that carries text, values or glyphs, and use
+  /// `KnurlPattern` in a `.background { }` clipped to its own shape where a knurled backing is
+  /// allowed (see `KnurlPattern`).
   func knurl(opacity: Double = 0.08) -> some View {
     overlay(KnurlPattern(opacity: opacity).clipped().allowsHitTesting(false))
   }
