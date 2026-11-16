@@ -855,3 +855,45 @@ configuration and physical-device validation remain documented separately.
   gradient, and `HardsetButtonFace`/`HardsetKeyFace` are shared by the live styles and the
   catalogue. CI run 43365872815 green; renders reviewed. Contrast gate now also checks
   `controlEdge` on `steelPressed` (light is 3.11:1).
+
+## Front-end rebuild, phase 2: component kit — 2026-11-16
+
+- Maintainer: FrankieBiz <frankabisignano@gmail.com>.
+- Objective: the second phase of the front-end rebuild: restyle every kit component on the calibrated-iron tokens, keep every public
+  signature, and give each component an all-states catalogue or preview and a snapshot. Plan:
+  `docs/superpowers/plans/2026-11-13-frontend-rebuild-phase-2-component-kit.md` with its component map beside it; the coordinator's per-wave
+  notes are in `.agents/handoffs/phase-2.md`.
+- Worktree: `/home/frankbiz/orca/workspaces/hardset/nursehound`; branch `FrankieBiz/premium-frontend-design-plan-2`, pushed, a strict descendant of
+  `FrankieBiz/premium-frontend-design-plan` at `09e967c` (the older branch is untouched). Nothing has been pushed to `main`.
+- Delivered: 16 tasks in four waves. The two shared files were split (`PressStyle`, `ChipsAndSegments`, `Messages`, `HardsetTag`, `LoggerFormatting`); shared press
+  faces (`HardsetPressFace`, `MachinedPressFace`, `MachinedPressStyle`) and `hardsetText(_:weight:)`; the screen chrome, chips, tag, segments, ledger, banners, empty
+  and loading states, search field and selection rows, the certainty badge, assumption chip and methodology sheet (with `CertaintyLevel(_:)` replacing the
+  mapping copies and an executable engine-truth test), the set row (machined fields, plate-green seal on a knurled ring), keypad and load step, rest bar
+  (knurled countdown, 8 new contrast pairs), exercise card, name entry, gym, machine and exercise pickers; 195 kit captures in 15 catalogue and direct-root
+  suites, plus a preview per state; `DESIGN.md` and the spec corrected to match. `HardsetTag` is public; `hardsetArrival()` carries the banner reveal.
+- Verification: Linux `make check` exit 0 (176 files parsed, 232 Core tests, 299 Store tests, query gate, 184 contrast pairs across 23 swatches); project
+  generator diff clean. macOS: Wave 0 run 43763977949, Wave 1 run 43791436878, final runs 43961189914 and 43971950806 (last green, on `469caaf`, about 32
+  minutes, 252 PNGs, real-app journeys and audit passed in dark and light). Reviewed from the artefacts: every kit capture (per-group readers plus coordinator
+  spot checks), before and after pairs of every fix, and the changed existing screens (no regressions).
+- Process that worked: each task by an implementer in its own worktree plus a spec review and a compile review; a whole-branch review by four Opus lenses with a
+  skeptic per finding (9 confirmed); one fix dispatch plus scoped re-reviews. The plan itself was adversarially reviewed first (36 confirmed defects fixed before
+  any code). The macOS early compile step added to the workflow (package tests built at about minute 6) and the 120 minute timeout are kept.
+- Settled: weighted tracked roles use `hardsetText(_:weight:)` (a font-weight chain after `hardsetText` is not used); a sinking face needs a `ButtonStyle` that feeds
+  `configuration.isPressed` into the face; knurl is only ever a background, never the `.knurl()` overlay on product UI, and never under the seal glyph; the rest
+  countdown is chalk in both states (chalkDim fails 7:1 on knurl); wrapped tags, assumption chips and certainty capsules take the control radius at accessibility
+  sizes (no custom `Shape`); picker error banners scroll with the content at accessibility sizes (R41); `Packages/HardsetKit/Package.resolved` is rewritten by Linux
+  Swift tooling and is never staged.
+- Failed approaches and traps: a generic simulator destination for the early compile step also builds x86_64 that the render step never reuses (named iPhone 17
+  destination instead); a bare-root sheet snapshot lacks the tint a real presentation applies, so toolbar buttons draw near-black (the harness, not the app);
+  a still render cannot prove scrolling, so the R26 reachability check is structural; an implementer once reported a mistyped SHA, so tip is always checked
+  against the reported head.
+- Open and owner decisions (not changed inside Phase 2): under Increase Contrast dark, `steelRaised` and `steel` are pure black so filled-only tags, icon tiles and
+  the static "Not evaluated" fill vanish (word and symbol still carry meaning) and `steelPressed` is lighter than `steelRaised`, so a pressed face does not sink; the
+  paused countdown differs from running only by the word "Paused" and the play glyph; dismissible banners squeeze their body at accessibility3; chips truncate in a
+  one-line rail and segments hyphenate long words at accessibility3; at accessibility3 the exercise card's machine chip breaks a long name mid-word (R43, Phase 5).
+  Audit: `[volume with a workout] Text clipped | Moderate confidence` (R42, not clipped) and the baseline's unattributed `[keypad] Potentially inaccessible text`
+  (Phase 5). Physical-device checks the owner still owns: press feel on `HeaderIconMenu` (a `Menu` never reports a press) and on the machined faces, glare, haptics.
+  `AGENTS.md`'s file and test counts (86 files, 162 Core, 45 Store) are stale; the true numbers are above.
+- Next concrete step: Phase 3 (fixtures and staged screens: `TourFixtures`, `ScaledPhoneFrame`, every screen rendered from fixtures) gets its own plan,
+  written now that Phase 2 is green on the macOS lane. The pitch-2 reps are 3, 8, 12 and 15 (the engine gives low only at 11 and 12 reps). Deliver by PR when the
+  owner chooses; there is no push to `main` until then.
