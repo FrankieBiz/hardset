@@ -110,15 +110,10 @@ public struct MethodologySheet: View {
     )
   }
 
-  /// Maps engine certainty onto the UI's own scale. Kept here so `HardsetUI` does not need the
-  /// engine's enum to colour a chip, matching how `CertaintyLevel` is already used.
+  /// Maps engine certainty onto the UI's own scale. Delegates to `CertaintyLevel(_:)`, the one
+  /// mapping in the kit, so the progression chart and the muscle map keep their call sites.
   static func level(for certainty: Certainty) -> CertaintyLevel {
-    switch certainty {
-    case .high: .high
-    case .moderate: .moderate
-    case .low: .low
-    case .unevaluated: .unevaluated
-    }
+    CertaintyLevel(certainty)
   }
 
   static func label(for certainty: Certainty) -> String { level(for: certainty).label }

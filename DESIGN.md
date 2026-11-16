@@ -108,7 +108,7 @@ System fonts only, so no resource bundle is needed. Every role is a Dynamic Type
 | `hero` | Large Title, semibold, condensed, tabular | Rest countdown, keypad display |
 | `readout` | Title, semibold, condensed, tabular | Headline figures |
 | `setEntry` | Title 2, semibold, condensed, tabular | Weight and reps in a set row |
-| `figure` | Headline, condensed, tabular | Small figures inside ledgers and rows |
+| `figure` | Headline, condensed, tabular | Small figures inside rows and compact ledgers |
 
 Tracking is a ratio of the resolved size, so it follows Dynamic Type: `hero` and `display` -2%,
 `readout` -1%, `caption` and `unit` +1%, every other role 0. `hardsetText(_:)` applies a role's
@@ -172,19 +172,42 @@ Selection rows, the unit switch and pickers stay silent.
 - **Keys** (`HardsetKeyStyle`): the same machined face as a secondary button: raised steel with the
   control edge and the edge light inside it, and pressed, the control edge kept, the edge light
   dropped and the darker pressed fill, plus a 0.96 scale.
-- **Knurl** (`KnurlPattern`, `.knurl(opacity:)`): a `Canvas` crosshatch for a control's face or a
-  hero figure's backing, never behind text. It fills rectangular bounds, so callers with rounded
-  shapes clip it themselves.
+- **Knurl** (`KnurlPattern`, `.knurl(opacity:)`): a `Canvas` crosshatch at 8% opacity, the
+  `KnurlPattern` default. It fills rectangular bounds, so callers with rounded shapes clip it
+  themselves. Phase 2 allows it in two places and nowhere else: behind the rest bar's `hero`
+  countdown, and as the logged-set seal's rim. It is always a backing layer, `KnurlPattern`
+  inside a `.background { }` clipped to the backing shape; the `.knurl(opacity:)` overlay is never
+  used on text, the rest panel or the seal. The countdown is drawn in `chalk` in both running and
+  paused states, because `chalk` is the only text colour on the knurl, and `Tools/check_contrast.py`
+  gates that pair with the knurl blended in. The seal's `checkmark.circle.fill` glyph is never over
+  knurl: the knurl fills only an annulus around an opaque `plateGreenSurface` inner disc that
+  holds the glyph, because `plateGreen` on `plateGreenSurface` loses contrast with knurl under it.
+  The welcome bar's use belongs to the onboarding phase.
 - **Cards** (`hardsetCard`): `steel` fill, decorative `hairline` border; selected uses a 2 pt
   `plateBlue` ring and `plateBlueSurface` fill.
 - **Chips** (`HardsetChip`): capsule, raised fill; selected uses `plateBlueFill` with `onPlateBlue`
   text.
+- **Tags** (`HardsetTag`): the public name of the non-interactive label on a row (modality,
+  "Recent", "Custom"). Flat `steelRaised`, no outline, no edge light. It stays on one line at
+  ordinary sizes and wraps at accessibility sizes, never truncating the word it carries.
 - **Segmented control** (`HardsetSegmentedControl`): replaces the system segmented picker; the
-  selection indicator slides with `Motion.state`.
+  selection indicator slides with `Motion.state`. The indicator is a `matchedGeometryEffect`, a
+  documented exception to "only transform and opacity animate": it moves a shape between two
+  segments inside one container and never changes the container's layout.
 - **Screen header** (`ScreenHeader`): display title, one context line, optional trailing action.
-- **Banner** (`HardsetBanner`): record, caveat, and error messages on their tinted surfaces.
+- **Banner** (`HardsetBanner`): record, caveat, and error messages on their tinted surfaces. The
+  `info` kind stays as a neutral note and is listed for deletion in the final phase if nothing
+  uses it. A banner's stroke, `hue.opacity(0.35)`, and the static capsule outline at 0.35 on the
+  session screen's status capsules are decorative strokes that never carry meaning: the message
+  words, the symbol and the tinted surface identify the kind, so they are exempt from the 3:1
+  boundary rule that applies to controls. A message-only banner speaks only its message to
+  VoiceOver, as it does today; speaking the kind is recorded for the accessibility pass.
+- **Arrival** (`hardsetArrival()`): the one public modifier that carries a message's
+  insertion-only opacity reveal on `Motion.reveal`, with no animated transaction. The pickers and
+  the name entry sheet use it; the session and root screens adopt it when they are rebuilt.
 - **Ledger** (`StatLedger`): a row of labelled figures separated by hairlines, used for session
-  totals.
+  totals. Its values stay in the `setEntry` role, so it suits rows and compact ledgers; a larger
+  headline figure uses `readout`.
 - **Empty and loading states**: explain what is missing and what to do next; loading is a quiet line
   of text, not a spinner. An empty slot is drawn with a dashed outline, the app's one mark for
   "nothing here yet": the empty-state socket, the "Add movement" slot, a warm-up's ordinal, an
@@ -193,14 +216,21 @@ Selection rows, the unit switch and pickers stay silent.
   "Recent", "Custom", an untrained muscle) is filled only, so it never imitates a control.
 - **Selection** (`SelectionRow`, `SelectionCardButtonStyle`, `SelectionIndicator`): selected choices
   take the plate blue ring and `plateBlueSurface`, and the trailing indicator swaps an empty ring
-  for a filled check, so the choice is carried by shape as well as colour.
+  for a filled check, so the choice is carried by shape as well as colour. A pressed selection
+  card scales to 0.97 (not 0.98, to match every other pressed face). A disabled selection row
+  dims to 0.4, as a disabled control does; saved logger values are never dimmed.
+- **Rest bar** (`RestBarView`): keeps its `ViewThatFits`, and the four controls (−15, +15, pause,
+  skip) stay in one row under the countdown at every size that fits.
+- **Navigation titles** (`hardsetNavigationTitle`): the one title that may shrink, with
+  `minimumScaleFactor(0.8)`, so a long exercise name stays on a single line in a bar. It is a
+  documented exception to "adaptive layouts in place of shrinking text".
 - **Text entry** (`entryFieldChrome`): raised fill, control border, and a 2 pt plate blue ring that
   fades in on focus. Used by the search field and the name entry sheet.
 - **Set log control**: four states, never confused: incomplete (dashed, disabled), ready (plate blue
   outline), next up (plate blue fill), logged (the stamp). The first three are square key faces with
   a check; a logged set loses its key face and wears a round `plateGreen` seal
-  (`checkmark.circle.fill`) on the row's `plateGreenSurface` tint, so logged and next up differ by
-  shape, not only by hue. At accessibility sizes the control also reads "Log set" or "Logged", and
+  (`checkmark.circle.fill`) with a knurled rim, on the row's `plateGreenSurface` tint, so logged
+  and next up differ by shape, not only by hue. At accessibility sizes the control also reads "Log set" or "Logged", and
   VoiceOver hears "next to log" on the next-up row. Voice Control answers to "Set 2", "Log set 2",
   and, on the next-up row, "Log set".
 - **Press feedback on self-drawn controls** (`HardsetPressStyle`, `MachinedPressStyle` and the set

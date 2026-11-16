@@ -155,9 +155,11 @@ Chart series stay one per machine with distinct point symbols: `plateBlue`, chal
 
 The current app is flat. The rebuild gives surfaces weight without noise:
 
-- A raised surface (`steelRaised`) carries a 1 pt `edgeLight` on its top edge and a 1 pt
-  `edgeShadow` on its bottom edge. This is the only "shadow" in the app; no soft drop shadows
-  under cards.
+- A pressable raised face (keys, set-row value fields, chips, header circles, the segment track
+  and secondary buttons) carries a 1 pt `edgeLight` on its top edge and a 1 pt `edgeShadow` on
+  its bottom edge. This is the only "shadow" in the app; no soft drop shadows under cards. Entry
+  fields, tags, panels, banners and cards stay flat, with no edge light, because a lit edge reads
+  as something to press.
 - Keys on the keypad and the set-row fields are machined: raised fill, edge light, and on press
   they sink to `steelPressed` and lose the edge light, so the press reads as the key going down.
   A pressed face keeps its `controlEdge` outline, so the 3:1 boundary never disappears; only the
@@ -169,11 +171,15 @@ The current app is flat. The rebuild gives surfaces weight without noise:
 - Liquid Glass is used for system chrome only: the tab bar, the live-workout bottom accessory,
   toolbars, and the tour's floating callout card. Content never sits on glass. The keypad, set
   rows and rest bar stay opaque, as today, because they are read under glare and sweat.
-- Glass gets a `plateBlue` tint on the selected tab and the next-up control, nowhere else.
+- Glass gets a `plateBlue` tint on the selected tab, nowhere else. The next-up control stays an
+  opaque `plateBlueFill`, not glass, because set rows are read under glare and stay opaque.
 - One signature texture: a knurl. A `Canvas` pattern (`KnurlPattern`) draws a subtle diagonal
   crosshatch, because a Metal shader needs a resource bundle and this package has none. It is
   visible only on the welcome bar, the hero figure background of the rest countdown, and the
-  logged-set seal. It never appears behind text that must be read.
+  logged-set seal's ring. Behind the rest countdown it is a background layer at 8% opacity under
+  `chalk` text only, with its contrast gated by `Tools/check_contrast.py`; the seal's check glyph
+  sits on an opaque `plateGreenSurface` disc inside a knurled ring, never over knurl. It never
+  appears behind other text that must be read, and nowhere else.
 
 ### Typography
 
@@ -299,10 +305,12 @@ reps are already filled in from last time. If the set went as planned, one tap l
 
 Pitch 2, "Honest numbers." The element is a `readout` figure for an estimated one-rep max with
 a live `CertaintyBadge`, and beneath it a `HardsetSegmentedControl` with four segments showing
-the same 60 kg set at "3 reps", "8 reps", "15 reps" and "25 reps". The engine's real rule drives
+the same 60 kg set at "3 reps", "8 reps", "12 reps" and "15 reps". The engine's real rule drives
 the badge (`StrengthMath`: certainty is high at low reps, falls past six, and becomes
-unevaluated beyond the estimable ceiling), so the segments walk high, moderate, low,
-unevaluated, and the figure itself is computed by the engine, not typed into the fixture. The
+unevaluated beyond the estimable ceiling, with low only at 11 and 12 reps), so the segments walk
+high, moderate, low, unevaluated, and the figure itself is computed by the engine, not typed into
+the fixture. The earlier pitch of 3, 8, 15 and 25 reps does not walk four levels (it gives high,
+moderate, unevaluated, unevaluated), so the engine's rule wins over the sequence. The
 one-line provenance text under it is the engine's own wording. The copy: "Every estimate says
 how sure it is. When Hardset can't tell, it says so instead of guessing."
 
@@ -347,7 +355,8 @@ Headline: "Before your first set." Two choices on `SelectionRow`s:
 
 - Units: "Kilograms" or "Pounds", preselected from the locale guess the app already makes
   (`hardset.useImperial`).
-- Gym: a `HardsetSearchField` name entry with "Add gym" beneath, prefilled empty with the
+- Gym: a name field built from `hardsetNameInput()` and `hardsetEntryField(isFocused:)` (not
+  `HardsetSearchField`, which is the search control) with "Add gym" beneath, prefilled empty with the
   placeholder "Where do you train?"; the lifter may leave it blank, in which case the app keeps
   today's "Not recorded" behaviour.
 
@@ -391,7 +400,7 @@ and rest bar; the rebuild changes these things:
 - Set rows: 56 pt, machined fields (raised, edge light) for weight and reps, each in `setEntry`,
   with the unit in `unit`. The log control keeps its four states (incomplete dashed, ready
   outline, next-up filled, logged seal), with next-up in `plateBlue` and the seal in
-  `plateGreen` over the knurl texture.
+  `plateGreen` on an opaque `plateGreenSurface` disc inside a knurled ring.
 - The keypad opens as a sheet from the tapped field with `Motion.fling`, stays up across Next
   between weight and reps, and shows the replaceable prefill as selected text on
   `plateBlueSurface`. Keys are machined and sink on touch-down. Quick steps (−/+ by the
@@ -474,7 +483,8 @@ snapshot test renders the whole kit. The kit:
 
 Behaviour that must survive the rewrite even though no screen section above names it: the rest
 recovery failure banner above every tab and its blocking of timer commands, gym and machine
-management (rename, merge, archive, their alerts and retry), the machine load-step editor,
+management (rename, archive, their alerts and retry; there is no gym or machine merge, because
+the engine has no merge operation and none is added without an engine ask), the machine load-step editor,
 Apple Health settings, data import preview and export, the Lifetime restore action, and the root
 readiness gating in `WorkoutRootModel`. These are rebuilt on the kit, not dropped.
 
@@ -501,10 +511,12 @@ suite already renders the real root view from an in-memory migrated database que
 
 ## Verification
 
-Linux, every change: `hardset-check parse`, `make check` (Core, Store, contrast, project
-generation). The generator must produce identical project and scheme files for any file added
-to HardsetUI or HardsetFeature, which means new files are registered through the generator,
-never by hand.
+Linux, every change: `hardset-check parse`, `make check` (orchestration tests, parse, Core,
+Store, the query gate and contrast). `make check` does not run the project generator; run
+`python3 -B Tools/generate_project.py` and `git diff --exit-code -- Hardset.xcodeproj` to prove no
+project drift. Package files in HardsetUI, HardsetFeature and the package tests need no
+registration, because SwiftPM globs them and the app project lists no package files; the project
+is never edited by hand.
 
 macOS CI, every push: the package snapshot tests render every component state and every staged
 screen to PNG in dark, light and Increase Contrast; `HardsetUITests` drives the real app through

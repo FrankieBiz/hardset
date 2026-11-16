@@ -37,7 +37,3 @@ public struct HardsetTag: View {
     .background(Tokens.Color.steelRaised, in: Capsule())
   }
 }
-
-/// The name this view had before it became public. Call sites keep compiling through it until the
-/// rename is finished.
-typealias SelectionTag = HardsetTag

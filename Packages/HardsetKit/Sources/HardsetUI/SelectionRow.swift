@@ -98,7 +98,7 @@ struct SelectionRowLabel: View {
         // At accessibility text sizes the tag moves under the title instead of squeezing it
         // into a column one word wide.
         if stacksTag, let badge {
-          SelectionTag(badge)
+          HardsetTag(badge)
             .padding(.top, Tokens.Spacing.tight)
         }
       }
@@ -107,7 +107,7 @@ struct SelectionRowLabel: View {
       .frame(maxWidth: .infinity, alignment: .leading)
 
       if !stacksTag, let badge {
-        SelectionTag(badge)
+        HardsetTag(badge)
       }
 
       SelectionIndicator(isSelected: isSelected)
