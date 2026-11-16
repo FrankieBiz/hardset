@@ -38,6 +38,8 @@ public struct ExercisePickerView: View {
   ///   - onCancel: Closes the picker without choosing. When set, the picker draws "Cancel" in the
   ///     toolbar's cancellation position, so the caller should not draw its own.
   ///   - onCreate: Adds a movement with the typed, trimmed name. When `nil`, no add is offered.
+  ///   - initialCategory: The region filter the picker opens with. It only seeds the filter, which
+  ///     the lifter then changes freely; `nil` opens on "All", as the picker always has.
   public init(
     query: Binding<String>,
     entries: [CatalogEntry],
@@ -45,6 +47,7 @@ public struct ExercisePickerView: View {
     errorMessage: String? = nil,
     onCancel: (() -> Void)? = nil,
     onCreate: ((String) -> Void)? = nil,
+    initialCategory: MuscleFilterCategory? = nil,
     onSelect: @escaping (CatalogEntry) -> Void
   ) {
     self._query = query
@@ -53,6 +56,7 @@ public struct ExercisePickerView: View {
     self.errorMessage = errorMessage
     self.onCancel = onCancel
     self.onCreate = onCreate
+    self._selectedCategory = State(initialValue: initialCategory)
     self.onSelect = onSelect
   }
 
@@ -73,10 +77,11 @@ public struct ExercisePickerView: View {
           HardsetBanner(.error, message: visibleErrorMessage)
             .padding(.horizontal, Tokens.Spacing.loose)
             .padding(.top, Tokens.Spacing.tight)
+            .hardsetArrival()
         }
       }
       .padding(.top, Tokens.Spacing.snug)
-      .background(Tokens.Color.background)
+      .background(Tokens.Color.canvas)
 
       if hasRows {
         movementList
@@ -88,7 +93,7 @@ public struct ExercisePickerView: View {
         emptyState
       }
     }
-    .background(Tokens.Color.background)
+    .background(Tokens.Color.canvas)
     .pickerCancelAction(onCancel)
     // A swipe down closes the sheet without passing through Cancel, and the search used to survive
     // it, so the next "Add movement" opened on a stale filter. Cleared on every way out.
@@ -176,7 +181,7 @@ public struct ExercisePickerView: View {
       .padding(.horizontal, Tokens.Spacing.loose)
       .padding(.vertical, Tokens.Spacing.snug)
       // Opaque, because the header is pinned and rows scroll underneath it.
-      .background(Tokens.Color.background)
+      .background(Tokens.Color.canvas)
   }
 
   // MARK: - Exercise row
@@ -189,12 +194,12 @@ public struct ExercisePickerView: View {
         VStack(alignment: .leading, spacing: Tokens.Spacing.hairline) {
           Text(entry.name)
             .font(Tokens.Text.headline)
-            .foregroundStyle(Tokens.Color.textPrimary)
+            .foregroundStyle(Tokens.Color.chalk)
 
           if let alsoTrains = supportingText(for: entry) {
             Text(alsoTrains)
               .font(Tokens.Text.provenance)
-              .foregroundStyle(Tokens.Color.textSecondary)
+              .foregroundStyle(Tokens.Color.chalkDim)
           }
 
           // At accessibility text sizes the tags move under the name instead of squeezing it
@@ -231,10 +236,10 @@ public struct ExercisePickerView: View {
   @ViewBuilder
   private func tags(for entry: CatalogEntry) -> some View {
     if let modality = entry.modality {
-      SelectionTag(modality.label)
+      HardsetTag(modality.label)
     }
     if !entry.isCurated {
-      SelectionTag("Custom", systemImage: "person.crop.circle")
+      HardsetTag("Custom", systemImage: "person.crop.circle")
         .accessibilityLabel("Your own movement")
     }
   }
@@ -316,7 +321,7 @@ public struct ExercisePickerView: View {
         Text(createTitle)
       } icon: {
         Image(systemName: "plus")
-          .foregroundStyle(Tokens.Color.accent)
+          .foregroundStyle(Tokens.Color.plateBlue)
       }
     }
     .buttonStyle(HardsetButtonStyle(.secondary, size: .logger, fullWidth: fullWidth))
@@ -496,24 +501,75 @@ public struct ExercisePickerView: View {
 }
 
 #if DEBUG
+  /// Hand-built movements for the previews, because the shipped catalogue has no custom or
+  /// unattributed rows.
+  private enum ExercisePickerSamples {
+    static let curated = ExerciseCatalog.v1.compactMap(\.catalogEntry)
+
+    static var chestOnly: [CatalogEntry] {
+      curated.filter { MuscleFilterCategory.chest.matches($0.primaryMuscle) }
+    }
+
+    static var withCustom: [CatalogEntry] {
+      Array(chestOnly.prefix(3)) + [
+        custom("Cable Fly Variation", modality: .cable, primary: .chest),
+        custom("Zercher Carry", modality: nil, primary: .forearms),
+      ]
+    }
+
+    static var withUnknownMuscles: [CatalogEntry] {
+      Array(chestOnly.prefix(2)) + [
+        CatalogEntry(
+          id: ExerciseID(), name: "Sled Drag", slug: nil, isCurated: false, modality: nil,
+          primaryMuscle: MuscleKey(stored: MuscleKey.notAttributedRawValue), contributions: []
+        ),
+        CatalogEntry(
+          id: ExerciseID(), name: "Neck Harness Raise", slug: nil, isCurated: false, modality: nil,
+          primaryMuscle: MuscleKey(stored: "muscle-from-a-newer-version"), contributions: []
+        ),
+      ]
+    }
+
+    private static func custom(
+      _ name: String, modality: ExerciseModality?, primary: Muscle
+    ) -> CatalogEntry {
+      CatalogEntry(
+        id: ExerciseID(), name: name, slug: nil, isCurated: false, modality: modality,
+        primaryMuscle: MuscleKey(primary),
+        contributions: [
+          MuscleContribution(primary, role: .direct, certainty: .low, source: .user)
+        ]
+      )
+    }
+  }
+
   private struct ExercisePickerHarness: View {
     private let allowsCreate: Bool
     private let hasHistory: Bool
     private let readFails: Bool
+    private let category: MuscleFilterCategory?
+    private let catalogueOverride: [CatalogEntry]?
     @State private var query: String
 
+    /// `category` seeds the private region filter through `initialCategory`. `catalogueOverride`
+    /// replaces the shipped catalogue: an empty list is the first frame before a read has come
+    /// back, and a hand-built list shows rows the shipped catalogue never contains.
     init(
       query: String = "", allowsCreate: Bool = true, hasHistory: Bool = false,
-      readFails: Bool = false
+      readFails: Bool = false, category: MuscleFilterCategory? = nil,
+      catalogueOverride: [CatalogEntry]? = nil
     ) {
       self.allowsCreate = allowsCreate
       self.hasHistory = hasHistory
       self.readFails = readFails
+      self.category = category
+      self.catalogueOverride = catalogueOverride
       self._query = State(initialValue: query)
     }
 
     private var catalogue: [CatalogEntry] {
-      readFails ? [] : ExerciseCatalog.v1.compactMap(\.catalogEntry)
+      if readFails { return [] }
+      return catalogueOverride ?? ExerciseCatalog.v1.compactMap(\.catalogEntry)
     }
 
     private var entries: [CatalogEntry] {
@@ -532,7 +588,8 @@ public struct ExercisePickerView: View {
           errorMessage: readFails
             ? "Your movements could not be read. Close this and try again." : nil,
           onCancel: {},
-          onCreate: allowsCreate ? { (_: String) in } : nil
+          onCreate: allowsCreate ? { (_: String) in } : nil,
+          initialCategory: category
         ) { _ in }
         .hardsetNavigationTitle("Add movement")
       }
@@ -564,5 +621,37 @@ public struct ExercisePickerView: View {
   #Preview("Exercise picker, read failed") {
     // The banner says what happened; nothing claims the catalogue is empty.
     ExercisePickerHarness(readFails: true)
+  }
+
+  #Preview("Exercise picker, region filter active") {
+    // Seeded through `initialCategory`: the Chest chip is selected and only chest movements list.
+    ExercisePickerHarness(category: .chest)
+  }
+
+  #Preview("Exercise picker, hidden by the filter") {
+    // Only chest movements exist, so the Calves filter hides all of them: the first offer is
+    // "Show all regions", the second is adding one of the lifter's own.
+    ExercisePickerHarness(
+      query: "press", category: .calves, catalogueOverride: ExercisePickerSamples.chestOnly
+    )
+  }
+
+  #Preview("Exercise picker, loading") {
+    // An empty first frame before any read has come back: a quiet line, not an empty catalogue.
+    ExercisePickerHarness(catalogueOverride: [])
+  }
+
+  #Preview("Exercise picker, custom entry tags") {
+    ExercisePickerHarness(catalogueOverride: ExercisePickerSamples.withCustom)
+  }
+
+  #Preview("Exercise picker, not attributed and not recognised") {
+    // Both sort last, under their own honest names, and neither is folded into a region.
+    ExercisePickerHarness(catalogueOverride: ExercisePickerSamples.withUnknownMuscles)
+  }
+
+  #Preview("Exercise picker, accessibility size, stacked tags") {
+    ExercisePickerHarness(catalogueOverride: ExercisePickerSamples.withCustom)
+      .dynamicTypeSize(.accessibility3)
   }
 #endif
