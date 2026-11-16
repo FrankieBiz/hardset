@@ -24,14 +24,17 @@ public struct MachineOption: Hashable, Sendable, Identifiable {
 /// rows under sentence-case labels. "Not recorded" stays a real choice, and adding a machine is a
 /// plainly styled action rather than a row pretending to be one.
 ///
-/// A failed read or save appears as an error banner above every choice, as in the gym picker, so
-/// an unreadable gym is never presented as a gym with no machines.
+/// A failed read or save appears as an error banner pinned above the scrolling choices, as in the
+/// gym picker, so it cannot be scrolled past and an unreadable gym is never presented as a gym
+/// with no machines. While the first read is in flight and there is nothing to list yet, a quiet
+/// loading line stands in for the empty message.
 public struct MachinePickerView: View {
   private let recent: [MachineOption]
   private let others: [MachineOption]
   private let selected: MachineID?
   private let unit: WeightUnit
   private let errorMessage: String?
+  private let isLoading: Bool
   private let onSelect: (MachineID?) -> Void
   private let onEditIncrement: ((MachineID) -> Void)?
   private let onAddMachine: (() -> Void)?
@@ -44,6 +47,9 @@ public struct MachinePickerView: View {
   /// - Parameters:
   ///   - errorMessage: A failed read or save, in the lifter's words, shown as an error banner.
   ///     "Not recorded" stays selectable under it, so a failure never blocks logging.
+  ///   - isLoading: A read is in flight. With no machines yet, a loading line is drawn in place of
+  ///     "No machines to show for this gym.", which would be untrue before the read has finished.
+  ///     Machines already on screen stay while a refresh runs.
   ///   - onArchive: Takes a machine off this gym's list after the lifter confirms. Offered from
   ///     a long press and as a VoiceOver action, never for the machine currently selected.
   ///   - onCancel: Closes the picker without choosing. When set, the picker draws "Cancel" in the
@@ -54,6 +60,7 @@ public struct MachinePickerView: View {
     selected: MachineID?,
     unit: WeightUnit = .kilograms,
     errorMessage: String? = nil,
+    isLoading: Bool = false,
     onSelect: @escaping (MachineID?) -> Void,
     onAddMachine: (() -> Void)? = nil,
     onEditIncrement: ((MachineID) -> Void)? = nil,
@@ -65,6 +72,7 @@ public struct MachinePickerView: View {
     self.selected = selected
     self.unit = unit
     self.errorMessage = errorMessage
+    self.isLoading = isLoading
     self.onSelect = onSelect
     self.onEditIncrement = onEditIncrement
     self.onAddMachine = onAddMachine
@@ -73,78 +81,86 @@ public struct MachinePickerView: View {
   }
 
   public var body: some View {
-    ScrollView {
-      VStack(alignment: .leading, spacing: Tokens.Spacing.section) {
-        VStack(alignment: .leading, spacing: Tokens.Spacing.regular) {
-          if let visibleErrorMessage {
-            HardsetBanner(.error, message: visibleErrorMessage)
-          }
+    VStack(spacing: 0) {
+      // Above the scroll view rather than in it, so a failure stays in sight whatever the list's
+      // length or scroll position. It fades in where it lands and the list below moves at once.
+      if let visibleErrorMessage {
+        HardsetBanner(.error, message: visibleErrorMessage)
+          .hardsetArrival()
+          .padding(.horizontal, Tokens.Spacing.loose)
+          .padding(.top, Tokens.Spacing.regular)
+      }
 
+      ScrollView {
+        VStack(alignment: .leading, spacing: Tokens.Spacing.section) {
           Text("Loads are tracked per machine, so weight on different equipment stays separate.")
             .font(Tokens.Text.label)
-            .foregroundStyle(Tokens.Color.textSecondary)
+            .foregroundStyle(Tokens.Color.chalkDim)
             .fixedSize(horizontal: false, vertical: true)
-        }
 
-        if let hero = recent.first {
-          VStack(alignment: .leading, spacing: Tokens.Spacing.snug) {
-            SectionLabel("Used last time")
-            heroCard(hero)
-          }
-        } else if others.isEmpty, visibleErrorMessage == nil {
-          // True whether the gym has no machines yet or its list could not be read, which is why
-          // it does not claim either. Left out under an error banner, which already says which.
-          Text("No machines to show for this gym.")
-            .font(Tokens.Text.label)
-            .foregroundStyle(Tokens.Color.textPrimary)
-            .fixedSize(horizontal: false, vertical: true)
-        }
-
-        if recent.count > 1 {
-          machineSection("Other recent machines", options: Array(recent.dropFirst()))
-        }
-
-        if !others.isEmpty {
-          machineSection("Also at this gym", options: others)
-        }
-
-        // Only for a machine on the list: the caller edits the step of a listed option, so for a
-        // machine the list does not hold (after a failed read) the button would do nothing.
-        if let selected, let onEditIncrement, isListed(selected) {
-          Button("Set this machine’s load step") { onEditIncrement(selected) }
-            .buttonStyle(HardsetButtonStyle(.secondary, size: .logger))
-        }
-
-        VStack(alignment: .leading, spacing: Tokens.Spacing.snug) {
-          SectionLabel("Not on the list")
-
-          SelectionRow(
-            title: "Not recorded",
-            subtitle: "History is kept for the movement, not a machine",
-            leadingIcon: "slash.circle",
-            isSelected: selected == nil,
-            action: { onSelect(nil) }
-          )
-
-          if let onAddMachine {
-            Button(action: onAddMachine) {
-              Label {
-                Text("Add a machine")
-              } icon: {
-                Image(systemName: "plus")
-                  .foregroundStyle(Tokens.Color.accent)
-              }
+          if let hero = recent.first {
+            VStack(alignment: .leading, spacing: Tokens.Spacing.snug) {
+              SectionLabel("Used last time")
+              heroCard(hero)
             }
-            .buttonStyle(HardsetButtonStyle(.secondary, size: .logger))
-            .padding(.top, Tokens.Spacing.tight)
+          } else if others.isEmpty, isLoading {
+            // Before the first read has finished, an empty list says nothing about the gym.
+            HardsetLoadingState("Loading this gym’s machines.")
+          } else if others.isEmpty, visibleErrorMessage == nil {
+            // True whether the gym has no machines yet or its list could not be read, which is why
+            // it does not claim either. Left out under an error banner, which already says which.
+            Text("No machines to show for this gym.")
+              .font(Tokens.Text.label)
+              .foregroundStyle(Tokens.Color.chalk)
+              .fixedSize(horizontal: false, vertical: true)
+          }
+
+          if recent.count > 1 {
+            machineSection("Other recent machines", options: Array(recent.dropFirst()))
+          }
+
+          if !others.isEmpty {
+            machineSection("Also at this gym", options: others)
+          }
+
+          // Only for a machine on the list: the caller edits the step of a listed option, so for a
+          // machine the list does not hold (after a failed read) the button would do nothing.
+          if let selected, let onEditIncrement, isListed(selected) {
+            Button("Set this machine’s load step") { onEditIncrement(selected) }
+              .buttonStyle(HardsetButtonStyle(.secondary, size: .logger))
+          }
+
+          VStack(alignment: .leading, spacing: Tokens.Spacing.snug) {
+            SectionLabel("Not on the list")
+
+            SelectionRow(
+              title: "Not recorded",
+              subtitle: "History is kept for the movement, not a machine",
+              leadingIcon: "slash.circle",
+              isSelected: selected == nil,
+              action: { onSelect(nil) }
+            )
+
+            if let onAddMachine {
+              Button(action: onAddMachine) {
+                Label {
+                  Text("Add a machine")
+                } icon: {
+                  Image(systemName: "plus")
+                    .foregroundStyle(Tokens.Color.plateBlue)
+                }
+              }
+              .buttonStyle(HardsetButtonStyle(.secondary, size: .logger))
+              .padding(.top, Tokens.Spacing.tight)
+            }
           }
         }
+        .padding(.horizontal, Tokens.Spacing.loose)
+        .padding(.top, Tokens.Spacing.regular)
+        .padding(.bottom, Tokens.Spacing.section)
       }
-      .padding(.horizontal, Tokens.Spacing.loose)
-      .padding(.top, Tokens.Spacing.regular)
-      .padding(.bottom, Tokens.Spacing.section)
     }
-    .background(Tokens.Color.background)
+    .background(Tokens.Color.canvas)
     .pickerCancelAction(onCancel)
     // Asked once, because nothing in the app brings an archived machine back to the list.
     .confirmationDialog(
@@ -224,12 +240,12 @@ public struct MachinePickerView: View {
         VStack(alignment: .leading, spacing: Tokens.Spacing.tight) {
           Text(hero.displayName)
             .font(Tokens.Text.title)
-            .foregroundStyle(Tokens.Color.textPrimary)
+            .foregroundStyle(Tokens.Color.chalk)
 
           if let increment = hero.stackIncrementKg {
             Text(Self.formatStep(increment, unit: unit))
               .font(Tokens.Text.provenance.monospacedDigit())
-              .foregroundStyle(Tokens.Color.textSecondary)
+              .foregroundStyle(Tokens.Color.chalkDim)
           }
         }
         .multilineTextAlignment(.leading)
@@ -348,5 +364,175 @@ public struct MachinePickerView: View {
       isEmpty: true,
       errorMessage: "This gym’s machines could not be read. You can still log without one."
     )
+  }
+
+  /// One state of the picker, with every value passed in, for the all-states previews below.
+  /// Sample data is built here because a preview cannot reach the test target's fixtures.
+  private struct MachinePickerStateHarness: View {
+    let recent: [MachineOption]
+    let others: [MachineOption]
+    let unit: WeightUnit
+    let errorMessage: String?
+    let isLoading: Bool
+    let offersAdd: Bool
+    let offersLoadStep: Bool
+    @State private var selected: MachineID?
+
+    init(
+      recent: [MachineOption],
+      others: [MachineOption] = [],
+      selected: MachineID? = nil,
+      unit: WeightUnit = .kilograms,
+      errorMessage: String? = nil,
+      isLoading: Bool = false,
+      offersAdd: Bool = true,
+      offersLoadStep: Bool = false
+    ) {
+      self.recent = recent
+      self.others = others
+      self.unit = unit
+      self.errorMessage = errorMessage
+      self.isLoading = isLoading
+      self.offersAdd = offersAdd
+      self.offersLoadStep = offersLoadStep
+      self._selected = State(initialValue: selected)
+    }
+
+    var body: some View {
+      NavigationStack {
+        MachinePickerView(
+          recent: recent,
+          others: others,
+          selected: selected,
+          unit: unit,
+          errorMessage: errorMessage,
+          isLoading: isLoading,
+          onSelect: { selected = $0 },
+          onAddMachine: offersAdd ? {} : nil,
+          onEditIncrement: offersLoadStep ? { _ in } : nil,
+          onArchive: { _ in },
+          onCancel: {}
+        )
+        .hardsetNavigationTitle("Machine")
+      }
+    }
+  }
+
+  private enum MachinePickerSamples {
+    static let hammer = MachineOption(
+      id: MachineID(), displayName: "Hammer Strength Leg Press", stackIncrementKg: 10)
+    static let cybex = MachineOption(
+      id: MachineID(), displayName: "Cybex Leg Press", stackIncrementKg: 4.5)
+    static let technogym = MachineOption(
+      id: MachineID(), displayName: "Technogym Selection Leg Press", stackIncrementKg: 5)
+    static let lifeFitness = MachineOption(
+      id: MachineID(), displayName: "Life Fitness Pro Leg Press", stackIncrementKg: 2.5)
+    static let panatta = MachineOption(id: MachineID(), displayName: "Panatta Leg Press")
+    static let hackSquat = MachineOption(
+      id: MachineID(), displayName: "Plate-loaded hack squat by the window, second from the end",
+      stackIncrementKg: 2.5)
+
+    static let manyRecent = [hammer, cybex, technogym, lifeFitness]
+  }
+
+  #Preview("Machine picker, zero recent machines") {
+    MachinePickerStateHarness(recent: [], others: [MachinePickerSamples.panatta])
+  }
+
+  #Preview("Machine picker, one recent machine") {
+    MachinePickerStateHarness(
+      recent: [MachinePickerSamples.hammer], others: [MachinePickerSamples.panatta])
+  }
+
+  #Preview("Machine picker, many recent machines") {
+    MachinePickerStateHarness(
+      recent: MachinePickerSamples.manyRecent, others: [MachinePickerSamples.panatta])
+  }
+
+  #Preview("Machine picker, other machines only") {
+    MachinePickerStateHarness(
+      recent: [], others: [MachinePickerSamples.panatta, MachinePickerSamples.lifeFitness])
+  }
+
+  #Preview("Machine picker, hero selected") {
+    MachinePickerStateHarness(
+      recent: MachinePickerSamples.manyRecent, selected: MachinePickerSamples.hammer.id)
+  }
+
+  #Preview("Machine picker, row selected") {
+    MachinePickerStateHarness(
+      recent: MachinePickerSamples.manyRecent, selected: MachinePickerSamples.technogym.id)
+  }
+
+  #Preview("Machine picker, not recorded selected") {
+    MachinePickerStateHarness(recent: MachinePickerSamples.manyRecent, selected: nil)
+  }
+
+  #Preview("Machine picker, selection not on the list") {
+    // The selected machine is not in either list, so there is no load-step button.
+    MachinePickerStateHarness(
+      recent: MachinePickerSamples.manyRecent, selected: MachineID(), offersLoadStep: true)
+  }
+
+  #Preview("Machine picker, steps in kilograms") {
+    MachinePickerStateHarness(
+      recent: MachinePickerSamples.manyRecent, unit: .kilograms)
+  }
+
+  #Preview("Machine picker, steps in pounds") {
+    MachinePickerStateHarness(
+      recent: MachinePickerSamples.manyRecent, unit: .pounds)
+  }
+
+  #Preview("Machine picker, unknown step") {
+    MachinePickerStateHarness(
+      recent: [MachinePickerSamples.panatta], others: [MachinePickerSamples.hammer])
+  }
+
+  #Preview("Machine picker, error with machines") {
+    MachinePickerStateHarness(
+      recent: [MachinePickerSamples.hammer, MachinePickerSamples.cybex],
+      others: [MachinePickerSamples.panatta],
+      errorMessage: "This machine could not be saved. You can still log without one."
+    )
+  }
+
+  #Preview("Machine picker, load-step button shown") {
+    MachinePickerStateHarness(
+      recent: MachinePickerSamples.manyRecent,
+      selected: MachinePickerSamples.cybex.id,
+      offersLoadStep: true
+    )
+  }
+
+  #Preview("Machine picker, no add action") {
+    MachinePickerStateHarness(recent: MachinePickerSamples.manyRecent, offersAdd: false)
+  }
+
+  #Preview("Machine picker, long names") {
+    MachinePickerStateHarness(
+      recent: [MachinePickerSamples.hackSquat, MachinePickerSamples.technogym],
+      others: [MachinePickerSamples.hackSquat]
+    )
+  }
+
+  #Preview("Machine picker, loading") {
+    MachinePickerStateHarness(recent: [], isLoading: true)
+  }
+
+  #Preview("Machine picker, largest text") {
+    MachinePickerStateHarness(
+      recent: MachinePickerSamples.manyRecent, others: [MachinePickerSamples.panatta]
+    )
+    .dynamicTypeSize(.accessibility3)
+  }
+
+  #Preview("Machine picker, largest text with a read error") {
+    MachinePickerStateHarness(
+      recent: [MachinePickerSamples.hammer],
+      others: [MachinePickerSamples.cybex, MachinePickerSamples.technogym],
+      errorMessage: "This gym’s machines could not be read. You can still log without one."
+    )
+    .dynamicTypeSize(.accessibility3)
   }
 #endif
