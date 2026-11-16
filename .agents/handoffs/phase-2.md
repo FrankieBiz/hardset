@@ -94,3 +94,25 @@ entry in `.agents/HANDOFF.md`.
   "Paused" and the play glyph; dismissible banners squeeze their body at accessibility3; chips truncate in a rail at accessibility3 by design; segments
   hyphenate "Estimated one-rep max" mid-word at accessibility3; `plateBlue` text on `steelPressed` in light is 6.97:1 (not gated; the pressed floor is 4.5:1).
 - Physical-device checks the owner still owns: press feel on `HeaderIconMenu` (a `Menu` never reports a press) and on the machined faces, glare, haptics.
+
+## Final macOS run and the R26 contingency, 2026-11-16
+
+- Run 43961189914 on `b0f5eba` (Wave 2, Task 16, the first fix dispatch `ee7540b`, the honesty-sample follow-up `eb80dee` and the ledger): green, every
+  step success, about 48 minutes against the 120 minute timeout. 251 PNGs (56 existing plus 195 `kit-*`, budget about 192); render step 106 tests in 18
+  suites; real-app journey and audit passed in dark and light.
+- Accessibility audit against the Phase 1 baseline run 43365872815 (Task 16 Step 7): four of five audit files are unchanged (the `gym` file only reorders a line).
+  The `workout` file gains two lines versus the baseline, both first seen with Wave 1: `[volume with a workout] Text clipped | Moderate confidence` and a
+  second `[keypad] Potentially inaccessible text`. Ruled in R42 (no change: the badge renders unclipped, about 4 pt wider from the +1% caption tracking, and
+  wraps at accessibility3; the keypad item is a second instance of a class the baseline already had and goes to Phase 5). The History title line is the same
+  issue as the baseline at a different width.
+- PNG review of the final run (coordinator plus seven readers): every earlier crop fixed (23 of 23 before/after pairs), toolbar Done/Cancel/Save now plate
+  blue, wrapped tags, assumption chips (including the pressed sample) and certainty capsules sit inside a rounded-rectangle outline at accessibility3, the "All"
+  chip is wider than tall, and the 14 changed existing screens show only intended differences. Wave 2's 71 kit renders show every state the tasks list.
+- The R26 check failed, as it was made to: in `kit-machine-error-dark-ax3` and `kit-gym-error-dark-ax3` (phone height, accessibility3) the pinned banner left zero
+  and one fully visible rows against the plan's minimum of two. Remedy per the plan's Task 16 Step 7, recorded as R41: at accessibility sizes the Gym, Machine and
+  Exercise picker error banners move into the scrolling content, uncapped; ordinary sizes stay pinned. Commit `70496cd`, one fixer and two scoped re-reviewers
+  (spec, compile), no open findings; a phone-height accessibility3 error capture was added for the exercise picker, two exercise-picker captures that ended mid-row
+  were made taller, and picker and name-entry test roots now fill with the app canvas so no black or white seam shows under short content.
+- Recorded for Phase 5, not changed (R43): at accessibility3 the exercise card's machine chip breaks a long machine name mid-word ("Strengt/h") and the
+  "Add set" and "Warm-up" row wraps awkwardly, layouts the Phase 2 restyle did not change; the disabled primary "Add" is faint by design (40% dim).
+- A mistake of mine, corrected: my first final-PNG-review script threw on an aggregation line before any agent started and was relaunched; no work was lost.

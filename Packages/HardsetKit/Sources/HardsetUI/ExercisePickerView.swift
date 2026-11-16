@@ -34,7 +34,8 @@ public struct ExercisePickerView: View {
   ///   - recent: Movements the lifter logged most recently, newest first. Shown above the muscle
   ///     sections while the search is empty, narrowed by the region filter like everything else.
   ///   - errorMessage: A failed read or save, in the lifter's words. Shown as an error banner
-  ///     under the search field; while it is set, an empty list is not described as empty.
+  ///     under the search field at ordinary sizes, and as the first thing in the scrolling
+  ///     content at accessibility sizes; while it is set, an empty list is not described as empty.
   ///   - onCancel: Closes the picker without choosing. When set, the picker draws "Cancel" in the
   ///     toolbar's cancellation position, so the caller should not draw its own.
   ///   - onCreate: Adds a movement with the typed, trimmed name. When `nil`, no add is offered.
