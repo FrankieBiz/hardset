@@ -29,3 +29,68 @@ entry in `.agents/HANDOFF.md`.
   of a font-weight chain), the press architecture (`MachinedPressFace` and `MachinedPressStyle`), knurl as a background only, the capture
   budget and timeout, and the execution protocol were all written into the plan after its adversarial review; see its Rulings table.
   Housekeeping: `Packages/HardsetKit/Package.resolved` is rewritten by Linux Swift tooling and is never staged.
+
+## Wave 1 (Tasks 3 to 11), 2026-11-15 and 2026-11-16 (recorded after Wave 2 merged)
+
+- Merged `--no-ff` in task order after conflict dry runs, no conflicts: `de8ccfd` (3), `2ad2fd7` (4), `3063a10` (5), `efa9990` (6),
+  `9dda653` (7), `92d76f6` (8), `4d0007d` (9), `4cf7b88` (10), `164161f` (11). BASE `6199f26`. Each task was one commit on its own
+  scratch branch in `_p2/t<N>`; a spec reviewer and a compile reviewer both approved every task in round 0 (no fix rounds).
+- Before merging, the coordinator checked each branch against its owned paths (all nine touched only their own files), authorship
+  (FrankieBiz, no trailers) and tip against reported head. One implementer (Task 9) reported a mistyped full SHA (`775f4841ee1d...`
+  is not an object); the branch itself was one clean commit (`775f484`), and its reviewers read the real code. Later waves asked for
+  `git rev-parse HEAD` verbatim and the coordinator checks tip equals reported head for every task. Task 9 was re-verified by hand:
+  no spoken-label or action line removed, `LoggerFormatting.swift` untouched, knurl through `KnurlPattern` in a background.
+- Integrated V: parse 172, contrast 184 pairs across 23 swatches (Task 11 added exactly 8), generator diff clean, `make check` exit 0
+  (Core 232 in 29 suites, Store 299 in 30 suites unchanged).
+- macOS run 43791436878 on `164161f`: green, about 30 minutes. The early package-test compile step passed in about 2 m 40 s, so the whole
+  snapshot target compiled for the simulator minutes in. 179 PNGs (the 56 existing plus 123 `kit-*`); real-app journeys and audit passed
+  in dark and light, which covers the set-row tap geometry (offsets 0.44, 0.93, 0.08).
+- PNG review (coordinator spot checks plus 12 parallel readers): no regression in the existing screens; every difference is an intended
+  one (condensed -2% display titles, +1% caption and unit tracking, machined fields, chips and header circle, the knurled ring around the
+  logged seal, the chalk countdown on its knurled backing). Findings acted on in the final fix dispatch: capture windows cropped at the
+  bottom (messages empty, honesty detail, methodology with a citation, set-row rows at accessibility3, rest bar at 402 pt); sheet roots
+  rendered without the app's plate-blue tint, so toolbar Done and Cancel drew near-black on dark (the pre-Phase-2 methodology capture had
+  the same artefact; the real app shows them blue); long wrapped tags, assumption chips and certainty capsules at accessibility3 became
+  blobs with text crossing the outline. Known renderer artefact, not a defect: stray end-lines on outlined capsules.
+- Deferred minors (Wave 1): Task 3 extra live `HeaderIconMenu` in the icons section; Task 4 two extra internal symbols
+  (`HardsetSegmentFace` second init, `hardsetSegmentTrack()`) and the `.isSelected` trait stays on the Button; Task 6 extra internal
+  `SelectionRowLabel`; Task 7 large-text detail rendered through `CertaintyDetail` not the seam; Task 9 seal glyph capped at xxxLarge;
+  Task 10 catalogue does not use `CatalogSection` and has no `height(_:)` switch (one section).
+
+## Wave 2 (Tasks 12 to 15), 2026-11-16
+
+- BASE `164161f`. Merged `--no-ff` after dry runs, no conflicts: `0cf2a00` (12), `b38594d` (13), `befccb5` (14), `601dfd0` (15).
+  Both reviewers approved every task in round 0. Owned paths, authorship, trailers and tip equal to reported head all checked.
+  Integrated V: parse 176, contrast 184, generator clean; `SelectionTag` survives only at the two `SelectionRow` call sites and the
+  typealias; the U+2019 label in `MachinePickerView` is intact.
+- Ruling: Wave 2 was merged locally while Wave 1's run was still in flight (its reviews were complete and nothing was pushed while a run was
+  in flight), and Wave 2 and Task 16 share the next push so there is one run rather than two; costs: a failure in the combined run is
+  attributed by file path.
+- Deferred minors (Wave 2): Task 12 default preview has no warm-up row and a capture name with a width suffix
+  (`kit-exercise-leg-press-dark-375`); Task 13 the gym loading line is an inline `Text`, not `HardsetLoadingState` (deliberate: that view
+  fills its frame); Task 14 sample reused one machine in both lists (fixed in the final dispatch).
+
+## Task 16 and the final review, 2026-11-16
+
+- Task 16 (kit completion) `28081c8` plus a design-notes correction `0cdbee0` after one fix round; `make check` exit 0; `ComponentsHarness` and
+  the `SelectionTag` typealias deleted, `MethodologySheet.level(for:)` delegates to `CertaintyLevel(_:)`. Preview shortfalls, deliberate:
+  `NumericPad` 12 previews for 11 states with two sharing one; `ExercisePickerView` 12 for 13 with the two "Not attributed" and "Not recognised"
+  states sharing one.
+- Whole-branch review (four Opus lenses: compile across tasks, spec and accessibility, frozen contracts, tests and CI honesty, each finding
+  verified by a skeptic): 9 confirmed, 0 refuted. No public signature was removed or altered; every call site compiles; contrast math for the
+  new pairs holds (editing ring 7.43:1, seal 7.40:1, pressed selected chip 7.54:1, chalk on `steelPressed` 14.67:1, `controlEdge` at least
+  3.11:1). Important findings, all fixed in `ee7540b`: the machine picker's accessibility3 error capture was 2800 pt tall and could not show
+  whether the pinned banner crowds the list (now phone height, so it can fail by design: if the render shows the list unreachable, move the
+  banner into the scrolling content at accessibility sizes and record a ruling); the "All" chip hit region was about 40 pt wide (now 44 by 44);
+  `DESIGN.md` said every header circle sinks, but `HeaderIconMenu` is a `Menu` and keeps its resting face (device check); three capture windows
+  were cropped; this ledger lacked Wave 1 and Wave 2.
+- Final fix dispatch: one fixer commit `ee7540b` (21 files: windows, sheet tint in the snapshot roots, rounded-rectangle shape at accessibility sizes
+  for `HardsetTag`, `AssumptionChip` and `CertaintyCapsule` with no new `Shape` type, chip minimum width, design and spec notes, stale comments), then
+  two scoped re-reviewers approved it with minors only. Coordinator follow-up `HonestyCatalogView` pressed assumption-chip sample now takes the same
+  shape rule as the live chip.
+- Owner decisions left open (not changed inside Phase 2): under Increase Contrast dark, `steelRaised` and `steel` are pure black, so filled-only tags,
+  icon tiles and the static "Not evaluated" fill vanish (word and symbol still carry meaning) and `steelPressed` (`#26262B`) is lighter than `steelRaised`,
+  so a pressed face does not sink; the paused rest countdown is chalk like running (chalkDim failed 7:1 on the knurl), distinguished by the word
+  "Paused" and the play glyph; dismissible banners squeeze their body at accessibility3; chips truncate in a rail at accessibility3 by design; segments
+  hyphenate "Estimated one-rep max" mid-word at accessibility3; `plateBlue` text on `steelPressed` in light is 6.97:1 (not gated; the pressed floor is 4.5:1).
+- Physical-device checks the owner still owns: press feel on `HeaderIconMenu` (a `Menu` never reports a press) and on the machined faces, glare, haptics.
