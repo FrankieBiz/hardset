@@ -7,13 +7,15 @@ import SwiftUI
 /// target needs a resource bundle, which this package avoids. Every line goes into one path and
 /// one stroke, so it stays cheap on a static surface.
 ///
-/// The pattern is texture for the edges of a control and, in one gated form, a backing layer: a
-/// `KnurlPattern` inside a `.background { }`, clipped to its own shape, so it sits above the
-/// opaque panel fill and under the glyphs it backs. The allowed uses are that background form
-/// behind the hero rest countdown, and as the logged seal's ring, which never sits under the
-/// glyph (and, from Phase 4, the welcome bar). It is never a backdrop for body text, values or
-/// labels: even at low opacity it costs contrast the palette guarantees, and the contrast checker
-/// gates only `chalk` on the 8% backing, so no other colour is placed on it.
+/// In the product UI the pattern is only ever a backing layer: a `KnurlPattern` inside a
+/// `.background { }`, clipped to its own shape, so it sits above the opaque panel fill and under
+/// the glyphs it backs. It is allowed in two places: as the backing behind the hero rest
+/// countdown, and as the logged seal's ring, which never sits under the glyph (and, from Phase 4,
+/// the welcome bar). It never draws over text or a glyph, and apart from the countdown it is never
+/// a backdrop for body text, values or labels: even at low opacity it costs contrast the palette
+/// guarantees, and the contrast checker gates only `chalk` on the 8% backing, so no other colour
+/// is placed on it. `.knurl()` is the overlay form and is not used on product UI text; the token
+/// catalogue keeps one labelled knurl sample on a machined face, drawn with that overlay form.
 public struct KnurlPattern: View {
   public let pitch: CGFloat
   public let opacity: Double

@@ -20,7 +20,7 @@
       case .ledger: 900
       case .banners: 1_500
       case .loading: 420
-      case .empty: 1_500
+      case .empty: 1_700
       }
     }
 

@@ -431,6 +431,10 @@ public struct MachinePickerView: View {
     static let hackSquat = MachineOption(
       id: MachineID(), displayName: "Plate-loaded hack squat by the window, second from the end",
       stackIncrementKg: 2.5)
+    /// A second long name for the other list, so no machine is offered as both recent and other.
+    static let backWallHackSquat = MachineOption(
+      id: MachineID(), displayName: "Plate-loaded hack squat on the back wall, under the clock",
+      stackIncrementKg: 2.5)
 
     static let manyRecent = [hammer, cybex, technogym, lifeFitness]
   }
@@ -512,7 +516,7 @@ public struct MachinePickerView: View {
   #Preview("Machine picker, long names") {
     MachinePickerStateHarness(
       recent: [MachinePickerSamples.hackSquat, MachinePickerSamples.technogym],
-      others: [MachinePickerSamples.hackSquat]
+      others: [MachinePickerSamples.backWallHackSquat]
     )
   }
 
@@ -520,14 +524,14 @@ public struct MachinePickerView: View {
     MachinePickerStateHarness(recent: [], isLoading: true)
   }
 
-  #Preview("Machine picker, largest text") {
+  #Preview("Machine picker, accessibility3") {
     MachinePickerStateHarness(
       recent: MachinePickerSamples.manyRecent, others: [MachinePickerSamples.panatta]
     )
     .dynamicTypeSize(.accessibility3)
   }
 
-  #Preview("Machine picker, largest text with a read error") {
+  #Preview("Machine picker, accessibility3 with a read error") {
     MachinePickerStateHarness(
       recent: [MachinePickerSamples.hammer],
       others: [MachinePickerSamples.cybex, MachinePickerSamples.technogym],

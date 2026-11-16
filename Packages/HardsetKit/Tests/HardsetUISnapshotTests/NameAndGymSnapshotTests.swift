@@ -57,6 +57,8 @@
         onConfirm: { _ in },
         onCancel: {}
       )
+      // A real presentation applies hardsetSheet()'s plate-blue tint, so Cancel is plate blue.
+      .tint(Tokens.Color.plateBlue)
     }
 
     /// The default state, with its footnote and an empty field, in every appearance.
@@ -159,8 +161,10 @@
           gyms: [], selected: nil,
           errorMessage: "The gym was saved, but its list could not be read.")
       }
+      // The one gym capture with a toolbar button, so the one that wears the presentation's tint.
       try await Snapshot.capture("kit-gym-loading-dark", size: Self.phone) {
         Self.picker(gyms: [], selected: nil, isLoading: true, onCancel: {})
+          .tint(Tokens.Color.plateBlue)
       }
     }
 

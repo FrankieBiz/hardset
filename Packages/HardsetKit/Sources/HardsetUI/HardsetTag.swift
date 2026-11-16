@@ -5,6 +5,11 @@ import SwiftUI
 /// Filled but never outlined. The outline is what tells the lifter something can be tapped, so a
 /// tag that wore one would be claiming to be a control it is not. It has no edge light either: a
 /// tag is flat `steelRaised`, never a machined face.
+///
+/// A capsule at ordinary sizes. At accessibility sizes a long tag wraps to several lines, and a
+/// capsule's corner radius, half its height, then pushes the wrapped text across its edge, so there
+/// the fill takes the control radius instead. Only the shape changes: the fill and padding are the
+/// same at every size.
 public struct HardsetTag: View {
   private let title: String
   private let systemImage: String?
@@ -34,6 +39,12 @@ public struct HardsetTag: View {
     .fixedSize(horizontal: !isLarge, vertical: true)
     .padding(.horizontal, Tokens.Spacing.snug)
     .padding(.vertical, Tokens.Spacing.tight)
-    .background(Tokens.Color.steelRaised, in: Capsule())
+    .background {
+      if isLarge {
+        RoundedRectangle(cornerRadius: Tokens.Radius.control).fill(Tokens.Color.steelRaised)
+      } else {
+        Capsule().fill(Tokens.Color.steelRaised)
+      }
+    }
   }
 }

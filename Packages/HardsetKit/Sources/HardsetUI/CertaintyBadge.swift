@@ -9,9 +9,11 @@ import SwiftUI
 /// describes, because the same view renders both.
 ///
 /// Drawn as a compact capsule on the level's own tint, outlined in the level's hue so it reads as
-/// something that can be opened. The capsule stays small enough to sit beside a figure, but the
-/// tappable region is the full 44 pt floor, laid out inside the button's label: a frame applied
-/// outside a plain button reserves space without reliably extending what can be tapped.
+/// something that can be opened; at accessibility sizes, where the word can wrap, the capsule takes
+/// the control radius (see `CertaintyCapsule`). The capsule stays small enough to sit beside a
+/// figure, but the tappable region is the full 44 pt floor, laid out inside the button's label: a
+/// frame applied outside a plain button reserves space without reliably extending what can be
+/// tapped.
 public struct CertaintyBadge: View {
   private let level: CertaintyLevel
   private let methodology: String
@@ -175,11 +177,28 @@ struct CertaintyDetailContent: View {
 /// Shared with `MethodologySheet`, which states the same level at the top of its disclosure. Only
 /// the interactive version carries a full-strength outline, because an outline at 3:1 is what tells
 /// the lifter something is tappable, and a static chip must not imitate a control.
+///
+/// A capsule at ordinary sizes. At accessibility sizes the word can wrap to a second line, and a
+/// capsule's corner radius, half its height, then pushes the wrapped text across the outline, so
+/// there the fill and outline take the control radius instead. Only the shape changes: the tint,
+/// the outline strength and the padding are the same at every size.
 struct CertaintyCapsule: View {
   let level: CertaintyLevel
   let isInteractive: Bool
 
+  @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
+  /// Explicit, because the private environment property above would otherwise make the memberwise
+  /// initialiser private, and `MethodologySheet` and the honesty catalogue draw the capsule from
+  /// other files.
+  init(level: CertaintyLevel, isInteractive: Bool) {
+    self.level = level
+    self.isInteractive = isInteractive
+  }
+
   var body: some View {
+    let isLarge = dynamicTypeSize.isAccessibilitySize
+    let outline = Tokens.Color.certainty(level).opacity(isInteractive ? 1 : 0.35)
     HStack(spacing: Tokens.Spacing.tight) {
       Image(systemName: level.symbolName)
         .accessibilityHidden(true)
@@ -191,13 +210,22 @@ struct CertaintyCapsule: View {
     .foregroundStyle(Tokens.Color.certainty(level))
     .padding(.horizontal, Tokens.Spacing.snug)
     .padding(.vertical, Tokens.Spacing.tight)
-    .background(Tokens.Color.certaintySurface(level), in: Capsule())
-    .overlay(
-      Capsule().strokeBorder(
-        Tokens.Color.certainty(level).opacity(isInteractive ? 1 : 0.35),
-        lineWidth: Tokens.Stroke.hairline
-      )
-    )
+    .background {
+      if isLarge {
+        RoundedRectangle(cornerRadius: Tokens.Radius.control)
+          .fill(Tokens.Color.certaintySurface(level))
+      } else {
+        Capsule().fill(Tokens.Color.certaintySurface(level))
+      }
+    }
+    .overlay {
+      if isLarge {
+        RoundedRectangle(cornerRadius: Tokens.Radius.control)
+          .strokeBorder(outline, lineWidth: Tokens.Stroke.hairline)
+      } else {
+        Capsule().strokeBorder(outline, lineWidth: Tokens.Stroke.hairline)
+      }
+    }
   }
 }
 
@@ -208,10 +236,17 @@ struct CertaintyCapsule: View {
 ///
 /// Outlined as a control, with the pencil in plate blue because it is the part that acts. Its 44 pt
 /// hit region is applied by `MachinedPressFace` after the capsule (R40).
+///
+/// A capsule at ordinary sizes. At accessibility sizes a long label wraps to several lines, and a
+/// capsule's corner radius, half its height, then pushes the wrapped text across the outline, so
+/// there the machined face takes the control radius instead. Only the shape changes: the press,
+/// the outline, the hit region and the spoken label are the same at every size.
 public struct AssumptionChip: View {
   private let label: String
   private let correctionPrompt: String
   private let onCorrect: () -> Void
+
+  @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
   public init(label: String, correctionPrompt: String, onCorrect: @escaping () -> Void) {
     self.label = label
@@ -220,6 +255,24 @@ public struct AssumptionChip: View {
   }
 
   public var body: some View {
+    styledChip
+      .accessibilityLabel("\(label). \(correctionPrompt).")
+  }
+
+  /// The chip in its machined press style, on the capsule or, at accessibility sizes, on the
+  /// control radius.
+  @ViewBuilder
+  private var styledChip: some View {
+    if dynamicTypeSize.isAccessibilitySize {
+      chip.buttonStyle(
+        MachinedPressStyle(
+          shape: RoundedRectangle(cornerRadius: Tokens.Radius.control), outlined: true))
+    } else {
+      chip.buttonStyle(MachinedPressStyle(shape: Capsule(), outlined: true))
+    }
+  }
+
+  private var chip: some View {
     Button(action: onCorrect) {
       HStack(spacing: Tokens.Spacing.tight) {
         Text(label)
@@ -233,8 +286,6 @@ public struct AssumptionChip: View {
       .padding(.horizontal, Tokens.Spacing.regular)
       .padding(.vertical, Tokens.Spacing.snug)
     }
-    .buttonStyle(MachinedPressStyle(shape: Capsule(), outlined: true))
-    .accessibilityLabel("\(label). \(correctionPrompt).")
   }
 }
 

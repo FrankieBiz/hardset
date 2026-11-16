@@ -267,7 +267,7 @@ public struct RestBarView: View {
       .background(Tokens.Color.canvas)
   }
 
-  #Preview("Rest bar, paused at the largest accessibility size") {
+  #Preview("Rest bar, paused at accessibility3") {
     previewRestBar()
       .frame(width: 402)
       .environment(\.dynamicTypeSize, .accessibility3)

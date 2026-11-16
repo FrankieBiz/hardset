@@ -6,8 +6,9 @@ import SwiftUI
 /// at its boundary, and selected it is a flat `plateBlueFill`.
 ///
 /// The visible capsule is compact so a rail of them reads as one control, but the tappable region
-/// is the full 44 pt minimum. Unselected, a press sinks the face to `steelPressed`; selected, it
-/// swaps to `plateBlueFillPressed`. Neither dims, so the boundary never fades under a finger.
+/// is at least 44 by 44 pt, so a short chip such as "All" is as easy to hit as a long one.
+/// Unselected, a press sinks the face to `steelPressed`; selected, it swaps to
+/// `plateBlueFillPressed`. Neither dims, so the boundary never fades under a finger.
 public struct HardsetChip: View {
   private let title: String
   private let isSelected: Bool
@@ -34,6 +35,9 @@ public struct HardsetChip: View {
 ///
 /// The selected face is a plain `plateBlueFill` with no edge gradient: the edge colours are
 /// pre-blended for steel and read wrong on plate blue.
+///
+/// The face owns the chip's hit region: after the surface it applies a frame of at least 44 by
+/// 44 pt and a rectangular content shape, so the compact capsule sits inside a full-size target.
 struct HardsetChipFace<Label: View>: View {
   private let isSelected: Bool
   private let isPressed: Bool
@@ -54,7 +58,7 @@ struct HardsetChipFace<Label: View>: View {
         .padding(.horizontal, Tokens.Spacing.regular)
         .padding(.vertical, Tokens.Spacing.snug)
     )
-    .frame(minHeight: Tokens.minimumTapTarget)
+    .frame(minWidth: Tokens.minimumTapTarget, minHeight: Tokens.minimumTapTarget)
     .contentShape(Rectangle())
   }
 

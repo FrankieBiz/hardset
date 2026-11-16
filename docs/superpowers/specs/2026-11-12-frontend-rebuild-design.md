@@ -179,7 +179,8 @@ The current app is flat. The rebuild gives surfaces weight without noise:
   logged-set seal's ring. Behind the rest countdown it is a background layer at 8% opacity under
   `chalk` text only, with its contrast gated by `Tools/check_contrast.py`; the seal's check glyph
   sits on an opaque `plateGreenSurface` disc inside a knurled ring, never over knurl. It never
-  appears behind other text that must be read, and nowhere else.
+  appears behind other text that must be read, and nowhere else in the product UI (the token
+  catalogue keeps one labelled knurl sample on a machined face, drawn with the overlay form).
 
 ### Typography
 
@@ -356,8 +357,8 @@ Headline: "Before your first set." Two choices on `SelectionRow`s:
 - Units: "Kilograms" or "Pounds", preselected from the locale guess the app already makes
   (`hardset.useImperial`).
 - Gym: a name field built from `hardsetNameInput()` and `hardsetEntryField(isFocused:)` (not
-  `HardsetSearchField`, which is the search control) with "Add gym" beneath, prefilled empty with the
-  placeholder "Where do you train?"; the lifter may leave it blank, in which case the app keeps
+  `HardsetSearchField`, which is the search control) with "Add gym" beneath, prefilled empty with
+  the placeholder "Where do you train?"; the lifter may leave it blank, in which case the app keeps
   today's "Not recorded" behaviour.
 
 Primary button: "Start logging". It sets the onboarding version, saves the choices through the
@@ -483,10 +484,10 @@ snapshot test renders the whole kit. The kit:
 
 Behaviour that must survive the rewrite even though no screen section above names it: the rest
 recovery failure banner above every tab and its blocking of timer commands, gym and machine
-management (rename, archive, their alerts and retry; there is no gym or machine merge, because
-the engine has no merge operation and none is added without an engine ask), the machine load-step editor,
-Apple Health settings, data import preview and export, the Lifetime restore action, and the root
-readiness gating in `WorkoutRootModel`. These are rebuilt on the kit, not dropped.
+management (rename, archive, their alerts and retry; there is no gym or machine merge, because the
+engine has no merge operation and none is added without an engine ask), the machine load-step
+editor, Apple Health settings, data import preview and export, the Lifetime restore action, and the
+root readiness gating in `WorkoutRootModel`. These are rebuilt on the kit, not dropped.
 
 What is deleted: every existing view in HardsetUI and HardsetFeature is replaced. The builder
 may keep a file where its body survives the new design unchanged, but the default is to rewrite.

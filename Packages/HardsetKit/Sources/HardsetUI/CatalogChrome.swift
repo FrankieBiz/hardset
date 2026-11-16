@@ -3,7 +3,8 @@ import SwiftUI
 // MARK: - Section chrome
 
 /// A catalogue section: the shared section label over its content, so every section reads the
-/// same way and none draws its own heading. Every catalogue view in the module uses it.
+/// same way and none draws its own heading. Every catalogue view in the module uses it except
+/// `KeypadCatalogView`, whose one section is a whole sheet with a `SectionLabel` of its own.
 struct CatalogSection<Content: View>: View {
   private let title: String
   private let content: Content

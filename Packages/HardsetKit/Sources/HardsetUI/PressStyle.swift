@@ -4,8 +4,10 @@ import SwiftUI
 
 /// Press feedback for a control that draws its own shape and fill and has no steel face: a
 /// segment, the dashed "Add movement" slot, the exercise-name link, the dismiss glyph, an unset
-/// machine chip, the "Clear search" glyph, the certainty badge capsule, and the ready and next-up
-/// set log control.
+/// machine chip, the "Clear search" glyph and the certainty badge capsule. The ready and next-up
+/// set log control takes the same press without this style: the set row's private
+/// `SetReadoutStyle` draws `SetLogControlFace`, which wraps `HardsetPressFace`, the face this
+/// style is built on.
 ///
 /// The same 0.97 sink on `Motion.press` as `HardsetButtonStyle`, with opacity standing in for a
 /// pressed fill because each of these controls owns its fill. With Reduce Motion the scale is

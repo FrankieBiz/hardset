@@ -107,7 +107,7 @@ System fonts only, so no resource bundle is needed. Every role is a Dynamic Type
 | `sectionHeader` | Subheadline, semibold | Sentence-case section labels; never all caps |
 | `hero` | Large Title, semibold, condensed, tabular | Rest countdown, keypad display |
 | `readout` | Title, semibold, condensed, tabular | Headline figures |
-| `setEntry` | Title 2, semibold, condensed, tabular | Weight and reps in a set row |
+| `setEntry` | Title 2, semibold, condensed, tabular | Weight and reps in a set row, and the values in a `StatLedger` |
 | `figure` | Headline, condensed, tabular | Small figures inside rows and compact ledgers |
 
 Tracking is a ratio of the resolved size, so it follows Dynamic Type: `hero` and `display` -2%,
@@ -174,15 +174,17 @@ Selection rows, the unit switch and pickers stay silent.
   dropped and the darker pressed fill, plus a 0.96 scale.
 - **Knurl** (`KnurlPattern`, `.knurl(opacity:)`): a `Canvas` crosshatch at 8% opacity, the
   `KnurlPattern` default. It fills rectangular bounds, so callers with rounded shapes clip it
-  themselves. Phase 2 allows it in two places and nowhere else: behind the rest bar's `hero`
-  countdown, and as the logged-set seal's rim. It is always a backing layer, `KnurlPattern`
-  inside a `.background { }` clipped to the backing shape; the `.knurl(opacity:)` overlay is never
-  used on text, the rest panel or the seal. The countdown is drawn in `chalk` in both running and
-  paused states, because `chalk` is the only text colour on the knurl, and `Tools/check_contrast.py`
-  gates that pair with the knurl blended in. The seal's `checkmark.circle.fill` glyph is never over
-  knurl: the knurl fills only an annulus around an opaque `plateGreenSurface` inner disc that
-  holds the glyph, because `plateGreen` on `plateGreenSurface` loses contrast with knurl under it.
-  The welcome bar's use belongs to the onboarding phase.
+  themselves. Phase 2 allows it in two places and nowhere else in the product UI (the token
+  catalogue keeps one labelled knurl sample on a machined face, drawn with the overlay form): behind
+  the rest bar's `hero` countdown, and as the logged-set seal's rim. In the product UI it is always
+  a backing layer, `KnurlPattern` inside a `.background { }` clipped to the backing shape; the
+  `.knurl(opacity:)` overlay is never used on text, the rest panel or the seal. The countdown is
+  drawn in `chalk` in both running and paused states, because `chalk` is the only text colour on the
+  knurl, and `Tools/check_contrast.py` gates that pair with the knurl blended in. The seal's
+  `checkmark.circle.fill` glyph is never over knurl: the knurl fills only an annulus around an
+  opaque `plateGreenSurface` inner disc that holds the glyph, because `plateGreen` on
+  `plateGreenSurface` loses contrast with knurl under it. The welcome bar's use belongs to the
+  onboarding phase.
 - **Cards** (`hardsetCard`): `steel` fill, decorative `hairline` border; selected uses a 2 pt
   `plateBlue` ring and `plateBlueSurface` fill.
 - **Chips** (`HardsetChip`): capsule, raised fill; selected uses `plateBlueFill` with `onPlateBlue`
@@ -207,14 +209,16 @@ Selection rows, the unit switch and pickers stay silent.
   insertion-only opacity reveal on `Motion.reveal`, with no animated transaction. The pickers and
   the name entry sheet use it; the session and root screens adopt it when they are rebuilt.
 - **Ledger** (`StatLedger`): a row of labelled figures separated by hairlines, used for session
-  totals. Its values stay in the `setEntry` role, so it suits rows and compact ledgers; a larger
-  headline figure uses `readout`.
+  totals. Its values stay in the `setEntry` role, a step larger than the `figure` used inside rows
+  and compact ledgers; a larger headline figure uses `readout`.
 - **Empty and loading states**: explain what is missing and what to do next; loading is a quiet line
   of text, not a spinner. An empty slot is drawn with a dashed outline, the app's one mark for
   "nothing here yet": the empty-state socket, the "Add movement" slot, a warm-up's ordinal, an
   incomplete set's log control, and the rule under "Not evaluated".
 - **Tags versus chips**: a chip can be tapped and wears the control border; a tag (modality,
-  "Recent", "Custom", an untrained muscle) is filled only, so it never imitates a control.
+  "Recent", "Custom", an untrained muscle) is filled only, so it never imitates a control. At
+  accessibility sizes a wrapping tag, assumption chip or certainty capsule takes the control radius
+  instead of a capsule, so wrapped text stays inside its outline.
 - **Selection** (`SelectionRow`, `SelectionCardButtonStyle`, `SelectionIndicator`): selected choices
   take the plate blue ring and `plateBlueSurface`, and the trailing indicator swaps an empty ring
   for a filled check, so the choice is carried by shape as well as colour. A pressed selection
@@ -231,19 +235,21 @@ Selection rows, the unit switch and pickers stay silent.
 - **Set log control**: four states, never confused: incomplete (dashed, disabled), ready (plate blue
   outline), next up (plate blue fill), logged (the stamp). The first three are square key faces with
   a check; a logged set loses its key face and wears a round `plateGreen` seal
-  (`checkmark.circle.fill`) with a knurled rim, on the row's `plateGreenSurface` tint, so logged
-  and next up differ by shape, not only by hue. At accessibility sizes the control also reads "Log set" or "Logged", and
-  VoiceOver hears "next to log" on the next-up row. Voice Control answers to "Set 2", "Log set 2",
-  and, on the next-up row, "Log set".
+  (`checkmark.circle.fill`) with a knurled rim, on the row's `plateGreenSurface` tint, so logged and
+  next up differ by shape, not only by hue. At accessibility sizes the control also reads "Log set"
+  or "Logged", and VoiceOver hears "next to log" on the next-up row. Voice Control answers to
+  "Set 2", "Log set 2", and, on the next-up row, "Log set".
 - **Press feedback on self-drawn controls** (`HardsetPressStyle`, `MachinedPressStyle` and the set
   row's own styles): steel faces sink, everything else dims, and no press moves layout.
   - Machined faces (raised steel with the control edge and the edge light: unselected chips,
-    `AssumptionChip`, header circles, the set machine chip, the set row's value fields, keys and
-    secondary buttons) sink to `steelPressed`, lose the edge light, keep the control edge and scale
-    to 0.97 (keys 0.96) on `Motion.press`. They never dim, so the 3:1 boundary survives a press. A
-    selected chip swaps `plateBlueFill` to `plateBlueFillPressed`. An editing set-row field is
-    `plateBlueSurface` with a 2 pt `plateBlue` ring and no edge light. A machined control's hit
-    region is at least 44 by 44 pt, however compact its face.
+    `AssumptionChip`, the header icon button, the set machine chip, the set row's value fields, keys
+    and secondary buttons) sink to `steelPressed`, lose the edge light, keep the control edge and
+    scale to 0.97 (keys 0.96) on `Motion.press`. They never dim, so the 3:1 boundary survives a
+    press. The header icon menu is the one exception: `HeaderIconMenu` is a `Menu`, not a `Button`,
+    so it keeps its resting machined face, and its press feel is a device check. A selected chip
+    swaps `plateBlueFill` to `plateBlueFillPressed`. An editing set-row field is `plateBlueSurface`
+    with a 2 pt `plateBlue` ring and no edge light. A machined control's hit region is at least 44
+    by 44 pt, however compact its face.
   - Controls that draw their own fill and shape with no steel face (segments, the dashed "Add
     movement" slot, the exercise-name link, an unset machine chip, the dismiss glyph, the "Clear
     search" glyph and the certainty badge) sink to 0.97 and drop to 80% opacity on `Motion.press`,

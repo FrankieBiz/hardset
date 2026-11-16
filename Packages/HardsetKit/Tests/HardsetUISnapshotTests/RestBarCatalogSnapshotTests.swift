@@ -39,7 +39,7 @@
     }
 
     @Test func pausedAtPhoneWidth() async throws {
-      let size = CGSize(width: 402, height: 200)
+      let size = CGSize(width: 402, height: 260)
       try await Snapshot.capture("kit-restbar-paused-402-metadata-dark", size: size) {
         Self.bar(width: 402)
       }

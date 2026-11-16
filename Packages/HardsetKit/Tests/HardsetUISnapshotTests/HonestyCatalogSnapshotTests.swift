@@ -18,7 +18,7 @@
     private static func height(_ section: HonestyCatalogView.Section) -> CGFloat {
       switch section {
       case .badges: 760
-      case .detail: 1500
+      case .detail: 1850
       case .chips: 540
       case .readouts: 560
       }
@@ -28,7 +28,7 @@
     private static func heightAX3(_ section: HonestyCatalogView.Section) -> CGFloat {
       switch section {
       case .badges: 1500
-      case .detail: 3400
+      case .detail: 6000
       case .chips: 1800
       case .readouts: 1900
       }
@@ -63,8 +63,9 @@
       }
     }
 
-    /// Every section at an accessibility text size: "High confidence" wraps, the detail switches
-    /// to its sheet layout, the chip label wraps inside its hit region, and the readout wraps.
+    /// Every section at an accessibility text size: "Moderate confidence" wraps while "High
+    /// confidence" stays on one line, the detail switches to its sheet layout, the chip label wraps
+    /// inside its hit region, and the readout wraps.
     @Test func accessibilitySizes() async throws {
       for section in HonestyCatalogView.Section.allCases {
         try await Snapshot.capture(

@@ -43,7 +43,7 @@
     @Test func accessibilitySizes() async throws {
       try await Snapshot.capture(
         "kit-setrow-rows-dark-ax3",
-        size: CGSize(width: Self.width, height: 5200),
+        size: CGSize(width: Self.width, height: 6_400),
         typeSize: .accessibility3
       ) {
         SetRowCatalogView(section: .rows)

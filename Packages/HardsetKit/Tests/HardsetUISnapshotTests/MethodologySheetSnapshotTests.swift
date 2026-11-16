@@ -17,8 +17,10 @@
   @Suite("Methodology sheet renders for review", .serialized)
   struct MethodologySheetSnapshotTests {
     private static let phone = CGSize(width: 402, height: 874)
-    private static let tall = CGSize(width: 402, height: 1300)
-    private static let accessibility = CGSize(width: 402, height: 2600)
+    /// Room for the whole sheet, Source card included, when the source has a citation and a range.
+    private static let withCitation = CGSize(width: 402, height: 1200)
+    private static let tall = CGSize(width: 402, height: 1800)
+    private static let accessibility = CGSize(width: 402, height: 4600)
 
     private static let shortMethodology =
       "A completed working set credits one set to each muscle labelled direct on the movement "
@@ -50,53 +52,62 @@
       validRange: SetCounting.source.validRange
     )
 
+    /// The sheet as a real presentation shows it: `hardsetSheet()` tints the presented content
+    /// plate blue, so the toolbar's Done is drawn in plate blue here too, not near-black.
+    private static func sheet(_ source: EvidenceSource, certainty: Certainty? = nil) -> some View {
+      MethodologySheet(source: source, certainty: certainty)
+        .tint(Tokens.Color.plateBlue)
+    }
+
     /// The default state in every appearance: high certainty, valid range and citation present.
     @Test func defaultStateInEveryAppearance() async throws {
-      try await Snapshot.capture("kit-methodology-high-dark", size: Self.phone) {
-        MethodologySheet(source: SetCounting.source, certainty: .high)
-      }
-      try await Snapshot.capture("kit-methodology-high-light", size: Self.phone, style: .light) {
-        MethodologySheet(source: SetCounting.source, certainty: .high)
+      try await Snapshot.capture("kit-methodology-high-dark", size: Self.withCitation) {
+        Self.sheet(SetCounting.source, certainty: .high)
       }
       try await Snapshot.capture(
-        "kit-methodology-high-dark-contrast", size: Self.phone, contrast: .high
+        "kit-methodology-high-light", size: Self.withCitation, style: .light
       ) {
-        MethodologySheet(source: SetCounting.source, certainty: .high)
+        Self.sheet(SetCounting.source, certainty: .high)
+      }
+      try await Snapshot.capture(
+        "kit-methodology-high-dark-contrast", size: Self.withCitation, contrast: .high
+      ) {
+        Self.sheet(SetCounting.source, certainty: .high)
       }
     }
 
     /// The other certainty levels, and no certainty at all.
     @Test func certaintyLevels() async throws {
-      try await Snapshot.capture("kit-methodology-moderate-dark", size: Self.phone) {
-        MethodologySheet(source: SetCounting.source, certainty: .moderate)
+      try await Snapshot.capture("kit-methodology-moderate-dark", size: Self.withCitation) {
+        Self.sheet(SetCounting.source, certainty: .moderate)
       }
-      try await Snapshot.capture("kit-methodology-low-dark", size: Self.phone) {
-        MethodologySheet(source: SetCounting.source, certainty: .low)
+      try await Snapshot.capture("kit-methodology-low-dark", size: Self.withCitation) {
+        Self.sheet(SetCounting.source, certainty: .low)
       }
       try await Snapshot.capture("kit-methodology-unevaluated-dark", size: Self.phone) {
-        MethodologySheet(source: VolumeAnalyzer.targetSource, certainty: .unevaluated)
+        Self.sheet(VolumeAnalyzer.targetSource, certainty: .unevaluated)
       }
       try await Snapshot.capture("kit-methodology-no-certainty-dark", size: Self.phone) {
-        MethodologySheet(source: ProgressionAnalyzer.source)
+        Self.sheet(ProgressionAnalyzer.source)
       }
     }
 
     /// Which parts of the source are present: the limits section and the citation card.
     @Test func sourceParts() async throws {
       try await Snapshot.capture("kit-methodology-no-range-dark", size: Self.phone) {
-        MethodologySheet(source: Self.withoutRange, certainty: .moderate)
+        Self.sheet(Self.withoutRange, certainty: .moderate)
       }
       try await Snapshot.capture("kit-methodology-no-citation-dark", size: Self.phone) {
-        MethodologySheet(source: ProgressionAnalyzer.source, certainty: .moderate)
+        Self.sheet(ProgressionAnalyzer.source, certainty: .moderate)
       }
       try await Snapshot.capture("kit-methodology-method-only-dark", size: Self.phone) {
-        MethodologySheet(source: Self.bare, certainty: .high)
+        Self.sheet(Self.bare, certainty: .high)
       }
     }
 
     @Test func longMethodology() async throws {
       try await Snapshot.capture("kit-methodology-long-dark", size: Self.tall) {
-        MethodologySheet(source: Self.long, certainty: .moderate)
+        Self.sheet(Self.long, certainty: .moderate)
       }
     }
 
@@ -104,7 +115,7 @@
       try await Snapshot.capture(
         "kit-methodology-high-dark-ax3", size: Self.accessibility, typeSize: .accessibility3
       ) {
-        MethodologySheet(source: SetCounting.source, certainty: .high)
+        Self.sheet(SetCounting.source, certainty: .high)
       }
     }
   }

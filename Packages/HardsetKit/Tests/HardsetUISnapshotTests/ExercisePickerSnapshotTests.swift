@@ -86,6 +86,8 @@
         ) { _ in }
         .hardsetNavigationTitle("Add movement")
       }
+      // A real presentation applies hardsetSheet()'s plate-blue tint, so Cancel is plate blue.
+      .tint(Tokens.Color.plateBlue)
     }
 
     /// The default state, browse, in every appearance.

@@ -32,6 +32,10 @@
     private static let hackSquat = MachineOption(
       id: MachineID(), displayName: "Plate-loaded hack squat by the window, second from the end",
       stackIncrementKg: 2.5)
+    /// A second long name for the other list, so no machine is offered as both recent and other.
+    private static let backWallHackSquat = MachineOption(
+      id: MachineID(), displayName: "Plate-loaded hack squat on the back wall, under the clock",
+      stackIncrementKg: 2.5)
 
     private static let manyRecent = [hammer, cybex, technogym, lifeFitness]
 
@@ -61,6 +65,8 @@
         )
         .hardsetNavigationTitle("Machine")
       }
+      // A real presentation applies hardsetSheet()'s plate-blue tint, so Cancel is plate blue.
+      .tint(Tokens.Color.plateBlue)
     }
 
     // MARK: - Default state
@@ -166,7 +172,8 @@
         Self.picker(recent: Self.manyRecent, onAddMachine: nil)
       }
       try await Snapshot.capture("kit-machine-long-names-dark", size: Self.tall) {
-        Self.picker(recent: [Self.hackSquat, Self.technogym], others: [Self.hackSquat])
+        Self.picker(
+          recent: [Self.hackSquat, Self.technogym], others: [Self.backWallHackSquat])
       }
     }
 
@@ -178,10 +185,10 @@
       ) {
         Self.picker(recent: Self.manyRecent, others: [Self.panatta])
       }
-      // The pinned banner over a list of one recent and several other machines, so the capture
-      // shows the list is still reachable beneath it.
+      // The pinned, uncapped banner in a phone-height window: the list of one recent and several
+      // other machines must stay reachable beneath the banner, so this capture can fail.
       try await Snapshot.capture(
-        "kit-machine-error-dark-ax3", size: Self.accessibility, typeSize: .accessibility3
+        "kit-machine-error-dark-ax3", size: Self.phone, typeSize: .accessibility3
       ) {
         Self.picker(
           recent: [Self.hammer],

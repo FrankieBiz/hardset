@@ -117,30 +117,37 @@
 
     // MARK: - Load-step sheet
 
+    /// Every load-step sheet capture, here and in the failed save below, wears the plate-blue tint
+    /// a real presentation applies through `hardsetSheet()`, so the toolbar Cancel is plate blue
+    /// rather than near-black.
     @Test func loadStepSheet() async throws {
       try await Snapshot.capture("kit-keypad-sheet-kg-dark", size: Self.sheetSize) {
         LoadStepSheet(
           machineName: "Cybex Leg Press", incrementKg: 2.5, unit: .kilograms,
           onSave: { _ in true }, onCancel: {}
         )
+        .tint(Tokens.Color.plateBlue)
       }
       try await Snapshot.capture("kit-keypad-sheet-lb-dark", size: Self.sheetSize) {
         LoadStepSheet(
           machineName: "Cybex Leg Press", incrementKg: 2.5, unit: .pounds,
           onSave: { _ in true }, onCancel: {}
         )
+        .tint(Tokens.Color.plateBlue)
       }
       try await Snapshot.capture("kit-keypad-sheet-blank-dark", size: Self.sheetSize) {
         LoadStepSheet(
           machineName: "Cybex Leg Press", incrementKg: nil, unit: .kilograms,
           onSave: { _ in true }, onCancel: {}
         )
+        .tint(Tokens.Color.plateBlue)
       }
       try await Snapshot.capture("kit-keypad-sheet-zero-dark", size: Self.sheetSize) {
         LoadStepSheet(
           machineName: "Cybex Leg Press", incrementKg: 0, unit: .kilograms,
           onSave: { _ in true }, onCancel: {}
         )
+        .tint(Tokens.Color.plateBlue)
       }
       try await Snapshot.capture(
         "kit-keypad-sheet-kg-dark-ax3", size: CGSize(width: 402, height: 1800),
@@ -150,6 +157,7 @@
           machineName: "Cybex Leg Press", incrementKg: 2.5, unit: .kilograms,
           onSave: { _ in true }, onCancel: {}
         )
+        .tint(Tokens.Color.plateBlue)
       }
     }
 
@@ -160,6 +168,7 @@
           "kit-keypad-\(section.rawValue)-dark", size: Self.sheetSize
         ) {
           KeypadCatalogView(section: section)
+            .tint(Tokens.Color.plateBlue)
         }
       }
     }

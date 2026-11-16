@@ -685,7 +685,7 @@ public struct ExerciseSectionView: View {
     ExerciseCardPreview(menu: false)
   }
 
-  #Preview("Exercise card, largest accessibility size") {
+  #Preview("Exercise card, accessibility3") {
     ExerciseCardPreview(machine: .borrowed, logged: 0, rest: .lastUsed, menu: true)
       .dynamicTypeSize(.accessibility3)
   }

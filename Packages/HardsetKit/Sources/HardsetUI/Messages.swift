@@ -228,8 +228,8 @@ extension View {
   /// transaction is involved, so what the message displaces is not dragged along with the fade.
   /// Under Reduce Motion the fade is replaced by an instant insertion.
   ///
-  /// Apply it to the message view where a conditional inserts it. No production code uses it yet;
-  /// the screens adopt it as they are rebuilt.
+  /// Apply it to the message view where a conditional inserts it. The pickers and the name entry
+  /// sheet use it; the session and root screens adopt it as they are rebuilt.
   public func hardsetArrival() -> some View {
     modifier(HardsetArrivalModifier())
   }
