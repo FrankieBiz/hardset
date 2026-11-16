@@ -116,3 +116,20 @@ entry in `.agents/HANDOFF.md`.
 - Recorded for Phase 5, not changed (R43): at accessibility3 the exercise card's machine chip breaks a long machine name mid-word ("Strengt/h") and the
   "Add set" and "Warm-up" row wraps awkwardly, layouts the Phase 2 restyle did not change; the disabled primary "Add" is faint by design (40% dim).
 - A mistake of mine, corrected: my first final-PNG-review script threw on an aggregation line before any agent started and was relaunched; no work was lost.
+
+## Verification run of the R26 fix, 2026-11-16
+
+- Run 43971950806 on `469caaf` (the R26 fix `70496cd` plus the ledger and two stale-note corrections): green, about 32 minutes. 252 PNGs (one new:
+  `kit-exercisepicker-error-dark-ax3`); render step 106 tests in 18 suites. The accessibility audit matches the previous run except that one line is gone:
+  the second `[keypad] Potentially inaccessible text`, so the keypad is back to the single instance the Phase 1 baseline had. The only two audit lines that differ
+  from the baseline are the History title at a different width (same issue) and `[volume with a workout] Text clipped | Moderate confidence` (R42: not clipped).
+- What the renders show after the R26 fix: at scroll offset 0 the three accessibility3 error captures look like the pinned version, because the banner is simply the
+  first element of the scrolling content. A still render cannot show scrolling, so reachability is structural (verified by two reviewers reading the code and by the
+  public API and ordinary-size layout being unchanged), not demonstrated by the image; the capture comments and R41 now say so. My own earlier acceptance wording
+  ("first two rows visible") could only hold after scrolling and was too strong. Exercise picker browse and recents-first captures now end on whole rows; the black
+  or white seam under short picker and name-entry content is gone.
+- Harness nondeterminism seen, not defects: `session-light.png` changed 63% between two runs with no change to anything it depends on (the record banner and
+  rest bar overlays landed mid-screen instead of at the bottom; its dark twin is stable at 0.04%); a blank band below the content in `kit-methodology-high-*` and
+  `kit-exercise-chip-step-pounds-dark` differs between runs at the same row (about 1078 px), in suites this fix did not touch.
+- Final state: Phase 2 is complete on `FrankieBiz/premium-frontend-design-plan-2`, last green run 43971950806 on `469caaf`; later commits are documentation and
+  comment edits pushed with `[skip ci]`, so they have no run of their own.

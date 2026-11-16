@@ -181,9 +181,11 @@
       ) {
         Self.picker(gyms: Self.manyGyms, selected: Self.manyGyms[0].id)
       }
-      // At accessibility sizes the uncapped banner is inside the scrolling content, not pinned
-      // above the list. This phone-height capture checks that, with the banner there, the first
-      // two list rows are visible, which is what it is for.
+      // At accessibility sizes the uncapped banner is the first element of the scrolling content,
+      // not pinned above the list (R41). A still render at scroll offset 0 shows the banner and
+      // the intro text first and the list below the fold, so it cannot show the rows being
+      // reachable: that is structural (the banner scrolls away with the content), and this
+      // phone-height capture records how much of the screen the banner takes before scrolling.
       try await Snapshot.capture(
         "kit-gym-error-dark-ax3", size: Self.phone, typeSize: .accessibility3
       ) {

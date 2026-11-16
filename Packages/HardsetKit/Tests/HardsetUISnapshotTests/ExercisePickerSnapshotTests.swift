@@ -164,11 +164,12 @@
         "kit-exercisepicker-stacked-tags-dark-ax3", size: Self.accessibility,
         typeSize: .accessibility3
       ) { Self.picker(entries: Self.withCustom) }
-      // At accessibility sizes the uncapped banner is inside the scrolling content, not pinned
-      // under the search field and the rail. This phone-height capture checks that, with the
-      // banner there, the first two list rows are visible, so it can fail. The read-failure
-      // message sits over the browse list, as in the machine and gym pickers' captures, because
-      // with no rows there would be nothing for the check to find.
+      // At accessibility sizes the uncapped banner is the first element of the scrolling list,
+      // under the pinned search field and the rail (R41). A still render at scroll offset 0
+      // shows the banner and the first movement and cannot show scrolling; reachability is
+      // structural (the banner scrolls away with the list). The read-failure message sits over
+      // the browse list, as in the machine and gym pickers' captures, so the capture has rows
+      // to show beneath it.
       try await Snapshot.capture(
         "kit-exercisepicker-error-dark-ax3", size: Self.phone, typeSize: .accessibility3
       ) {

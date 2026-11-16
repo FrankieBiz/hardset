@@ -188,9 +188,12 @@
       ) {
         Self.picker(recent: Self.manyRecent, others: [Self.panatta])
       }
-      // At accessibility sizes the uncapped banner is inside the scrolling content, not pinned
-      // above it. This phone-height capture checks that, with the banner there, the first two
-      // list rows (of one recent and several other machines) are visible, so it can fail.
+      // At accessibility sizes the uncapped banner is the first element of the scrolling content,
+      // not pinned above it (R41). A still render at scroll offset 0 shows the banner and the
+      // intro text first and the list (one recent and several other machines) below the fold, so
+      // it cannot show the rows being reachable: that is structural (the banner scrolls away
+      // with the content), and this phone-height capture records how much of the screen the
+      // banner takes before scrolling.
       try await Snapshot.capture(
         "kit-machine-error-dark-ax3", size: Self.phone, typeSize: .accessibility3
       ) {
