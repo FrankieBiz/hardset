@@ -193,13 +193,13 @@ public struct ExerciseSectionView: View {
       HStack(alignment: .firstTextBaseline, spacing: Tokens.Spacing.snug) {
         Text(state.exerciseName)
           .font(Tokens.Text.title)
-          .foregroundStyle(Tokens.Color.textPrimary)
+          .foregroundStyle(Tokens.Color.chalk)
           .underline(isLink && showsButtonShapes)
           .multilineTextAlignment(.leading)
         if isLink {
           Image(systemName: "chart.xyaxis.line")
-            .font(Tokens.Text.caption.weight(.semibold))
-            .foregroundStyle(Tokens.Color.accent)
+            .hardsetText(.caption, weight: .semibold)
+            .foregroundStyle(Tokens.Color.plateBlue)
         }
       }
       .frame(minHeight: Tokens.minimumTapTarget, alignment: .leading)
@@ -255,10 +255,10 @@ public struct ExerciseSectionView: View {
         HStack(spacing: Tokens.Spacing.hairline) {
           ForEach(0..<working, id: \.self) { index in
             Capsule()
-              .fill(index < logged ? Tokens.Color.success : Tokens.Color.surfaceRaised)
+              .fill(index < logged ? Tokens.Color.plateGreen : Tokens.Color.steelRaised)
               .overlay(
                 Capsule().strokeBorder(
-                  index < logged ? Tokens.Color.success : Tokens.Color.controlBorder,
+                  index < logged ? Tokens.Color.plateGreen : Tokens.Color.controlEdge,
                   lineWidth: Tokens.Stroke.hairline
                 )
               )
@@ -271,7 +271,7 @@ public struct ExerciseSectionView: View {
         .font(Tokens.Text.figure)
         .foregroundStyle(
           hasHistory && logged == working && working > 0
-            ? Tokens.Color.success : Tokens.Color.textSecondary
+            ? Tokens.Color.plateGreen : Tokens.Color.chalkDim
         )
     }
     .accessibilityElement(children: .combine)
@@ -300,8 +300,8 @@ public struct ExerciseSectionView: View {
       Color.clear
         .frame(width: Tokens.loggerTapTarget, height: 1)
     }
-    .font(Tokens.Text.caption.weight(.medium))
-    .foregroundStyle(Tokens.Color.textSecondary)
+    .hardsetText(.caption, weight: .medium)
+    .foregroundStyle(Tokens.Color.chalkDim)
     .lineLimit(1)
     // The same inset as each row, so every label sits over its column.
     .padding(.horizontal, Tokens.Spacing.tight)
@@ -320,51 +320,65 @@ public struct ExerciseSectionView: View {
   ///
   /// Unset reads as an invitation, never a warning. A set with no machine is a real set.
   private func machineChip(action: @escaping () -> Void) -> some View {
-    Button(action: action) {
-      HStack(spacing: Tokens.Spacing.snug) {
-        Image(systemName: state.machineID == nil ? "plus" : "dumbbell.fill")
-          .font(Tokens.Text.caption.weight(.semibold))
-        Text(state.machineName ?? "Choose machine")
-          .font(Tokens.Text.caption.weight(.semibold))
-          // One line at ordinary sizes; at accessibility sizes the name wraps rather than
-          // truncating to "Hamm…", because it is how the lifter recognises the machine.
-          .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 1)
-        if let increment = state.machineIncrementKg {
-          // Shown because it is the constraint on what a suggestion may propose. Written with the
-          // same figure as the step buttons and the fields, so 10 kg reads "22.05 lb steps" here
-          // and "+22.05 lb" on the button below it, not 22 in one place and 22.05 in the other.
-          Text("\(LoadFigure.text(unit.fromKilograms(increment))) \(unit.abbreviation) steps")
-            .font(Tokens.Text.caption)
-            .foregroundStyle(Tokens.Color.textSecondary)
-            .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 1)
-        }
-        Image(systemName: "chevron.down")
-          .font(Tokens.Text.caption.weight(.semibold))
-          .foregroundStyle(Tokens.Color.textSecondary)
+    machineChipButton(action: action)
+      // Begins with the words on the chip, so "Tap Choose machine" works for Voice Control, and
+      // includes the load step the chip shows.
+      .accessibilityLabel(machineChipLabel)
+      .accessibilityInputLabels(
+        state.machineName.map { [$0, "Change machine", "Machine"] } ?? ["Choose machine", "Machine"]
+      )
+  }
+
+  /// A set chip is a machined raised face that sinks on press; an unset one keeps its plate blue
+  /// tint and takes the opacity press, because it draws its own fill and outline. The two are
+  /// separate buttons because a button takes one style, and the label is shared so they cannot
+  /// drift apart.
+  @ViewBuilder
+  private func machineChipButton(action: @escaping () -> Void) -> some View {
+    if state.machineID == nil {
+      Button(action: action) {
+        machineChipContent
+          .background(Tokens.Color.plateBlueSurface, in: Capsule())
+          .overlay(
+            Capsule().strokeBorder(Tokens.Color.plateBlue, lineWidth: Tokens.Stroke.hairline)
+          )
+          .frame(minHeight: Tokens.minimumTapTarget)
+          .contentShape(Rectangle())
       }
-      .foregroundStyle(state.machineID == nil ? Tokens.Color.accent : Tokens.Color.textPrimary)
-      .padding(.horizontal, Tokens.Spacing.regular)
-      .padding(.vertical, Tokens.Spacing.snug)
-      .background(
-        state.machineID == nil ? Tokens.Color.accentSurface : Tokens.Color.surfaceRaised,
-        in: Capsule()
-      )
-      .overlay(
-        Capsule().strokeBorder(
-          state.machineID == nil ? Tokens.Color.accent : Tokens.Color.controlBorder,
-          lineWidth: Tokens.Stroke.hairline
-        )
-      )
-      .frame(minHeight: Tokens.minimumTapTarget)
-      .contentShape(Rectangle())
+      .buttonStyle(HardsetPressStyle())
+    } else {
+      Button(action: action) {
+        machineChipContent
+      }
+      .buttonStyle(MachinedPressStyle(shape: Capsule(), outlined: true))
     }
-    .buttonStyle(HardsetPressStyle())
-    // Begins with the words on the chip, so "Tap Choose machine" works for Voice Control, and
-    // includes the load step the chip shows.
-    .accessibilityLabel(machineChipLabel)
-    .accessibilityInputLabels(
-      state.machineName.map { [$0, "Change machine", "Machine"] } ?? ["Choose machine", "Machine"]
-    )
+  }
+
+  private var machineChipContent: some View {
+    HStack(spacing: Tokens.Spacing.snug) {
+      Image(systemName: state.machineID == nil ? "plus" : "dumbbell.fill")
+        .hardsetText(.caption, weight: .semibold)
+      Text(state.machineName ?? "Choose machine")
+        .hardsetText(.caption, weight: .semibold)
+        // One line at ordinary sizes; at accessibility sizes the name wraps rather than
+        // truncating to "Hamm…", because it is how the lifter recognises the machine.
+        .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 1)
+      if let increment = state.machineIncrementKg {
+        // Shown because it is the constraint on what a suggestion may propose. Written with the
+        // same figure as the step buttons and the fields, so 10 kg reads "22.05 lb steps" here
+        // and "+22.05 lb" on the button below it, not 22 in one place and 22.05 in the other.
+        Text("\(LoadFigure.text(unit.fromKilograms(increment))) \(unit.abbreviation) steps")
+          .hardsetText(.caption)
+          .foregroundStyle(Tokens.Color.chalkDim)
+          .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 1)
+      }
+      Image(systemName: "chevron.down")
+        .hardsetText(.caption, weight: .semibold)
+        .foregroundStyle(Tokens.Color.chalkDim)
+    }
+    .foregroundStyle(state.machineID == nil ? Tokens.Color.plateBlue : Tokens.Color.chalk)
+    .padding(.horizontal, Tokens.Spacing.regular)
+    .padding(.vertical, Tokens.Spacing.snug)
   }
 
   private var machineChipLabel: String {
@@ -506,9 +520,173 @@ public struct ExerciseSectionView: View {
           )
           .padding()
         }
-        .background(Tokens.Color.background)
+        .background(Tokens.Color.canvas)
       }
     }
     return Harness()
+  }
+
+  /// A card on the canvas, built from source-side sample data: the test target's fixtures are not
+  /// visible here. The state is the `@State` seed, so each preview shows one fixed condition.
+  private struct ExerciseCardPreview: View {
+    enum Machine {
+      case unset
+      case set(incrementKg: Double?)
+      case borrowed
+    }
+
+    enum Rest {
+      case absent
+      case asking
+      case lastUsed
+    }
+
+    @State private var state: ExerciseLogState
+    private let unit: WeightUnit
+    private let history: Bool
+    private let rest: Rest
+    private let menu: Bool
+
+    init(
+      machine: Machine = .set(incrementKg: 10),
+      plannedSets: Int = 3,
+      logged: Int = 1,
+      unit: WeightUnit = .kilograms,
+      history: Bool = true,
+      rest: Rest = .absent,
+      menu: Bool = false
+    ) {
+      let exercise = ExerciseID()
+      let priorMachine = MachineID()
+      let machineID: MachineID?
+      let machineName: String?
+      let incrementKg: Double?
+      var priorKeyMachine: MachineID? = priorMachine
+      switch machine {
+      case .unset:
+        machineID = nil
+        machineName = nil
+        incrementKg = nil
+        priorKeyMachine = nil
+      case .set(let step):
+        machineID = priorMachine
+        machineName = "Hammer Strength"
+        incrementKg = step
+      case .borrowed:
+        machineID = MachineID()
+        machineName = "Cybex"
+        incrementKg = nil
+      }
+      let key = ProgressionKey(exerciseID: exercise, machineID: priorKeyMachine)
+      let records = [
+        PriorSetRecord(weightKg: 100, reps: 10, completedAt: .distantPast),
+        PriorSetRecord(weightKg: 105, reps: 8, completedAt: .distantPast),
+        PriorSetRecord(weightKg: 60, reps: 12, completedAt: .distantPast),
+      ]
+      let snapshot = PriorPerformanceSnapshot(
+        entries: [key: PriorPerformance(key: key, lastSets: records, heaviestSet: records[1])],
+        capturedAt: .distantPast
+      )
+      var built = ExerciseLogState.build(
+        exerciseID: exercise,
+        machineID: machineID,
+        exerciseName: "Leg Press",
+        machineName: machineName,
+        machineIncrementKg: incrementKg,
+        snapshot: snapshot,
+        plannedSets: plannedSets
+      )
+      for index in built.slots.indices.prefix(logged) {
+        built.markLogged(slotID: built.slots[index].id, setID: SetID())
+      }
+      _state = State(initialValue: built)
+      self.unit = unit
+      self.history = history
+      self.rest = rest
+      self.menu = menu
+    }
+
+    var body: some View {
+      let showHistory: (() -> Void)? = history ? {} : nil
+      let startRest: ((Duration) -> Void)? = rest == .absent ? nil : { _ in }
+      let moveDown: (() -> Void)? = menu ? {} : nil
+      let remove: (() -> Void)? = menu ? {} : nil
+      ScrollView {
+        ExerciseSectionView(
+          state: $state,
+          unit: unit,
+          onLogSet: { _ in },
+          onStartRest: startRest,
+          onSelectMachine: {},
+          onShowHistory: showHistory,
+          lastRest: rest == .lastUsed ? .seconds(90) : nil,
+          onMoveDown: moveDown,
+          onRemove: remove
+        )
+        .padding()
+      }
+      .background(Tokens.Color.canvas)
+    }
+  }
+
+  #Preview("Exercise card, history link") {
+    ExerciseCardPreview(history: true)
+  }
+
+  #Preview("Exercise card, inert title") {
+    ExerciseCardPreview(history: false)
+  }
+
+  #Preview("Exercise card, machine chip unset") {
+    ExerciseCardPreview(machine: .unset)
+  }
+
+  #Preview("Exercise card, machine chip set") {
+    ExerciseCardPreview(machine: .set(incrementKg: nil))
+  }
+
+  #Preview("Exercise card, machine chip set with step") {
+    ExerciseCardPreview(machine: .set(incrementKg: 10))
+  }
+
+  #Preview("Exercise card, machine chip set with step in pounds") {
+    ExerciseCardPreview(machine: .set(incrementKg: 10), unit: .pounds)
+  }
+
+  #Preview("Exercise card, borrowed history badge") {
+    ExerciseCardPreview(machine: .borrowed, logged: 0)
+  }
+
+  #Preview("Exercise card, progress with pips") {
+    ExerciseCardPreview(plannedSets: 5, logged: 2)
+  }
+
+  #Preview("Exercise card, more than eight sets, no pips") {
+    ExerciseCardPreview(plannedSets: 10, logged: 2)
+  }
+
+  #Preview("Exercise card, progress complete") {
+    ExerciseCardPreview(plannedSets: 3, logged: 3)
+  }
+
+  #Preview("Exercise card, rest control with last rest") {
+    ExerciseCardPreview(rest: .lastUsed)
+  }
+
+  #Preview("Exercise card, rest control without last rest") {
+    ExerciseCardPreview(rest: .asking)
+  }
+
+  #Preview("Exercise card, menu present") {
+    ExerciseCardPreview(menu: true)
+  }
+
+  #Preview("Exercise card, menu absent") {
+    ExerciseCardPreview(menu: false)
+  }
+
+  #Preview("Exercise card, largest accessibility size") {
+    ExerciseCardPreview(machine: .borrowed, logged: 0, rest: .lastUsed, menu: true)
+      .dynamicTypeSize(.accessibility3)
   }
 #endif
