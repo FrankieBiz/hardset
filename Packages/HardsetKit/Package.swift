@@ -87,6 +87,9 @@ let package = Package(
         // Declared explicitly, not leaned on transitively: the composition root takes a
         // `DatabaseWriter`, so this target genuinely uses the type and should say so.
         .product(name: "SQLiteData", package: "sqlite-data"),
+        // `TourFixtures` builds the tour's in-memory `DatabaseQueue`. GRDB is already the locked
+        // storage engine and `HardsetStore` depends on it, so this adds no new package.
+        .product(name: "GRDB", package: "GRDB.swift"),
       ],
       swiftSettings: mainActorByDefault
     ),
