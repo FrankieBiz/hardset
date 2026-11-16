@@ -47,13 +47,13 @@ public struct ScreenHeader<Trailing: View>: View {
   private var titleBlock: some View {
     VStack(alignment: .leading, spacing: Tokens.Spacing.tight) {
       Text(title)
-        .font(Tokens.Text.display)
-        .foregroundStyle(Tokens.Color.textPrimary)
+        .hardsetText(.display)
+        .foregroundStyle(Tokens.Color.chalk)
         .accessibilityAddTraits(.isHeader)
       if let subtitle, !subtitle.isEmpty {
         Text(subtitle)
           .font(Tokens.Text.label)
-          .foregroundStyle(Tokens.Color.textSecondary)
+          .foregroundStyle(Tokens.Color.chalkDim)
       }
     }
     .frame(maxWidth: .infinity, alignment: .leading)
@@ -80,9 +80,13 @@ public struct HeaderIconButton: View {
 
   public var body: some View {
     Button(action: action) {
-      HeaderIconGlyph(systemImage: systemImage)
+      HeaderIconGlyphFace(systemImage: systemImage)
     }
-    .buttonStyle(HardsetPressStyle())
+    .buttonStyle(MachinedPressStyle(shape: Circle(), outlined: true))
+    // Applied outside the style, so the face wraps a label that is already framed to the capped
+    // diameter. The label is the bare glyph face, never `HeaderIconGlyph`, which would draw a
+    // second circle.
+    .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
     .accessibilityLabel(accessibilityLabel)
     // The Large Content Viewer is iOS-only; the macOS host build (tests only) goes without it.
     #if os(iOS)
@@ -129,7 +133,10 @@ public struct HeaderIconMenu<Content: View>: View {
   }
 }
 
-/// The circle both header controls draw: raised fill, measured control border, a 44 pt target.
+/// The circle both header controls draw: a machined raised face, measured control border, a 44 pt
+/// target. The button draws the bare `HeaderIconGlyphFace` inside its own press style; this view
+/// draws the face and the circle together for the menu, whose label receives no pressed state, and
+/// for the catalogue, which forces `isPressed`.
 ///
 /// It grows with text up to the largest ordinary size and stops there, about 60 pt across. Grown
 /// linearly to the largest accessibility size it reached about 137 pt and squeezed the screen
@@ -137,14 +144,18 @@ public struct HeaderIconMenu<Content: View>: View {
 /// system's own bar buttons do.
 struct HeaderIconGlyph: View {
   let systemImage: String
+  let isPressed: Bool
 
-  init(systemImage: String) {
+  init(systemImage: String, isPressed: Bool = false) {
     self.systemImage = systemImage
+    self.isPressed = isPressed
   }
 
   var body: some View {
-    HeaderIconGlyphFace(systemImage: systemImage)
-      .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
+    MachinedPressFace(shape: Circle(), outlined: true, isPressed: isPressed, reduceMotion: false) {
+      HeaderIconGlyphFace(systemImage: systemImage)
+    }
+    .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
   }
 }
 
@@ -157,11 +168,8 @@ private struct HeaderIconGlyphFace: View {
   var body: some View {
     Image(systemName: systemImage)
       .font(Tokens.Text.headline)
-      .foregroundStyle(Tokens.Color.textPrimary)
+      .foregroundStyle(Tokens.Color.chalk)
       .frame(width: diameter, height: diameter)
-      .background(Tokens.Color.surfaceRaised, in: Circle())
-      .overlay(Circle().strokeBorder(Tokens.Color.controlBorder, lineWidth: Tokens.Stroke.hairline))
-      .contentShape(Circle())
   }
 }
 
@@ -195,7 +203,7 @@ private struct TabRootChrome: ViewModifier {
           // the status bar, which is exactly the region that needs covering.
           Color.clear
             .frame(height: 0)
-            .background(Tokens.Color.background)
+            .background(Tokens.Color.canvas)
         }
     #else
       content
@@ -215,7 +223,7 @@ private struct NavigationTitleChrome: ViewModifier {
           ToolbarItem(placement: .principal) {
             Text(title)
               .font(Tokens.Text.title)
-              .foregroundStyle(Tokens.Color.textPrimary)
+              .foregroundStyle(Tokens.Color.chalk)
               .lineLimit(1)
               .minimumScaleFactor(0.8)
               .accessibilityAddTraits(.isHeader)
@@ -250,11 +258,12 @@ public struct SectionLabel: View {
     HStack(alignment: .firstTextBaseline, spacing: Tokens.Spacing.snug) {
       Text(title)
         .font(Tokens.Text.sectionHeader)
-        .foregroundStyle(Tokens.Color.textPrimary)
+        .foregroundStyle(Tokens.Color.chalk)
       if let count {
         Text(count, format: .number)
-          .font(Tokens.Text.caption.monospacedDigit())
-          .foregroundStyle(Tokens.Color.textSecondary)
+          .hardsetText(.caption)
+          .monospacedDigit()
+          .foregroundStyle(Tokens.Color.chalkDim)
       }
       Spacer(minLength: 0)
     }
@@ -303,7 +312,7 @@ public struct SectionLabel: View {
           .padding(.horizontal, Tokens.Spacing.loose)
         }
       }
-      .background(Tokens.Color.background)
+      .background(Tokens.Color.canvas)
     }
   }
 
