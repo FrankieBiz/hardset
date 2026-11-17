@@ -151,8 +151,10 @@ leaves at once. A logged row's tint is a layer whose opacity fades on `Motion.st
 height is never animated.
 
 Haptics follow the same restraint, and each has a name in `Tokens.Haptic`: `clank`, `success`,
-`error`, `selection` and `warning`. `clank` is a heavy, full-strength impact for a weighty physical
-moment; it is the heavy system impact until the welcome bar introduces CoreHaptics. `success`
+`error`, `selection` and `warning`. `clank` is the weighty tap of a plate meeting a bar: a CoreHaptics
+pattern (a transient at intensity 1.0 and sharpness 0.6, then a 40 ms low rumble) played by
+`ClankPlayer`, which falls back to the heavy system impact where CoreHaptics is unavailable, and
+which `Tokens.Haptic.clank` names for a view that plays it through `.sensoryFeedback`. `success`
 belongs to the log tap alone. `error` follows every failed command, a repeated failure included.
 `selection` answers the row's machine step and the rest bar's −15, +15, pause and skip. `warning`
 marks a rest that ran out on its own when no alarm can mark it (alarms denied or unavailable).
@@ -233,6 +235,15 @@ Selection rows, the unit switch and pickers stay silent.
 - **Navigation titles** (`hardsetNavigationTitle`): the one title that may shrink, with
   `minimumScaleFactor(0.8)`, so a long exercise name stays on a single line in a bar. It is a
   documented exception to "adaptive layouts in place of shrinking text".
+- **Plate tray and Welcome bar** (`PlateTray`, `WelcomeBarView`): the first screen's centrepiece, and
+  the one place onboarding is allowed larger, physical motion. Five plates, coloured by mass (red
+  25 kg, blue 20, yellow 15, green 10, white 5, which is chalk), rest in a tray as 56 pt targets with
+  their mass stamped in `canvas`. Tapping one, or throwing it up, loads it on the bar's two sleeves
+  with a `clank`; the bar droops a few degrees in proportion to the load, on `Motion.state`; tapping
+  a loaded plate returns it. The total is in `hero` with its unit. After four idle seconds the bar
+  loads one 20 kg plate per side on its own, and any touch takes over. Reduce Motion draws it
+  already loaded and swaps the stack instantly. The shaft is the one place the knurl is drawn as a
+  texture, because it carries no text.
 - **Staged phone** (`ScaledPhoneFrame`): a real screen laid out at phone size (402 by 874 pt) and
   scaled down onto a `steel` plate with a hairline `edgeLight` rim; the first-launch tour stages
   the app's own screens in it, built from `TourFixtures`. The tour gives it 78% of the screen's
