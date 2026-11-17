@@ -24,6 +24,11 @@
   struct StagedScreensSnapshotTests {
     /// The staged world's present is the real clock, so the root view and the screens that read
     /// "now" agree with the history that lies before it.
+    /// How long a screen that reads the staged database through the real stores runs before it is
+    /// drawn. The first run of these captures, at the default 800 ms, drew every one of them on its
+    /// loading line: the read had not returned yet.
+    private static let dataSettle: Duration = .seconds(5)
+
     private static func stage(_ stage: TourFixtures.Stage) throws -> TourFixtures.Staged {
       try TourFixtures.make(stage: stage, now: Date())
     }
@@ -32,11 +37,11 @@
     @Test func trainStart() async throws {
       guard Snapshot.directory != nil else { return }
       let dark = try Self.stage(.start)
-      try await Snapshot.capture("tour-start-dark") {
+      try await Snapshot.capture("tour-start-dark", settle: Self.dataSettle) {
         HardsetRootView(environment: dark.environment, unit: .kilograms)
       }
       let light = try Self.stage(.start)
-      try await Snapshot.capture("tour-start-light", style: .light) {
+      try await Snapshot.capture("tour-start-light", style: .light, settle: Self.dataSettle) {
         HardsetRootView(environment: light.environment, unit: .kilograms)
       }
     }
@@ -47,7 +52,7 @@
       guard Snapshot.directory != nil else { return }
       let staged = try Self.stage(.start)
       let width = Snapshot.phone.width * ScaledPhoneFrame<EmptyView>.screenWidthFraction
-      try await Snapshot.capture("tour-start-framed-dark") {
+      try await Snapshot.capture("tour-start-framed-dark", settle: Self.dataSettle) {
         ZStack {
           Tokens.Color.canvas.ignoresSafeArea()
           ScaledPhoneFrame {
@@ -97,9 +102,9 @@
     @Test func volume() async throws {
       guard Snapshot.directory != nil else { return }
       let dark = try Self.stage(.start)
-      try await Snapshot.capture("tour-volume-dark") { Self.volumeScreen(dark) }
+      try await Snapshot.capture("tour-volume-dark", settle: Self.dataSettle) { Self.volumeScreen(dark) }
       let light = try Self.stage(.start)
-      try await Snapshot.capture("tour-volume-light", style: .light) { Self.volumeScreen(light) }
+      try await Snapshot.capture("tour-volume-light", style: .light, settle: Self.dataSettle) { Self.volumeScreen(light) }
     }
 
     /// The History tab over twelve staged workouts. Tall, so the month grouping and several rows
@@ -108,9 +113,9 @@
       guard Snapshot.directory != nil else { return }
       let size = CGSize(width: Snapshot.phone.width, height: 1500)
       let dark = try Self.stage(.start)
-      try await Snapshot.capture("tour-history-dark", size: size) { Self.historyScreen(dark) }
+      try await Snapshot.capture("tour-history-dark", size: size, settle: Self.dataSettle) { Self.historyScreen(dark) }
       let light = try Self.stage(.start)
-      try await Snapshot.capture("tour-history-light", size: size, style: .light) {
+      try await Snapshot.capture("tour-history-light", size: size, style: .light, settle: Self.dataSettle) {
         Self.historyScreen(light)
       }
     }
@@ -119,7 +124,9 @@
     @Test func settings() async throws {
       guard Snapshot.directory != nil else { return }
       let staged = try Self.stage(.start)
-      try await Snapshot.capture("tour-settings-dark", size: CGSize(width: 402, height: 1600)) {
+      try await Snapshot.capture(
+        "tour-settings-dark", size: CGSize(width: 402, height: 1600), settle: Self.dataSettle
+      ) {
         SettingsSheet(
           useImperial: .constant(false), transfer: staged.environment.transfer,
           health: staged.environment.health, sync: staged.environment.sync,

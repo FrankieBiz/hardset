@@ -342,13 +342,16 @@
 
     /// Hosts `content` in a window of `size`, lets its tasks and first layout run, and writes the
     /// result at 2x to `<name>.png`. `contrast` overrides Increase Contrast, so the high-contrast
-    /// palette can be rendered without changing the Simulator's settings.
+    /// palette can be rendered without changing the Simulator's settings. `settle` is how long the
+    /// window runs before the frame is taken: the default covers a view's own tasks, and a screen
+    /// that reads a database through the real stores needs longer.
     static func capture<Content: View>(
       _ name: String,
       size: CGSize = Snapshot.phone,
       style: UIUserInterfaceStyle = .dark,
       typeSize: DynamicTypeSize = .large,
       contrast: UIAccessibilityContrast = .normal,
+      settle: Duration = .milliseconds(800),
       @ViewBuilder _ content: () -> Content
     ) async throws {
       guard let directory else { return }
@@ -368,7 +371,7 @@
       host.view.frame = window.bounds
       host.view.layoutIfNeeded()
       // `.task` modifiers, database reads and the first full layout land on later run-loop turns.
-      try await Task.sleep(for: .milliseconds(800))
+      try await Task.sleep(for: settle)
       host.view.layoutIfNeeded()
 
       let format = UIGraphicsImageRendererFormat()
