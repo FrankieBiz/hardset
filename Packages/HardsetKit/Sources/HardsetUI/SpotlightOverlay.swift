@@ -24,14 +24,18 @@ public struct SpotlightOverlay: View {
 
   public var body: some View {
     let hole = target.map(Self.padded)
-    SpotlightShape(hole: hole ?? .zero)
+    let shape = SpotlightShape(hole: hole ?? .zero, cornerRadius: Self.holeRadius)
+    shape
       .fill(Tokens.Color.canvas.opacity(0.7), style: FillStyle(eoFill: true))
       .opacity(target == nil ? 0 : 1)
-      .contentShape(SpotlightShape(hole: hole ?? .zero), eoFill: true)
+      .contentShape(shape, eoFill: true)
       .allowsHitTesting(swallowsTouches && target != nil)
       .animation(Tokens.Motion.adaptive(Tokens.Motion.state, reduceMotion: reduceMotion), value: hole)
       .accessibilityHidden(true)
   }
+
+  /// The hole's corners follow the control radius, grown by the air around the target.
+  private static var holeRadius: CGFloat { Tokens.Radius.control + Tokens.Spacing.snug }
 
   /// A little air around the target, so the hole does not hug its edge.
   private static func padded(_ rect: CGRect) -> CGRect {
@@ -42,6 +46,8 @@ public struct SpotlightOverlay: View {
 /// The whole rectangle with a rounded hole cut from it, filled with the even-odd rule.
 struct SpotlightShape: Shape {
   var hole: CGRect
+  /// Passed in rather than read from `Tokens`, because a shape's path is drawn off the main actor.
+  let cornerRadius: CGFloat
 
   var animatableData: CGRect.AnimatableData {
     get { hole.animatableData }
@@ -53,9 +59,7 @@ struct SpotlightShape: Shape {
     if !hole.isEmpty {
       path.addRoundedRect(
         in: hole,
-        cornerSize: CGSize(
-          width: Tokens.Radius.control + Tokens.Spacing.snug,
-          height: Tokens.Radius.control + Tokens.Spacing.snug))
+        cornerSize: CGSize(width: cornerRadius, height: cornerRadius))
     }
     return path
   }
