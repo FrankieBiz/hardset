@@ -43,6 +43,20 @@ public struct OnboardingFlow: View {
     VStack(spacing: 0) {
       topBar
       pager
+        // The tour is drawn over the pager's empty tour page, not inside it. Its staged phone holds
+        // real root views with tab views of their own, and a tab view inside a page-style tab view
+        // is a UIKit tab bar controller inside a page controller, which does not hold together:
+        // the pager jumped on to Setup as the tour appeared.
+        .overlay {
+          if model.page == .tour {
+            TourStage(model: model, unit: unit)
+              .background(Tokens.Color.canvas)
+              .transition(.opacity)
+          }
+        }
+        .animation(
+          Tokens.Motion.adaptive(Tokens.Motion.reveal, reduceMotion: reduceMotion),
+          value: model.page == .tour)
       footer
     }
     .background(Tokens.Color.canvas.ignoresSafeArea())
@@ -118,7 +132,7 @@ public struct OnboardingFlow: View {
     case .pitchSetRow: PitchSetRowPage(unit: unit)
     case .pitchEstimate: PitchEstimatePage(unit: unit)
     case .pitchRest: PitchRestPage()
-    case .tour: TourStage(model: model, unit: unit)
+    case .tour: Color.clear
     case .setup:
       SetupPage(model: model, useImperial: $useImperial) {
         onFinish(model.chosenGymID)

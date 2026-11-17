@@ -223,8 +223,10 @@ public struct VolumeReportView: View {
     let claim = VolumeAnalyzer.doseResponse(fractionalSets: row.sets, for: row.muscle)
 
     return VStack(alignment: .leading, spacing: Tokens.Spacing.snug) {
-      VStack(alignment: .leading, spacing: Tokens.Spacing.snug) {
-        HStack(alignment: .firstTextBaseline, spacing: Tokens.Spacing.snug) {
+      HStack(alignment: .top, spacing: Tokens.Spacing.snug) {
+        VStack(alignment: .leading, spacing: Tokens.Spacing.tight) {
+          // The name, what is not modelled, and the figure are one spoken element, so the figure is
+          // read with its muscle and the badge below it stays a control of its own.
           VStack(alignment: .leading, spacing: Tokens.Spacing.hairline) {
             Text(name)
               .font(Tokens.Text.label)
@@ -235,21 +237,21 @@ public struct VolumeReportView: View {
                 .foregroundStyle(Tokens.Color.chalkDim)
             }
           }
-          Spacer(minLength: Tokens.Spacing.snug)
-          Text(value)
-            .font(Tokens.Text.figure)
-            .foregroundStyle(Tokens.Color.chalk)
+          .accessibilityElement(children: .combine)
+          .accessibilityLabel(spoken)
+          CertaintyBadge(
+            level: CertaintyLevel(claim.certainty),
+            methodology: claim.source.methodology,
+            citation: claim.source.citation
+          )
         }
-        track(fraction: CGFloat(row.sets / maxSets), isCounted: isCounted)
+        Spacer(minLength: Tokens.Spacing.snug)
+        Text(value)
+          .font(Tokens.Text.figure)
+          .foregroundStyle(Tokens.Color.chalk)
+          .accessibilityHidden(true)
       }
-      .accessibilityElement(children: .combine)
-      .accessibilityLabel(spoken)
-      // A control of its own, outside the combined figure, so its disclosure stays reachable.
-      CertaintyBadge(
-        level: CertaintyLevel(claim.certainty),
-        methodology: claim.source.methodology,
-        citation: claim.source.citation
-      )
+      track(fraction: CGFloat(row.sets / maxSets), isCounted: isCounted)
     }
   }
 

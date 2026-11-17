@@ -315,6 +315,11 @@ final class AppScreensUITests: XCTestCase {
     XCTAssertTrue(app.staticTexts["Rest that keeps time."].waitForExistence(timeout: 5))
     capture(app, "46-onboarding-pitch-3")
     app.buttons["Next"].tap()
+    // What is on screen two seconds after the tap, kept in the log so a page that lands somewhere
+    // else is visible in the run rather than inferred.
+    Thread.sleep(forTimeInterval: 2)
+    print("ONBOARDING-TRACE after the third pitch's Next:", app.staticTexts.allElementsBoundByIndex.map(\.label))
+    capture(app, "46b-onboarding-after-pitch-3-next")
 
     // The tour. Its first step waits while two staged apps are built.
     XCTAssertTrue(app.staticTexts["Step 1 of 8"].waitForExistence(timeout: 90))
