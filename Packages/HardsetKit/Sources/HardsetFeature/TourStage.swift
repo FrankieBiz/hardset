@@ -73,6 +73,8 @@ struct TourStage: View {
       prepared = Prepared(
         start: try TourFixtures.make(stage: .start),
         live: try TourFixtures.make(stage: .liveSession))
+      // Opened straight onto the rest step, there is no logged set to have started one.
+      if model.tourStep == .rest { rest.restart() }
     } catch {
       failure = String(describing: error)
     }
@@ -102,9 +104,10 @@ struct TourStage: View {
   // MARK: - Stage
 
   private func stage(_ prepared: Prepared) -> some View {
-    GeometryReader { proxy in
+    // Read here, not inside the reader below, so the page is redrawn when a target reports.
+    let target = localTarget
+    return GeometryReader { proxy in
       let width = proxy.size.width * ScaledPhoneFrame<EmptyView>.screenWidthFraction
-      let target = localTarget
       ZStack(alignment: calloutAtTop(for: target) ? .top : .bottom) {
         ScaledPhoneFrame(isInteractive: isPhoneInteractive) {
           phone(prepared, target: target)

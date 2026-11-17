@@ -110,6 +110,7 @@ jobs:
             -scheme HardsetKit-Package \
             -destination 'platform=iOS Simulator,name=iPhone 17,OS=latest' \
             -only-testing:HardsetUISnapshotTests \
+            -parallel-testing-enabled NO \
             -skipMacroValidation -skipPackagePluginValidation \
             2>&1 | tee ../../snapshot-test.log | grep -E "error:|TEST (SUCCEEDED|FAILED)|Test run" || true
           ls -la ../../snapshots

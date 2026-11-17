@@ -27,7 +27,7 @@
     /// How long a screen that reads the staged database through the real stores runs before it is
     /// drawn. The first run of these captures, at the default 800 ms, drew every one of them on its
     /// loading line: the read had not returned yet.
-    private static let dataSettle: Duration = .seconds(5)
+    private static let dataSettle: Duration = .seconds(8)
 
     private static func stage(_ stage: TourFixtures.Stage) throws -> TourFixtures.Staged {
       try TourFixtures.make(stage: stage, now: Date())

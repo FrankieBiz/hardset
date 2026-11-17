@@ -79,21 +79,31 @@ private struct TourTargetModifier: ViewModifier {
 
   @Environment(\.tourTargets) private var registry
   @State private var source = UUID()
-  @State private var lastFrame: CGRect?
 
-  func body(content: Content) -> some View {
-    content
-      .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { frame in
-        guard registry != nil else { return }
-        lastFrame = frame
-        publish()
-      }
-      .onChange(of: isActive) { publish() }
-      .onDisappear { registry?.forget(target, from: source) }
+  @ViewBuilder func body(content: Content) -> some View {
+    if registry != nil {
+      content
+        // Measured in a background reader rather than with `onGeometryChange`, because the
+        // reader's `onChange(initial: true)` reports the first frame as well as every later one. A
+        // control that is laid out once and never moves, such as the start button, must still be
+        // reported. Only inside the tour: outside it the view is returned as it is, so the daily
+        // app's set rows do not follow their own position while a list scrolls.
+        .background {
+          GeometryReader { proxy in
+            let frame = proxy.frame(in: .global)
+            Color.clear
+              .onChange(of: frame, initial: true) { _, new in publish(new) }
+              .onChange(of: isActive) { publish(frame) }
+          }
+        }
+        .onDisappear { registry?.forget(target, from: source) }
+    } else {
+      content
+    }
   }
 
-  private func publish() {
+  private func publish(_ frame: CGRect) {
     guard let registry else { return }
-    registry.report(target, from: source, rect: isActive ? lastFrame : nil)
+    registry.report(target, from: source, rect: isActive ? frame : nil)
   }
 }
