@@ -406,6 +406,8 @@ public struct SetRowView: View {
     .accessibilityLabel(isLogged ? "Logged" : "Log set")
     // Haptics confirm the tap landed without the user looking at the phone.
     .sensoryFeedback(Tokens.Haptic.success, trigger: isLogged) { !$0 && $1 }
+    // The tour points at the check of the first set still to log.
+    .tourTarget(.logCheck, isActive: isNext && !isLogged)
   }
 
   private var logState: SetLogState {

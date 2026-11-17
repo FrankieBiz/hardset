@@ -70,8 +70,9 @@ public struct WelcomeBarView: View {
     .frame(height: 132)
     .animation(Tokens.Motion.adaptive(Tokens.Motion.state, reduceMotion: reduceMotion), value: perSide)
     .contentShape(Rectangle())
-    // The bar owns horizontal drags here, so loading and unloading never turn the page.
-    .gesture(DragGesture(minimumDistance: 8).onChanged { _ in touch() })
+    // The bar owns horizontal drags here, so loading and unloading never turn the page. High
+    // priority, because the pager's own pan would otherwise win the drag.
+    .highPriorityGesture(DragGesture(minimumDistance: 8).onChanged { _ in touch() })
     .accessibilityElement(children: .ignore)
     .accessibilityLabel("Barbell, \(totalText) \(unit.abbreviation) loaded")
     .accessibilityHint("Tap a plate below to load it")

@@ -59,6 +59,9 @@ public struct HardsetRootView: View {
   @State private var isChoosingGym = false
   @State private var isAddingGym = false
   @State private var isShowingSettings = false
+  /// Set when Settings asked for the tour, so it opens once the sheet has finished closing: a
+  /// presentation started while another is still leaving is dropped.
+  @State private var wantsTour = false
   /// The newest finished workout, for the start screen. `nil` when there is none, and then the
   /// start screen shows nothing in its place rather than a placeholder that implies a history.
   @State private var lastWorkoutSnapshot = SnapshotLoader<[SessionSummary]>()
@@ -91,21 +94,28 @@ public struct HardsetRootView: View {
   @Environment(\.accessibilityReduceMotion) private var reduceMotion
   @Environment(\.scenePhase) private var scenePhase
   @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+  /// What the first-launch tour asks of the root: a tab, or Settings open. Asks for nothing in the
+  /// daily app.
+  @Environment(\.tourStaging) private var staging
   private let environment: HardsetEnvironment
   /// Overrides the stored preference. Exists for previews and tests; the app passes `nil` so the
   /// user's own choice wins.
   private let unitOverride: WeightUnit?
   private let hooks: RestTimerHooks
+  /// Replays the first-launch tour. `nil` where nothing hosts one, and Settings then offers no row.
+  private let onShowTour: (() -> Void)?
 
   public init(
     environment: HardsetEnvironment,
     unit: WeightUnit? = nil,
     hooks: RestTimerHooks = .inert,
-    restAfterSet: Duration? = nil
+    restAfterSet: Duration? = nil,
+    onShowTour: (() -> Void)? = nil
   ) {
     self.environment = environment
     self.unitOverride = unit
     self.hooks = hooks
+    self.onShowTour = onShowTour
     _model = State(initialValue: WorkoutRootModel(
       logger: environment.logger, catalog: environment.catalog, gyms: environment.gyms,
       restAfterSet: restAfterSet, onStartRest: { duration, metadata in hooks.start(duration, metadata) }
@@ -140,7 +150,14 @@ public struct HardsetRootView: View {
       // Above every tab, so Settings opens from each tab's header alike, and outside anything
       // that changes when a workout starts or finishes, so finishing while it is open cannot pull
       // its anchor out from under it.
-      .sheet(isPresented: $isShowingSettings) {
+      .stagedSheet(
+        isPresented: $isShowingSettings,
+        onDismiss: {
+          guard wantsTour else { return }
+          wantsTour = false
+          onShowTour?()
+        }
+      ) {
         SettingsSheet(
           useImperial: $useImperial, transfer: environment.transfer,
           health: environment.health, sync: environment.sync, gyms: environment.gyms,
@@ -156,6 +173,12 @@ public struct HardsetRootView: View {
             } catch {
               gymError = "Your gyms could not be re-read. Close and reopen the list to try again."
             }
+          },
+          onShowTour: onShowTour.map { _ in
+            {
+              wantsTour = true
+              isShowingSettings = false
+            }
           }
         ) { isShowingSettings = false }
           .hardsetSheet()
@@ -165,6 +188,15 @@ public struct HardsetRootView: View {
         guard phase == .active, !Calendar.current.isDate(today, inSameDayAs: .now) else { return }
         today = .now
       }
+      // The tour moves the root between tabs and opens Settings by asking through the environment.
+      .onChange(of: staging.tab, initial: true) { _, tab in
+        switch tab {
+        case .train: selectedTab = .train
+        case .volume: selectedTab = .volume
+        case .history: selectedTab = .history
+        }
+      }
+      .onChange(of: staging.showsSettings, initial: true) { _, shows in isShowingSettings = shows }
   }
 
   private var tabs: some View {
@@ -335,6 +367,7 @@ public struct HardsetRootView: View {
                 .labelStyle(.titleAndIcon)
             }
             .buttonStyle(HardsetButtonStyle(.primary, size: .logger))
+            .tourTarget(.startAction)
 
             if startFailed {
               HardsetBanner(

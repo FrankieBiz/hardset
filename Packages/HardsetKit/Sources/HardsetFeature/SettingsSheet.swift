@@ -32,16 +32,20 @@ public struct SettingsSheet: View {
   private let sync: SyncStatus?
   private let gyms: GymStore?
   private let onDataChanged: (() -> Void)?
+  private let onShowTour: (() -> Void)?
   private let onDone: () -> Void
 
   /// - Parameters:
   ///   - gyms: When given, Settings offers renaming and archiving gyms and machines.
   ///   - onDataChanged: Called after Settings changes saved data: an import that wrote workouts, or
   ///     a gym or machine renamed or archived. Screens showing that data re-read it.
+  ///   - onShowTour: When given, Settings offers "Show the tour again" and calls this, which is
+  ///     expected to close Settings and replay the first-launch sequence.
   public init(
     useImperial: Binding<Bool>, transfer: DataTransferStore? = nil,
     health: DeviceHealthStore? = nil, sync: SyncStatus? = nil, gyms: GymStore? = nil,
-    onDataChanged: (() -> Void)? = nil, onDone: @escaping () -> Void
+    onDataChanged: (() -> Void)? = nil, onShowTour: (() -> Void)? = nil,
+    onDone: @escaping () -> Void
   ) {
     self._useImperial = useImperial
     self.health = health
@@ -49,6 +53,7 @@ public struct SettingsSheet: View {
     self.sync = sync
     self.gyms = gyms
     self.onDataChanged = onDataChanged
+    self.onShowTour = onShowTour
     self.onDone = onDone
   }
 
@@ -70,6 +75,7 @@ public struct SettingsSheet: View {
           if let health { HealthSettingsSection(store: health, unit: unit) }
           #endif
           methodologySection
+          if let onShowTour { tourSection(onShowTour) }
           // The optional purchase comes after everything the lifter already owns.
           LifetimePurchaseSection(access: lifetime)
         }
@@ -133,6 +139,7 @@ public struct SettingsSheet: View {
       .padding(Tokens.Spacing.loose)
       .frame(maxWidth: .infinity, alignment: .leading)
       .hardsetCard()
+      .tourTarget(.settingsUnits)
 
       // Stated because it is the reason switching never corrupts anything, and because a
       // lifter who has logged in one unit deserves to know the other view is a conversion,
@@ -220,6 +227,35 @@ public struct SettingsSheet: View {
       }
       .buttonStyle(DisclosureRowButtonStyle())
       .accessibilityHint("Opens your gyms and their machines")
+    }
+  }
+
+  // MARK: - Tour
+
+  private func tourSection(_ show: @escaping () -> Void) -> some View {
+    VStack(alignment: .leading, spacing: Tokens.Spacing.snug) {
+      SectionLabel("Tour")
+      Button(action: show) {
+        HStack(spacing: Tokens.Spacing.regular) {
+          VStack(alignment: .leading, spacing: Tokens.Spacing.hairline) {
+            Text("Show the tour again")
+              .font(Tokens.Text.headline)
+              .foregroundStyle(Tokens.Color.textPrimary)
+            Text("The welcome, the three pitches and the walk through the app.")
+              .font(Tokens.Text.caption)
+              .foregroundStyle(Tokens.Color.textSecondary)
+          }
+          .multilineTextAlignment(.leading)
+          .frame(maxWidth: .infinity, alignment: .leading)
+
+          Image(systemName: "chevron.right")
+            .font(Tokens.Text.caption.weight(.semibold))
+            .foregroundStyle(Tokens.Color.textSecondary)
+            .accessibilityHidden(true)
+        }
+      }
+      .buttonStyle(DisclosureRowButtonStyle())
+      .accessibilityHint("Closes Settings and plays the tour")
     }
   }
 

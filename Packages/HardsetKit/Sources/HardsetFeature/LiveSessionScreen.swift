@@ -64,6 +64,9 @@ public struct LiveSessionScreen: View {
   private let progression: ProgressionStore?
   private let gymName: String?
   private let restPreferences: RestPreferences
+  /// What the first-launch tour asks of this screen: the machine picker, open on the first
+  /// movement. Asks for nothing in the daily app.
+  @Environment(\.tourStaging) private var staging
   private let onShowSettings: (() -> Void)?
   private let onFinished: () -> Void
 
@@ -161,6 +164,15 @@ public struct LiveSessionScreen: View {
     )
     .onAppear { loadRememberedRest() }
     .onChange(of: coordinator.exercises.map(\.exerciseID)) { loadRememberedRest() }
+    // The tour opens the machine picker on the first movement, and closes it when its step ends.
+    .onChange(of: staging.opensMachinePicker, initial: true) { _, opens in
+      if opens {
+        guard canPickMachines, let first = coordinator.exercises.first else { return }
+        machineTarget = MachineTarget(id: first.id)
+      } else {
+        machineTarget = nil
+      }
+    }
     .sheet(isPresented: $isPickerPresented, onDismiss: {
       // A swipe-down dismissal used to leave the last search behind for the next visit.
       pickerQuery = ""
@@ -185,7 +197,7 @@ public struct LiveSessionScreen: View {
       // user-created movement shows up without reopening the sheet.
       .task(id: pickerQuery) { refreshPicker() }
     }
-    .sheet(item: $machineTarget, onDismiss: {
+    .stagedSheet(item: $machineTarget, onDismiss: {
       machineError = nil
       machineLoadFailed = false
       clearError(from: .changeMachine)

@@ -87,6 +87,8 @@ public struct SessionView: View {
 
   @Environment(\.accessibilityReduceMotion) private var reduceMotion
   @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+  /// What the first-launch tour asks of this screen. Asks for nothing in the daily app.
+  @Environment(\.tourStaging) private var staging
 
   /// - Parameter title: Draws a screen header when present. The live session passes "Workout";
   ///   previews and embedded uses can leave it out.
@@ -276,8 +278,17 @@ public struct SessionView: View {
         Text(discardMessage)
       }
     }
-    .sheet(isPresented: isKeypadPresented, onDismiss: keypadDidDismiss) {
+    .stagedSheet(isPresented: isKeypadPresented, inlineHeight: padHeight, onDismiss: keypadDidDismiss) {
       keypadSheet
+    }
+    // The tour opens the keypad on the first set still to log, and closes it when its step ends.
+    .onChange(of: staging.opensKeypad, initial: true) { _, opens in
+      if opens {
+        guard keypad == nil, let next = firstUnloggedSlot else { return }
+        beginEditing(exerciseID: next.exerciseID, slotID: next.slotID, field: .weight)
+      } else if keypad != nil {
+        keypad = nil
+      }
     }
     // A row the keypad is on can change underneath it: logged from its own check, removed, moved
     // to another machine, or stepped with the −/+ buttons. Logged or gone closes the keypad; a
@@ -633,6 +644,7 @@ public struct SessionView: View {
             onSkipRest()
           }
         )
+        .tourTarget(.restBar)
       }
       .padding(.bottom, isRestIdle && hasFeedback ? Tokens.Spacing.snug : 0)
     }
@@ -983,6 +995,16 @@ public struct SessionView: View {
     return slot(exerciseID: keypad.exerciseID, slotID: keypad.slotID)
   }
 
+  /// The first set, in workout order, that is not logged: where the tour's keypad opens.
+  private var firstUnloggedSlot: (exerciseID: UUID, slotID: UUID)? {
+    for exercise in exercises {
+      if let slot = exercise.slots.first(where: { !$0.isLogged }) {
+        return (exercise.id, slot.id)
+      }
+    }
+    return nil
+  }
+
   private func slot(exerciseID: UUID, slotID: UUID) -> SetSlot? {
     exercises.first { $0.id == exerciseID }?.slots.first { $0.id == slotID }
   }
@@ -1092,6 +1114,7 @@ public struct SessionView: View {
           onLog: field == .reps ? { logFromKeypad() } : nil,
           canLog: targetedSlot?.draft.isLoggable ?? false
         )
+        .tourTarget(.keypad)
       }
       // Measured rather than fixed. A hard-coded 370 pt detent was shorter than the pad's own
       // minimum (380 pt before any larger text), so the bottom row could clip; the scroll view

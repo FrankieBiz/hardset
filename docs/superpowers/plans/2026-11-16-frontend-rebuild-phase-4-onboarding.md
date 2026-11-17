@@ -26,6 +26,11 @@
 | R51 | Replay is a full-screen cover hosting the same flow in replay mode, so Settings does not restart the app or touch `hardset.onboardingVersion`; finishing a replay just dismisses it. |
 | R52 | The Welcome bar's bend is a spring on `Motion.state` driven by the loaded mass, not a `keyframeAnimator`: a critically damped settle is the spec's intent and the keyframe form adds nothing the spring does not. |
 | R53 | No per-task review agents (R48 stands); one whole-branch review of the Phase 4 diff before delivery. |
+| R54 | A system sheet presents over the whole window, so the tour's keypad, machine picker and Settings cannot be real sheets inside a scaled phone. `stagedSheet` draws them inline when `TourStaging.presentsSheetsInline` is set; the content is the real content and only the surface is the tour's. The three presenting screens call it in place of `sheet`, which is unchanged outside the tour. |
+| R55 | Targets report their window rectangles into a `TourTargets` registry through `onGeometryChange(.global)`, not a preference: a tab view and navigation stack can host their content across a UIKit boundary that a preference does not cross. The stage converts to the phone's space with the phone's own measured frame, so the scale cancels. |
+| R56 | Tour step one's line differs from the spec: the start screen has no "repeat last workout" action, so it says what is there ("One tap starts a workout. Your last one is right below it."). |
+| R57 | A replay runs the same pages without Setup and ends at the tour's end; skipping a replay ends it. |
+| R58 | UI-test onboarding state is set by a DEBUG-only `HARDSET_ONBOARDING` environment variable ("skip" or "reset") read in `HardsetApp.init`, not a launch argument: an argument shadows the stored value, so the app's own write on finishing would never be read back. |
 
 ## Review Focus
 

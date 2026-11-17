@@ -28,6 +28,18 @@ struct HardsetApp: App {
         let descriptor = open(path, O_WRONLY | O_CREAT | O_APPEND, 0o644)
         if descriptor >= 0 { dup2(descriptor, STDERR_FILENO) }
       }
+      // For the UI tests only: the first-launch sequence is stored state, and a launch argument
+      // cannot stand in for it, because an argument shadows the stored value and the app's own
+      // write on finishing would never be read back. "skip" marks it seen; "reset" clears it so a
+      // fresh-install journey can run.
+      switch ProcessInfo.processInfo.environment["HARDSET_ONBOARDING"] {
+      case "skip":
+        UserDefaults.standard.set(OnboardingVersion.current, forKey: "hardset.onboardingVersion")
+      case "reset":
+        UserDefaults.standard.removeObject(forKey: "hardset.onboardingVersion")
+      default:
+        break
+      }
     #endif
   }
 
@@ -108,7 +120,7 @@ private struct RootView: View {
   let restTimer: RestTimerController
 
   var body: some View {
-    HardsetRootView(
+    HardsetLaunchView(
       environment: HardsetEnvironment(database: database, sync: sync),
       // No unit passed: the root view infers it from the device locale on first launch and then
       // honours whatever the user chose in Settings. Hardcoding `.kilograms` here meant a US

@@ -249,6 +249,31 @@ Selection rows, the unit switch and pickers stay silent.
   the app's own screens in it, built from `TourFixtures`. The tour gives it 78% of the screen's
   width. A frame that is not interactive is inert to touch and hidden from VoiceOver; an interactive
   one, for the steps that ask the lifter to tap, is neither. It adds no token and no motion.
+- **Pitch pages** (`PitchPage`, `PitchSetRowPage`, `PitchEstimatePage`, `PitchRestPage`): three
+  pages with one anatomy, a `title` headline, two lines in `label` and one live element that is the
+  real component, never a picture. "One tap per set" is a real set row prefilled from last time; its
+  tap plays `clank` then the row's own `success`. "Honest numbers" is the engine's estimate for the
+  same 60 kg set at 3, 8, 12 and 15 reps, so the badge walks high, moderate, low and not evaluated
+  because `StrengthMath` says so. "Rest that keeps time" is the real rest bar over a `DemoRestTimer`,
+  an in-memory timer with no alarm, whose controls give the selection haptic. The first-launch pager
+  shows three short `hairline` segments above the primary button, the active one `plateBlue`,
+  sliding on `Motion.state`; like the segmented control's indicator it is one shape moved between
+  two places inside its row.
+- **Tour** (`TourStage`, `SpotlightOverlay`, `CalloutCard`, `tourTarget`, `TourStaging`): the real
+  root view in the staged phone, asked into each state through the `TourStaging` environment value
+  the real screens read, with the controls it points at tagged in place. The spotlight is the
+  canvas at 70% with one rounded hole that moves between targets on `Motion.state`; it is drawn, not
+  laid out, so it joins the segmented control's indicator as a documented exception to "only
+  transform and opacity animate". Touches outside the hole are swallowed, and only step two, the
+  staged set's check, lets one through. A system sheet always presents over the whole window, so
+  inside the staged phone the keypad, machine picker and Settings draw inline (`stagedSheet`): the
+  sheet's content is the real content, on a `steel` surface with the card radius and the lit top
+  edge. The callout is the one floating element on system glass besides the toolbars, and sits in
+  the half of the phone the target is not in. Both Reduce Motion paths drop the hole's travel.
+- **Setup** (`SetupPage`): "Before your first set." Two selection rows for the unit, which edit the
+  stored preference in place, and the gym: existing gyms as selection rows with one preselected, or
+  for a new lifter one name field that may stay blank. A failed save stays on the page with the
+  reason and the typed name kept.
 - **Text entry** (`entryFieldChrome`): raised fill, control border, and a 2 pt plate blue ring that
   fades in on focus. Used by the search field and the name entry sheet.
 - **Set log control**: four states, never confused: incomplete (dashed, disabled), ready (plate blue

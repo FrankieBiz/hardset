@@ -112,6 +112,7 @@ public struct HistoryView: View {
             Section {
               ForEach(group.rows) { row in
                 card(for: row)
+                  .tourTarget(.historyList)
                   .padding(.horizontal, Tokens.Spacing.loose)
               }
             } header: {

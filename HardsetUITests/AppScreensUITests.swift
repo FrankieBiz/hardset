@@ -258,15 +258,118 @@ final class AppScreensUITests: XCTestCase {
     writeAuditReport(named: "accessibility-audit-light")
   }
 
+  /// The first launch as a fresh install sees it: load a plate on the Welcome bar, through the
+  /// three pitches, the guided tour, Setup and into the app, saving a screenshot of each page.
+  ///
+  /// It pins what the model tests cannot: that a swipe on the bar loads a plate instead of turning
+  /// the page, that the tour's second step waits for the lifter's own tap on the staged set's check
+  /// before "Next" appears, and that every page can be reached and completed.
+  @MainActor
+  func testOnboardingJourneyDark() throws {
+    continueAfterFailure = true
+    let app = XCUIApplication()
+    launch(app, appearance: .dark, showsOnboarding: true)
+
+    // Welcome.
+    XCTAssertTrue(app.staticTexts["Hardset"].waitForExistence(timeout: 30))
+    XCTAssertFalse(app.buttons["Skip"].exists, "the welcome page has no skip")
+    capture(app, "40-onboarding-welcome")
+    audit(app, screen: "onboarding welcome")
+
+    let bar = app.descendants(matching: .any)
+      .matching(NSPredicate(format: "label BEGINSWITH 'Barbell'")).firstMatch
+    XCTAssertTrue(bar.waitForExistence(timeout: 5))
+    let unloaded = bar.label
+    app.buttons["20 kilogram plate"].tap()
+    XCTAssertNotEqual(bar.label, unloaded, "tapping a plate loads it")
+    XCTAssertTrue(app.staticTexts["That\u{2019}s a set logged in one tap."].waitForExistence(timeout: 5))
+    capture(app, "41-onboarding-welcome-loaded")
+
+    // A swipe across the bar belongs to the bar: the page does not turn.
+    bar.swipeLeft()
+    XCTAssertTrue(app.staticTexts["Hardset"].exists, "swiping the bar must not turn the page")
+    XCTAssertFalse(app.buttons["Skip"].exists)
+
+    app.buttons["Start"].tap()
+
+    // Pitch 1: one tap per set.
+    XCTAssertTrue(app.staticTexts["One tap per set."].waitForExistence(timeout: 5))
+    XCTAssertTrue(app.buttons["Skip"].exists, "skip is offered from the second page on")
+    capture(app, "42-onboarding-pitch-1")
+    audit(app, screen: "onboarding pitch 1")
+    app.buttons["Log set"].firstMatch.tap()
+    XCTAssertTrue(app.buttons["Logged"].waitForExistence(timeout: 5), "the pitch row logs")
+    capture(app, "43-onboarding-pitch-1-logged")
+    app.buttons["Next"].tap()
+
+    // Pitch 2: honest numbers.
+    XCTAssertTrue(app.staticTexts["Honest numbers."].waitForExistence(timeout: 5))
+    capture(app, "44-onboarding-pitch-2")
+    let fifteen = app.buttons["15 reps"].firstMatch
+    XCTAssertTrue(fifteen.waitForExistence(timeout: 5))
+    fifteen.tap()
+    capture(app, "45-onboarding-pitch-2-unevaluated")
+    app.buttons["Next"].tap()
+
+    // Pitch 3: rest that keeps time.
+    XCTAssertTrue(app.staticTexts["Rest that keeps time."].waitForExistence(timeout: 5))
+    capture(app, "46-onboarding-pitch-3")
+    app.buttons["Next"].tap()
+
+    // The tour. Its first step waits while two staged apps are built.
+    XCTAssertTrue(app.staticTexts["Step 1 of 8"].waitForExistence(timeout: 90))
+    capture(app, "47-onboarding-tour-1")
+    app.buttons["Next"].tap()
+
+    // Step 2 is the interactive one: no "Next" until the staged check is tapped.
+    XCTAssertTrue(app.staticTexts["Step 2 of 8"].waitForExistence(timeout: 10))
+    XCTAssertFalse(app.buttons["Next"].exists, "Next waits for the check to be tapped")
+    capture(app, "48-onboarding-tour-2")
+    audit(app, screen: "onboarding tour 2")
+    // Hittable, because the scrim over the rest of the staged phone swallows touches: only the
+    // check inside the spotlight can be tapped, and no other page's row is mistaken for it.
+    let check = app.buttons.matching(NSPredicate(format: "label == 'Log set' AND hittable == true"))
+      .firstMatch
+    XCTAssertTrue(check.waitForExistence(timeout: 10))
+    check.tap()
+    XCTAssertTrue(app.buttons["Next"].waitForExistence(timeout: 10), "logging the staged set unlocks Next")
+    capture(app, "49-onboarding-tour-2-logged")
+
+    for step in 3...8 {
+      app.buttons["Next"].tap()
+      XCTAssertTrue(app.staticTexts["Step \(step) of 8"].waitForExistence(timeout: 10))
+      capture(app, "5\(step - 3)-onboarding-tour-\(step)")
+    }
+    app.buttons["Next"].tap()
+
+    // Setup, then the app.
+    XCTAssertTrue(app.staticTexts["Before your first set."].waitForExistence(timeout: 10))
+    XCTAssertTrue(app.buttons["Kilograms"].exists)
+    XCTAssertTrue(app.buttons["Pounds"].exists)
+    XCTAssertFalse(app.buttons["Skip"].exists, "Setup is where skip leads")
+    capture(app, "60-onboarding-setup")
+    audit(app, screen: "onboarding setup")
+    app.buttons["Start logging"].tap()
+    guard waitForStartScreen(app) else { return }
+    capture(app, "61-onboarding-done")
+
+    writeAuditReport(named: "accessibility-audit-onboarding")
+  }
+
   // MARK: - Helpers
 
   /// Launches the app. Appearance is set by CI with `simctl ui` around separate passes, because
   /// `XCUIDevice.appearance` did not reach the system on the runner: every "dark" screenshot came
   /// out light. The parameter names which pass a test belongs to.
   @MainActor
-  private func launch(_ app: XCUIApplication, appearance: XCUIDevice.Appearance) {
+  private func launch(
+    _ app: XCUIApplication, appearance: XCUIDevice.Appearance, showsOnboarding: Bool = false
+  ) {
     // Keeps the app's stderr, so a runtime trap's message survives for CI to collect.
     app.launchEnvironment["HARDSET_CAPTURE_STDERR"] = "1"
+    // Every journey but the onboarding one starts past the first-launch sequence; that one starts
+    // as a fresh install would.
+    app.launchEnvironment["HARDSET_ONBOARDING"] = showsOnboarding ? "reset" : "skip"
     app.launch()
   }
 

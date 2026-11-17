@@ -202,6 +202,7 @@ public struct VolumeReportView: View {
       .padding(Tokens.Spacing.loose)
       .frame(maxWidth: .infinity, alignment: .leading)
       .hardsetCard()
+      .tourTarget(.volumeFigures)
     }
   }
 

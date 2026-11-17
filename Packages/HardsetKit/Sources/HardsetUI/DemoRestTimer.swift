@@ -27,9 +27,19 @@ public final class DemoRestTimer {
     self.state = initialState ?? .running(endsAt: Date().addingTimeInterval(startingDuration.seconds))
   }
 
-  /// Starts a fresh rest.
+  /// Starts a fresh rest of the usual length.
   public func restart() {
-    state = .running(endsAt: Date().addingTimeInterval(startingDuration.seconds))
+    start(for: startingDuration)
+  }
+
+  /// Starts a rest of `duration`, as the real timer does when a set is logged.
+  public func start(for duration: Duration) {
+    state = .running(endsAt: Date().addingTimeInterval(duration.seconds))
+  }
+
+  /// Ends the rest and leaves the bar idle, as the real timer does when a rest is skipped.
+  public func cancel() {
+    state = .idle
   }
 
   /// Nudges the rest by `delta` with the engine's own rule, so −15 and +15 behave as they do on
