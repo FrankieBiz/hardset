@@ -91,7 +91,7 @@ public struct ProgressionChartView: View {
             chart(plotted)
           }
           Rectangle()
-            .fill(Tokens.Color.border)
+            .fill(Tokens.Color.hairline)
             .frame(height: Tokens.Stroke.hairline)
             .accessibilityHidden(true)
           legend(plotted)
@@ -130,11 +130,11 @@ public struct ProgressionChartView: View {
       VStack(alignment: .leading, spacing: Tokens.Spacing.hairline) {
         Text(metricTitle)
           .font(Tokens.Text.headline)
-          .foregroundStyle(Tokens.Color.textPrimary)
+          .foregroundStyle(Tokens.Color.chalk)
           .fixedSize(horizontal: false, vertical: true)
         Text("Best per session, in \(unit.abbreviation). One line per machine.")
           .font(Tokens.Text.caption)
-          .foregroundStyle(Tokens.Color.textSecondary)
+          .foregroundStyle(Tokens.Color.chalkDim)
           .fixedSize(horizontal: false, vertical: true)
       }
       .frame(maxWidth: .infinity, alignment: .leading)
@@ -184,8 +184,8 @@ public struct ProgressionChartView: View {
     // Resolved once, outside the axis and annotation builders, so those closures capture plain
     // values rather than reaching back into the token namespace.
     let caveat = Tokens.Color.warning
-    let grid = Tokens.Color.border
-    let axisText = Tokens.Color.textSecondary
+    let grid = Tokens.Color.hairline
+    let axisText = Tokens.Color.chalkDim
     let axisFont = Tokens.Text.caption
     let lineWidth = Tokens.Stroke.selected
     let gridWidth = Tokens.Stroke.hairline
@@ -276,22 +276,22 @@ public struct ProgressionChartView: View {
           legendGlyph(index: entry.index)
           Text(entry.name)
             .font(Tokens.Text.label)
-            .foregroundStyle(Tokens.Color.textPrimary)
+            .foregroundStyle(Tokens.Color.chalk)
             .lineLimit(2)
           Spacer(minLength: Tokens.Spacing.snug)
           if let latest {
             HStack(alignment: .firstTextBaseline, spacing: Tokens.Spacing.tight) {
               Text(valueText(latest))
                 .font(Tokens.Text.figure)
-                .foregroundStyle(Tokens.Color.textPrimary)
+                .foregroundStyle(Tokens.Color.chalk)
               Text(unit.abbreviation)
                 .font(Tokens.Text.unit)
-                .foregroundStyle(Tokens.Color.textSecondary)
+                .foregroundStyle(Tokens.Color.chalkDim)
             }
           } else {
             Text(emptyValueText)
               .font(Tokens.Text.caption)
-              .foregroundStyle(Tokens.Color.textSecondary)
+              .foregroundStyle(Tokens.Color.chalkDim)
           }
         }
         .accessibilityElement(children: .ignore)
@@ -359,10 +359,10 @@ public struct ProgressionChartView: View {
           VStack(alignment: .leading, spacing: Tokens.Spacing.tight) {
             Text(change.date, format: .dateTime.day().month(.abbreviated).year())
               .font(Tokens.Text.figure)
-              .foregroundStyle(Tokens.Color.textPrimary)
+              .foregroundStyle(Tokens.Color.chalk)
             Text(change.explanation(in: unit))
               .font(Tokens.Text.provenance)
-              .foregroundStyle(Tokens.Color.textSecondary)
+              .foregroundStyle(Tokens.Color.chalkDim)
               .fixedSize(horizontal: false, vertical: true)
           }
         }
@@ -535,7 +535,7 @@ public struct ProgressionChartView: View {
         )
         .padding(Tokens.Spacing.loose)
       }
-      .background(Tokens.Color.background)
+      .background(Tokens.Color.canvas)
     }
   }
 
@@ -550,6 +550,6 @@ public struct ProgressionChartView: View {
   #Preview("No history") {
     ProgressionChartView(series: [], unit: .pounds)
       .padding(Tokens.Spacing.loose)
-      .background(Tokens.Color.background)
+      .background(Tokens.Color.canvas)
   }
 #endif

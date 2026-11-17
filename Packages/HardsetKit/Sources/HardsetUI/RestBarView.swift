@@ -18,18 +18,40 @@ import SwiftUI
 /// lines — countdown above, controls below at equal widths — when they do not. Four 56 pt
 /// controls reserve over 300 pt on their own, so on most phones the second form is the one in use,
 /// and the countdown keeps its full size instead of being squeezed into what is left.
+///
+/// With a chooser (`onChooseNextRest`), the bar also offers the length of the rest after the next
+/// set: a quiet "Next rest" row under the controls opens a row of choices, and a drag up on the bar
+/// opens it as well and a drag down closes it, so the length can be changed without reaching for a
+/// menu on the card. Choosing changes the next set's rest, not the one running.
 public struct RestBarView: View {
   private let state: RestTimerState
   private let metadata: RestMetadata?
   private let referenceDate: Date
+  private let nextRest: Duration?
+  private let restChoices: [Duration]
+  private let onChooseNextRest: ((Duration) -> Void)?
   private let onAdjust: (Duration) -> Void
   private let onPauseResume: () -> Void
   private let onSkip: () -> Void
 
+  @State private var isChoosing = false
+  @State private var chosenCount = 0
+  @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+  /// - Parameters:
+  ///   - nextRest: The length the next rest will have, marked among the choices.
+  ///   - restChoices: The lengths offered. Empty, or without `onChooseNextRest`, the bar has no
+  ///     chooser.
+  ///   - onChooseNextRest: Called with the length the lifter picks.
+  ///   - isChoosingInitially: Opens the choices as the bar appears, for a capture or a preview.
   public init(
     state: RestTimerState,
     metadata: RestMetadata? = nil,
     referenceDate: Date = Date(),
+    nextRest: Duration? = nil,
+    restChoices: [Duration] = [],
+    onChooseNextRest: ((Duration) -> Void)? = nil,
+    isChoosingInitially: Bool = false,
     onAdjust: @escaping (Duration) -> Void,
     onPauseResume: @escaping () -> Void,
     onSkip: @escaping () -> Void
@@ -37,25 +59,36 @@ public struct RestBarView: View {
     self.state = state
     self.metadata = metadata
     self.referenceDate = referenceDate
+    self.nextRest = nextRest
+    self.restChoices = restChoices
+    self.onChooseNextRest = onChooseNextRest
+    _isChoosing = State(initialValue: isChoosingInitially)
     self.onAdjust = onAdjust
     self.onPauseResume = onPauseResume
     self.onSkip = onSkip
   }
 
+  private var hasChooser: Bool { onChooseNextRest != nil && !restChoices.isEmpty }
+
   public var body: some View {
     if case .idle = state {
       EmptyView()
     } else {
-      ViewThatFits(in: .horizontal) {
-        HStack(spacing: Tokens.Spacing.regular) {
-          status
-          Spacer(minLength: Tokens.Spacing.snug)
-          controls
-            .fixedSize()
+      VStack(alignment: .leading, spacing: Tokens.Spacing.regular) {
+        ViewThatFits(in: .horizontal) {
+          HStack(spacing: Tokens.Spacing.regular) {
+            status
+            Spacer(minLength: Tokens.Spacing.snug)
+            controls
+              .fixedSize()
+          }
+          VStack(alignment: .leading, spacing: Tokens.Spacing.regular) {
+            status
+            controls
+          }
         }
-        VStack(alignment: .leading, spacing: Tokens.Spacing.regular) {
-          status
-          controls
+        if hasChooser {
+          chooser
         }
       }
       .padding(Tokens.Spacing.regular)
@@ -70,6 +103,68 @@ public struct RestBarView: View {
       // the time and still reach "Plus 15 seconds" directly. Combining the whole bar made the
       // controls unreachable.
       .accessibilityElement(children: .contain)
+      .gesture(chooserDrag)
+      .sensoryFeedback(Tokens.Haptic.selection, trigger: chosenCount)
+    }
+  }
+
+  // MARK: - Next rest
+
+  /// The chooser's two parts: a row that says what the next rest is and opens the choices, and the
+  /// choices themselves. They arrive with an insertion-only opacity reveal and no animated layout,
+  /// so the bar does not slide the set rows above it.
+  @ViewBuilder private var chooser: some View {
+    VStack(alignment: .leading, spacing: Tokens.Spacing.snug) {
+      Button {
+        isChoosing.toggle()
+      } label: {
+        HStack(spacing: Tokens.Spacing.snug) {
+          Text(nextRest.map { "Next rest \($0.clockString)" } ?? "Next rest")
+            .hardsetText(.caption)
+          Image(systemName: isChoosing ? "chevron.down" : "chevron.up")
+            .font(Tokens.Text.caption.weight(.semibold))
+            .accessibilityHidden(true)
+        }
+        .frame(maxWidth: .infinity, minHeight: Tokens.minimumTapTarget, alignment: .leading)
+        .contentShape(Rectangle())
+      }
+      .buttonStyle(HardsetPressStyle())
+      .foregroundStyle(Tokens.Color.plateBlue)
+      .accessibilityLabel(
+        nextRest.map { "Next rest, \(ExerciseSectionView.spoken($0))" } ?? "Choose the next rest")
+      .accessibilityHint(isChoosing ? "Hides the lengths" : "Shows the lengths to choose from")
+
+      if isChoosing {
+        HStack(spacing: Tokens.Spacing.snug) {
+          ForEach(restChoices, id: \.self) { duration in
+            HardsetChip(duration.clockString, isSelected: duration == nextRest) {
+              chosenCount += 1
+              onChooseNextRest?(duration)
+              isChoosing = false
+            }
+            .accessibilityLabel(ExerciseSectionView.spoken(duration))
+          }
+          Spacer(minLength: 0)
+        }
+        .transition(
+          .asymmetric(
+            insertion: .opacity.animation(
+              Tokens.Motion.adaptive(Tokens.Motion.reveal, reduceMotion: reduceMotion)),
+            removal: .identity))
+      }
+    }
+  }
+
+  /// A drag up on the bar opens the choices and a drag down closes them. The row above is the same
+  /// control for anyone who does not drag.
+  private var chooserDrag: some Gesture {
+    DragGesture(minimumDistance: 16).onEnded { value in
+      guard hasChooser else { return }
+      if value.translation.height < -24 {
+        isChoosing = true
+      } else if value.translation.height > 24 {
+        isChoosing = false
+      }
     }
   }
 

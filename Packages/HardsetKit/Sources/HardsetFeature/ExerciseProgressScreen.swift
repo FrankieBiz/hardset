@@ -61,7 +61,7 @@ public struct ExerciseProgressScreen: View {
       .padding(.top, Tokens.Spacing.loose)
       .padding(.bottom, Tokens.Spacing.block)
     }
-    .background(Tokens.Color.background)
+    .background(Tokens.Color.canvas)
     .hardsetNavigationTitle(exerciseName)
     // Keyed on the movement, so a different exercise reloads and a stale read is cancelled.
     .task(id: exerciseID) { await load() }

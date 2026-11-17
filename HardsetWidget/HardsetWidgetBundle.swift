@@ -34,36 +34,36 @@ struct RestTimerLiveActivity: Widget {
           VStack(alignment: .leading, spacing: Tokens.Spacing.hairline) {
             Text(statusLabel(for: context.state))
               .font(Tokens.Text.sectionHeader)
-              .foregroundStyle(Tokens.Color.accent)
+              .foregroundStyle(Tokens.Color.plateBlue)
             Text(context.attributes.metadata?.exerciseName ?? "Rest")
               .font(Tokens.Text.headline)
-              .foregroundStyle(Tokens.Color.textPrimary)
+              .foregroundStyle(Tokens.Color.chalk)
               .lineLimit(1)
             if let detail = detail(for: context.attributes.metadata) {
               Text(detail)
                 .font(Tokens.Text.caption)
-                .foregroundStyle(Tokens.Color.textSecondary)
+                .foregroundStyle(Tokens.Color.chalkDim)
                 .lineLimit(1)
             }
           }
           Spacer(minLength: Tokens.Spacing.snug)
           countdown(for: context.state)
             .font(Tokens.Text.hero)
-            .foregroundStyle(Tokens.Color.textPrimary)
+            .foregroundStyle(Tokens.Color.chalk)
             .multilineTextAlignment(.trailing)
         }
         progress(for: context.state, metadata: context.attributes.metadata)
       }
       .padding(Tokens.Spacing.loose)
-      .activityBackgroundTint(Tokens.Color.background)
-      .activitySystemActionForegroundColor(Tokens.Color.accent)
+      .activityBackgroundTint(Tokens.Color.canvas)
+      .activitySystemActionForegroundColor(Tokens.Color.plateBlue)
     } dynamicIsland: { context in
       DynamicIsland {
         DynamicIslandExpandedRegion(.leading) {
           VStack(alignment: .leading, spacing: Tokens.Spacing.hairline) {
             Text(statusLabel(for: context.state))
               .font(Tokens.Text.caption.weight(.semibold))
-              .foregroundStyle(Tokens.Color.accent)
+              .foregroundStyle(Tokens.Color.plateBlue)
             Text(context.attributes.metadata?.exerciseName ?? "Rest")
               .font(Tokens.Text.headline)
               .lineLimit(1)
@@ -72,7 +72,7 @@ struct RestTimerLiveActivity: Widget {
         DynamicIslandExpandedRegion(.trailing) {
           countdown(for: context.state)
             .font(Tokens.Text.readout)
-            .foregroundStyle(Tokens.Color.accent)
+            .foregroundStyle(Tokens.Color.plateBlue)
             .multilineTextAlignment(.trailing)
         }
         DynamicIslandExpandedRegion(.bottom) {
@@ -80,7 +80,7 @@ struct RestTimerLiveActivity: Widget {
             if let detail = detail(for: context.attributes.metadata) {
               Text(detail)
                 .font(Tokens.Text.caption)
-                .foregroundStyle(Tokens.Color.textSecondary)
+                .foregroundStyle(Tokens.Color.chalkDim)
                 .lineLimit(1)
             }
             progress(for: context.state, metadata: context.attributes.metadata)
@@ -88,18 +88,18 @@ struct RestTimerLiveActivity: Widget {
         }
       } compactLeading: {
         Image(systemName: "timer")
-          .foregroundStyle(Tokens.Color.accent)
+          .foregroundStyle(Tokens.Color.plateBlue)
       } compactTrailing: {
         countdown(for: context.state)
           .font(Tokens.Text.figure)
-          .foregroundStyle(Tokens.Color.accent)
+          .foregroundStyle(Tokens.Color.plateBlue)
           // A timer text otherwise claims all the width it is offered and pushes the island wide.
           .frame(width: 44)
       } minimal: {
         Image(systemName: "timer")
-          .foregroundStyle(Tokens.Color.accent)
+          .foregroundStyle(Tokens.Color.plateBlue)
       }
-      .keylineTint(Tokens.Color.accent)
+      .keylineTint(Tokens.Color.plateBlue)
     }
   }
 
@@ -168,7 +168,7 @@ struct RestTimerLiveActivity: Widget {
         EmptyView()
       }
       .progressViewStyle(.linear)
-      .tint(Tokens.Color.accent)
+      .tint(Tokens.Color.plateBlue)
       .accessibilityHidden(true)
     }
   }

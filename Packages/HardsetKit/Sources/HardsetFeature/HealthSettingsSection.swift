@@ -39,12 +39,12 @@ struct HealthSettingsSection: View {
     VStack(alignment: .leading, spacing: Tokens.Spacing.regular) {
       SectionLabel("Apple Health")
       Text("Optional. Send completed strength workouts and body mass to Apple Health, or copy recent body mass and workout summaries onto this iPhone. Imported workouts never become machine history. Access can be changed in Apple Health at any time.")
-        .font(Tokens.Text.provenance).foregroundStyle(Tokens.Color.textSecondary)
+        .font(Tokens.Text.provenance).foregroundStyle(Tokens.Color.chalkDim)
         .fixedSize(horizontal: false, vertical: true)
       if let latest = bridge.latestBodyMass { latestBodyMass(latest) }
       if bridge.connected {
         Text("Apple Health access has been requested. What Hardset may read or write is up to you in the Health app.")
-          .font(Tokens.Text.caption).foregroundStyle(Tokens.Color.textSecondary)
+          .font(Tokens.Text.caption).foregroundStyle(Tokens.Color.chalkDim)
           .fixedSize(horizontal: false, vertical: true)
         Button("Copy recent Health data to this iPhone") { Task { await bridge.readRecent() } }
           .buttonStyle(HardsetButtonStyle(.secondary)).disabled(bridge.isWorking)
@@ -55,19 +55,19 @@ struct HealthSettingsSection: View {
         // unmeasured placeholder grey.
         VStack(alignment: .leading, spacing: Tokens.Spacing.tight) {
           Text("Body mass (\(unit.abbreviation))")
-            .font(Tokens.Text.caption).foregroundStyle(Tokens.Color.textSecondary)
+            .font(Tokens.Text.caption).foregroundStyle(Tokens.Color.chalkDim)
             .accessibilityHidden(true)
           TextField(
             text: $bodyMass,
-            prompt: Text("Body mass (\(unit.abbreviation))").foregroundStyle(Tokens.Color.textSecondary)
+            prompt: Text("Body mass (\(unit.abbreviation))").foregroundStyle(Tokens.Color.chalkDim)
           ) {
             Text("Body mass")
           }
           .keyboardType(.decimalPad)
           .focused($bodyMassFocused)
           .font(Tokens.Text.label.monospacedDigit())
-          .foregroundStyle(Tokens.Color.textPrimary)
-          .tint(Tokens.Color.accent)
+          .foregroundStyle(Tokens.Color.chalk)
+          .tint(Tokens.Color.plateBlue)
           .padding(Tokens.Spacing.regular)
           .frame(minHeight: Tokens.minimumTapTarget)
           .hardsetEntryField(isFocused: bodyMassFocused)
@@ -83,7 +83,7 @@ struct HealthSettingsSection: View {
         }
         if showsRangeHint {
           Text(rangeText)
-            .font(Tokens.Text.caption).foregroundStyle(Tokens.Color.error)
+            .font(Tokens.Text.caption).foregroundStyle(Tokens.Color.plateRed)
             .fixedSize(horizontal: false, vertical: true)
         }
         Button("Save entered body mass to Health") { save() }
@@ -95,12 +95,12 @@ struct HealthSettingsSection: View {
       }
       if bridge.isWorking { ProgressView().accessibilityLabel("Working with Apple Health") }
       if let message = bridge.message {
-        Text(message).font(Tokens.Text.provenance).foregroundStyle(Tokens.Color.textSecondary)
+        Text(message).font(Tokens.Text.provenance).foregroundStyle(Tokens.Color.chalkDim)
           .fixedSize(horizontal: false, vertical: true)
       }
       if bridge.lastError != nil {
         Text("Apple Health could not complete this request. Your workouts remain saved in Hardset. Check Hardset's access in Settings or the Health app, then try again.")
-          .font(Tokens.Text.provenance).foregroundStyle(Tokens.Color.error)
+          .font(Tokens.Text.provenance).foregroundStyle(Tokens.Color.plateRed)
           .fixedSize(horizontal: false, vertical: true)
         if let settings = URL(string: UIApplication.openSettingsURLString) {
           Button("Open Settings") { openURL(settings) }
@@ -120,11 +120,11 @@ struct HealthSettingsSection: View {
     let value = unit.fromKilograms(latest.kilograms).formatted(.number.precision(.fractionLength(0...1)))
     return VStack(alignment: .leading, spacing: Tokens.Spacing.hairline) {
       Text("Latest body mass on this iPhone")
-        .font(Tokens.Text.caption).foregroundStyle(Tokens.Color.textSecondary)
+        .font(Tokens.Text.caption).foregroundStyle(Tokens.Color.chalkDim)
       Text("\(value) \(unit.abbreviation)")
-        .font(Tokens.Text.figure.monospacedDigit()).foregroundStyle(Tokens.Color.textPrimary)
+        .font(Tokens.Text.figure.monospacedDigit()).foregroundStyle(Tokens.Color.chalk)
       Text("\(latest.measuredAt.formatted(date: .abbreviated, time: .omitted)) · Apple Health")
-        .font(Tokens.Text.caption).foregroundStyle(Tokens.Color.textSecondary)
+        .font(Tokens.Text.caption).foregroundStyle(Tokens.Color.chalkDim)
     }
     .padding(Tokens.Spacing.loose)
     .frame(maxWidth: .infinity, alignment: .leading)

@@ -81,7 +81,7 @@ public struct WeeklyVolumeScreen: View {
           .padding(.bottom, Tokens.Spacing.block)
           .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .background(Tokens.Color.background)
+        .background(Tokens.Color.canvas)
       } else {
         // A sentence rather than a spinner: the read takes milliseconds, and a spinner would only
         // flash.
@@ -89,7 +89,7 @@ public struct WeeklyVolumeScreen: View {
           header(subtitle: "Sets per muscle")
           HardsetLoadingState("Reading the last 7 days…")
         }
-        .background(Tokens.Color.background)
+        .background(Tokens.Color.canvas)
       }
     }
     .safeAreaInset(edge: .bottom) {
@@ -97,7 +97,7 @@ public struct WeeklyVolumeScreen: View {
       if let window = snapshot.value, window.report.hardSets > 0 {
         Button("Deep muscle map") { isShowingMap = true }
           .buttonStyle(HardsetButtonStyle(.secondary))
-          .padding(Tokens.Spacing.loose).background(Tokens.Color.background)
+          .padding(Tokens.Spacing.loose).background(Tokens.Color.canvas)
       }
     }
     .sheet(isPresented: $isShowingMap) {
@@ -117,7 +117,7 @@ public struct WeeklyVolumeScreen: View {
             LifetimePurchaseSection(access: lifetime).padding(Tokens.Spacing.loose)
           }
         }
-        .background(Tokens.Color.background)
+        .background(Tokens.Color.canvas)
         .hardsetNavigationTitle("Deep muscle map")
         .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { isShowingMap = false } } }
         .task { await lifetime.load() }

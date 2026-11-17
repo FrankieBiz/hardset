@@ -86,7 +86,7 @@ public struct SettingsSheet: View {
       .scrollBounceBehavior(.basedOnSize)
       // The body-mass field's decimal pad has no return key; dragging the list puts it away.
       .scrollDismissesKeyboard(.interactively)
-      .background(Tokens.Color.background)
+      .background(Tokens.Color.canvas)
       .hardsetNavigationTitle("Settings")
       .toolbar {
         ToolbarItem(placement: .confirmationAction) {
@@ -112,10 +112,10 @@ public struct SettingsSheet: View {
         VStack(alignment: .leading, spacing: Tokens.Spacing.hairline) {
           Text("Weight")
             .font(Tokens.Text.headline)
-            .foregroundStyle(Tokens.Color.textPrimary)
+            .foregroundStyle(Tokens.Color.chalk)
           Text("How loads are shown, and what typed numbers are read as.")
             .font(Tokens.Text.caption)
-            .foregroundStyle(Tokens.Color.textSecondary)
+            .foregroundStyle(Tokens.Color.chalkDim)
             .fixedSize(horizontal: false, vertical: true)
         }
 
@@ -149,7 +149,7 @@ public struct SettingsSheet: View {
           + "see and changes nothing that was recorded."
       )
       .font(Tokens.Text.provenance)
-      .foregroundStyle(Tokens.Color.textSecondary)
+      .foregroundStyle(Tokens.Color.chalkDim)
       .fixedSize(horizontal: false, vertical: true)
       .padding(.horizontal, Tokens.Spacing.tight)
     }
@@ -170,12 +170,12 @@ public struct SettingsSheet: View {
       HStack(alignment: .firstTextBaseline, spacing: Tokens.Spacing.regular) {
         Image(systemName: sync.isSyncing ? "icloud" : "iphone")
           .font(Tokens.Text.headline)
-          .foregroundStyle(Tokens.Color.textSecondary)
+          .foregroundStyle(Tokens.Color.chalkDim)
           .accessibilityHidden(true)
         VStack(alignment: .leading, spacing: Tokens.Spacing.hairline) {
           Text(sync.isSyncing ? "iCloud sync is set up" : "Saved on this iPhone only")
             .font(Tokens.Text.headline)
-            .foregroundStyle(Tokens.Color.textPrimary)
+            .foregroundStyle(Tokens.Color.chalk)
           Text(
             sync.isSyncing
               ? "Workouts replicate to your private iCloud database while you are signed in "
@@ -187,7 +187,7 @@ public struct SettingsSheet: View {
                 + "copy to keep elsewhere; Hardset can't restore from it."
           )
           .font(Tokens.Text.caption)
-          .foregroundStyle(Tokens.Color.textSecondary)
+          .foregroundStyle(Tokens.Color.chalkDim)
           .fixedSize(horizontal: false, vertical: true)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -211,17 +211,17 @@ public struct SettingsSheet: View {
           VStack(alignment: .leading, spacing: Tokens.Spacing.hairline) {
             Text("Rename or archive")
               .font(Tokens.Text.headline)
-              .foregroundStyle(Tokens.Color.textPrimary)
+              .foregroundStyle(Tokens.Color.chalk)
             Text("Fix a misspelt name, or retire a gym or machine. Logged sets stay in your history.")
               .font(Tokens.Text.caption)
-              .foregroundStyle(Tokens.Color.textSecondary)
+              .foregroundStyle(Tokens.Color.chalkDim)
           }
           .multilineTextAlignment(.leading)
           .frame(maxWidth: .infinity, alignment: .leading)
 
           Image(systemName: "chevron.right")
             .font(Tokens.Text.caption.weight(.semibold))
-            .foregroundStyle(Tokens.Color.textSecondary)
+            .foregroundStyle(Tokens.Color.chalkDim)
             .accessibilityHidden(true)
         }
       }
@@ -240,17 +240,17 @@ public struct SettingsSheet: View {
           VStack(alignment: .leading, spacing: Tokens.Spacing.hairline) {
             Text("Show the tour again")
               .font(Tokens.Text.headline)
-              .foregroundStyle(Tokens.Color.textPrimary)
+              .foregroundStyle(Tokens.Color.chalk)
             Text("The welcome, the three pitches and the walk through the app.")
               .font(Tokens.Text.caption)
-              .foregroundStyle(Tokens.Color.textSecondary)
+              .foregroundStyle(Tokens.Color.chalkDim)
           }
           .multilineTextAlignment(.leading)
           .frame(maxWidth: .infinity, alignment: .leading)
 
           Image(systemName: "chevron.right")
             .font(Tokens.Text.caption.weight(.semibold))
-            .foregroundStyle(Tokens.Color.textSecondary)
+            .foregroundStyle(Tokens.Color.chalkDim)
             .accessibilityHidden(true)
         }
       }
@@ -267,7 +267,7 @@ public struct SettingsSheet: View {
 
       Text("The method behind each figure the app shows, and where it stops applying.")
         .font(Tokens.Text.provenance)
-        .foregroundStyle(Tokens.Color.textSecondary)
+        .foregroundStyle(Tokens.Color.chalkDim)
         .fixedSize(horizontal: false, vertical: true)
         .padding(.horizontal, Tokens.Spacing.tight)
         .padding(.bottom, Tokens.Spacing.tight)
@@ -288,17 +288,17 @@ public struct SettingsSheet: View {
           // The source's own title, so the row and the sheet it opens cannot name it differently.
           Text(item.source.title)
             .font(Tokens.Text.headline)
-            .foregroundStyle(Tokens.Color.textPrimary)
+            .foregroundStyle(Tokens.Color.chalk)
           Text(item.detail)
             .font(Tokens.Text.caption)
-            .foregroundStyle(Tokens.Color.textSecondary)
+            .foregroundStyle(Tokens.Color.chalkDim)
         }
         .multilineTextAlignment(.leading)
         .frame(maxWidth: .infinity, alignment: .leading)
 
         Image(systemName: "chevron.right")
           .font(Tokens.Text.caption.weight(.semibold))
-          .foregroundStyle(Tokens.Color.textSecondary)
+          .foregroundStyle(Tokens.Color.chalkDim)
           .accessibilityHidden(true)
       }
     }
@@ -369,11 +369,11 @@ private struct DisclosureRowButtonBody: View {
       .padding(.vertical, Tokens.Spacing.regular)
       .frame(maxWidth: .infinity, minHeight: Tokens.loggerTapTarget, alignment: .leading)
       .background(
-        configuration.isPressed ? Tokens.Color.surfacePressed : Tokens.Color.surface,
+        configuration.isPressed ? Tokens.Color.steelPressed : Tokens.Color.steel,
         in: shape
       )
       .overlay {
-        shape.strokeBorder(Tokens.Color.controlBorder, lineWidth: Tokens.Stroke.hairline)
+        shape.strokeBorder(Tokens.Color.controlEdge, lineWidth: Tokens.Stroke.hairline)
       }
       .contentShape(shape)
       .scaleEffect(configuration.isPressed && !reduceMotion ? 0.97 : 1)

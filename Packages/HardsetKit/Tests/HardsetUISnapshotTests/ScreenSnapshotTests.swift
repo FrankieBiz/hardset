@@ -30,11 +30,11 @@
         ])
       try await Snapshot.capture("receipt-dark-375", size: Snapshot.narrow) {
         ScrollView { WorkoutReceiptView(receipt: receipt, unit: .kilograms) }
-          .background(Tokens.Color.background)
+          .background(Tokens.Color.canvas)
       }
       try await Snapshot.capture("receipt-light-ax3", style: .light, typeSize: .accessibility3) {
         ScrollView { WorkoutReceiptView(receipt: receipt, unit: .pounds) }
-          .background(Tokens.Color.background)
+          .background(Tokens.Color.canvas)
       }
     }
 
@@ -48,10 +48,10 @@
       let report = MuscleVolumeReport(fractionalSets: [MuscleKey(.chest): 8, MuscleKey(.triceps): 4],
         hardSets: 10, unattributedHardSets: 2, setsTouchingGroup: [:])
       try await Snapshot.capture("muscle-map-dark-375", size: Snapshot.narrow) {
-        ScrollView { MuscleHeatmapView(report: report) }.background(Tokens.Color.background)
+        ScrollView { MuscleHeatmapView(report: report) }.background(Tokens.Color.canvas)
       }
       try await Snapshot.capture("muscle-map-light-ax3", style: .light, typeSize: .accessibility3) {
-        ScrollView { MuscleHeatmapView(report: report) }.background(Tokens.Color.background)
+        ScrollView { MuscleHeatmapView(report: report) }.background(Tokens.Color.canvas)
       }
     }
 
@@ -78,7 +78,7 @@
           )
           .padding(Tokens.Spacing.regular)
         }
-        .background(Tokens.Color.background)
+        .background(Tokens.Color.canvas)
       }
       try await Snapshot.capture("exercise-card-pounds-375", size: Snapshot.narrowShort) {
         ScrollView {
@@ -91,7 +91,7 @@
           )
           .padding(Tokens.Spacing.regular)
         }
-        .background(Tokens.Color.background)
+        .background(Tokens.Color.canvas)
       }
     }
 
@@ -112,7 +112,7 @@
           Spacer()
           Fixtures.restBar()
         }
-        .background(Tokens.Color.background)
+        .background(Tokens.Color.canvas)
       }
       // Paused shows static text, so this isolates the one-line layout from the live timer.
       try await Snapshot.capture("restbar-paused-440", size: CGSize(width: 440, height: 200)) {
@@ -120,7 +120,7 @@
           Spacer()
           Fixtures.restBar(paused: true)
         }
-        .background(Tokens.Color.background)
+        .background(Tokens.Color.canvas)
       }
     }
 
@@ -224,7 +224,7 @@
           action: {}
         )
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(Tokens.Color.background)
+        .background(Tokens.Color.canvas)
       }
       try await Snapshot.capture("startup-opening-light", style: .light) {
         HardsetLoadingState("Opening your workouts…")
@@ -306,7 +306,7 @@
       }
       .padding(Tokens.Spacing.loose)
       .frame(width: 402, alignment: .leading)
-      .background(Tokens.Color.background)
+      .background(Tokens.Color.canvas)
       .environment(\.colorScheme, .dark)
 
       let renderer = ImageRenderer(content: strip)
@@ -323,7 +323,7 @@
           Spacer()
           Fixtures.restBar()
         }
-        .background(Tokens.Color.background)
+        .background(Tokens.Color.canvas)
       }
     }
   }
@@ -565,7 +565,7 @@
         )
         .padding(Tokens.Spacing.loose)
       }
-      .background(Tokens.Color.background)
+      .background(Tokens.Color.canvas)
     }
 
     static func gallery() -> some View {
@@ -613,7 +613,7 @@
           .padding(.horizontal, Tokens.Spacing.loose)
         }
       }
-      .background(Tokens.Color.background)
+      .background(Tokens.Color.canvas)
     }
   }
 #endif

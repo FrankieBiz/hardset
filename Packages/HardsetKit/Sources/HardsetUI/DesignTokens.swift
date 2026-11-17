@@ -155,28 +155,6 @@ public enum Tokens {
       case .unevaluated: steelRaised
       }
     }
-
-    // MARK: - Transitional aliases (deleted in phase 7)
-
-    public static let background = canvas
-    public static let surface = steel
-    public static let surfaceRaised = steelRaised
-    public static let surfacePressed = steelPressed
-    public static let border = hairline
-    public static let controlBorder = controlEdge
-    public static let textPrimary = chalk
-    public static let textSecondary = chalkDim
-    public static let accent = plateBlue
-    public static let accentFill = plateBlueFill
-    public static let accentFillPressed = plateBlueFillPressed
-    public static let onAccent = onPlateBlue
-    public static let accentSurface = plateBlueSurface
-    public static let success = plateGreen
-    public static let successSurface = plateGreenSurface
-    public static let pr = plateYellow
-    public static let prSurface = plateYellowSurface
-    public static let error = plateRed
-    public static let errorSurface = plateRedSurface
   }
 
   /// A colour that follows the system appearance and the Increase Contrast setting, in sRGB.

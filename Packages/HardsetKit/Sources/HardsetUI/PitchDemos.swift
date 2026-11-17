@@ -41,8 +41,8 @@ public struct PitchPage<Element: View>: View {
 // MARK: - Pitch 1: one tap per set
 
 /// "One tap per set." A real set row for "Chest press", filled in from last time's 60 kg for 10.
-/// Tapping its check logs the set: the stamp, a `clank` then the success haptic the row plays, the
-/// row settling onto the logged tint, and the next row appearing with its own prefill.
+/// Tapping its check logs the set: the stamp, the `clank` and success haptics the row plays when a set
+/// is saved, the row settling onto the logged tint, and the next row appearing with its own prefill.
 public struct PitchSetRowPage: View {
   private let unit: WeightUnit
   private let isFirstLogged: Bool
@@ -70,6 +70,7 @@ public struct PitchSetRowDemo: View {
   @State private var first: SetEntryDraft
   @State private var second: SetEntryDraft
   @State private var firstLogged: Bool
+  @State private var secondLogged = false
   @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
   private static let lastTime = PriorSetRecord(
@@ -92,15 +93,15 @@ public struct PitchSetRowDemo: View {
         draft: $first, ordinal: 0, isLogged: firstLogged, isNext: !firstLogged, unit: unit,
         previous: Self.lastTime,
         onLog: {
-          ClankPlayer.shared.play()
           withAnimation(Tokens.Motion.adaptive(Tokens.Motion.reveal, reduceMotion: reduceMotion)) {
             firstLogged = true
           }
         })
       if firstLogged {
         SetRowView(
-          draft: $second, ordinal: 1, isNext: true, unit: unit, previous: Self.lastTime,
-          onLog: { ClankPlayer.shared.play() }
+          draft: $second, ordinal: 1, isLogged: secondLogged, isNext: !secondLogged, unit: unit,
+          previous: Self.lastTime,
+          onLog: { secondLogged = true }
         )
         .transition(.opacity)
       }

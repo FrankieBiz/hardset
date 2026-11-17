@@ -54,7 +54,7 @@ struct WorkoutReceiptScreen: View {
             systemImage: "exclamationmark.triangle", actionTitle: "Try again", actionSystemImage: "arrow.clockwise", action: { Task { await load() } })
         } else { HardsetLoadingState("Reading your workout…") }
       }
-      .background(Tokens.Color.background)
+      .background(Tokens.Color.canvas)
       .hardsetNavigationTitle("Workout receipt")
       .toolbar {
         ToolbarItem(placement: .confirmationAction) {
@@ -149,7 +149,7 @@ struct WorkoutReceiptScreen: View {
       SectionLabel("Load history", count: movements.count)
       Text("Each movement's heaviest load and estimated one-rep max over time, one line per machine.")
         .font(Tokens.Text.caption)
-        .foregroundStyle(Tokens.Color.textSecondary)
+        .foregroundStyle(Tokens.Color.chalkDim)
         .fixedSize(horizontal: false, vertical: true)
       ForEach(movements) { movement in
         NavigationLink {
@@ -159,16 +159,16 @@ struct WorkoutReceiptScreen: View {
           HStack(spacing: Tokens.Spacing.regular) {
             Image(systemName: "chart.xyaxis.line")
               .font(Tokens.Text.headline)
-              .foregroundStyle(Tokens.Color.accent)
+              .foregroundStyle(Tokens.Color.plateBlue)
               .accessibilityHidden(true)
             Text(movement.name)
               .font(Tokens.Text.label)
-              .foregroundStyle(Tokens.Color.textPrimary)
+              .foregroundStyle(Tokens.Color.chalk)
               .multilineTextAlignment(.leading)
               .frame(maxWidth: .infinity, alignment: .leading)
             Image(systemName: "chevron.right")
               .font(Tokens.Text.caption.weight(.semibold))
-              .foregroundStyle(Tokens.Color.textSecondary)
+              .foregroundStyle(Tokens.Color.chalkDim)
               .accessibilityHidden(true)
           }
           .padding(.horizontal, Tokens.Spacing.regular)
@@ -188,7 +188,7 @@ struct WorkoutReceiptScreen: View {
       SectionLabel("Correct this workout")
       Text("Saved sets are never edited. Remove a mis-logged set, or delete the whole workout if it was started by mistake.")
         .font(Tokens.Text.caption)
-        .foregroundStyle(Tokens.Color.textSecondary)
+        .foregroundStyle(Tokens.Color.chalkDim)
         .fixedSize(horizontal: false, vertical: true)
       if !receipt.lines.isEmpty {
         Button(action: toggleEditing) {
@@ -291,12 +291,12 @@ private struct ReceiptLinkRowBody: View {
     configuration.label
       .background {
         ZStack {
-          shape.fill(Tokens.Color.surface)
-          shape.fill(Tokens.Color.surfacePressed)
+          shape.fill(Tokens.Color.steel)
+          shape.fill(Tokens.Color.steelPressed)
             .opacity(configuration.isPressed ? 1 : 0)
         }
       }
-      .overlay(shape.strokeBorder(Tokens.Color.border, lineWidth: Tokens.Stroke.hairline))
+      .overlay(shape.strokeBorder(Tokens.Color.hairline, lineWidth: Tokens.Stroke.hairline))
       .contentShape(shape)
       .scaleEffect(configuration.isPressed && !reduceMotion ? 0.98 : 1)
       .animation(

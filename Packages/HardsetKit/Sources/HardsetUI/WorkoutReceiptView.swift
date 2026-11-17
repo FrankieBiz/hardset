@@ -28,18 +28,18 @@ public struct WorkoutReceiptView: View {
     VStack(alignment: .leading, spacing: Tokens.Spacing.section) {
       Text("HARDSET")
         .font(Tokens.Text.display)
-        .foregroundStyle(Tokens.Color.accent)
+        .foregroundStyle(Tokens.Color.plateBlue)
       VStack(alignment: .leading, spacing: Tokens.Spacing.tight) {
         Text(receipt.title.isEmpty ? "Workout receipt" : receipt.title)
           .font(Tokens.Text.title)
         Text(receipt.startedAt.formatted(date: .abbreviated, time: .shortened))
           .font(Tokens.Text.provenance)
-          .foregroundStyle(Tokens.Color.textSecondary)
+          .foregroundStyle(Tokens.Color.chalkDim)
       }
       if receipt.lines.isEmpty {
         Text("No sets were logged in this workout.")
           .font(Tokens.Text.provenance)
-          .foregroundStyle(Tokens.Color.textSecondary)
+          .foregroundStyle(Tokens.Color.chalkDim)
       }
       ForEach(receipt.blocks) { block in
         VStack(alignment: .leading, spacing: Tokens.Spacing.snug) {
@@ -47,26 +47,26 @@ public struct WorkoutReceiptView: View {
             Text(block.exerciseName).font(Tokens.Text.headline)
             Text(block.equipmentLabel)
               .font(Tokens.Text.provenance)
-              .foregroundStyle(Tokens.Color.textSecondary)
+              .foregroundStyle(Tokens.Color.chalkDim)
           }
           .accessibilityElement(children: .combine)
           .accessibilityAddTraits(.isHeader)
           ForEach(block.lines) { line in
             row(line)
           }
-          Divider().overlay(Tokens.Color.border)
+          Divider().overlay(Tokens.Color.hairline)
         }
       }
       Text("Recorded training log. Loads and equipment are user-entered, not independently verified. Records compare working sets of the same movement on the same recorded machine, or with no machine recorded, against history before this workout.")
         .font(Tokens.Text.caption)
-        .foregroundStyle(Tokens.Color.textSecondary)
+        .foregroundStyle(Tokens.Color.chalkDim)
       if !receipt.notes.isEmpty {
-        Text(receipt.notes).font(Tokens.Text.caption).foregroundStyle(Tokens.Color.textSecondary)
+        Text(receipt.notes).font(Tokens.Text.caption).foregroundStyle(Tokens.Color.chalkDim)
       }
     }
-    .foregroundStyle(Tokens.Color.textPrimary)
+    .foregroundStyle(Tokens.Color.chalk)
     .padding(Tokens.Spacing.section)
-    .background(Tokens.Color.background)
+    .background(Tokens.Color.canvas)
   }
 
   /// One set: its load and reps as figures, then anything it earned. The delete control, when
@@ -80,7 +80,7 @@ public struct WorkoutReceiptView: View {
         } label: {
           Image(systemName: "minus.circle.fill")
             .font(Tokens.Text.headline)
-            .foregroundStyle(Tokens.Color.error)
+            .foregroundStyle(Tokens.Color.plateRed)
             .frame(minWidth: Tokens.minimumTapTarget, minHeight: Tokens.minimumTapTarget)
             .contentShape(Rectangle())
         }
@@ -95,7 +95,7 @@ public struct WorkoutReceiptView: View {
           if line.isWarmup {
             Text("Warm-up")
               .font(Tokens.Text.caption)
-              .foregroundStyle(Tokens.Color.textSecondary)
+              .foregroundStyle(Tokens.Color.chalkDim)
           }
           Spacer(minLength: 0)
         }
@@ -104,7 +104,7 @@ public struct WorkoutReceiptView: View {
           // symbol, and in the record hue it read as a mixed certainty claim.
           Label(record.kind.label, systemImage: "trophy.fill")
             .font(Tokens.Text.provenance)
-            .foregroundStyle(Tokens.Color.pr)
+            .foregroundStyle(Tokens.Color.plateYellow)
         }
       }
       .accessibilityElement(children: .combine)

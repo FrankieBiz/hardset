@@ -86,7 +86,7 @@ public struct HistoryScreen: View {
           .padding(.bottom, Tokens.Spacing.block)
           .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .background(Tokens.Color.background)
+        .background(Tokens.Color.canvas)
       } else if let listing = snapshot.value {
         HistoryView(
           rows: listing.rows,
@@ -104,7 +104,7 @@ public struct HistoryScreen: View {
           header
           HardsetLoadingState("Reading your history…")
         }
-        .background(Tokens.Color.background)
+        .background(Tokens.Color.canvas)
       }
     }
     // Keyed on the page size and the reload token, so asking for older workouts, a correction and

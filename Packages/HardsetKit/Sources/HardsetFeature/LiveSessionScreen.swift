@@ -19,6 +19,9 @@ public struct LiveSessionScreen: View {
   @State private var coordinator: SessionCoordinator
   @State private var editingIncrement: MachineOption?
   @State private var restMetadata: RestMetadata?
+  /// The exercise-state id the running rest follows, so the rest bar can offer that movement's
+  /// next rest.
+  @State private var restExerciseStateID: UUID?
   @State private var isPickerPresented = false
   /// Why finishing or discarding failed while the session is still open, so the user is told
   /// rather than silently returned to a start screen while their workout is stranded. Cleared by
@@ -124,6 +127,10 @@ public struct LiveSessionScreen: View {
       records: recordsDismissed ? [] : coordinator.lastRecords,
       recordsExerciseName: recordsExerciseName,
       lastRest: lastRestByCard,
+      restExerciseID: restExerciseStateID,
+      onChooseNextRest: { exerciseStateID, duration in
+        rememberRest(duration, forExercise: exerciseStateID)
+      },
       onLogSet: { exerciseStateID, slot in
         logSet(slot, inExercise: exerciseStateID)
       },
@@ -370,7 +377,27 @@ public struct LiveSessionScreen: View {
     recordsDismissed = false
     if noteOutcome(coordinator.logSet(slotID: slot.id, inExercise: exerciseStateID)) {
       recordsExerciseName = coordinator.exercises.first { $0.id == exerciseStateID }?.exerciseName
+      startRememberedRest(afterSet: slot, inExercise: exerciseStateID)
     }
+  }
+
+  /// A working set that was just logged starts the rest the lifter last chose for this movement,
+  /// so the second tap after every set is gone. A movement they have never chosen a rest for is not
+  /// given one: it asks once, through the card's rest control, and remembers the answer. A warm-up
+  /// starts nothing, as before.
+  private func startRememberedRest(afterSet slot: SetSlot, inExercise exerciseStateID: UUID) {
+    guard !slot.isWarmup,
+      let exercise = coordinator.exercises.first(where: { $0.id == exerciseStateID }),
+      let duration = rememberedRest[exercise.exerciseID]
+    else { return }
+    startRest(duration, afterExercise: exerciseStateID)
+  }
+
+  /// Remembers a length the lifter picked on the rest bar for a movement's next rest.
+  private func rememberRest(_ duration: Duration, forExercise exerciseStateID: UUID) {
+    guard let exercise = coordinator.exercises.first(where: { $0.id == exerciseStateID }) else { return }
+    restPreferences.remember(duration, for: exercise.exerciseID)
+    rememberedRest[exercise.exerciseID] = duration
   }
 
   /// Starts a rest the lifter chose, and remembers it for this movement so it is one tap next
@@ -383,12 +410,14 @@ public struct LiveSessionScreen: View {
     let metadata = RestMetadata(exerciseName: exercise.exerciseName, setOrdinal: completed,
       plannedSets: exercise.workingSetCount, machineName: exercise.machineName)
     restMetadata = metadata
+    restExerciseStateID = exerciseStateID
     hooks.start(duration, metadata)
   }
 
   private func endRest() {
     hooks.cancel()
     restMetadata = nil
+    restExerciseStateID = nil
   }
 
   private func loadRememberedRest() {

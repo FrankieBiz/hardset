@@ -37,7 +37,7 @@ struct DataPortabilitySection: View {
       SectionLabel("Your data")
       Text("Logging, personal history and exports are always free.")
         .font(Tokens.Text.provenance)
-        .foregroundStyle(Tokens.Color.textSecondary)
+        .foregroundStyle(Tokens.Color.chalkDim)
       ForEach(DataTransferStore.Format.allCases, id: \.self) { format in
         Button("Export \(format.displayName)") { export(format) }
           .buttonStyle(HardsetButtonStyle(.secondary))
@@ -53,18 +53,18 @@ struct DataPortabilitySection: View {
       if let exportMessage {
         Text(exportMessage)
           .font(Tokens.Text.provenance)
-          .foregroundStyle(exportFailed ? Tokens.Color.error : Tokens.Color.textSecondary)
+          .foregroundStyle(exportFailed ? Tokens.Color.plateRed : Tokens.Color.chalkDim)
           .fixedSize(horizontal: false, vertical: true)
       }
       Text("CSV includes every logged set and its machine IDs. JSON and SQLite include all training and device-local tables, including Apple Health data you chose to copy. An export is a readable copy; Hardset can't restore from it. Share only where you intend.")
         .font(Tokens.Text.caption)
-        .foregroundStyle(Tokens.Color.textSecondary)
+        .foregroundStyle(Tokens.Color.chalkDim)
         .fixedSize(horizontal: false, vertical: true)
 
       SectionLabel("Move your workouts")
       Text("Choose an English Strong or Hevy CSV. Unitless Strong loads are read as \(unit.abbreviation), the unit chosen above, and dates without an offset use this device’s time zone. Timed, distance and unweighted sets have no load and reps to record, so they are listed and left out. Workouts already imported from the same app are skipped.")
         .font(Tokens.Text.provenance)
-        .foregroundStyle(Tokens.Color.textSecondary)
+        .foregroundStyle(Tokens.Color.chalkDim)
         .fixedSize(horizontal: false, vertical: true)
       Button("Choose workout CSV") { isChoosingFile = true }
         .buttonStyle(HardsetButtonStyle(.secondary))
@@ -74,7 +74,7 @@ struct DataPortabilitySection: View {
       if let importMessage {
         Text(importMessage)
           .font(Tokens.Text.provenance)
-          .foregroundStyle(importFailed ? Tokens.Color.error : Tokens.Color.textSecondary)
+          .foregroundStyle(importFailed ? Tokens.Color.plateRed : Tokens.Color.chalkDim)
           .fixedSize(horizontal: false, vertical: true)
       }
     }
@@ -107,12 +107,12 @@ struct DataPortabilitySection: View {
     VStack(alignment: .leading, spacing: Tokens.Spacing.regular) {
       Text("\(preview.sessions.count) workouts · \(preview.setCount) sets from \(preview.source)")
         .font(Tokens.Text.headline.monospacedDigit())
-        .foregroundStyle(Tokens.Color.textPrimary)
+        .foregroundStyle(Tokens.Color.chalk)
       if let sample = preview.sessions.first?.sets.first {
         // One converted set, so the magnitude can be checked before anything is saved.
         Text("First set: \(sample.exercise) · \(Self.load(sample.weightKg, in: unit)) × \(sample.reps)")
           .font(Tokens.Text.provenance.monospacedDigit())
-          .foregroundStyle(Tokens.Color.textPrimary)
+          .foregroundStyle(Tokens.Color.chalk)
           .fixedSize(horizontal: false, vertical: true)
       }
       if skippedWorkouts > 0 {
@@ -120,20 +120,20 @@ struct DataPortabilitySection: View {
           ? "Every workout in this file was already imported from \(preview.source). There is nothing new to import."
           : "\(skippedWorkouts) of these workouts were already imported from \(preview.source) and will be skipped.")
           .font(Tokens.Text.provenance)
-          .foregroundStyle(Tokens.Color.textSecondary)
+          .foregroundStyle(Tokens.Color.chalkDim)
           .fixedSize(horizontal: false, vertical: true)
       }
       if !preview.skipped.isEmpty {
         Text(Self.skippedSummary(preview.skipped))
           .font(Tokens.Text.provenance)
-          .foregroundStyle(Tokens.Color.textSecondary)
+          .foregroundStyle(Tokens.Color.chalkDim)
           .fixedSize(horizontal: false, vertical: true)
       }
-      Text(preview.interpretation).font(Tokens.Text.provenance).foregroundStyle(Tokens.Color.textSecondary)
+      Text(preview.interpretation).font(Tokens.Text.provenance).foregroundStyle(Tokens.Color.chalkDim)
         .fixedSize(horizontal: false, vertical: true)
       Text("Imported • Unevaluated Machine. Imported movements stay separate from your machine-specific history. Set times are unavailable and will be grouped at workout start. A fingerprint of the file is kept on this device so the same file is never imported twice.")
         .font(Tokens.Text.provenance)
-        .foregroundStyle(Tokens.Color.textSecondary)
+        .foregroundStyle(Tokens.Color.chalkDim)
         .fixedSize(horizontal: false, vertical: true)
       CertaintyBadge(level: .unevaluated, methodology: "The CSV contains no physical machine identity. No machine or muscle attribution is inferred.")
       if newWorkouts > 0 {

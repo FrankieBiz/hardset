@@ -32,6 +32,8 @@ public struct SessionView: View {
   private let records: [PersonalRecord]
   private let recordsExerciseName: String?
   private let lastRest: [UUID: Duration]
+  private let restExerciseID: UUID?
+  private let onChooseNextRest: ((UUID, Duration) -> Void)?
   private let onLogSet: (UUID, SetSlot) -> Void
   private let onStartRest: ((UUID, Duration) -> Void)?
   private let onAdjustRest: (Duration) -> Void
@@ -107,6 +109,10 @@ public struct SessionView: View {
   ///   does: a haptic and an announcement when the deadline, not the lifter, ends it.
   /// - Parameter records: Records from the set just logged, named after `recordsExerciseName`.
   /// - Parameter lastRest: The rest the lifter last chose per movement, keyed by exercise-state id.
+  /// - Parameter restExerciseID: The exercise-state id the running rest follows, so the rest bar can
+  ///   offer the length of that movement's next rest.
+  /// - Parameter onChooseNextRest: Offers the next rest's length on the rest bar and is called with
+  ///   the movement and the length the lifter picks.
   /// - Parameter onShowSettings: Puts a settings button in the header.
   /// - Parameter onChangeGym: Makes the header's gym a chip that sets or changes it.
   /// - Parameter onUndoSet: Returns a logged set to unlogged. `true` when it was undone.
@@ -129,6 +135,8 @@ public struct SessionView: View {
     records: [PersonalRecord] = [],
     recordsExerciseName: String? = nil,
     lastRest: [UUID: Duration] = [:],
+    restExerciseID: UUID? = nil,
+    onChooseNextRest: ((UUID, Duration) -> Void)? = nil,
     onLogSet: @escaping (UUID, SetSlot) -> Void,
     onStartRest: ((UUID, Duration) -> Void)? = nil,
     onAdjustRest: @escaping (Duration) -> Void = { _ in },
@@ -164,6 +172,8 @@ public struct SessionView: View {
     self.records = records
     self.recordsExerciseName = recordsExerciseName
     self.lastRest = lastRest
+    self.restExerciseID = restExerciseID
+    self.onChooseNextRest = onChooseNextRest
     self.onLogSet = onLogSet
     self.onStartRest = onStartRest
     self.onAdjustRest = onAdjustRest
@@ -246,7 +256,7 @@ public struct SessionView: View {
           )
         }
       }
-      .background(Tokens.Color.background)
+      .background(Tokens.Color.canvas)
       // The inset measures what it holds and reserves exactly its height, so the last row is never
       // trapped underneath it. A guessed 72 pt allowance used to sit on top of this and was wrong as
       // soon as the bar wrapped onto two lines.
@@ -415,16 +425,16 @@ public struct SessionView: View {
         if isSet {
           Image(systemName: "chevron.down")
             .font(Tokens.Text.caption.weight(.semibold))
-            .foregroundStyle(Tokens.Color.textSecondary)
+            .foregroundStyle(Tokens.Color.chalkDim)
         }
       }
-      .foregroundStyle(isSet ? Tokens.Color.textPrimary : Tokens.Color.accent)
+      .foregroundStyle(isSet ? Tokens.Color.chalk : Tokens.Color.plateBlue)
       .padding(.horizontal, Tokens.Spacing.regular)
       .padding(.vertical, Tokens.Spacing.snug)
-      .background(isSet ? Tokens.Color.surfaceRaised : Tokens.Color.accentSurface, in: Capsule())
+      .background(isSet ? Tokens.Color.steelRaised : Tokens.Color.plateBlueSurface, in: Capsule())
       .overlay(
         Capsule().strokeBorder(
-          isSet ? Tokens.Color.controlBorder : Tokens.Color.accent,
+          isSet ? Tokens.Color.controlEdge : Tokens.Color.plateBlue,
           lineWidth: Tokens.Stroke.hairline
         )
       )
@@ -462,7 +472,7 @@ public struct SessionView: View {
             .foregroundStyle(Tokens.Color.warning)
           Text(staleDetail)
             .font(Tokens.Text.provenance)
-            .foregroundStyle(Tokens.Color.textPrimary)
+            .foregroundStyle(Tokens.Color.chalk)
             .fixedSize(horizontal: false, vertical: true)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -585,12 +595,12 @@ public struct SessionView: View {
     return Button(action: action) {
       Label("Add movement", systemImage: "plus")
         .font(Tokens.Text.headline)
-        .foregroundStyle(Tokens.Color.accent)
+        .foregroundStyle(Tokens.Color.plateBlue)
         .frame(maxWidth: .infinity, minHeight: Tokens.loggerTapTarget)
         .contentShape(shape)
         .overlay(
           shape.strokeBorder(
-            Tokens.Color.controlBorder,
+            Tokens.Color.controlEdge,
             style: StrokeStyle(lineWidth: Tokens.Stroke.hairline, dash: [5, 4])
           )
         )
@@ -631,6 +641,9 @@ public struct SessionView: View {
         RestBarView(
           state: restState,
           metadata: restMetadata,
+          nextRest: restExerciseID.flatMap { lastRest[$0] },
+          restChoices: ExerciseSectionView.restChoices,
+          onChooseNextRest: restChooser,
           onAdjust: { delta in
             restControlTaps += 1
             onAdjustRest(delta)
@@ -648,6 +661,12 @@ public struct SessionView: View {
       }
       .padding(.bottom, isRestIdle && hasFeedback ? Tokens.Spacing.snug : 0)
     }
+  }
+
+  /// The rest bar's chooser, when the caller offers one and a movement's rest is running.
+  private var restChooser: ((Duration) -> Void)? {
+    guard let onChooseNextRest, let restExerciseID else { return nil }
+    return { duration in onChooseNextRest(restExerciseID, duration) }
   }
 
   /// How a message arrives: it fades in where it lands, on `Motion.reveal`, while everything it
@@ -711,11 +730,11 @@ public struct SessionView: View {
       HStack(alignment: .firstTextBaseline, spacing: Tokens.Spacing.regular) {
         Image(systemName: "trophy.fill")
           .font(Tokens.Text.headline)
-          .foregroundStyle(Tokens.Color.pr)
+          .foregroundStyle(Tokens.Color.plateYellow)
           .accessibilityHidden(true)
         Text(recordsTitle)
           .font(Tokens.Text.headline)
-          .foregroundStyle(Tokens.Color.pr)
+          .foregroundStyle(Tokens.Color.plateYellow)
           .frame(maxWidth: .infinity, alignment: .leading)
         if let onDismissRecords {
           DismissGlyphButton(action: onDismissRecords)
@@ -732,7 +751,7 @@ public struct SessionView: View {
         VStack(alignment: .leading, spacing: Tokens.Spacing.tight) {
           Text("\(record.kind.label): \(Self.describe(record, unit: unit))")
             .font(Tokens.Text.provenance)
-            .foregroundStyle(Tokens.Color.textPrimary)
+            .foregroundStyle(Tokens.Color.chalk)
             .fixedSize(horizontal: false, vertical: true)
           if record.kind == .estimatedOneRepMax {
             // Graded by the estimate itself, by rep range, as the receipt and the load chart
@@ -749,10 +768,10 @@ public struct SessionView: View {
       }
     }
     .padding(Tokens.Spacing.regular)
-    .background(Tokens.Color.prSurface, in: RoundedRectangle(cornerRadius: Tokens.Radius.card))
+    .background(Tokens.Color.plateYellowSurface, in: RoundedRectangle(cornerRadius: Tokens.Radius.card))
     .overlay(
       RoundedRectangle(cornerRadius: Tokens.Radius.card)
-        .strokeBorder(Tokens.Color.pr.opacity(0.35), lineWidth: Tokens.Stroke.hairline)
+        .strokeBorder(Tokens.Color.plateYellow.opacity(0.35), lineWidth: Tokens.Stroke.hairline)
     )
   }
 
@@ -825,7 +844,7 @@ public struct SessionView: View {
         if volume.isEmpty {
           Text("No sets logged yet")
             .font(Tokens.Text.label)
-            .foregroundStyle(Tokens.Color.textSecondary)
+            .foregroundStyle(Tokens.Color.chalkDim)
         } else {
           StatLedger(ledgerItems(volume))
         }
@@ -855,7 +874,7 @@ public struct SessionView: View {
       VStack(alignment: .leading, spacing: Tokens.Spacing.regular) {
         Text("Finish this workout? Sets you have not logged are not saved.")
           .font(Tokens.Text.provenance)
-          .foregroundStyle(Tokens.Color.textPrimary)
+          .foregroundStyle(Tokens.Color.chalk)
           .fixedSize(horizontal: false, vertical: true)
           .accessibilityFocused($isFinishQuestionFocused)
         if let lastLoggedAt, let onFinishAt, offersFinishAtLastSet(lastLoggedAt) {
@@ -1126,7 +1145,7 @@ public struct SessionView: View {
       }
     }
     .scrollBounceBehavior(.basedOnSize)
-    .background(Tokens.Color.surface)
+    .background(Tokens.Color.steel)
     // A fresh keypad scrolls its row clear of itself, by the least amount, and only if the row
     // would be covered. Retargeting does not scroll: a row tapped while the keypad is up was
     // already in view.
@@ -1136,7 +1155,7 @@ public struct SessionView: View {
       }
     }
     .presentationDetents([.height(padHeight)])
-    .presentationBackground(Tokens.Color.surface)
+    .presentationBackground(Tokens.Color.steel)
     .presentationDragIndicator(.hidden)
     // The rows stay visible and tappable behind the pad, so this reads as a keyboard replacement
     // rather than a modal that interrupts the set: another row's field retargets it, and the

@@ -80,7 +80,7 @@ private struct StartupView: View {
           // to report when retrying failed the same way.
           Text(verbatim: String(describing: error))
             .font(Tokens.Text.provenance)
-            .foregroundStyle(Tokens.Color.textSecondary)
+            .foregroundStyle(Tokens.Color.chalkDim)
             .multilineTextAlignment(.center)
             .lineLimit(6)
             .textSelection(.enabled)
@@ -88,7 +88,7 @@ private struct StartupView: View {
             .accessibilityLabel("Error details: \(String(describing: error))")
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(Tokens.Color.background)
+        .background(Tokens.Color.canvas)
       } else {
         // A quiet line on the launch canvas rather than a spinner: opening usually takes a moment,
         // and the screen should not flash a busy indicator on every launch.

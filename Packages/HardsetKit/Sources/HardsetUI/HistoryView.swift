@@ -101,7 +101,7 @@ public struct HistoryView: View {
         .padding(.bottom, Tokens.Spacing.block)
         .frame(maxWidth: .infinity, alignment: .leading)
       }
-      .background(Tokens.Color.background)
+      .background(Tokens.Color.canvas)
     } else {
       ScrollView {
         LazyVStack(alignment: .leading, spacing: Tokens.Spacing.snug, pinnedViews: [.sectionHeaders]) {
@@ -121,7 +121,7 @@ public struct HistoryView: View {
                 .padding(.horizontal, Tokens.Spacing.loose)
                 .padding(.top, Tokens.Spacing.loose)
                 .padding(.bottom, Tokens.Spacing.snug)
-                .background(Tokens.Color.background)
+                .background(Tokens.Color.canvas)
             }
           }
           if let onShowOlder {
@@ -140,7 +140,7 @@ public struct HistoryView: View {
         .padding(.top, title == nil ? Tokens.Spacing.snug : 0)
         .padding(.bottom, Tokens.Spacing.block)
       }
-      .background(Tokens.Color.background)
+      .background(Tokens.Color.canvas)
     }
   }
 
@@ -283,7 +283,7 @@ private struct HistoryRowContent: View {
       if showsDisclosure {
         Image(systemName: "chevron.right")
           .font(Tokens.Text.caption.weight(.semibold))
-          .foregroundStyle(Tokens.Color.textSecondary)
+          .foregroundStyle(Tokens.Color.chalkDim)
           .accessibilityHidden(true)
       }
     }
@@ -311,13 +311,13 @@ private struct HistoryRowContent: View {
   private var dayFigure: some View {
     Text(row.date, format: .dateTime.day(.twoDigits))
       .font(Tokens.Text.setEntry)
-      .foregroundStyle(Tokens.Color.textPrimary)
+      .foregroundStyle(Tokens.Color.chalk)
   }
 
   private var weekday: some View {
     Text(row.date, format: .dateTime.weekday(.abbreviated))
       .font(Tokens.Text.caption)
-      .foregroundStyle(Tokens.Color.textSecondary)
+      .foregroundStyle(Tokens.Color.chalkDim)
   }
 
   private func details(isLarge: Bool) -> some View {
@@ -338,7 +338,7 @@ private struct HistoryRowContent: View {
       if !row.exerciseNames.isEmpty {
         Text(row.exerciseNames.joined(separator: " · "))
           .font(Tokens.Text.caption)
-          .foregroundStyle(Tokens.Color.textSecondary)
+          .foregroundStyle(Tokens.Color.chalkDim)
           .lineLimit(2)
       }
     }
@@ -350,7 +350,7 @@ private struct HistoryRowContent: View {
   private var titleText: some View {
     Text(row.title.isEmpty ? "Workout" : row.title)
       .font(Tokens.Text.headline)
-      .foregroundStyle(Tokens.Color.textPrimary)
+      .foregroundStyle(Tokens.Color.chalk)
       .lineLimit(2)
   }
 
@@ -361,7 +361,7 @@ private struct HistoryRowContent: View {
     if volume.isEmpty {
       Text("No sets logged")
         .font(Tokens.Text.caption)
-        .foregroundStyle(Tokens.Color.textSecondary)
+        .foregroundStyle(Tokens.Color.chalkDim)
     } else {
       FlowLayout(spacing: Tokens.Spacing.regular) {
         figure(volume.workingSets.formatted(), volume.workingSets == 1 ? "set" : "sets")
@@ -385,10 +385,10 @@ private struct HistoryRowContent: View {
       Text(value)
         .font(Tokens.Text.figure)
         .monospacedDigit()
-        .foregroundStyle(Tokens.Color.textPrimary)
+        .foregroundStyle(Tokens.Color.chalk)
       Text(label)
         .font(Tokens.Text.caption)
-        .foregroundStyle(Tokens.Color.textSecondary)
+        .foregroundStyle(Tokens.Color.chalkDim)
     }
   }
 
@@ -408,7 +408,7 @@ private struct HistoryRowContent: View {
     } else if let duration = row.duration {
       Text(duration.clockString)
         .font(Tokens.Text.figure)
-        .foregroundStyle(Tokens.Color.textSecondary)
+        .foregroundStyle(Tokens.Color.chalkDim)
     }
   }
 }
@@ -457,12 +457,12 @@ private struct HistoryRowButtonBody: View {
     configuration.label
       .background {
         ZStack {
-          shape.fill(Tokens.Color.surface)
-          shape.fill(Tokens.Color.surfacePressed)
+          shape.fill(Tokens.Color.steel)
+          shape.fill(Tokens.Color.steelPressed)
             .opacity(configuration.isPressed ? 1 : 0)
         }
       }
-      .overlay(shape.strokeBorder(Tokens.Color.border, lineWidth: Tokens.Stroke.hairline))
+      .overlay(shape.strokeBorder(Tokens.Color.hairline, lineWidth: Tokens.Stroke.hairline))
       .contentShape(shape)
       .scaleEffect(configuration.isPressed && !reduceMotion ? 0.98 : 1)
       .animation(

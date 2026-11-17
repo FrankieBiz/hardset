@@ -8,21 +8,21 @@ struct LifetimePurchaseSection: View {
     VStack(alignment: .leading, spacing: Tokens.Spacing.regular) {
       SectionLabel("Hardset Lifetime")
       Text("An optional one-time purchase for the deep muscle map. Your workouts, personal history, CSV import, and CSV, JSON and SQLite exports stay free. Existing gym and machine logging stays available.")
-        .font(Tokens.Text.provenance).foregroundStyle(Tokens.Color.textSecondary)
+        .font(Tokens.Text.provenance).foregroundStyle(Tokens.Color.chalkDim)
         .fixedSize(horizontal: false, vertical: true)
       if access.isDevelopmentBuild {
         LifetimeDevelopmentNote(access: access)
       } else if access.isUnlocked {
         Label("Lifetime access active", systemImage: "checkmark.seal")
-          .font(Tokens.Text.headline).foregroundStyle(Tokens.Color.success)
+          .font(Tokens.Text.headline).foregroundStyle(Tokens.Color.plateGreen)
       } else if let product = access.product {
         Button("Unlock Lifetime · \(product.displayPrice)") { Task { await access.purchase() } }
           .buttonStyle(HardsetButtonStyle()).disabled(access.isWorking)
-        Text("One purchase. No subscription.").font(Tokens.Text.caption).foregroundStyle(Tokens.Color.textSecondary)
+        Text("One purchase. No subscription.").font(Tokens.Text.caption).foregroundStyle(Tokens.Color.chalkDim)
       }
       if access.isWorking { ProgressView().accessibilityLabel("Checking the lifetime purchase") }
       if let message = access.message {
-        Text(message).font(Tokens.Text.provenance).foregroundStyle(Tokens.Color.textSecondary)
+        Text(message).font(Tokens.Text.provenance).foregroundStyle(Tokens.Color.chalkDim)
           .fixedSize(horizontal: false, vertical: true)
       }
       if !access.isDevelopmentBuild && !access.isUnlocked {
@@ -54,7 +54,7 @@ struct LifetimeDevelopmentNote: View {
         Image(systemName: "hammer")
       }
       .font(Tokens.Text.caption)
-      .foregroundStyle(Tokens.Color.textSecondary)
+      .foregroundStyle(Tokens.Color.chalkDim)
       .accessibilityElement(children: .combine)
     }
   }

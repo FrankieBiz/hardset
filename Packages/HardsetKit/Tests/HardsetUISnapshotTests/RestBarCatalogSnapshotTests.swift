@@ -21,7 +21,8 @@
     private static let referenceDate = Date(timeIntervalSince1970: 1_793_000_000)
 
     private static func bar(
-      width: CGFloat, withMetadata: Bool = true, state: RestTimerState? = nil
+      width: CGFloat, withMetadata: Bool = true, state: RestTimerState? = nil,
+      chooser: Bool = false, isChoosing: Bool = false
     ) -> some View {
       VStack {
         Spacer()
@@ -29,6 +30,10 @@
           state: state ?? .paused(remaining: .seconds(96)),
           metadata: withMetadata ? metadata : nil,
           referenceDate: referenceDate,
+          nextRest: chooser ? .seconds(90) : nil,
+          restChoices: chooser ? [.seconds(60), .seconds(90), .seconds(120), .seconds(180)] : [],
+          onChooseNextRest: chooser ? { _ in } : nil,
+          isChoosingInitially: isChoosing,
           onAdjust: { _ in },
           onPauseResume: {},
           onSkip: {}
@@ -54,6 +59,24 @@
       try await Snapshot.capture("kit-restbar-paused-402-plain-dark", size: size) {
         Self.bar(width: 402, withMetadata: false)
       }
+    }
+
+    /// The next-rest chooser, closed and open, over the same paused bar.
+    @Test func nextRestChooser() async throws {
+      let size = CGSize(width: 402, height: 340)
+      try await Snapshot.capture("kit-restbar-chooser-closed-dark", size: size) {
+        Self.bar(width: 402, chooser: true)
+      }
+      try await Snapshot.capture("kit-restbar-chooser-open-dark", size: size) {
+        Self.bar(width: 402, chooser: true, isChoosing: true)
+      }
+      try await Snapshot.capture("kit-restbar-chooser-open-light", size: size, style: .light) {
+        Self.bar(width: 402, chooser: true, isChoosing: true)
+      }
+      try await Snapshot.capture(
+        "kit-restbar-chooser-open-dark-ax3", size: CGSize(width: 402, height: 760),
+        typeSize: .accessibility3
+      ) { Self.bar(width: 402, chooser: true, isChoosing: true) }
     }
 
     @Test func pausedAtProMaxWidth() async throws {

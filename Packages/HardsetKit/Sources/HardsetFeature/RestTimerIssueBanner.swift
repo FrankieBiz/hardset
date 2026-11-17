@@ -43,7 +43,7 @@ struct RestTimerIssueBanner: View {
       }
     }
     .padding(Tokens.Spacing.regular)
-    .background(Tokens.Color.background)
+    .background(Tokens.Color.canvas)
   }
 
   private var details: some View {
@@ -68,7 +68,7 @@ struct RestTimerIssueBanner: View {
           .frame(maxWidth: .infinity, alignment: .leading)
         Image(systemName: "chevron.right")
           .font(Tokens.Text.caption.weight(.semibold))
-          .foregroundStyle(Tokens.Color.textSecondary)
+          .foregroundStyle(Tokens.Color.chalkDim)
           .accessibilityHidden(true)
       }
     }
@@ -81,7 +81,7 @@ struct RestTimerIssueBanner: View {
             .padding(Tokens.Spacing.loose)
         }
         .scrollBounceBehavior(.basedOnSize)
-        .background(Tokens.Color.background)
+        .background(Tokens.Color.canvas)
         .hardsetNavigationTitle("Rest timer")
         .toolbar {
           ToolbarItem(placement: .confirmationAction) {
@@ -112,7 +112,7 @@ struct RestTimerIssueBanner: View {
   private var hue: Color {
     switch issue {
     case .alarmsDenied: Tokens.Color.warning
-    case .unavailable, .recoveryFailed: Tokens.Color.error
+    case .unavailable, .recoveryFailed: Tokens.Color.plateRed
     }
   }
 
@@ -193,6 +193,6 @@ struct RestTimerIssueBanner: View {
       RestTimerIssueBanner(issue: .unavailable, retry: {})
       RestTimerIssueBanner(issue: .recoveryFailed, retry: {}, reset: {})
     }
-    .background(Tokens.Color.background)
+    .background(Tokens.Color.canvas)
   }
 #endif

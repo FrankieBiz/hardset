@@ -406,6 +406,11 @@ public struct SetRowView: View {
     .accessibilityLabel(isLogged ? "Logged" : "Log set")
     // Haptics confirm the tap landed without the user looking at the phone.
     .sensoryFeedback(Tokens.Haptic.success, trigger: isLogged) { !$0 && $1 }
+    // The weight of the plate going down, as the set is saved: the clank under the success. Only on
+    // the saved transition, so a failed write, which never marks the row logged, stays silent.
+    .onChange(of: isLogged) { old, new in
+      if !old && new { ClankPlayer.shared.play() }
+    }
     // The tour points at the check of the first set still to log.
     .tourTarget(.logCheck, isActive: isNext && !isLogged)
   }

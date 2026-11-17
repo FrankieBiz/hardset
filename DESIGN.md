@@ -72,8 +72,8 @@ into alphas.
 The earlier names (`background`, `surface`, `surfaceRaised`, `surfacePressed`, `border`,
 `controlBorder`, `textPrimary`, `textSecondary`, `accent`, `accentFill`, `accentFillPressed`,
 `onAccent`, `accentSurface`, `success`, `successSurface`, `pr`, `prSurface`, `error`,
-`errorSurface`) remain as aliases of the tokens above during the rebuild and are deleted in its
-final phase.
+`errorSurface`) were aliases of the tokens above while the screens were rebuilt, and are deleted:
+every screen names the plate tokens, so a stray use of an old name no longer compiles.
 
 Increased Contrast swaps `canvas`, `steel` and `steelRaised` to pure white (light) or black (dark)
 and `chalk` to pure black or white. It strengthens `steelPressed` (`#E6E6EA` / `#26262B`),
@@ -154,9 +154,11 @@ Haptics follow the same restraint, and each has a name in `Tokens.Haptic`: `clan
 `error`, `selection` and `warning`. `clank` is the weighty tap of a plate meeting a bar: a CoreHaptics
 pattern (a transient at intensity 1.0 and sharpness 0.6, then a 40 ms low rumble) played by
 `ClankPlayer`, which falls back to the heavy system impact where CoreHaptics is unavailable, and
-which `Tokens.Haptic.clank` names for a view that plays it through `.sensoryFeedback`. `success`
-belongs to the log tap alone. `error` follows every failed command, a repeated failure included.
-`selection` answers the row's machine step and the rest bar's −15, +15, pause and skip. `warning`
+which `Tokens.Haptic.clank` names for a view that plays it through `.sensoryFeedback`. Saving a set
+plays `clank` under `success` (the row plays both when it is marked logged, so a failed write plays
+neither), and the Welcome bar's plate landing is the only other place `clank` is used. `error`
+follows every failed command, a repeated failure included. `selection` answers the row's machine
+step and the rest bar's −15, +15, pause, skip and next-rest choices. `warning`
 marks a rest that ran out on its own when no alarm can mark it (alarms denied or unavailable).
 Selection rows, the unit switch and pickers stay silent.
 
@@ -360,9 +362,14 @@ components rather than native spinners.
   exists. They add/subtract canonical kilograms and convert only the label. Each
   button uses the existing56pt logger style and selection haptic. Blank loads stay
   blank, saved loads are read-only, and Reduce Motion uses the existing button style.
-- Rest starts only from an explicit duration choice. Durable absolute-date state is
-  separate from OS scheduling; a visible retry banner reports either persistence or
-  scheduling failure. No countdown state is stored or animated by a custom loop.
+- Rest starts from a duration the lifter chose: logging a working set starts the rest last
+  chosen for that movement, and a movement with none asks once through the card's rest control and
+  remembers the answer. The app never starts a rest of a length nobody chose. Durable absolute-date
+  state is separate from OS scheduling; a visible retry banner reports either persistence or
+  scheduling failure. No countdown state is stored or animated by a custom loop. The rest bar's
+  "Next rest" row, and a drag up on the bar, open a row of lengths for the movement's next rest; it
+  appears by an insertion-only opacity reveal like any message, because a height that animated would
+  slide the set rows above it.
 - Settings adds file import/export, optional Apple Health and a StoreKit Lifetime
   section. Reuse existing spacing, typography, buttons and semantic error colours.
   Import previews state unknown equipment and unit/time-zone interpretation before

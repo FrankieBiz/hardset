@@ -31,7 +31,7 @@ public struct MuscleHeatmapView: View {
   public var body: some View {
     VStack(alignment: .leading, spacing: Tokens.Spacing.section) {
       Text("\(windowLabel) · Comparative fractional sets. Bars compare volume with your most-credited muscle; it does not rate whether you trained enough.")
-        .font(Tokens.Text.provenance).foregroundStyle(Tokens.Color.textSecondary)
+        .font(Tokens.Text.provenance).foregroundStyle(Tokens.Color.chalkDim)
       CertaintyBadge(level: MethodologySheet.level(for: certainty), methodology: SetCounting.source.methodology, citation: SetCounting.source.citation)
       if report.isLowerBound {
         HardsetBanner(.caveat, message: "\(report.unattributedHardSets) working sets have unknown attribution. All muscle counts are lower bounds.")
@@ -44,27 +44,27 @@ public struct MuscleHeatmapView: View {
               // No catalogue movement credits it directly, so a zero here is the catalogue's gap,
               // not the lifter's.
               Text("No catalogue movement credits this yet")
-                .font(Tokens.Text.caption).foregroundStyle(Tokens.Color.textSecondary)
+                .font(Tokens.Text.caption).foregroundStyle(Tokens.Color.chalkDim)
             } else {
               Text("\(report.isLowerBound ? "≥ " : "")\(report.sets(for: muscle).formatted(.number.precision(.fractionLength(0...1)))) fractional sets")
                 .font(Tokens.Text.figure).monospacedDigit()
             }
             if muscle.tier == .counted { Text("Counted, not modelled").font(Tokens.Text.caption) }
             ProgressView(value: report.sets(for: muscle), total: max(report.fractionalSets.values.max() ?? 0, 1))
-              .tint(Tokens.Color.accent)
+              .tint(Tokens.Color.plateBlue)
               .accessibilityHidden(true)
           }
           .frame(maxWidth: .infinity, alignment: .leading)
           .padding(Tokens.Spacing.regular)
-          .background(report.sets(for: muscle) > 0 ? Tokens.Color.accentSurface : Tokens.Color.surface,
+          .background(report.sets(for: muscle) > 0 ? Tokens.Color.plateBlueSurface : Tokens.Color.steel,
             in: RoundedRectangle(cornerRadius: Tokens.Radius.control))
           .accessibilityElement(children: .combine)
         }
       }
       Text("A zero means no credited sets, not proof that a muscle was untrained. Direct sets receive 1.0, indirect sets 0.5, and stabilizing contributions 0. Current catalogue attribution is used.")
-        .font(Tokens.Text.caption).foregroundStyle(Tokens.Color.textSecondary)
+        .font(Tokens.Text.caption).foregroundStyle(Tokens.Color.chalkDim)
     }
-    .foregroundStyle(Tokens.Color.textPrimary)
+    .foregroundStyle(Tokens.Color.chalk)
     .padding(Tokens.Spacing.loose)
   }
 }

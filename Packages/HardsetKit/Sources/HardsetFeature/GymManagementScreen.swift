@@ -26,7 +26,7 @@ struct GymManagementScreen: View {
       VStack(alignment: .leading, spacing: Tokens.Spacing.section) {
         Text("Renaming keeps every logged set attached. Archiving removes a gym or machine from the pickers; its logged sets stay in your history.")
           .font(Tokens.Text.provenance)
-          .foregroundStyle(Tokens.Color.textSecondary)
+          .foregroundStyle(Tokens.Color.chalkDim)
           .fixedSize(horizontal: false, vertical: true)
 
         if let inventory {
@@ -58,7 +58,7 @@ struct GymManagementScreen: View {
       .frame(maxWidth: .infinity, alignment: .leading)
     }
     .scrollBounceBehavior(.basedOnSize)
-    .background(Tokens.Color.background)
+    .background(Tokens.Color.canvas)
     .hardsetNavigationTitle("Gyms and machines")
     .task { await load() }
     .sheet(item: $editing) { edit in
@@ -229,11 +229,11 @@ private struct ManagedRow: View {
       VStack(alignment: .leading, spacing: Tokens.Spacing.hairline) {
         Text(title)
           .font(Tokens.Text.headline)
-          .foregroundStyle(Tokens.Color.textPrimary)
+          .foregroundStyle(Tokens.Color.chalk)
           .fixedSize(horizontal: false, vertical: true)
         Text(detail)
           .font(Tokens.Text.caption)
-          .foregroundStyle(Tokens.Color.textSecondary)
+          .foregroundStyle(Tokens.Color.chalkDim)
       }
       .accessibilityElement(children: .combine)
 
@@ -314,7 +314,7 @@ private struct EquipmentRenameSheet: View {
             field("Brand", text: $brand, focus: .brand)
             Text("Leave the brand blank if the machine has none.")
               .font(Tokens.Text.caption)
-              .foregroundStyle(Tokens.Color.textSecondary)
+              .foregroundStyle(Tokens.Color.chalkDim)
               .fixedSize(horizontal: false, vertical: true)
           }
           Button("Save", action: save)
@@ -327,7 +327,7 @@ private struct EquipmentRenameSheet: View {
         .padding(.bottom, Tokens.Spacing.section)
       }
       .scrollBounceBehavior(.basedOnSize)
-      .background(Tokens.Color.background)
+      .background(Tokens.Color.canvas)
       .hardsetNavigationTitle(isMachine ? "Rename machine" : "Rename gym")
       .toolbar {
         ToolbarItem(placement: .cancellationAction) {
@@ -353,14 +353,14 @@ private struct EquipmentRenameSheet: View {
     VStack(alignment: .leading, spacing: Tokens.Spacing.tight) {
       Text(label)
         .font(Tokens.Text.caption)
-        .foregroundStyle(Tokens.Color.textSecondary)
+        .foregroundStyle(Tokens.Color.chalkDim)
         .accessibilityHidden(true)
-      TextField(text: text, prompt: Text(label).foregroundStyle(Tokens.Color.textSecondary)) {
+      TextField(text: text, prompt: Text(label).foregroundStyle(Tokens.Color.chalkDim)) {
         Text(label)
       }
       .font(Tokens.Text.label)
-      .foregroundStyle(Tokens.Color.textPrimary)
-      .tint(Tokens.Color.accent)
+      .foregroundStyle(Tokens.Color.chalk)
+      .tint(Tokens.Color.plateBlue)
       .focused($focus, equals: field)
       .hardsetNameInput()
       .submitLabel(isMachine && field == .name ? .next : .done)

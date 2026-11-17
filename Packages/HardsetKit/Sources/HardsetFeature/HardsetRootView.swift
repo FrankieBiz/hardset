@@ -40,6 +40,11 @@ public struct HardsetEnvironment {
   }
 }
 
+/// Which finished workout's receipt the start screen has open.
+private nonisolated struct LastWorkoutReceipt: Identifiable {
+  let id: SessionID
+}
+
 /// The app's three tabs, plus the workout-in-progress bar.
 ///
 /// A live session is deliberately NOT a full-screen modal. It lives in the tab bar's bottom
@@ -59,6 +64,10 @@ public struct HardsetRootView: View {
   @State private var isChoosingGym = false
   @State private var isAddingGym = false
   @State private var isShowingSettings = false
+  /// The receipt of the last workout, open from the start screen's card.
+  @State private var receiptSelection: LastWorkoutReceipt?
+  /// Set when the open receipt changed saved data, so the start screen re-reads once it closes.
+  @State private var receiptChanged = false
   /// Set when Settings asked for the tour, so it opens once the sheet has finished closing: a
   /// presentation started while another is still leaving is dropped.
   @State private var wantsTour = false
@@ -146,7 +155,7 @@ public struct HardsetRootView: View {
   /// export read their own data and stay reachable when preparing a workout fails.
   private var rootContent: some View {
     tabs
-      .tint(Tokens.Color.accent)
+      .tint(Tokens.Color.plateBlue)
       // Above every tab, so Settings opens from each tab's header alike, and outside anything
       // that changes when a workout starts or finishes, so finishing while it is open cannot pull
       // its anchor out from under it.
@@ -298,7 +307,7 @@ public struct HardsetRootView: View {
         trainHeader
         HardsetLoadingState("Preparing your workout…")
       }
-      .background(Tokens.Color.background)
+      .background(Tokens.Color.canvas)
       .navigationTitle("Train")
       .hardsetTabRoot()
     }
@@ -334,7 +343,7 @@ public struct HardsetRootView: View {
           )
           Text(verbatim: String(describing: error))
             .font(Tokens.Text.provenance)
-            .foregroundStyle(Tokens.Color.textSecondary)
+            .foregroundStyle(Tokens.Color.chalkDim)
             .multilineTextAlignment(.center)
             .lineLimit(6)
             .textSelection(.enabled)
@@ -345,7 +354,7 @@ public struct HardsetRootView: View {
       .padding(.bottom, Tokens.Spacing.block)
       .frame(maxWidth: .infinity, alignment: .leading)
     }
-    .background(Tokens.Color.background)
+    .background(Tokens.Color.canvas)
   }
 
   /// The start screen: where the lifter is, the one action, and what they did last time.
@@ -384,7 +393,7 @@ public struct HardsetRootView: View {
                 + "invent a program."
             )
             .font(Tokens.Text.provenance)
-            .foregroundStyle(Tokens.Color.textSecondary)
+            .foregroundStyle(Tokens.Color.chalkDim)
             .fixedSize(horizontal: false, vertical: true)
           }
         }
@@ -397,12 +406,21 @@ public struct HardsetRootView: View {
         if let lastWorkout {
           lastWorkoutCard(lastWorkout)
             .padding(.horizontal, Tokens.Spacing.loose)
+        } else if lastWorkoutSnapshot.value != nil {
+          // Read successfully and empty: said as what it is. Before the read has returned, or if it
+          // failed, nothing is drawn, so this never appears on a guess.
+          HardsetEmptyState(
+            title: "No sessions yet",
+            detail: "Start a workout and your last one will live here.",
+            systemImage: "clock.arrow.circlepath"
+          )
+          .padding(.horizontal, Tokens.Spacing.loose)
         }
       }
       .padding(.bottom, Tokens.Spacing.block)
     }
     .scrollBounceBehavior(.basedOnSize)
-    .background(Tokens.Color.background)
+    .background(Tokens.Color.canvas)
     // A failure belongs to the visit it happened in; reopening the picker starts clean.
     .sheet(isPresented: $isChoosingGym, onDismiss: { gymError = nil }) { gymSheet.hardsetSheet() }
   }
@@ -425,17 +443,17 @@ public struct HardsetRootView: View {
       HStack(spacing: Tokens.Spacing.regular) {
         Image(systemName: "mappin.and.ellipse")
           .font(Tokens.Text.headline)
-          .foregroundStyle(Tokens.Color.accent)
+          .foregroundStyle(Tokens.Color.plateBlue)
           .accessibilityHidden(true)
 
         VStack(alignment: .leading, spacing: Tokens.Spacing.hairline) {
           if let selectedGymName {
             Text("Training at")
               .font(Tokens.Text.caption)
-              .foregroundStyle(Tokens.Color.textSecondary)
+              .foregroundStyle(Tokens.Color.chalkDim)
             Text(selectedGymName)
               .font(Tokens.Text.title)
-              .foregroundStyle(Tokens.Color.textPrimary)
+              .foregroundStyle(Tokens.Color.chalk)
             if dynamicTypeSize.isAccessibilitySize {
               // Under the name at large sizes, so the name keeps the card's width.
               changeLabel
@@ -443,10 +461,10 @@ public struct HardsetRootView: View {
           } else {
             Text(gymInvitation)
               .font(Tokens.Text.headline)
-              .foregroundStyle(Tokens.Color.textPrimary)
+              .foregroundStyle(Tokens.Color.chalk)
             Text("Optional. Loads are recorded per machine, and machines belong to a gym.")
               .font(Tokens.Text.caption)
-              .foregroundStyle(Tokens.Color.textSecondary)
+              .foregroundStyle(Tokens.Color.chalkDim)
           }
         }
         .multilineTextAlignment(.leading)
@@ -457,7 +475,7 @@ public struct HardsetRootView: View {
         }
         Image(systemName: "chevron.right")
           .font(Tokens.Text.caption.weight(.semibold))
-          .foregroundStyle(Tokens.Color.textSecondary)
+          .foregroundStyle(Tokens.Color.chalkDim)
           .accessibilityHidden(true)
       }
     }
@@ -469,7 +487,7 @@ public struct HardsetRootView: View {
   private var changeLabel: some View {
     Text("Change")
       .font(Tokens.Text.labelEmphasis)
-      .foregroundStyle(Tokens.Color.accent)
+      .foregroundStyle(Tokens.Color.plateBlue)
   }
 
   private var selectedGymName: String? {
@@ -500,12 +518,39 @@ public struct HardsetRootView: View {
 
   private var lastWorkout: SessionSummary? { lastWorkoutSnapshot.value?.first }
 
-  /// The newest finished workout, as it was recorded.
+  /// The newest finished workout, as it was recorded, opening its receipt.
   ///
-  /// Read-only on purpose: it states what happened and leads nowhere, so it cannot be mistaken for
-  /// a plan to repeat. Duration appears only when the timeline is plausible — a forgotten session
-  /// is not presented as a six-hour effort here any more than it is in history.
+  /// The receipt is a static record, so the card still cannot be mistaken for a plan to repeat.
+  /// Duration appears only when the timeline is plausible — a forgotten session is not presented as
+  /// a six-hour effort here any more than it is in history.
   private func lastWorkoutCard(_ summary: SessionSummary) -> some View {
+    Button {
+      receiptSelection = LastWorkoutReceipt(id: summary.id)
+    } label: {
+      lastWorkoutContent(summary)
+    }
+    .buttonStyle(HardsetPressStyle())
+    .accessibilityHint("Opens the receipt")
+    // Attached here, not on the start screen: that already carries the gym sheet, and a second
+    // sheet on one anchor never presents.
+    .sheet(
+      item: $receiptSelection,
+      onDismiss: {
+        guard receiptChanged else { return }
+        receiptChanged = false
+        dataRevision &+= 1
+        Task { await refreshLastWorkout() }
+      }
+    ) { selection in
+      WorkoutReceiptScreen(
+        sessionID: selection.id, store: environment.receipts, unit: unit,
+        progression: environment.progression, onChanged: { receiptChanged = true }
+      )
+      .hardsetSheet()
+    }
+  }
+
+  private func lastWorkoutContent(_ summary: SessionSummary) -> some View {
     let title = summary.title.trimmingCharacters(in: .whitespacesAndNewlines)
     let date = Self.sessionDate(summary.timeline.startedAt)
     let duration = summary.hasImplausibleDuration ? nil : summary.timeline.duration
@@ -520,11 +565,11 @@ public struct HardsetRootView: View {
           VStack(alignment: .leading, spacing: Tokens.Spacing.hairline) {
             Text(title.isEmpty ? date : title)
               .font(Tokens.Text.headline)
-              .foregroundStyle(Tokens.Color.textPrimary)
+              .foregroundStyle(Tokens.Color.chalk)
             if !title.isEmpty {
               Text(date)
                 .font(Tokens.Text.caption)
-                .foregroundStyle(Tokens.Color.textSecondary)
+                .foregroundStyle(Tokens.Color.chalkDim)
             }
           }
           .frame(maxWidth: .infinity, alignment: .leading)
@@ -534,7 +579,7 @@ public struct HardsetRootView: View {
             Label(duration.clockString, systemImage: "clock")
               .labelStyle(.titleAndIcon)
               .font(Tokens.Text.figure)
-              .foregroundStyle(Tokens.Color.textSecondary)
+              .foregroundStyle(Tokens.Color.chalkDim)
               .accessibilityLabel("Duration \(duration.clockString)")
           }
         }
@@ -542,7 +587,7 @@ public struct HardsetRootView: View {
         if summary.volume.isEmpty {
           Text("Finished with no sets logged.")
             .font(Tokens.Text.label)
-            .foregroundStyle(Tokens.Color.textSecondary)
+            .foregroundStyle(Tokens.Color.chalkDim)
         } else {
           StatLedger(ledgerItems(summary.volume))
         }
@@ -550,7 +595,7 @@ public struct HardsetRootView: View {
         if !summary.exerciseNames.isEmpty {
           Text(summary.exerciseNames.joined(separator: ", "))
             .font(Tokens.Text.label)
-            .foregroundStyle(Tokens.Color.textSecondary)
+            .foregroundStyle(Tokens.Color.chalkDim)
             .lineLimit(2)
         }
       }
@@ -724,7 +769,7 @@ public struct HardsetRootView: View {
           // A steady mark, not a pulse: the workout is open, and nothing about that changes from
           // second to second, so nothing here moves.
           Circle()
-            .fill(Tokens.Color.accent)
+            .fill(Tokens.Color.plateBlue)
             .frame(width: Tokens.Spacing.snug, height: Tokens.Spacing.snug)
             .accessibilityHidden(true)
           loggedSetsLine(coordinator.loggedSetCount)
@@ -767,21 +812,21 @@ public struct HardsetRootView: View {
     if case .running(let endsAt) = state {
       Image(systemName: "timer")
         .font(Tokens.Text.caption.weight(.semibold))
-        .foregroundStyle(Tokens.Color.accent)
+        .foregroundStyle(Tokens.Color.plateBlue)
         .accessibilityHidden(true)
       // System-rendered from the deadline, so the accessory costs no updates.
       Text(timerInterval: Date()...max(endsAt, Date()), countsDown: true)
         .font(Tokens.Text.figure)
-        .foregroundStyle(Tokens.Color.accent)
+        .foregroundStyle(Tokens.Color.plateBlue)
     } else if case .paused(let remaining) = state {
       // Static, like the rest bar's paused figure: nothing is counting, so nothing ticks.
       Image(systemName: "pause.fill")
         .font(Tokens.Text.caption.weight(.semibold))
-        .foregroundStyle(Tokens.Color.textSecondary)
+        .foregroundStyle(Tokens.Color.chalkDim)
         .accessibilityHidden(true)
       Text(remaining.clockString)
         .font(Tokens.Text.figure)
-        .foregroundStyle(Tokens.Color.textSecondary)
+        .foregroundStyle(Tokens.Color.chalkDim)
     }
   }
 
@@ -812,7 +857,7 @@ public struct HardsetRootView: View {
       Text(count == 1 ? "set logged" : "sets logged")
         .font(Tokens.Text.label)
     }
-    .foregroundStyle(Tokens.Color.textPrimary)
+    .foregroundStyle(Tokens.Color.chalk)
     .lineLimit(1)
   }
 }
@@ -848,11 +893,11 @@ private struct OutlinedCardButtonBody: View {
       .padding(.vertical, Tokens.Spacing.regular)
       .frame(maxWidth: .infinity, minHeight: Tokens.loggerTapTarget, alignment: .leading)
       .background(
-        configuration.isPressed ? Tokens.Color.surfacePressed : Tokens.Color.surface,
+        configuration.isPressed ? Tokens.Color.steelPressed : Tokens.Color.steel,
         in: shape
       )
       .overlay {
-        shape.strokeBorder(Tokens.Color.controlBorder, lineWidth: Tokens.Stroke.hairline)
+        shape.strokeBorder(Tokens.Color.controlEdge, lineWidth: Tokens.Stroke.hairline)
       }
       .contentShape(shape)
       .scaleEffect(configuration.isPressed && !reduceMotion ? 0.97 : 1)

@@ -29,7 +29,6 @@ public struct VolumeReportView: View {
   private let onShowSettings: (() -> Void)?
   private let onEarlier: (() -> Void)?
   private let onLater: (() -> Void)?
-  @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
   public init(
     report: MuscleVolumeReport,
@@ -85,7 +84,7 @@ public struct VolumeReportView: View {
       .padding(.bottom, Tokens.Spacing.block)
       .frame(maxWidth: .infinity, alignment: .leading)
     }
-    .background(Tokens.Color.background)
+    .background(Tokens.Color.canvas)
   }
 
   // MARK: - Window
@@ -126,10 +125,10 @@ public struct VolumeReportView: View {
       HStack(alignment: .firstTextBaseline, spacing: Tokens.Spacing.snug) {
         Text(report.hardSets, format: .number)
           .font(Tokens.Text.hero)
-          .foregroundStyle(Tokens.Color.textPrimary)
+          .foregroundStyle(Tokens.Color.chalk)
         Text(verbatim: "\(report.hardSets == 1 ? "working set" : "working sets") \(period)")
           .font(Tokens.Text.unit)
-          .foregroundStyle(Tokens.Color.textSecondary)
+          .foregroundStyle(Tokens.Color.chalkDim)
           .fixedSize(horizontal: false, vertical: true)
       }
       .accessibilityElement(children: .ignore)
@@ -172,25 +171,15 @@ public struct VolumeReportView: View {
     return VStack(alignment: .leading, spacing: Tokens.Spacing.regular) {
       VStack(alignment: .leading, spacing: Tokens.Spacing.tight) {
         // The per-muscle figures are fractional credits (an indirect set counts 0.5), an adopted
-        // convention rather than a measurement, so their certainty sits beside them. The hero total
-        // above is an exact count and carries none.
-        let layout =
-          dynamicTypeSize.isAccessibilitySize
-          ? AnyLayout(VStackLayout(alignment: .leading, spacing: Tokens.Spacing.snug))
-          : AnyLayout(HStackLayout(alignment: .center, spacing: Tokens.Spacing.regular))
-        layout {
-          SectionLabel("Where the work went", count: rows.count)
-          CertaintyBadge(
-            level: .moderate,
-            methodology: SetCounting.source.methodology,
-            citation: SetCounting.source.citation
-          )
-        }
+        // convention rather than a measurement. The certainty is each muscle's own, below, from
+        // where its count sits on the dose-response; the engine asserts nothing for the report as a
+        // whole, so no badge speaks for it. The hero total above is an exact count and carries none.
+        SectionLabel("Where the work went", count: rows.count)
         // No goal line, so the scale is the report's own maximum. Stated in the caption rather than
         // left for the user to assume it means something absolute.
         Text("Bars are relative to your biggest muscle \(period). There is no target line, because no weekly set target is established.")
           .font(Tokens.Text.caption)
-          .foregroundStyle(Tokens.Color.textSecondary)
+          .foregroundStyle(Tokens.Color.chalkDim)
           .fixedSize(horizontal: false, vertical: true)
       }
 
@@ -228,27 +217,40 @@ public struct VolumeReportView: View {
       "\(name), \(report.isLowerBound ? "at least " : "")\(Self.format(row.sets)) sets"
       + (isCounted ? ", counted, not modelled" : "")
 
+    // Where this muscle's count sits on the published dose-response, as the engine states it:
+    // moderate inside the studied range, low beyond it, and not evaluated for a muscle outside the
+    // corpus. Never a level chosen here.
+    let claim = VolumeAnalyzer.doseResponse(fractionalSets: row.sets, for: row.muscle)
+
     return VStack(alignment: .leading, spacing: Tokens.Spacing.snug) {
-      HStack(alignment: .firstTextBaseline, spacing: Tokens.Spacing.snug) {
-        VStack(alignment: .leading, spacing: Tokens.Spacing.hairline) {
-          Text(name)
-            .font(Tokens.Text.label)
-            .foregroundStyle(Tokens.Color.textPrimary)
-          if isCounted {
-            Text("Counted, not modelled")
-              .font(Tokens.Text.caption)
-              .foregroundStyle(Tokens.Color.textSecondary)
+      VStack(alignment: .leading, spacing: Tokens.Spacing.snug) {
+        HStack(alignment: .firstTextBaseline, spacing: Tokens.Spacing.snug) {
+          VStack(alignment: .leading, spacing: Tokens.Spacing.hairline) {
+            Text(name)
+              .font(Tokens.Text.label)
+              .foregroundStyle(Tokens.Color.chalk)
+            if isCounted {
+              Text("Counted, not modelled")
+                .font(Tokens.Text.caption)
+                .foregroundStyle(Tokens.Color.chalkDim)
+            }
           }
+          Spacer(minLength: Tokens.Spacing.snug)
+          Text(value)
+            .font(Tokens.Text.figure)
+            .foregroundStyle(Tokens.Color.chalk)
         }
-        Spacer(minLength: Tokens.Spacing.snug)
-        Text(value)
-          .font(Tokens.Text.figure)
-          .foregroundStyle(Tokens.Color.textPrimary)
+        track(fraction: CGFloat(row.sets / maxSets), isCounted: isCounted)
       }
-      track(fraction: CGFloat(row.sets / maxSets), isCounted: isCounted)
+      .accessibilityElement(children: .combine)
+      .accessibilityLabel(spoken)
+      // A control of its own, outside the combined figure, so its disclosure stays reachable.
+      CertaintyBadge(
+        level: CertaintyLevel(claim.certainty),
+        methodology: claim.source.methodology,
+        citation: claim.source.citation
+      )
     }
-    .accessibilityElement(children: .combine)
-    .accessibilityLabel(spoken)
   }
 
   /// The bar itself: a raised track with a readout-cyan fill, square-ended like a gauge.
@@ -260,18 +262,18 @@ public struct VolumeReportView: View {
     GeometryReader { proxy in
       ZStack(alignment: .leading) {
         Rectangle()
-          .fill(Tokens.Color.surfaceRaised)
+          .fill(Tokens.Color.steelRaised)
         Group {
           if isCounted {
             Rectangle()
-              .fill(Tokens.Color.accentSurface)
+              .fill(Tokens.Color.plateBlueSurface)
               .overlay(
                 Rectangle()
-                  .strokeBorder(Tokens.Color.accent, lineWidth: Tokens.Stroke.hairline)
+                  .strokeBorder(Tokens.Color.plateBlue, lineWidth: Tokens.Stroke.hairline)
               )
           } else {
             Rectangle()
-              .fill(Tokens.Color.accent)
+              .fill(Tokens.Color.plateBlue)
           }
         }
         // Never narrower than the bar is tall, so the smallest real count is still a visible mark.
@@ -300,7 +302,7 @@ public struct VolumeReportView: View {
                 : "These had no sets \(period). Whether that matters depends on your plan."
             )
               .font(Tokens.Text.caption)
-              .foregroundStyle(Tokens.Color.textSecondary)
+              .foregroundStyle(Tokens.Color.chalkDim)
               .fixedSize(horizontal: false, vertical: true)
           }
 
@@ -310,11 +312,11 @@ public struct VolumeReportView: View {
             ForEach(gaps, id: \.self) { muscle in
               Text(ExercisePickerView.displayName(MuscleKey(muscle)))
                 .font(Tokens.Text.caption.weight(.medium))
-                .foregroundStyle(Tokens.Color.textSecondary)
+                .foregroundStyle(Tokens.Color.chalkDim)
                 .padding(.horizontal, Tokens.Spacing.snug)
                 .padding(.vertical, Tokens.Spacing.tight)
                 .background(
-                  Tokens.Color.surfaceRaised,
+                  Tokens.Color.steelRaised,
                   in: RoundedRectangle(cornerRadius: Tokens.Radius.control / 2)
                 )
             }
