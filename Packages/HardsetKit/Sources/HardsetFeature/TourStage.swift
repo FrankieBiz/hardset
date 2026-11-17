@@ -139,6 +139,10 @@ struct TourStage: View {
       root(prepared.live, staging: liveStaging, isShown: model.tourStep != .train)
     }
     .environment(\.tourTargets, targets)
+    // The pager's page style travels down the environment to every tab view below it, so the staged
+    // root's own tab view would otherwise become a second pager nested in the first, with no tab
+    // bar and a scroll view fighting the one that turns the page.
+    .tabViewStyle(.automatic)
     .background {
       Color.clear.onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: {
         phoneFrame = $0
