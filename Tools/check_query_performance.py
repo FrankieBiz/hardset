@@ -38,8 +38,10 @@ QUERIES = {
         'SELECT * FROM loggedSets WHERE sessionID = ? ORDER BY setOrdinal',
         ("session-100",),
     ),
+    # Names the columns the fixture had before the upgrade: an additive migration widens
+    # SELECT *, which is not a change in the rows this query returns.
     "session plan": (
-        'SELECT * FROM sessionExercises WHERE sessionID = ? ORDER BY position',
+        'SELECT id, sessionID, exerciseID, machineID, position, plannedSets FROM sessionExercises WHERE sessionID = ? ORDER BY position',
         ("session-100",),
     ),
     "snapshot heaviest": (

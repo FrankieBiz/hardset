@@ -71,6 +71,10 @@ nonisolated struct Session: Hashable, Identifiable, Sendable {
   var startedAt = Date(timeIntervalSince1970: 0)
   /// nil means the session is still open. Never backfilled from `Date()`.
   var finishedAt: Date?
+  /// The saved workout this session was started from, as plain text with no foreign key: a plan
+  /// can be edited or archived without ever touching the sessions it started. nil for a workout
+  /// built by hand.
+  var templateID: UUID?
 }
 
 @Table("sessionExercises")
@@ -81,6 +85,36 @@ nonisolated struct SessionExercise: Hashable, Identifiable, Sendable {
   var machineID: UUID?
   var position = 0
   var plannedSets: Int?
+  /// The rep range this movement was planned for, copied from the saved workout when the session
+  /// starts so targets and the scorecard survive the plan being changed. Both nil when none.
+  var repRangeLower: Int?
+  var repRangeUpper: Int?
+}
+
+/// A saved workout. A plan, never a record: sessions copy what they need and never read this back.
+@Table("workoutTemplates")
+nonisolated struct StoredTemplate: Hashable, Identifiable, Sendable {
+  let id: UUID
+  var name = ""
+  /// The lifter's rotation order.
+  var position = 0
+  /// Archived rather than deleted, so a session's `templateID` never dangles.
+  var isArchived = false
+  var createdAt = Date(timeIntervalSince1970: 0)
+}
+
+@Table("templateExercises")
+nonisolated struct StoredTemplateExercise: Hashable, Identifiable, Sendable {
+  let id: UUID
+  var templateID: UUID
+  var exerciseID: UUID
+  var machineID: UUID?
+  var position = 0
+  var plannedSets: Int?
+  var repRangeLower: Int?
+  var repRangeUpper: Int?
+  var restSeconds: Int?
+  var createdAt = Date(timeIntervalSince1970: 0)
 }
 
 @Table("loggedSets")

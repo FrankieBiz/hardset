@@ -58,16 +58,11 @@ struct HistoryStoreTests {
       try Gym.insert { Gym.Draft(id: gym, name: "My gym") }.execute(db)
       try Machine.insert { Machine.Draft(id: machine, gymID: gym, name: "My press", stackIncrementKg: 5) }.execute(db)
       try MachineExercise.insert { MachineExercise.Draft(id: UUID(), machineID: machine, exerciseID: exercise) }.execute(db)
-      try Session.insert {
-        Session.Draft(id: active, gymID: gym, title: "Open workout", notes: "Keep this too", startedAt: self.now)
-      }.execute(db)
-      try Session.insert {
-        Session.Draft(id: finished, gymID: gym, title: "Finished workout",
-                      startedAt: self.now.addingTimeInterval(-7200), finishedAt: self.now.addingTimeInterval(-3600))
-      }.execute(db)
-      try SessionExercise.insert {
-        SessionExercise.Draft(id: plan, sessionID: active, exerciseID: exercise, machineID: machine, position: 0, plannedSets: 3)
-      }.execute(db)
+      // Raw statements naming only the v1 columns: the records gain columns with every later
+      // migration, and a historical database does not have them.
+      try #sql("INSERT INTO sessions (id, gymID, title, notes, startedAt) VALUES (\(active), \(gym), 'Open workout', 'Keep this too', \(self.now))").execute(db)
+      try #sql("INSERT INTO sessions (id, gymID, title, startedAt, finishedAt) VALUES (\(finished), \(gym), 'Finished workout', \(self.now.addingTimeInterval(-7200)), \(self.now.addingTimeInterval(-3600)))").execute(db)
+      try #sql("INSERT INTO sessionExercises (id, sessionID, exerciseID, machineID, position, plannedSets) VALUES (\(plan), \(active), \(exercise), \(machine), 0, 3)").execute(db)
       try #sql("INSERT INTO loggedSets (id, sessionID, exerciseID, machineID, weightKg, reps, completedAt) VALUES (\(set), \(active), \(exercise), \(machine), 100, 8, \(self.now))").execute(db)
       try BodyweightEntry.insert { BodyweightEntry.Draft(id: UUID(), weightKg: 80, measuredAt: self.now) }.execute(db)
       try DeviceHealthSample.insert { DeviceHealthSample.Draft(id: UUID(), kind: "fixture", value: 1) }.execute(db)
