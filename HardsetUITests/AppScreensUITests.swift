@@ -324,28 +324,32 @@ final class AppScreensUITests: XCTestCase {
     // The tour. Its first step waits while two staged apps are built.
     XCTAssertTrue(app.staticTexts["Step 1 of 8"].waitForExistence(timeout: 90))
     capture(app, "47-onboarding-tour-1")
-    app.buttons["Next"].tap()
+    app.buttons["tour-next"].tap()
 
     // Step 2 is the interactive one: no "Next" until the staged check is tapped.
     XCTAssertTrue(app.staticTexts["Step 2 of 8"].waitForExistence(timeout: 10))
-    XCTAssertFalse(app.buttons["Next"].exists, "Next waits for the check to be tapped")
+    XCTAssertFalse(app.buttons["tour-next"].exists, "Next waits for the check to be tapped")
     capture(app, "48-onboarding-tour-2")
     audit(app, screen: "onboarding tour 2")
-    // Hittable, because the scrim over the rest of the staged phone swallows touches: only the
-    // check inside the spotlight can be tapped, and no other page's row is mistaken for it.
-    let check = app.buttons.matching(NSPredicate(format: "label == 'Log set' AND isHittable == true"))
-      .firstMatch
-    XCTAssertTrue(check.waitForExistence(timeout: 10))
+    // The hittable one: the scrim over the rest of the staged phone swallows touches, so only the
+    // check inside the spotlight can be tapped. Other rows' checks, and anything the staged apps
+    // expose behind the scrim, are not mistaken for it.
+    let checks = app.buttons.matching(NSPredicate(format: "label == 'Log set'"))
+    XCTAssertTrue(checks.firstMatch.waitForExistence(timeout: 10))
+    guard let check = checks.allElementsBoundByIndex.first(where: { $0.isHittable }) else {
+      XCTFail("No hittable check inside the spotlight")
+      return
+    }
     check.tap()
-    XCTAssertTrue(app.buttons["Next"].waitForExistence(timeout: 10), "logging the staged set unlocks Next")
+    XCTAssertTrue(app.buttons["tour-next"].waitForExistence(timeout: 10), "logging the staged set unlocks Next")
     capture(app, "49-onboarding-tour-2-logged")
 
     for step in 3...8 {
-      app.buttons["Next"].tap()
+      app.buttons["tour-next"].tap()
       XCTAssertTrue(app.staticTexts["Step \(step) of 8"].waitForExistence(timeout: 10))
       capture(app, "5\(step - 3)-onboarding-tour-\(step)")
     }
-    app.buttons["Next"].tap()
+    app.buttons["tour-next"].tap()
 
     // Setup, then the app.
     XCTAssertTrue(app.staticTexts["Before your first set."].waitForExistence(timeout: 10))

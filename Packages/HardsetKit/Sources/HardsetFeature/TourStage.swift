@@ -2,9 +2,6 @@ import HardsetCore
 import HardsetStore
 import HardsetUI
 import SwiftUI
-#if canImport(UIKit)
-  import UIKit
-#endif
 
 /// The tour page: the real app, staged in a small phone, with a spotlight on the thing each of the
 /// eight steps is about and a callout that says what it is.
@@ -34,7 +31,6 @@ struct TourStage: View {
   /// spotlight can be placed in the phone's own space whatever the scale.
   @State private var phoneFrame: CGRect = .zero
   @Environment(\.accessibilityReduceMotion) private var reduceMotion
-  @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
   var body: some View {
     Group {
@@ -142,6 +138,11 @@ struct TourStage: View {
         isShown: model.tourStep == .train)
       root(prepared.live, staging: liveStaging, isShown: model.tourStep != .train)
     }
+    .environment(\.tourTargets, targets)
+    // The pager's page style travels down the environment to every tab view below it, so the staged
+    // root's own tab view would otherwise become a second pager nested in the first, with no tab
+    // bar and a scroll view fighting the one that turns the page.
+    .tabViewStyle(.automatic)
     .background {
       Color.clear.onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: {
         phoneFrame = $0
@@ -152,28 +153,18 @@ struct TourStage: View {
 
   /// One staged app. Both stay alive for the whole tour, so a step never waits on a root preparing;
   /// the one not in use is hidden, inert and silent to VoiceOver.
-  ///
-  /// Each root sits in a hosting controller of its own (`StagedHost`). The root's tab view and
-  /// navigation stacks put their content in UIKit views, which `accessibilityHidden` on a SwiftUI
-  /// ancestor does not reach, so a root hidden that way was still read to VoiceOver and listed by
-  /// the UI tests; hiding the hosting view does hide it. The boundary also keeps the pager's page
-  /// style, a SwiftUI environment value, from reaching the staged tab view. What the root reads
-  /// from the environment is passed in, because the environment does not cross it.
   private func root(_ staged: TourFixtures.Staged, staging: TourStaging, isShown: Bool) -> some View {
-    StagedHost(isAccessible: isShown && isPhoneInteractive) {
-      HardsetRootView(
-        environment: staged.environment, unit: unit, hooks: hooks,
-        // A rest starts when a set is logged, as the tour's fourth step says it does. The daily app
-        // does not start one on its own.
-        restAfterSet: .seconds(90),
-        onShowTour: {}
-      )
-      .environment(\.tourStaging, staging)
-      .environment(\.tourTargets, targets)
-      .environment(\.dynamicTypeSize, dynamicTypeSize)
-    }
+    HardsetRootView(
+      environment: staged.environment, unit: unit, hooks: hooks,
+      // A rest starts when a set is logged, as the tour's fourth step says it does. The daily app
+      // does not start one on its own.
+      restAfterSet: .seconds(90),
+      onShowTour: {}
+    )
+    .environment(\.tourStaging, staging)
     .opacity(isShown ? 1 : 0)
     .allowsHitTesting(isShown)
+    .accessibilityHidden(!isShown)
     .animation(Tokens.Motion.adaptive(Tokens.Motion.reveal, reduceMotion: reduceMotion), value: isShown)
   }
 
@@ -262,45 +253,3 @@ struct TourStage: View {
     }
   }
 }
-
-#if canImport(UIKit)
-  /// Hosts a staged root in a `UIHostingController` of its own, so it can be hidden from
-  /// accessibility at the UIKit level, where its tab view and navigation stacks keep their content.
-  /// Transparent, and sized by whatever it is offered.
-  private struct StagedHost<Content: View>: UIViewControllerRepresentable {
-    let isAccessible: Bool
-    let content: Content
-
-    init(isAccessible: Bool, @ViewBuilder content: () -> Content) {
-      self.isAccessible = isAccessible
-      self.content = content()
-    }
-
-    func makeUIViewController(context: Context) -> UIHostingController<Content> {
-      let host = UIHostingController(rootView: content)
-      host.view.backgroundColor = .clear
-      host.view.accessibilityElementsHidden = !isAccessible
-      return host
-    }
-
-    func updateUIViewController(_ host: UIHostingController<Content>, context: Context) {
-      host.rootView = content
-      host.view.accessibilityElementsHidden = !isAccessible
-    }
-  }
-#else
-  /// Where there is no UIKit, the root is drawn in place and hidden the SwiftUI way.
-  private struct StagedHost<Content: View>: View {
-    let isAccessible: Bool
-    let content: Content
-
-    init(isAccessible: Bool, @ViewBuilder content: () -> Content) {
-      self.isAccessible = isAccessible
-      self.content = content()
-    }
-
-    var body: some View {
-      content.accessibilityHidden(!isAccessible)
-    }
-  }
-#endif

@@ -44,9 +44,12 @@ public struct CalloutCard: View {
         if let nextTitle {
           Button(nextTitle, action: onNext)
             .buttonStyle(HardsetButtonStyle(.primary))
+            // Named for the UI tests: the staged keypad has a "Next" of its own.
+            .accessibilityIdentifier("tour-next")
         }
         Button("Skip tour", action: onSkip)
           .buttonStyle(HardsetButtonStyle(.quiet))
+          .accessibilityIdentifier("tour-skip")
       }
       .padding(.top, Tokens.Spacing.tight)
     }

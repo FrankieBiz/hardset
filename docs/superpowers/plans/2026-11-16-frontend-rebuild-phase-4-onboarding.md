@@ -31,6 +31,7 @@
 | R56 | Tour step one's line differs from the spec: the start screen has no "repeat last workout" action, so it says what is there ("One tap starts a workout. Your last one is right below it."). |
 | R57 | A replay runs the same pages without Setup and ends at the tour's end; skipping a replay ends it. |
 | R58 | UI-test onboarding state is set by a DEBUG-only `HARDSET_ONBOARDING` environment variable ("skip" or "reset") read in `HardsetApp.init`, not a launch argument: an argument shadows the stored value, so the app's own write on finishing would never be read back. |
+| R66 | The tour page is drawn over the pager's empty tour page, not inside it. The staged root's tab view inside the page-style `TabView` is a UIKit tab bar controller inside a page controller; the pager jumped on to Setup as the tour appeared (found by the real-app journey, run 44194304056). A hosting controller per staged root was tried to hide the staged content from accessibility and reverted: it rendered the roots in the wrong appearance, and XCUITest still listed the content, so VoiceOver reaching the staged phone is a known limit (the callout carries the step in words and comes first). |
 
 ## Review Focus
 
