@@ -440,7 +440,10 @@ Rules (spec, "The scorecard counts movements"):
   - public types are `Sendable`
   - no test was weakened
 - [ ] **Step 2:** Run `hardset-check core` and `hardset-check parse`. Expected: PASS, with the Core test count above the 232 baseline by the number of tests added.
-- [ ] **Step 3:** Fix findings in place with tests, then commit with `Tighten the progress rules after review`. Skip the commit when there is nothing to fix.
+- [ ] **Step 3: Check the cost of replaying records.** `ProgressTrendAnalyzer.trend` calls `recordSessionIDs(lastSessions: sessionCount - 1)`, which replays the detector over the whole history, so the cost grows with the square of the set count. The progress board does this for every movement.
+  - Add a Core test that builds one key with 2,000 sets over 400 sessions and times `trend`.
+  - If it takes more than 50 ms on Linux, cap the replay: test only the last `stallRun + 1` sessions and report a run of at least 3 as `stallRun`. Then the label always reads "Stalled · 3 sessions", which the spec allows. Keep the full replay for the single-exercise detail screen.
+- [ ] **Step 4:** Fix findings in place with tests, then commit with `Tighten the progress rules after review`. Skip the commit when there is nothing to fix.
 
 ### Task 10: Schema v11 for saved workouts (Sonnet)
 
