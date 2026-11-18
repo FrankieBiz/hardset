@@ -118,6 +118,9 @@ struct TourStage: View {
         callout
           .padding(.horizontal, Tokens.Spacing.loose)
           .padding(.vertical, Tokens.Spacing.loose)
+          // Read before the staged phone, which stays reachable by VoiceOver and is only a picture of
+          // what the callout says.
+          .accessibilitySortPriority(1)
           .id(model.tourStep)
           .transition(.opacity)
       }

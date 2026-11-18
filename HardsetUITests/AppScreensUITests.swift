@@ -331,16 +331,11 @@ final class AppScreensUITests: XCTestCase {
     XCTAssertFalse(app.buttons["tour-next"].exists, "Next waits for the check to be tapped")
     capture(app, "48-onboarding-tour-2")
     audit(app, screen: "onboarding tour 2")
-    // The hittable one: the scrim over the rest of the staged phone swallows touches, so only the
-    // check inside the spotlight can be tapped. Other rows' checks, and anything the staged apps
-    // expose behind the scrim, are not mistaken for it.
-    let checks = app.buttons.matching(NSPredicate(format: "label == 'Log set'"))
-    XCTAssertTrue(checks.firstMatch.waitForExistence(timeout: 10))
-    guard let check = checks.allElementsBoundByIndex.first(where: { $0.isHittable }) else {
-      XCTFail("No hittable check inside the spotlight")
-      return
-    }
-    check.tap()
+    // Tapped where the spotlight is. The staged row is one accessibility element with named actions,
+    // so there is no separate "Log set" button to query; a touch at the check's place is also the
+    // honest test that the hole lets a touch through while the scrim stops every other one. The
+    // check sits at the right of the third Leg Press row, a little over half way down the screen.
+    app.coordinate(withNormalizedOffset: CGVector(dx: 0.767, dy: 0.555)).tap()
     XCTAssertTrue(app.buttons["tour-next"].waitForExistence(timeout: 10), "logging the staged set unlocks Next")
     capture(app, "49-onboarding-tour-2-logged")
 
@@ -363,6 +358,39 @@ final class AppScreensUITests: XCTestCase {
     capture(app, "61-onboarding-done")
 
     writeAuditReport(named: "accessibility-audit-onboarding")
+  }
+
+  /// The tour again, from Settings: the sheet closes, the same sequence plays in a full-screen cover
+  /// without Setup, and skipping it returns to the app. Run past onboarding, as the daily app is.
+  @MainActor
+  func testTourReplayDark() throws {
+    continueAfterFailure = true
+    let app = XCUIApplication()
+    launch(app, appearance: .dark)
+
+    guard waitForStartScreen(app) else { return }
+    app.buttons["Settings"].tap()
+    XCTAssertTrue(app.buttons["Done"].waitForExistence(timeout: 5))
+    let replay = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Show the tour again'"))
+      .firstMatch
+    var swipes = 0
+    while !replay.exists && swipes < 6 {
+      app.swipeUp()
+      swipes += 1
+    }
+    XCTAssertTrue(replay.exists, "Settings offers the tour again")
+    capture(app, "70-replay-settings-row")
+    replay.tap()
+
+    // The welcome page, then a skip from the second page ends the replay with no Setup page.
+    XCTAssertTrue(app.staticTexts["Hardset"].waitForExistence(timeout: 10))
+    capture(app, "71-replay-welcome")
+    app.buttons["Start"].tap()
+    XCTAssertTrue(app.staticTexts["One tap per set."].waitForExistence(timeout: 5))
+    app.buttons["Skip"].tap()
+    XCTAssertFalse(app.staticTexts["Before your first set."].exists, "a replay has no Setup")
+    guard waitForStartScreen(app) else { return }
+    capture(app, "72-replay-done")
   }
 
   // MARK: - Helpers
