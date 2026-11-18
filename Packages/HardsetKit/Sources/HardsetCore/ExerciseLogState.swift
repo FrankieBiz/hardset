@@ -67,8 +67,14 @@ public struct ExerciseLogState: Hashable, Sendable, Identifiable {
   /// the user verbatim rather than silently: 80 kg on another brand's machine is not this
   /// machine's 80 kg, and pretending otherwise is the kind of quiet lie this app is against.
   public private(set) var priorNote: String?
+  /// The reps the plan asks for, when it asks for any. Targets and the rep-range floor of a
+  /// "beat last time" mark exist only with one.
+  public private(set) var repRange: RepRange?
 
   private var prior: PriorPerformance?
+  private var weightUnit: WeightUnit
+  /// False for work with no added load to step up, which only ever adds reps.
+  private var addsLoad: Bool
   /// Updated only from successful log events, reconstruction of persisted sets, or an undo of
   /// one. The values are captured at that event; editing a draft cannot rewrite them.
   private var lastLoggedByKey: [ProgressionKey: PriorSetRecord] = [:]
@@ -93,6 +99,9 @@ public struct ExerciseLogState: Hashable, Sendable, Identifiable {
     machineIncrementKg: Double? = nil,
     prior: PriorPerformance?,
     priorNote: String? = nil,
+    repRange: RepRange? = nil,
+    weightUnit: WeightUnit = .kilograms,
+    addsLoad: Bool = true,
     slots: [SetSlot]
   ) {
     self.id = id
@@ -103,6 +112,9 @@ public struct ExerciseLogState: Hashable, Sendable, Identifiable {
     self.machineIncrementKg = machineIncrementKg
     self.prior = prior
     self.priorNote = priorNote
+    self.repRange = repRange
+    self.weightUnit = weightUnit
+    self.addsLoad = addsLoad
     self.slots = slots
     for slot in slots {
       rememberLogged(slot, completedAt: slot.loggedAt ?? Date(timeIntervalSince1970: 0))
@@ -126,7 +138,10 @@ public struct ExerciseLogState: Hashable, Sendable, Identifiable {
     machineIncrementKg: Double? = nil,
     snapshot: PriorPerformanceSnapshot,
     plannedSets: Int? = nil,
-    allowingOtherMachines: Bool = true
+    allowingOtherMachines: Bool = true,
+    repRange: RepRange? = nil,
+    weightUnit: WeightUnit = .kilograms,
+    addsLoad: Bool = true
   ) -> ExerciseLogState {
     let key = ProgressionKey(exerciseID: exerciseID, machineID: machineID)
 
@@ -141,9 +156,13 @@ public struct ExerciseLogState: Hashable, Sendable, Identifiable {
       if fallback.wasOtherMachine { note = "From another machine" }
     }
 
-    let rowCount = plannedSets ?? prior.map { max($0.lastSets.count, 1) } ?? 1
-    let slots = (0..<max(rowCount, 1)).map { index in
-      SetSlot(draft: SetEntryDraft(suggestion: prior?.suggestion(forSetIndex: index)))
+    let rowCount = max(plannedSets ?? prior.map { max($0.lastSets.count, 1) } ?? 1, 1)
+    let targets = Self.targets(
+      prior: prior, priorNote: note, repRange: repRange, count: rowCount,
+      incrementKg: machineIncrementKg, unit: weightUnit, addsLoad: addsLoad
+    )
+    let slots = (0..<rowCount).map { index in
+      SetSlot(draft: Self.draft(prior: prior, workingIndex: index, target: targets[index]))
     }
 
     return ExerciseLogState(
@@ -154,6 +173,9 @@ public struct ExerciseLogState: Hashable, Sendable, Identifiable {
       machineIncrementKg: machineIncrementKg,
       prior: prior,
       priorNote: note,
+      repRange: repRange,
+      weightUnit: weightUnit,
+      addsLoad: addsLoad,
       slots: slots
     )
   }
@@ -203,7 +225,10 @@ public struct ExerciseLogState: Hashable, Sendable, Identifiable {
     loggedSets: [LoggedSetSummary],
     snapshot: PriorPerformanceSnapshot,
     plannedSets: Int? = nil,
-    allowingOtherMachines: Bool = true
+    allowingOtherMachines: Bool = true,
+    repRange: RepRange? = nil,
+    weightUnit: WeightUnit = .kilograms,
+    addsLoad: Bool = true
   ) -> ExerciseLogState {
     var state = build(
       exerciseID: exerciseID,
@@ -213,7 +238,10 @@ public struct ExerciseLogState: Hashable, Sendable, Identifiable {
       machineIncrementKg: machineIncrementKg,
       snapshot: snapshot,
       plannedSets: plannedSets,
-      allowingOtherMachines: allowingOtherMachines
+      allowingOtherMachines: allowingOtherMachines,
+      repRange: repRange,
+      weightUnit: weightUnit,
+      addsLoad: addsLoad
     )
 
     // Written sets replace the opening rows, in the order they were performed.
@@ -238,8 +266,16 @@ public struct ExerciseLogState: Hashable, Sendable, Identifiable {
     let workingLogged = slots.count { !$0.isWarmup }
     let target = plannedSets ?? max(state.slots.count, workingLogged)
     if target > workingLogged {
+      // Targets go to the rows still open, each at its own working position. A set already written
+      // is a fact and keeps the values it was logged with.
+      let targets = Self.targets(
+        prior: state.prior, priorNote: state.priorNote, repRange: repRange, count: target,
+        incrementKg: machineIncrementKg, unit: weightUnit, addsLoad: addsLoad
+      )
       for index in workingLogged..<target {
-        slots.append(SetSlot(draft: SetEntryDraft(suggestion: state.suggestion(forSetIndex: index))))
+        slots.append(
+          SetSlot(draft: Self.draft(prior: state.prior, workingIndex: index, target: targets[index]))
+        )
       }
     }
 
@@ -267,6 +303,54 @@ public struct ExerciseLogState: Hashable, Sendable, Identifiable {
       return nil
     }
     return prior?.recorded(atSetIndex: slots[..<index].count { !$0.isWarmup })
+  }
+
+  /// How a logged set compares with the same set last time on this machine, or `nil` when there is
+  /// nothing honest to say.
+  ///
+  /// It says nothing for a row not yet logged, for a warm-up, when the history was borrowed from
+  /// other equipment, and for a set done on a machine the lifter has since left: that set was
+  /// performed somewhere this history does not describe. Otherwise it compares the values the set
+  /// was saved with against its partner, with the movement's rep floor deciding whether a heavier
+  /// set with fewer reps still counts.
+  public func comparison(forSlotID id: UUID) -> SetComparison? {
+    guard priorNote == nil,
+      let slot = slots.first(where: { $0.id == id }),
+      slot.isLogged, !slot.isWarmup,
+      slot.loggedMachineID == machineID,
+      let resolved = slot.draft.resolved()
+    else { return nil }
+    return SetComparison.compare(
+      weightKg: resolved.weightKg, reps: resolved.reps,
+      against: previousSet(forSlotID: id), repFloor: repRange?.lower
+    )
+  }
+
+  /// One target per working row, or nil for every row when targets do not apply.
+  ///
+  /// They apply only to a movement with a rep range, and only when the history is this exact
+  /// machine's: a prior carrying a note was borrowed from other equipment, and another machine's
+  /// 80 kg is not a base this machine's next step can be added to.
+  private static func targets(
+    prior: PriorPerformance?, priorNote: String?, repRange: RepRange?, count: Int,
+    incrementKg: Double?, unit: WeightUnit, addsLoad: Bool
+  ) -> [SetTarget?] {
+    guard let repRange, let prior, priorNote == nil, !prior.lastSets.isEmpty else {
+      return Array(repeating: nil, count: max(count, 0))
+    }
+    return OverloadTarget.targets(
+      lastSets: prior.lastSets, range: repRange, setCount: count,
+      incrementKg: incrementKg, unit: unit, addsLoad: addsLoad
+    )
+  }
+
+  /// A row's draft: its target when there is one, and otherwise what history suggests, as before.
+  private static func draft(
+    prior: PriorPerformance?, workingIndex: Int, target: SetTarget?
+  ) -> SetEntryDraft {
+    let suggestion = prior?.suggestion(forSetIndex: workingIndex)
+    if let target { return SetEntryDraft(target: target, suggestion: suggestion) }
+    return SetEntryDraft(suggestion: suggestion)
   }
 
   public var loggedCount: Int { slots.count(where: \.isLogged) }
@@ -353,24 +437,29 @@ public struct ExerciseLogState: Hashable, Sendable, Identifiable {
     self.prior = newPrior
     self.priorNote = newNote
 
-    // Warm-ups keep their drafts: history holds no warm-ups, and a working load in a warm-up row
-    // is one tap from recording a warm-up at working weight (see `appendSlot`).
-    for index in slots.indices where !slots[index].isLogged && !slots[index].isWarmup {
-      let workingIndex = slots[..<index].count { !$0.isWarmup }
-      slots[index].draft = SetEntryDraft(suggestion: newPrior?.suggestion(forSetIndex: workingIndex))
-    }
-
     // Before any working set, the machine is usually being chosen as the lifter reaches it, so
     // open as many rows as last time on that machine, as `build` would have. Rows are only ever
-    // added here, never removed, and never once work on this movement has been saved.
+    // added here, never removed, and never once work on this movement has been saved. They are
+    // prefilled with the rest, just below.
     if !slots.contains(where: { $0.isLogged && !$0.isWarmup }), let newPrior {
       var working = workingSetCount
       while working < newPrior.lastSets.count {
-        slots.append(
-          SetSlot(draft: SetEntryDraft(suggestion: newPrior.suggestion(forSetIndex: working)))
-        )
+        slots.append(SetSlot(draft: SetEntryDraft(suggestion: nil)))
         working += 1
       }
+    }
+
+    // Warm-ups keep their drafts: history holds no warm-ups, and a working load in a warm-up row
+    // is one tap from recording a warm-up at working weight (see `appendSlot`). Open working rows
+    // re-prefill from the new machine, with a target when its history can build one.
+    let targets = Self.targets(
+      prior: newPrior, priorNote: newNote, repRange: repRange, count: workingSetCount,
+      incrementKg: newIncrement, unit: weightUnit, addsLoad: addsLoad
+    )
+    for index in slots.indices where !slots[index].isLogged && !slots[index].isWarmup {
+      let workingIndex = slots[..<index].count { !$0.isWarmup }
+      slots[index].draft = Self.draft(
+        prior: newPrior, workingIndex: workingIndex, target: targets[workingIndex])
     }
   }
 
