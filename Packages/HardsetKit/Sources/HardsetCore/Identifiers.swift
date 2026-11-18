@@ -30,6 +30,11 @@ public struct GymID: HardsetID {
   public init(rawValue: UUID) { self.rawValue = rawValue }
 }
 
+public struct TemplateID: HardsetID {
+  public let rawValue: UUID
+  public init(rawValue: UUID) { self.rawValue = rawValue }
+}
+
 public struct SessionID: HardsetID {
   public let rawValue: UUID
   public init(rawValue: UUID) { self.rawValue = rawValue }
