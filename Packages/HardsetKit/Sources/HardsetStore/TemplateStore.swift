@@ -185,13 +185,37 @@ public nonisolated struct TemplateStore: Sendable {
       .where { $0.sessionID.eq(id.rawValue) }
       .order { ($0.position, $0.id) }
       .fetchAll(db)
-    let working: [(UUID?, UUID, UUID?)] = try LoggedSet
-      .where { $0.sessionID.eq(id.rawValue) && !$0.isWarmup }
-      .select { ($0.sessionExerciseID, $0.exerciseID, $0.machineID) }
-      .fetchAll(db)
     let names = try exerciseNames(Set(rows.map(\.exerciseID)), in: db)
     let machines = try machineNames(Set(rows.compactMap(\.machineID)), in: db)
+    let counts = try workingSetCounts(for: rows, in: db)
 
+    let position = (try StoredTemplate.where { !$0.isArchived }.select(\.position).fetchAll(db).max() ?? -1) + 1
+    return WorkoutTemplate(
+      name: name,
+      position: position,
+      exercises: rows.map { row in
+        TemplateExercise(
+          exerciseID: ExerciseID(rawValue: row.exerciseID),
+          exerciseName: names[row.exerciseID] ?? "Unknown movement",
+          machineID: row.machineID.map(MachineID.init(rawValue:)),
+          machineName: row.machineID.flatMap { machines[$0] },
+          plannedSets: counts[row.id] ?? 0,
+          repRange: repRange(row.repRangeLower, row.repRangeUpper)
+        )
+      }
+    )
+  }
+
+  /// Working sets logged for each plan row of one session, never counting warm-ups, by row id.
+  ///
+  /// A set counts against the plan row it recorded. A set written before sets recorded their plan
+  /// row is matched by movement and machine instead. `rows` are one session's plan rows.
+  static func workingSetCounts(for rows: [SessionExercise], in db: Database) throws -> [UUID: Int] {
+    guard let sessionID = rows.first?.sessionID else { return [:] }
+    let working: [(UUID?, UUID, UUID?)] = try LoggedSet
+      .where { $0.sessionID.eq(sessionID) && !$0.isWarmup }
+      .select { ($0.sessionExerciseID, $0.exerciseID, $0.machineID) }
+      .fetchAll(db)
     var linked: [UUID: Int] = [:]
     var unlinked: [UnlinkedKey: Int] = [:]
     for (link, exercise, machine) in working {
@@ -201,25 +225,14 @@ public nonisolated struct TemplateStore: Sendable {
         unlinked[UnlinkedKey(exerciseID: exercise, machineID: machine), default: 0] += 1
       }
     }
-
-    let position = (try StoredTemplate.where { !$0.isArchived }.select(\.position).fetchAll(db).max() ?? -1) + 1
-    return WorkoutTemplate(
-      name: name,
-      position: position,
-      exercises: rows.map { row in
-        // A set logged before sets recorded their plan row is matched by movement and machine.
-        let count = linked[row.id]
-          ?? unlinked[UnlinkedKey(exerciseID: row.exerciseID, machineID: row.machineID)] ?? 0
-        return TemplateExercise(
-          exerciseID: ExerciseID(rawValue: row.exerciseID),
-          exerciseName: names[row.exerciseID] ?? "Unknown movement",
-          machineID: row.machineID.map(MachineID.init(rawValue:)),
-          machineName: row.machineID.flatMap { machines[$0] },
-          plannedSets: count,
-          repRange: repRange(row.repRangeLower, row.repRangeUpper)
+    return Dictionary(
+      uniqueKeysWithValues: rows.map { row in
+        (
+          row.id,
+          linked[row.id]
+            ?? unlinked[UnlinkedKey(exerciseID: row.exerciseID, machineID: row.machineID)] ?? 0
         )
-      }
-    )
+      })
   }
 
   private struct UnlinkedKey: Hashable {

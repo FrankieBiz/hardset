@@ -556,6 +556,21 @@ public nonisolated enum HardsetMigrations {
       .execute(db)
     }
 
+    // "Repeat last workout" finds the workout finished most recently. The open-session index above
+    // holds open rows only, so finished history had no index on when it ended and the lookup would
+    // scan and sort every session. Local and non-unique, and it holds finished rows only. No
+    // synchronized shape changes.
+    migrator.registerMigration("v12_finishedWorkoutLookup") { db in
+      try #sql(
+        """
+        CREATE INDEX "sessions_on_finishedAt"
+          ON "sessions"("finishedAt" DESC)
+          WHERE "finishedAt" IS NOT NULL
+        """
+      )
+      .execute(db)
+    }
+
     return migrator
   }
 }

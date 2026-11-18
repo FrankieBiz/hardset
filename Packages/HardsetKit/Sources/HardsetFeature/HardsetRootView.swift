@@ -265,6 +265,8 @@ public struct HardsetRootView: View {
   /// Loads the root, then what the start screen shows from it. Shared by the first appearance and
   /// "Try again", so a load that succeeds only on retry fills in everything a first load does.
   private func prepare() async {
+    // Before the load, because a recovered workout rebuilds its targets in the lifter's unit.
+    model.weightUnit = unit
     await model.load()
     guard model.isReady else { return }
     restorePendingGymPick()

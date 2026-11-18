@@ -1,6 +1,7 @@
 import Foundation
 import GRDB
 import SQLiteData
+import Synchronization
 import Testing
 
 @testable import HardsetStore
@@ -45,9 +46,11 @@ struct SavedWorkoutSchemaTests {
     return template
   }
 
-  @Test("The last migration is the saved workouts one")
-  func migratesToV11() {
-    #expect(HardsetMigrations.migrator().migrations.last == "v11_savedWorkouts")
+  @Test("Saved workouts arrive as the migration right after v10")
+  func migratesToV11() throws {
+    let migrations = HardsetMigrations.migrator().migrations
+    let v10 = try #require(migrations.firstIndex(of: "v10_importLedgerDigests"))
+    #expect(migrations[v10 + 1] == "v11_savedWorkouts")
   }
 
   @Test("Both new tables are synchronized, the parent before its children")
@@ -198,5 +201,34 @@ struct SavedWorkoutSchemaTests {
     #expect(plannedValues["plannedSets"] as Int? == 4)
     #expect((plannedValues["repRangeLower"] as Int?) == nil)
     #expect((plannedValues["repRangeUpper"] as Int?) == nil)
+  }
+
+  /// The statement the store really emits, not a copy of it, so the index cannot quietly stop being
+  /// used after a change to the query.
+  @Test("Finding the workout finished last reads an index and sorts nothing")
+  func lastFinishedWorkoutLookupIsIndexed() throws {
+    let queue = try migratedDatabase()
+    let store = LoggerStore(database: queue)
+    let statements = Mutex<[String]>([])
+    try queue.writeWithoutTransaction { db in
+      db.trace { event in
+        if case .statement(let statement) = event, statement.sql.hasPrefix("SELECT") {
+          statements.withLock { $0.append(statement.expandedSQL) }
+        }
+      }
+    }
+
+    _ = try store.lastFinishedPlan()
+
+    let lookups = statements.withLock { $0.filter { $0.contains("\"finishedAt\" DESC") } }
+    #expect(lookups.count == 1)
+    try queue.read { db in
+      for query in lookups {
+        let plan = try Row.fetchAll(db, sql: "EXPLAIN QUERY PLAN " + query)
+          .compactMap { $0["detail"] as String? }
+        #expect(plan.contains { $0.contains("sessions_on_finishedAt") }, "plan: \(plan)")
+        #expect(!plan.contains { $0.contains("TEMP B-TREE") }, "plan: \(plan)")
+      }
+    }
   }
 }
