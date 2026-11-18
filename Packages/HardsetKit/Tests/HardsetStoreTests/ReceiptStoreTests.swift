@@ -327,4 +327,160 @@ struct ReceiptStoreTests {
     try logger.finishSession(session, at: start.addingTimeInterval(600))
     return session
   }
+
+  // MARK: - The scorecard
+
+  /// A finished session of working sets (and optional warm-ups), with its plan row and rep range.
+  private func seedFinished(
+    _ db: DatabaseQueue, exercise: ExerciseID, machine: MachineID? = nil,
+    sets: [(Double, Int)], warmups: [(Double, Int)] = [], range: RepRange? = nil, at start: Date
+  ) async throws -> SessionID {
+    let id = SessionID(), plan = UUID()
+    try await db.write { db in
+      try Session.insert {
+        Session.Draft(id: id.rawValue, startedAt: start, finishedAt: start.addingTimeInterval(3600))
+      }.execute(db)
+      try SessionExercise.insert {
+        SessionExercise.Draft(
+          id: plan, sessionID: id.rawValue, exerciseID: exercise.rawValue,
+          machineID: machine?.rawValue, position: 0, repRangeLower: range?.lower,
+          repRangeUpper: range?.upper)
+      }.execute(db)
+      for (index, set) in (warmups.map { ($0, true) } + sets.map { ($0, false) }).enumerated() {
+        try LoggedSet.insert {
+          LoggedSet.Draft(
+            id: UUID(), sessionID: id.rawValue, exerciseID: exercise.rawValue,
+            machineID: machine?.rawValue, sessionExerciseID: plan, setOrdinal: index,
+            weightKg: set.0.0, reps: set.0.1, isWarmup: set.1,
+            completedAt: start.addingTimeInterval(Double(index + 1) * 60))
+        }.execute(db)
+      }
+    }
+    return id
+  }
+
+  private func scorecardFixture() async throws -> (DatabaseQueue, ExerciseID, MachineID) {
+    let db = try DatabaseQueue()
+    try HardsetMigrations.migrator().migrate(db)
+    let exercise = ExerciseID(), gym = UUID(), machine = MachineID()
+    try await db.write { db in
+      try Exercise.insert { Exercise.Draft(id: exercise.rawValue, name: "Press") }.execute(db)
+      try Gym.insert { Gym.Draft(id: gym, name: "Gym") }.execute(db)
+      try Machine.insert {
+        Machine.Draft(id: machine.rawValue, gymID: gym, name: "Sled A", stackIncrementKg: 2.5)
+      }.execute(db)
+    }
+    return (db, exercise, machine)
+  }
+
+  @Test("The scorecard compares each set with the same set in the last session on that machine")
+  func receiptScorecardComparesWithPreviousSessionOnSameMachine() async throws {
+    let (db, exercise, machine) = try await scorecardFixture()
+    let other = MachineID(), gym = UUID()
+    try await db.write { db in
+      try Gym.insert { Gym.Draft(id: gym, name: "Away") }.execute(db)
+      try Machine.insert { Machine.Draft(id: other.rawValue, gymID: gym, name: "Sled B") }.execute(db)
+    }
+    let t0 = Date(timeIntervalSince1970: 1_000_000)
+    _ = try await seedFinished(db, exercise: exercise, machine: machine, sets: [(40, 10), (40, 9)], at: t0)
+    // A more recent session on ANOTHER machine, far heavier, must not be what this is compared with.
+    _ = try await seedFinished(
+      db, exercise: exercise, machine: other, sets: [(100, 10)], at: t0.addingTimeInterval(86_400))
+    let current = try await seedFinished(
+      db, exercise: exercise, machine: machine, sets: [(40, 11), (40, 9)],
+      at: t0.addingTimeInterval(2 * 86_400))
+
+    let receipt = try await ReceiptStore(database: db).load(current)
+
+    let scorecard = try #require(receipt.scorecard)
+    #expect(scorecard.comparedCount == 1)
+    #expect(scorecard.beatenCount == 1)
+    #expect(scorecard.entries.first?.outcome == .beat(.beat(addedKg: 0, addedReps: 1)))
+    #expect(scorecard.headline == "Beat last time on 1 of 1")
+  }
+
+  @Test("The scorecard reads the rep range from the session, so a load jump inside it counts")
+  func receiptScorecardUsesTheSessionsRepRange() async throws {
+    let (db, exercise, machine) = try await scorecardFixture()
+    let t0 = Date(timeIntervalSince1970: 1_000_000)
+    let range = try #require(RepRange(lower: 8, upper: 12))
+    _ = try await seedFinished(db, exercise: exercise, machine: machine, sets: [(40, 12)], at: t0)
+    let current = try await seedFinished(
+      db, exercise: exercise, machine: machine, sets: [(42.5, 8)], range: range,
+      at: t0.addingTimeInterval(86_400))
+
+    let scorecard = try #require(try await ReceiptStore(database: db).load(current).scorecard)
+
+    #expect(scorecard.entries.first?.outcome == .beat(.beat(addedKg: 2.5, addedReps: -4)))
+  }
+
+  @Test("A first session on a movement is stated as a first time, not as progress")
+  func receiptScorecardFirstTime() async throws {
+    let (db, exercise, machine) = try await scorecardFixture()
+    let current = try await seedFinished(
+      db, exercise: exercise, machine: machine, sets: [(40, 10)],
+      at: Date(timeIntervalSince1970: 1_000_000))
+
+    let scorecard = try #require(try await ReceiptStore(database: db).load(current).scorecard)
+
+    #expect(scorecard.entries.map(\.outcome) == [.firstTime])
+    #expect(scorecard.comparedCount == 0)
+    #expect(scorecard.headline == "First time on every movement")
+  }
+
+  @Test("A record counts as a win for the movement even when no set beat its partner")
+  func scorecardCountsARecordAsBeating() async throws {
+    let (db, exercise, machine) = try await scorecardFixture()
+    let t0 = Date(timeIntervalSince1970: 1_000_000)
+    _ = try await seedFinished(db, exercise: exercise, machine: machine, sets: [(40, 10)], at: t0)
+    let current = try await seedFinished(
+      db, exercise: exercise, machine: machine, sets: [(45, 5)], at: t0.addingTimeInterval(86_400))
+
+    let receipt = try await ReceiptStore(database: db).load(current)
+
+    let scorecard = try #require(receipt.scorecard)
+    #expect(scorecard.entries.first?.outcome == .beat(nil))
+    #expect(scorecard.recordMovementCount == 1)
+  }
+
+  @Test("Warm-ups are neither compared nor counted")
+  func scorecardIgnoresWarmups() async throws {
+    let (db, exercise, machine) = try await scorecardFixture()
+    let t0 = Date(timeIntervalSince1970: 1_000_000)
+    _ = try await seedFinished(
+      db, exercise: exercise, machine: machine, sets: [(40, 10)], warmups: [(20, 5)], at: t0)
+    let current = try await seedFinished(
+      db, exercise: exercise, machine: machine, sets: [(40, 10)], warmups: [(20, 12)],
+      at: t0.addingTimeInterval(86_400))
+
+    let scorecard = try #require(try await ReceiptStore(database: db).load(current).scorecard)
+
+    #expect(scorecard.entries.map(\.outcome) == [.matched])
+  }
+
+  @Test("A workout with no working sets has no scorecard")
+  func noWorkingSetsHasNoScorecard() async throws {
+    let (db, exercise, machine) = try await scorecardFixture()
+    let current = try await seedFinished(
+      db, exercise: exercise, machine: machine, sets: [], warmups: [(20, 12)],
+      at: Date(timeIntervalSince1970: 1_000_000))
+
+    let receipt = try await ReceiptStore(database: db).load(current)
+
+    #expect(receipt.scorecard == nil)
+  }
+
+  @Test("An imported workout has no scorecard")
+  func importedReceiptHasNoScorecard() async throws {
+    let db = try DatabaseQueue()
+    try HardsetMigrations.migrator().migrate(db)
+    let csv = "Date,Workout Name,Duration,Exercise Name,Weight,Reps\n2026-11-01 10:00:00,Push,3600,Press,100,8\n"
+    _ = try await DataTransferStore(database: db).importWorkouts(
+      WorkoutCSVImport.preview(csv, strongUnit: .kilograms))
+    let id = try #require(try await db.read { try Session.fetchOne($0)?.id })
+
+    let receipt = try await ReceiptStore(database: db).load(SessionID(rawValue: id))
+
+    #expect(receipt.scorecard == nil)
+  }
 }

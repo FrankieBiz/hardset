@@ -9,10 +9,17 @@ public struct WorkoutReceipt: Hashable, Sendable, Identifiable {
   /// In the order the sets were performed.
   public let lines: [Line]
   public let notes: String
+  /// How the workout compares with last time, or nil when it cannot say: an imported workout makes
+  /// no claim, and a workout with no working sets has nothing to compare.
+  public let scorecard: WorkoutScorecard?
 
-  public init(id: SessionID, title: String, startedAt: Date, finishedAt: Date, lines: [Line], notes: String = "") {
+  public init(
+    id: SessionID, title: String, startedAt: Date, finishedAt: Date, lines: [Line],
+    notes: String = "", scorecard: WorkoutScorecard? = nil
+  ) {
     self.id = id; self.title = title; self.startedAt = startedAt
     self.finishedAt = finishedAt; self.lines = lines; self.notes = notes
+    self.scorecard = scorecard
   }
 
   /// What a set was performed on, as far as the record shows.
