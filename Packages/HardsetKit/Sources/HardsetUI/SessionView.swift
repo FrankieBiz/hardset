@@ -798,6 +798,11 @@ public struct SessionView: View {
         return "\(record.reps) reps at \(weight), up from \(previousReps)"
       }
       return "\(record.reps) reps at \(weight)"
+    case .loadAtReps:
+      if let previous = record.previousWeightKg {
+        return "\(weight) for \(record.reps) reps, up from \(Self.trim(unit.fromKilograms(previous))) \(unit.abbreviation)"
+      }
+      return "\(weight) for \(record.reps) reps"
     case .estimatedOneRepMax:
       // States the new estimate as well as the old one, so the claim can be checked, and rounds
       // both as every other estimate in the app is rounded: to 0.5 kg or 1 lb, never to the
