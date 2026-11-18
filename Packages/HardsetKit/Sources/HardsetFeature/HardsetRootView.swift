@@ -20,6 +20,7 @@ public struct HardsetEnvironment {
   public let receipts: ReceiptStore
   public let transfer: DataTransferStore
   public let gyms: GymStore
+  public let templates: TemplateStore
   /// Whether this launch replicates to iCloud. Shown in Settings, so a local-only build says
   /// plainly where the lifter's workouts live instead of leaving them to assume a backup.
   public let sync: SyncStatus?
@@ -34,6 +35,7 @@ public struct HardsetEnvironment {
     self.history = HistoryStore(database: database)
     self.progression = ProgressionStore(database: database)
     self.gyms = GymStore(database: database)
+    self.templates = TemplateStore(database: database)
     self.health = DeviceHealthStore(database: database)
     self.receipts = ReceiptStore(database: database)
     self.transfer = DataTransferStore(database: database)

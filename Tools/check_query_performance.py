@@ -58,6 +58,39 @@ QUERIES = {
     ),
 }
 
+# Queries over tables and columns that only exist after the upgrade, so there is nothing to
+# compare them with before it. They are held to the same plan gate: no scan and no sort.
+UPGRADED_QUERIES = {
+    "template last done": (
+        'SELECT templateID, max(startedAt) FROM sessions WHERE templateID IS NOT NULL AND finishedAt IS NOT NULL GROUP BY templateID',
+        (),
+    ),
+    "template last session": (
+        'SELECT id FROM sessions WHERE templateID = ? AND finishedAt IS NOT NULL ORDER BY startedAt DESC LIMIT 1',
+        ("template-1",),
+    ),
+    "template movements": (
+        'SELECT * FROM templateExercises WHERE templateID IN (?, ?)',
+        ("template-1", "template-2"),
+    ),
+}
+
+
+def seed_saved_workouts(db):
+    """Three saved workouts of four movements each, and a tenth of the sessions started from them."""
+    db.executemany(
+        'INSERT INTO workoutTemplates (id, name, position) VALUES (?, ?, ?)',
+        [(f"template-{i}", f"Workout {i}", i) for i in range(3)],
+    )
+    db.executemany(
+        'INSERT INTO templateExercises (id, templateID, exerciseID, position, plannedSets) VALUES (?, ?, ?, ?, 3)',
+        ((f"template-exercise-{i}", f"template-{i // 4}", f"exercise-{i % 50}", i % 4) for i in range(12)),
+    )
+    db.execute(
+        "UPDATE sessions SET templateID = 'template-' || (CAST(substr(id, 9) AS INTEGER) % 3) "
+        "WHERE CAST(substr(id, 9) AS INTEGER) % 10 = 0"
+    )
+
 
 def statements(source):
     # Only literal SQL: fail explicitly if migrations switch to interpolated SQL.
@@ -137,6 +170,15 @@ def main():
         print(f"  after:  {'; '.join(plan)}")
         if any("SCAN " in step or "TEMP B-TREE" in step for step in plan):
             failures.append(name)
+    if upgrade:
+        seed_saved_workouts(db)
+        for name, (query, arguments) in UPGRADED_QUERIES.items():
+            rows, elapsed, plan = measure(db, query, arguments)
+            assert rows, f"{name}: empty fixture cannot verify a loading query"
+            print(f"{name}: {elapsed:.3f} ms ({len(rows)} rows)")
+            print(f"  after:  {'; '.join(plan)}")
+            if any("SCAN " in step or "TEMP B-TREE" in step for step in plan):
+                failures.append(name)
     assert db.execute("PRAGMA foreign_key_check").fetchall() == []
     assert db.execute("SELECT count(*) FROM loggedSets").fetchone()[0] == 100_000
     if args.require_indexes and failures:
