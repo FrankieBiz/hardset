@@ -52,7 +52,7 @@ public struct SpotlightOverlay: View {
 }
 
 /// The whole rectangle with a rounded hole cut from it, filled with the even-odd rule.
-struct SpotlightShape: Shape {
+nonisolated struct SpotlightShape: Shape {
   var hole: CGRect
   /// Passed in rather than read from `Tokens`, because a shape's path is drawn off the main actor.
   let cornerRadius: CGFloat
