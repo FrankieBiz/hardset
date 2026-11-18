@@ -222,34 +222,48 @@ public struct VolumeReportView: View {
     // corpus. Never a level chosen here.
     let claim = VolumeAnalyzer.doseResponse(fractionalSets: row.sets, for: row.muscle)
 
+    // The name, what is not modelled, and the figure are one spoken element, so the figure is read
+    // with its muscle and the badge stays a control of its own.
+    let nameBlock = VStack(alignment: .leading, spacing: Tokens.Spacing.hairline) {
+      Text(name)
+        .font(Tokens.Text.label)
+        .foregroundStyle(Tokens.Color.chalk)
+      if isCounted {
+        Text("Counted, not modelled")
+          .font(Tokens.Text.caption)
+          .foregroundStyle(Tokens.Color.chalkDim)
+      }
+    }
+    .accessibilityElement(children: .combine)
+    .accessibilityLabel(spoken)
+    let figure = Text(value)
+      .font(Tokens.Text.figure)
+      .foregroundStyle(Tokens.Color.chalk)
+      .accessibilityHidden(true)
+    let badge = CertaintyBadge(
+      level: CertaintyLevel(claim.certainty),
+      methodology: claim.source.methodology,
+      citation: claim.source.citation
+    )
+
     return VStack(alignment: .leading, spacing: Tokens.Spacing.snug) {
-      HStack(alignment: .top, spacing: Tokens.Spacing.snug) {
-        VStack(alignment: .leading, spacing: Tokens.Spacing.tight) {
-          // The name, what is not modelled, and the figure are one spoken element, so the figure is
-          // read with its muscle and the badge below it stays a control of its own.
-          VStack(alignment: .leading, spacing: Tokens.Spacing.hairline) {
-            Text(name)
-              .font(Tokens.Text.label)
-              .foregroundStyle(Tokens.Color.chalk)
-            if isCounted {
-              Text("Counted, not modelled")
-                .font(Tokens.Text.caption)
-                .foregroundStyle(Tokens.Color.chalkDim)
-            }
-          }
-          .accessibilityElement(children: .combine)
-          .accessibilityLabel(spoken)
-          CertaintyBadge(
-            level: CertaintyLevel(claim.certainty),
-            methodology: claim.source.methodology,
-            citation: claim.source.citation
-          )
+      // One line when the name, its certainty and the figure fit, which they do at ordinary sizes;
+      // otherwise the certainty drops under the name so nothing is squeezed or cut.
+      ViewThatFits(in: .horizontal) {
+        HStack(alignment: .center, spacing: Tokens.Spacing.snug) {
+          nameBlock
+          badge
+          Spacer(minLength: Tokens.Spacing.snug)
+          figure
         }
-        Spacer(minLength: Tokens.Spacing.snug)
-        Text(value)
-          .font(Tokens.Text.figure)
-          .foregroundStyle(Tokens.Color.chalk)
-          .accessibilityHidden(true)
+        VStack(alignment: .leading, spacing: Tokens.Spacing.tight) {
+          HStack(alignment: .top, spacing: Tokens.Spacing.snug) {
+            nameBlock
+            Spacer(minLength: Tokens.Spacing.snug)
+            figure
+          }
+          badge
+        }
       }
       track(fraction: CGFloat(row.sets / maxSets), isCounted: isCounted)
     }

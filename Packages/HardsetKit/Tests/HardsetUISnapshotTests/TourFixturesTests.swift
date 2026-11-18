@@ -60,4 +60,20 @@ struct TourFixturesTests {
     let sessions = try staged.environment.history.recentSessions(limit: 50)
     #expect(sessions.count == 12)
   }
+
+  /// A lifter in pounds sees round pound loads and steps, not the conversion of a round kilogram
+  /// load: 235 and 20, never 231.49 and 22.05. They are still stored in kilograms.
+  @Test func poundsStageWritesRoundPoundLoadsAndSteps() throws {
+    let staged = try TourFixtures.make(stage: .liveSession, now: Self.now, unit: .pounds)
+
+    let live = try #require(staged.liveSession)
+    let legPress = try #require(live.exercises.first)
+    let loggedLoads = legPress.slots.compactMap(\.draft.weightKg).map { WeightUnit.pounds.fromKilograms($0) }
+    #expect(!loggedLoads.isEmpty)
+    for load in loggedLoads {
+      #expect(abs(load - 235) < 0.001, "\(load)")
+    }
+    let stepKg = try #require(staged.machines.first?.stackIncrementKg)
+    #expect(abs(WeightUnit.pounds.fromKilograms(stepKg) - 20) < 0.001)
+  }
 }

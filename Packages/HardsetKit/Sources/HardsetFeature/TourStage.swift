@@ -71,8 +71,8 @@ struct TourStage: View {
     await Task.yield()
     do {
       prepared = Prepared(
-        start: try TourFixtures.make(stage: .start),
-        live: try TourFixtures.make(stage: .liveSession))
+        start: try TourFixtures.make(stage: .start, unit: unit),
+        live: try TourFixtures.make(stage: .liveSession, unit: unit))
       // Opened straight onto the rest step, there is no logged set to have started one.
       if model.tourStep == .rest { rest.restart() }
     } catch {

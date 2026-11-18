@@ -50,10 +50,16 @@ public enum TourFixtures {
 
   /// Builds the staged app.
   ///
-  /// - Parameter now: The instant the staged world treats as the present. The history lies before
-  ///   it. Pass the real current date for the tour; a test passes a fixed instant at or before the
-  ///   real clock, because the open workout is reopened with the real clock.
-  public static func make(stage: Stage, now: Date = Date()) throws -> Staged {
+  /// - Parameters:
+  ///   - now: The instant the staged world treats as the present. The history lies before it. Pass
+  ///     the real current date for the tour; a test passes a fixed instant at or before the real
+  ///     clock, because the open workout is reopened with the real clock.
+  ///   - unit: The unit the lifter reads. The loads and the machines' steps are written in round
+  ///     numbers of it, so a lifter in pounds sees 225 and 20 lb steps, not 231.49 and 22.05; they
+  ///     are stored in kilograms like every set.
+  public static func make(
+    stage: Stage, now: Date = Date(), unit: WeightUnit = .kilograms
+  ) throws -> Staged {
     var configuration = Configuration()
     // As the app's own database is opened: required for the schema's cascades to fire.
     configuration.foreignKeysEnabled = true
@@ -71,7 +77,7 @@ public enum TourFixtures {
       machineIDs.append(
         try environment.gyms.createMachine(
           at: gymID, name: machine.name, brand: machine.brand,
-          stackIncrementKg: machine.stepKg, now: beginning))
+          stackIncrementKg: unit.toKilograms(machine.step(in: unit)), now: beginning))
     }
     let stored = try environment.gyms.machines(at: gymID)
     let machines = machineIDs.compactMap { id in stored.first { $0.id == id } }
@@ -102,7 +108,7 @@ public enum TourFixtures {
         let index = coordinator.exercises.count - 1
         for (slotIndex, set) in lift.logged.enumerated() {
           coordinator.exercises[index].slots[slotIndex].draft = SetEntryDraft(
-            weightKg: set.kg, reps: set.reps)
+            weightKg: unit.toKilograms(set.load.in(unit)), reps: set.reps)
           current = current.addingTimeInterval(180)
           let state = coordinator.exercises[index]
           let logged = coordinator.logSet(slotID: state.slots[slotIndex].id, inExercise: state.id)
@@ -144,10 +150,26 @@ public enum TourFixtures {
 
   // MARK: - The staged world
 
+  /// A load written once in each unit, in round numbers of that unit, so what the tour shows reads
+  /// like a lifter's own training whichever unit they use.
+  private struct Load {
+    let kg: Double
+    let lb: Double
+
+    func `in`(_ unit: WeightUnit) -> Double {
+      switch unit {
+      case .kilograms: kg
+      case .pounds: lb
+      }
+    }
+  }
+
   private struct MachineSpec {
     let name: String
     let brand: String
-    let stepKg: Double
+    let step: Load
+
+    func step(in unit: WeightUnit) -> Double { step.in(unit) }
   }
 
   /// One movement in a workout: how many sets it plans and the sets actually logged.
@@ -156,7 +178,7 @@ public enum TourFixtures {
     /// Index into the gym's machines.
     let machine: Int
     let planned: Int
-    let logged: [(kg: Double, reps: Int)]
+    let logged: [(load: Load, reps: Int)]
   }
 
   private struct Workout {
@@ -166,24 +188,27 @@ public enum TourFixtures {
 
   /// Three machines the catalogue has a movement for, each with the stack step a gym machine has.
   private static let machineSpecs: [MachineSpec] = [
-    MachineSpec(name: "Leg Press", brand: "Hammer Strength", stepKg: 10),
-    MachineSpec(name: "Chest Press", brand: "Life Fitness", stepKg: 5),
-    MachineSpec(name: "Lat Pulldown", brand: "Cybex", stepKg: 5),
+    MachineSpec(name: "Leg Press", brand: "Hammer Strength", step: Load(kg: 10, lb: 20)),
+    MachineSpec(name: "Chest Press", brand: "Life Fitness", step: Load(kg: 5, lb: 10)),
+    MachineSpec(name: "Lat Pulldown", brand: "Cybex", step: Load(kg: 5, lb: 10)),
   ]
 
   private static let legPress = 0
   private static let chestPress = 1
   private static let latPulldown = 2
 
-  private static func threeSets(_ kg: Double) -> [(kg: Double, reps: Int)] {
-    [(kg, 10), (kg, 10), (kg, 9)]
+  private static func threeSets(_ load: Load) -> [(load: Load, reps: Int)] {
+    [(load, 10), (load, 10), (load, 9)]
   }
 
-  private static func lift(
-    _ movement: String, _ machine: Int, _ kg: Double
-  ) -> Lift {
-    Lift(movement: movement, machine: machine, planned: 3, logged: threeSets(kg))
+  private static func lift(_ movement: String, _ machine: Int, _ load: Load) -> Lift {
+    Lift(movement: movement, machine: machine, planned: 3, logged: threeSets(load))
   }
+
+  private static let legPressLoad = Load(kg: 100, lb: 225)
+  private static let legPressRaised = Load(kg: 105, lb: 235)
+  private static let chestPressLoad = Load(kg: 50, lb: 110)
+  private static let latPulldownLoad = Load(kg: 45, lb: 100)
 
   /// Twelve finished workouts, three of them in the last seven days. They rotate through the three
   /// machines at steady weights, and the newest raises the leg press, so the engine finds a record
@@ -192,15 +217,18 @@ public enum TourFixtures {
     let days: [Double] = [38, 35, 31, 28, 24, 21, 17, 14, 10, 6, 3, 1]
     return days.enumerated().map { index, daysAgo in
       let isNewest = index == days.count - 1
-      let legKg: Double = isNewest ? 105 : 100
+      let leg = isNewest ? legPressRaised : legPressLoad
       let lifts: [Lift]
       switch index % 3 {
       case 0:
-        lifts = [lift("Leg Press", legPress, legKg), lift("Chest Press", chestPress, 50)]
+        lifts = [lift("Leg Press", legPress, leg), lift("Chest Press", chestPress, chestPressLoad)]
       case 1:
-        lifts = [lift("Lat Pulldown", latPulldown, 45), lift("Chest Press", chestPress, 50)]
+        lifts = [
+          lift("Lat Pulldown", latPulldown, latPulldownLoad),
+          lift("Chest Press", chestPress, chestPressLoad),
+        ]
       default:
-        lifts = [lift("Leg Press", legPress, legKg), lift("Lat Pulldown", latPulldown, 45)]
+        lifts = [lift("Leg Press", legPress, leg), lift("Lat Pulldown", latPulldown, latPulldownLoad)]
       }
       return Workout(daysAgo: daysAgo, lifts: lifts)
     }
@@ -209,7 +237,11 @@ public enum TourFixtures {
   /// The open workout: two movements of three planned sets, two sets logged on the first and one
   /// on the second, so there is a next set waiting for the tour to log.
   private static let liveLifts: [Lift] = [
-    Lift(movement: "Leg Press", machine: legPress, planned: 3, logged: [(105, 10), (105, 10)]),
-    Lift(movement: "Chest Press", machine: chestPress, planned: 3, logged: [(55, 10)]),
+    Lift(
+      movement: "Leg Press", machine: legPress, planned: 3,
+      logged: [(legPressRaised, 10), (legPressRaised, 10)]),
+    Lift(
+      movement: "Chest Press", machine: chestPress, planned: 3,
+      logged: [(Load(kg: 55, lb: 120), 10)]),
   ]
 }

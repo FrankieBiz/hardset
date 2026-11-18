@@ -24,14 +24,22 @@ public struct SpotlightOverlay: View {
 
   public var body: some View {
     let hole = target.map(Self.padded)
-    let shape = SpotlightShape(hole: hole ?? .zero, cornerRadius: Self.holeRadius)
-    shape
-      .fill(Tokens.Color.canvas.opacity(0.7), style: FillStyle(eoFill: true))
-      .opacity(target == nil ? 0 : 1)
-      .contentShape(shape, eoFill: true)
-      .allowsHitTesting(swallowsTouches && target != nil)
-      .animation(Tokens.Motion.adaptive(Tokens.Motion.state, reduceMotion: reduceMotion), value: hole)
-      .accessibilityHidden(true)
+    ZStack {
+      // What is seen: the scrim with its rounded hole, drawn and never hit.
+      SpotlightShape(hole: hole ?? .zero, cornerRadius: Self.holeRadius)
+        .fill(Tokens.Color.canvas.opacity(0.7), style: FillStyle(eoFill: true))
+        .opacity(target == nil ? 0 : 1)
+        .allowsHitTesting(false)
+        .animation(
+          Tokens.Motion.adaptive(Tokens.Motion.state, reduceMotion: reduceMotion), value: hole)
+      // What is touched: four blockers around the hole, so a touch in it reaches the control below
+      // and a touch anywhere else stops here. An even-odd content shape was tried for this first and
+      // left the real check unreachable, so the hole is simply a gap between views.
+      if swallowsTouches, let hole {
+        TouchBlockers(hole: hole)
+      }
+    }
+    .accessibilityHidden(true)
   }
 
   /// The hole's corners follow the control radius, grown by the air around the target.
@@ -62,5 +70,33 @@ struct SpotlightShape: Shape {
         cornerSize: CGSize(width: cornerRadius, height: cornerRadius))
     }
     return path
+  }
+}
+
+/// Four transparent views that cover everything but `hole`, in the space they are drawn in.
+private struct TouchBlockers: View {
+  let hole: CGRect
+
+  var body: some View {
+    GeometryReader { proxy in
+      let size = proxy.size
+      let top = min(max(hole.minY, 0), size.height)
+      let bottom = min(max(hole.maxY, top), size.height)
+      let left = min(max(hole.minX, 0), size.width)
+      let right = min(max(hole.maxX, left), size.width)
+      ZStack(alignment: .topLeading) {
+        blocker(x: 0, y: 0, width: size.width, height: top)
+        blocker(x: 0, y: bottom, width: size.width, height: size.height - bottom)
+        blocker(x: 0, y: top, width: left, height: bottom - top)
+        blocker(x: right, y: top, width: size.width - right, height: bottom - top)
+      }
+    }
+  }
+
+  private func blocker(x: CGFloat, y: CGFloat, width: CGFloat, height: CGFloat) -> some View {
+    Color.clear
+      .frame(width: max(0, width), height: max(0, height))
+      .contentShape(Rectangle())
+      .offset(x: x, y: y)
   }
 }
