@@ -81,6 +81,32 @@ struct ProgressTrendTests {
     #expect(trend?.stalledSessions == 3)
   }
 
+  @Test func aLongFlatHistoryReportsTheThreeSessionsThatDecideIt() {
+    // Only the last three sessions decide a stall, so the label never claims a longer run than
+    // the sessions that were actually checked.
+    let samples = (0..<10).map { index in
+      s(day: index * 7, session: index, kg: 40, reps: 10)
+    }
+    let trend = ProgressTrendAnalyzer.trend(
+      key: key(), samples: samples, incrementKg: 2.5, estimatesOneRepMax: true
+    )
+    #expect(trend?.stalledSessions == ProgressTrendAnalyzer.stallRun)
+  }
+
+  @Test func aRecordFourSessionsBackDoesNotHideAStall() {
+    var samples = (0..<6).map { index in
+      s(day: index * 7, session: index, kg: 40, reps: 10)
+    }
+    samples.append(s(day: 42, session: 6, kg: 42.5, reps: 10))
+    samples.append(contentsOf: (7..<10).map { index in
+      s(day: index * 7, session: index, kg: 42.5, reps: 10)
+    })
+    let trend = ProgressTrendAnalyzer.trend(
+      key: key(), samples: samples, incrementKg: 2.5, estimatesOneRepMax: true
+    )
+    #expect(trend?.stalledSessions == ProgressTrendAnalyzer.stallRun)
+  }
+
   @Test func aRecordInTheLastThreeIsNotAStall() {
     var samples = (0..<3).map { index in
       s(day: index * 7, session: index, kg: 40, reps: 10)
@@ -120,6 +146,36 @@ struct ProgressTrendTests {
       samples: samples, incrementKg: 2.5, estimatesOneRepMax: true
     )
     #expect(records == [SessionID(rawValue: sessionUUID(1))])
+  }
+
+  @Test func trendOfALongHistoryStaysFast() {
+    // The progress board computes a trend for every movement on open. A lifter's busiest movement
+    // is 400 sessions of five sets, so the record replay must not grow with the square of that.
+    var samples: [ProgressionSample] = []
+    for session in 0..<400 {
+      for position in 0..<5 {
+        samples.append(
+          ProgressionSample(
+            sessionID: SessionID(rawValue: sessionUUID(session)),
+            machineID: nil,
+            weightKg: 40 + Double(session / 40) * 2.5,
+            reps: 8 + (session + position) % 5,
+            completedAt: day(session * 2).addingTimeInterval(Double(position))
+          )
+        )
+      }
+    }
+    #expect(samples.count == 2_000)
+
+    var trend: MovementTrend?
+    let elapsed = ContinuousClock().measure {
+      trend = ProgressTrendAnalyzer.trend(
+        key: key(), samples: samples, incrementKg: 2.5, estimatesOneRepMax: true
+      )
+    }
+
+    #expect(trend?.sessionCount == 400)
+    #expect(elapsed < .milliseconds(50), "trend over 2,000 sets took \(elapsed)")
   }
 
   @Test func mostImprovedOrdersByChange() {

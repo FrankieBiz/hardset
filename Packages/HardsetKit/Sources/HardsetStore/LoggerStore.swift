@@ -308,8 +308,9 @@ public nonisolated struct LoggerStore: Sendable {
     guard db.changesCount == 1 else { throw LoggerStoreError.writeNotApplied }
   }
 
-  /// At most 14 actual sets preserve every comparison the Core detector makes:
-  /// all-time load, reps near the candidate load, and the best load at each
+  /// At most 15 actual sets preserve every comparison the Core detector makes:
+  /// all-time load, reps near the candidate load, the heaviest set with at least
+  /// the candidate's reps (at any rep count), and the best load at each
   /// estimable rep count. The estimate formula remains solely in HardsetCore.
   private static func recordComparisonSets(
     in db: Database,
@@ -348,6 +349,15 @@ public nonisolated struct LoggerStore: Sendable {
       .order { $0.reps.desc() }
       .limit(1).fetchOne(db)
     if let mostReps { comparisons.append(record(from: mostReps)) }
+
+    // "More weight for the same reps" compares with every earlier set of at least this many reps,
+    // so it works above the twelve the estimate stops at, and for bodyweight work. The ordering
+    // is the heaviest-set index order, so the first row that qualifies ends the read.
+    let heaviestAtReps = try history
+      .where { $0.reps >= candidate.reps }
+      .order { ($0.weightKg.desc(), $0.reps.desc(), $0.completedAt.desc(), $0.id.desc()) }
+      .limit(1).fetchOne(db)
+    if let heaviestAtReps { comparisons.append(record(from: heaviestAtReps)) }
 
     if estimatesOneRepMax,
       StrengthMath.estimatedOneRepMax(weightKg: candidate.weightKg, reps: candidate.reps).value != nil

@@ -19,8 +19,9 @@ public struct MovementTrend: Hashable, Sendable, Identifiable {
   /// A fraction, so 0.08 means +8%. Nil when the six-week window has no session.
   public let sixWeekChange: Double?
   public let sessionCount: Int
-  /// Non-nil means the movement is stalled, and the number is the trailing run of sessions
-  /// without a record.
+  /// Non-nil means the movement is stalled: none of its last `ProgressTrendAnalyzer.stallRun`
+  /// sessions set a record, and the number is that count. It is never a longer run, because only
+  /// those sessions are checked.
   public let stalledSessions: Int?
   public let latestDate: Date
 
@@ -90,20 +91,19 @@ public enum ProgressTrendAnalyzer {
       change = nil
     }
 
-    let recordSessions = recordSessionIDs(
-      samples: samples,
-      incrementKg: incrementKg,
-      estimatesOneRepMax: estimatesOneRepMax,
-      lastSessions: sessions.count - 1
-    )
+    // Only the last `stallRun` sessions decide a stall, so only they are replayed through the
+    // detector, each set against everything before it. Replaying the whole history made opening
+    // the progress board grow with the square of a movement's set count.
     var stalled: Int?
     if sessions.count >= minimumSessionsForStall {
-      var run = 0
-      for session in sessions.dropFirst().reversed() {
-        if recordSessions.contains(session.id) { break }
-        run += 1
-      }
-      stalled = run >= stallRun ? run : nil
+      let recordSessions = recordSessionIDs(
+        samples: samples,
+        incrementKg: incrementKg,
+        estimatesOneRepMax: estimatesOneRepMax,
+        lastSessions: stallRun
+      )
+      let setARecord = sessions.suffix(stallRun).contains { recordSessions.contains($0.id) }
+      stalled = setARecord ? nil : stallRun
     }
 
     return MovementTrend(
@@ -122,6 +122,10 @@ public enum ProgressTrendAnalyzer {
   /// The first session only builds history: with nothing before it, an ordinary ramp would look
   /// like a run of records. `lastSessions` limits which sessions are tested, not what they are
   /// tested against.
+  ///
+  /// Every tested set is compared with all earlier sets, so testing every session costs the square
+  /// of the set count. A screen that replays many movements passes `lastSessions`; the single
+  /// exercise screen, which needs every record mark, leaves it nil.
   public static func recordSessionIDs(
     samples: [ProgressionSample],
     incrementKg: Double?,
