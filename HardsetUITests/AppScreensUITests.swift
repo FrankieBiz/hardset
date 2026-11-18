@@ -333,7 +333,7 @@ final class AppScreensUITests: XCTestCase {
     audit(app, screen: "onboarding tour 2")
     // Hittable, because the scrim over the rest of the staged phone swallows touches: only the
     // check inside the spotlight can be tapped, and no other page's row is mistaken for it.
-    let check = app.buttons.matching(NSPredicate(format: "label == 'Log set' AND hittable == true"))
+    let check = app.buttons.matching(NSPredicate(format: "label == 'Log set' AND isHittable == true"))
       .firstMatch
     XCTAssertTrue(check.waitForExistence(timeout: 10))
     check.tap()
