@@ -191,6 +191,8 @@ public nonisolated struct ProgressionStore: Sendable {
   private struct HistoryInputs: Sendable {
     let samples: [ProgressionSample]
     let names: [MachineID: String]
+    /// Each machine's real load step, so a record on a 5 kg stack needs a genuine 5 kg.
+    let increments: [MachineID: Double]
     let estimatesOneRepMax: Bool
   }
 
@@ -203,8 +205,11 @@ public nonisolated struct ProgressionStore: Sendable {
     // missing modality is not assumed to be bodyweight.
     let modality = try Exercise.where { $0.id.eq(exerciseID.rawValue) }.select(\.modality).fetchOne(db)
     let estimates = modality.flatMap(ExerciseModality.init(rawValue:))?.estimatesOneRepMax ?? true
+    // One read for both, so labelling a history stays a single query however much it carries.
+    let machines = try readMachines(ids, in: db)
     return HistoryInputs(
-      samples: samples, names: try readMachineNames(ids, in: db), estimatesOneRepMax: estimates
+      samples: samples, names: machines.names, increments: machines.increments,
+      estimatesOneRepMax: estimates
     )
   }
 
@@ -213,9 +218,23 @@ public nonisolated struct ProgressionStore: Sendable {
       from: inputs.samples, exerciseID: exerciseID, estimatesOneRepMax: inputs.estimatesOneRepMax
     )
     let changes = ProgressionAnalyzer.machineChanges(from: inputs.samples)
+    // Per series, never merged across machines: each machine's records are measured against its own
+    // history and its own step. This replays every session, which the single-exercise screen needs
+    // for every record mark; the progress board, which replays every movement, caps it instead.
+    var recordSessions: [ProgressionKey: Set<SessionID>] = [:]
+    var ledgers: [ProgressionKey: [BestAtWeight]] = [:]
+    for one in series {
+      let samples = inputs.samples.filter { $0.machineID == one.key.machineID }
+      recordSessions[one.key] = ProgressTrendAnalyzer.recordSessionIDs(
+        samples: samples, incrementKg: one.key.machineID.flatMap { inputs.increments[$0] },
+        estimatesOneRepMax: inputs.estimatesOneRepMax
+      )
+      ledgers[one.key] = RepMaxLedger.bests(from: samples)
+    }
     return ProgressionHistory(
       series: series, machineChanges: changes, machineNames: inputs.names,
-      estimatesOneRepMax: inputs.estimatesOneRepMax
+      estimatesOneRepMax: inputs.estimatesOneRepMax,
+      recordSessionIDs: recordSessions, bestAtWeight: ledgers
     )
   }
 
@@ -243,12 +262,23 @@ public nonisolated struct ProgressionStore: Sendable {
   private static func readMachineNames(_ ids: [MachineID], in db: Database) throws
     -> [MachineID: String]
   {
-    guard !ids.isEmpty else { return [:] }
+    try readMachines(ids, in: db).names
+  }
+
+  /// Names and real load steps for the given machines, from a single query.
+  private static func readMachines(_ ids: [MachineID], in db: Database) throws
+    -> (names: [MachineID: String], increments: [MachineID: Double])
+  {
+    guard !ids.isEmpty else { return ([:], [:]) }
     let raws = ids.map(\.rawValue)
-    return try Machine
-      .where { $0.id.in(raws) }
-      .fetchAll(db)
-      .reduce(into: [MachineID: String]()) { $0[MachineID(rawValue: $1.id)] = $1.name }
+    var names: [MachineID: String] = [:]
+    var increments: [MachineID: Double] = [:]
+    for row in try Machine.where({ $0.id.in(raws) }).fetchAll(db) {
+      let id = MachineID(rawValue: row.id)
+      names[id] = row.name
+      if let step = row.stackIncrementKg { increments[id] = step }
+    }
+    return (names, increments)
   }
 }
 
@@ -260,17 +290,26 @@ public nonisolated struct ProgressionHistory: Hashable, Sendable {
   /// `false` for a movement whose logged load is not the load moved, such as bodyweight work, so
   /// a chart can say why no one-rep max is estimated rather than blame the rep range.
   public let estimatesOneRepMax: Bool
+  /// For each series, the sessions in which at least one record was set, so the chart can mark
+  /// them. Records are the detector's alone, measured against that machine's own history.
+  public let recordSessionIDs: [ProgressionKey: Set<SessionID>]
+  /// For each series, the most reps ever done at each weight, heaviest first.
+  public let bestAtWeight: [ProgressionKey: [BestAtWeight]]
 
   public init(
     series: [ProgressionSeries],
     machineChanges: [MachineChange],
     machineNames: [MachineID: String],
-    estimatesOneRepMax: Bool = true
+    estimatesOneRepMax: Bool = true,
+    recordSessionIDs: [ProgressionKey: Set<SessionID>] = [:],
+    bestAtWeight: [ProgressionKey: [BestAtWeight]] = [:]
   ) {
     self.series = series
     self.machineChanges = machineChanges
     self.machineNames = machineNames
     self.estimatesOneRepMax = estimatesOneRepMax
+    self.recordSessionIDs = recordSessionIDs
+    self.bestAtWeight = bestAtWeight
   }
 
   /// Label for a series. Free-weight work and a deleted machine are named rather than blank.

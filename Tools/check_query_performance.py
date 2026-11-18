@@ -56,11 +56,29 @@ QUERIES = {
         'SELECT * FROM loggedSets WHERE exerciseID = ? AND machineID IS NULL AND NOT isWarmup AND reps >= ? ORDER BY weightKg DESC, reps DESC, completedAt DESC, id DESC LIMIT 1',
         ("exercise-3", 8),
     ),
+    "progress board sets": (
+        'SELECT exerciseID, machineID, sessionID, weightKg, reps, completedAt FROM loggedSets WHERE NOT isWarmup',
+        (),
+    ),
     "record best at reps": (
         'SELECT * FROM loggedSets WHERE exerciseID = ? AND machineID IS NULL AND NOT isWarmup AND reps = ? AND weightKg > 0 AND weightKg <= ? ORDER BY weightKg DESC LIMIT 1',
         ("exercise-3", 8, 1000),
     ),
 }
+
+# Queries that return a whole table's worth by design, so they cannot be a keyed lookup: the work
+# is the size of the answer. They may scan, but they may not sort or build a temporary tree.
+WHOLE_HISTORY = {"progress board sets"}
+
+
+def is_unbounded(name, plan):
+    for step in plan:
+        if "TEMP B-TREE" in step:
+            return True
+        if "SCAN " in step and name not in WHOLE_HISTORY:
+            return True
+    return False
+
 
 # Queries over tables and columns that only exist after the upgrade, so there is nothing to
 # compare them with before it. They are held to the same plan gate: no scan and no sort.
@@ -172,7 +190,7 @@ def main():
         print(f"{name}: {old_elapsed:.3f} -> {elapsed:.3f} ms ({len(rows)} rows)")
         print(f"  before: {'; '.join(old_plan)}")
         print(f"  after:  {'; '.join(plan)}")
-        if any("SCAN " in step or "TEMP B-TREE" in step for step in plan):
+        if is_unbounded(name, plan):
             failures.append(name)
     if upgrade:
         seed_saved_workouts(db)
@@ -181,7 +199,7 @@ def main():
             assert rows, f"{name}: empty fixture cannot verify a loading query"
             print(f"{name}: {elapsed:.3f} ms ({len(rows)} rows)")
             print(f"  after:  {'; '.join(plan)}")
-            if any("SCAN " in step or "TEMP B-TREE" in step for step in plan):
+            if is_unbounded(name, plan):
                 failures.append(name)
     assert db.execute("PRAGMA foreign_key_check").fetchall() == []
     assert db.execute("SELECT count(*) FROM loggedSets").fetchone()[0] == 100_000
