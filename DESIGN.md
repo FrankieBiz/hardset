@@ -245,6 +245,32 @@ Selection rows, the unit switch and pickers stay silent.
   top would be out of sight beside the button it answers; the sheet stays up with everything typed.
   Nothing is inferred from the name, and what is saved is the lifter's own attribution at moderate
   certainty. It adds no token and no motion.
+- **Workout cards** (`WorkoutCardsView`, `WorkoutCard`): the Train tab's saved workouts. The workout done
+  longest ago, or never, is the up-next card, in `hardsetCard`, with its name in `title`, "3 movements" in
+  `label` and a context line in `provenance`: "Up next · last done 4 days ago · beat 4 of 6 last time".
+  Its one `primary` 56 pt button reads "Start" and the name; starting is a single tap with no
+  confirmation, because the lifter is standing at a machine. The other workouts are control-radius cards
+  with a `secondary` Start and a `quiet` Edit, and "New workout" and "Repeat last workout" are `secondary`
+  buttons below them, the second only when a finished workout exists. Nothing is claimed that was not
+  measured: "beat 4 of 6" appears only when something was compared, and only on the workout it belongs to.
+  The order is the rotation, never a schedule or a streak. At accessibility sizes the buttons stack. It
+  adds no token and no motion.
+- **Workout editor** (`WorkoutEditorView`, `WorkoutEditorScreen`, `WorkoutDraft`): a name field in
+  `entryFieldChrome` and a card per movement. Each card has Sets and, once added, a rep range as large
+  44 pt minus and plus controls around a `figure` value, so a plan made sitting down cannot hold a number
+  the plan refuses; a rest as a rail of chips, none first; a machine tag only for a movement saved with one,
+  with "Use the usual machine" to clear it; and move up, move down and remove as round header controls,
+  dimmed to 0.4 when they cannot move. "Add movement" is the dashed slot and opens the same picker and the
+  same movement editor as the live workout. Save is the one `primary` 56 pt button and says what is
+  missing under it. A failed save or delete is a native alert, because the editor scrolls. Deleting
+  archives: workouts already done from it keep every set. It adds no token and no motion.
+- **Split balance** (`SplitBalance`, inside the workout editor): planned sets per body group across one
+  rotation, each saved workout counted once, in the sentence-case `label` role. A group reads "12 sets
+  touch it", which is a count of sets and never a total of its muscles, or "Nothing planned" in `warning`
+  with its `exclamationmark.triangle` symbol, so the gap is carried by shape and word as well as colour.
+  The neck is left out until something is planned for it. It sets no target and makes no judgement, and
+  it says when planned sets sit on movements with no muscles recorded, because those count toward no
+  group. It adds no token and no motion.
 - **Selection** (`SelectionRow`, `SelectionCardButtonStyle`, `SelectionIndicator`): selected choices
   take the plate blue ring and `plateBlueSurface`, and the trailing indicator swaps an empty ring
   for a filled check, so the choice is carried by shape as well as colour. A pressed selection

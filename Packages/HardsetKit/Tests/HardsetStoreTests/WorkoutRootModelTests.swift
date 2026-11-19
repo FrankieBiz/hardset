@@ -325,7 +325,9 @@ struct WorkoutRootModelTests {
   }
 
   @MainActor
-  private func savedWorkoutFixture() async throws -> SavedWorkoutFixture {
+  private func savedWorkoutFixture(
+    clock: (@Sendable () -> Date)? = nil
+  ) async throws -> SavedWorkoutFixture {
     let database = try fixture()
     let logger = LoggerStore(database: database)
     let gyms = GymStore(database: database)
@@ -335,8 +337,10 @@ struct WorkoutRootModelTests {
     try await database.write { db in
       try Exercise.insert { Exercise.Draft(id: press.rawValue, name: "Chest Press") }.execute(db)
     }
+    let fixedNow = now
     let model = WorkoutRootModel(
-      logger: logger, catalog: CatalogSeeder(database: database), gyms: gyms, now: { self.now }
+      logger: logger, catalog: CatalogSeeder(database: database), gyms: gyms,
+      now: clock ?? { fixedNow }
     )
     await model.load()
     #expect(model.restoreGymPick(home))
@@ -560,6 +564,41 @@ struct WorkoutRootModelTests {
       try Session.where { $0.id.eq(repeatedID) }.select(\.title).fetchOne(db)
     }
     #expect(title == "Upper A")
+  }
+
+  @Test("Finishing a saved workout hands the Train tab's up-next card to the other one")
+  @MainActor
+  func upNextUsesRotation() async throws {
+    let start = now
+    let clock = Mutex(start)
+    let f = try await savedWorkoutFixture(clock: { clock.withLock { $0 } })
+    let templates = TemplateStore(database: f.database)
+    let upperA = plan("Upper A", press: f.press, machine: nil)
+    let upperB = WorkoutTemplate(
+      name: "Upper B", position: 1,
+      exercises: [TemplateExercise(exerciseID: f.press, exerciseName: "Chest Press", plannedSets: 3)])
+    try await templates.save(upperA, now: start)
+    try await templates.save(upperB, now: start)
+
+    func upNext() async throws -> String? {
+      WorkoutRotation.upNextOrder(try await templates.loadTemplates()).first?.name
+    }
+    #expect(try await upNext() == "Upper A")
+
+    try f.model.startWorkout(from: upperA, unit: .kilograms, rest: scratchRest())
+    // Started but not finished: an open workout is not done, so A is still first.
+    #expect(try await upNext() == "Upper A")
+    clock.withLock { $0 = start.addingTimeInterval(3_600) }
+    try #require(f.model.coordinator).finish()
+    f.model.clearFinishedWorkout()
+    #expect(try await upNext() == "Upper B")
+
+    clock.withLock { $0 = start.addingTimeInterval(86_400) }
+    try f.model.startWorkout(from: upperB, unit: .kilograms, rest: scratchRest())
+    clock.withLock { $0 = start.addingTimeInterval(90_000) }
+    try #require(f.model.coordinator).finish()
+    f.model.clearFinishedWorkout()
+    #expect(try await upNext() == "Upper A")
   }
 
   @Test("There is nothing to repeat before a workout has been finished")

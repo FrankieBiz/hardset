@@ -47,6 +47,20 @@ private nonisolated struct LastWorkoutReceipt: Identifiable {
   let id: SessionID
 }
 
+/// One read of the saved workouts, and how the one up next went the last time it was done.
+private nonisolated struct SavedWorkouts: Sendable {
+  let templates: [WorkoutTemplate]
+  let lastResult: WorkoutCard.LastResult?
+}
+
+/// What the workout editor is open on: a saved workout, or nil for a new one, with the rest of the
+/// rotation for the split balance.
+private nonisolated struct WorkoutEditorTarget: Identifiable {
+  let template: WorkoutTemplate?
+  let others: [WorkoutTemplate]
+  var id: String { template?.id.rawValue.uuidString ?? "new" }
+}
+
 /// The app's three tabs, plus the workout-in-progress bar.
 ///
 /// A live session is deliberately NOT a full-screen modal. It lives in the tab bar's bottom
@@ -76,6 +90,13 @@ public struct HardsetRootView: View {
   /// The newest finished workout, for the start screen. `nil` when there is none, and then the
   /// start screen shows nothing in its place rather than a placeholder that implies a history.
   @State private var lastWorkoutSnapshot = SnapshotLoader<[SessionSummary]>()
+  /// The saved workouts and how the up-next one went last time, for the start screen's cards.
+  /// Nothing is drawn before the first read lands, and a failed read draws nothing either: the
+  /// empty start below works without them, and an empty list would claim there are none.
+  @State private var savedWorkouts = SnapshotLoader<SavedWorkouts>()
+  /// The workout editor, open on a saved workout or on a new one.
+  @State private var workoutEditor: WorkoutEditorTarget?
+  @State private var isShowingLibrary = false
   /// The day the start screen's header names. Read when the view is made and again whenever the
   /// app returns to the foreground on a later day; read only while drawing, the header went on
   /// naming yesterday for a lifter who left the app open overnight.
@@ -178,7 +199,10 @@ public struct HardsetRootView: View {
           // picker show; an archived pick is cleared, and an explicit Not recorded pick stays.
           onDataChanged: {
             dataRevision &+= 1
-            Task { await refreshLastWorkout() }
+            Task {
+              await refreshLastWorkout()
+              await refreshSavedWorkouts()
+            }
             do {
               try model.refreshGyms()
             } catch {
@@ -236,8 +260,14 @@ public struct HardsetRootView: View {
           HistoryScreen(
             store: environment.history, unit: unit, receipts: environment.receipts,
             progression: environment.progression,
-            // Deleting a workout or a set there can change which workout is the latest.
-            onHistoryChanged: { Task { await refreshLastWorkout() } },
+            // Deleting a workout or a set there can change which workout is the latest, and when a
+            // saved workout was last done.
+            onHistoryChanged: {
+              Task {
+                await refreshLastWorkout()
+                await refreshSavedWorkouts()
+              }
+            },
             onShowSettings: { isShowingSettings = true },
             dataRevision: dataRevision
           )
@@ -271,6 +301,7 @@ public struct HardsetRootView: View {
     guard model.isReady else { return }
     restorePendingGymPick()
     await refreshLastWorkout()
+    await refreshSavedWorkouts()
   }
 
   // MARK: - Train
@@ -290,8 +321,12 @@ public struct HardsetRootView: View {
         onShowSettings: { isShowingSettings = true },
         onFinished: {
           model.clearFinishedWorkout()
-          // The workout just finished is now the last one, so the start screen says so.
-          Task { await refreshLastWorkout() }
+          // The workout just finished is now the last one, so the start screen says so, and a saved
+          // workout it came from has a new last-done day and a new up-next.
+          Task {
+            await refreshLastWorkout()
+            await refreshSavedWorkouts()
+          }
         }
       )
       // The live session draws its own header, with the gym and the settings action. The title
@@ -314,6 +349,20 @@ public struct HardsetRootView: View {
       .background(Tokens.Color.canvas)
       .navigationTitle("Train")
       .hardsetTabRoot()
+    }
+  }
+
+  /// The start screen's header: the settings action, and the movement library beside it.
+  private var startHeader: some View {
+    ScreenHeader("Train", subtitle: Self.dayLabel(today)) {
+      HStack(spacing: Tokens.Spacing.snug) {
+        HeaderIconButton(systemImage: "books.vertical", accessibilityLabel: "Library") {
+          isShowingLibrary = true
+        }
+        HeaderIconButton(systemImage: "gearshape", accessibilityLabel: "Settings") {
+          isShowingSettings = true
+        }
+      }
     }
   }
 
@@ -369,10 +418,12 @@ public struct HardsetRootView: View {
   private var startView: some View {
     ScrollView {
       VStack(alignment: .leading, spacing: Tokens.Spacing.block) {
-        trainHeader
+        startHeader
 
         VStack(alignment: .leading, spacing: Tokens.Spacing.loose) {
           gymCard
+
+          savedWorkoutCards
 
           VStack(alignment: .leading, spacing: Tokens.Spacing.regular) {
             Button(action: startEmptyWorkout) {
@@ -427,6 +478,46 @@ public struct HardsetRootView: View {
     .background(Tokens.Color.canvas)
     // A failure belongs to the visit it happened in; reopening the picker starts clean.
     .sheet(isPresented: $isChoosingGym, onDismiss: { gymError = nil }) { gymSheet.hardsetSheet() }
+    .navigationDestination(isPresented: $isShowingLibrary) {
+      LibraryScreen(catalog: environment.catalog)
+    }
+  }
+
+  // MARK: - Saved workouts
+
+  /// The saved workouts, as cards above the empty start, once they have been read.
+  ///
+  /// Starting one is one tap on its card, with no confirmation: the workout opens with every
+  /// movement, machine and set row ready. The editor is its own sheet, attached here and not on the
+  /// start screen, which already carries the gym sheet: a second sheet on one anchor never presents.
+  @ViewBuilder private var savedWorkoutCards: some View {
+    if let saved = savedWorkouts.value {
+      WorkoutCardsView(
+        cards: WorkoutCard.cards(
+          templates: saved.templates, now: today, lastResult: saved.lastResult),
+        canRepeatLast: lastWorkout != nil,
+        onStart: { startSavedWorkout($0) },
+        onEdit: { id in
+          guard let template = saved.templates.first(where: { $0.id == id }) else { return }
+          workoutEditor = WorkoutEditorTarget(
+            template: template, others: saved.templates.filter { $0.id != id })
+        },
+        onNew: { workoutEditor = WorkoutEditorTarget(template: nil, others: saved.templates) },
+        onRepeatLast: { repeatLastWorkout() }
+      )
+      .sheet(item: $workoutEditor) { target in
+        WorkoutEditorScreen(
+          templates: environment.templates,
+          catalog: environment.catalog,
+          volume: environment.volume,
+          template: target.template,
+          others: target.others,
+          onSaved: { Task { await refreshSavedWorkouts() } },
+          onClose: { workoutEditor = nil }
+        )
+        .hardsetSheet()
+      }
+    }
   }
 
   /// A day, as the start screen's context line: "Saturday 7 November", in the device's format.
@@ -543,7 +634,10 @@ public struct HardsetRootView: View {
         guard receiptChanged else { return }
         receiptChanged = false
         dataRevision &+= 1
-        Task { await refreshLastWorkout() }
+        Task {
+          await refreshLastWorkout()
+          await refreshSavedWorkouts()
+        }
       }
     ) { selection in
       WorkoutReceiptScreen(
@@ -746,6 +840,48 @@ public struct HardsetRootView: View {
 
   /// `pendingGymPick`'s value for "Not recorded", which is a real choice and not the absence of one.
   private static let noGymPick = "none"
+
+  /// One tap from a card to a workout with every movement, machine and set row ready.
+  private func startSavedWorkout(_ id: TemplateID) {
+    guard let template = savedWorkouts.value?.templates.first(where: { $0.id == id }) else { return }
+    do {
+      try model.startWorkout(from: template, unit: unit, rest: RestPreferences())
+      startFailed = false
+      pendingGymPick = ""
+    } catch {
+      startFailed = true
+    }
+  }
+
+  private func repeatLastWorkout() {
+    do {
+      try model.repeatLastWorkout(unit: unit)
+      startFailed = false
+      pendingGymPick = ""
+    } catch {
+      startFailed = true
+    }
+  }
+
+  /// `try?` for the scorecard on purpose: it only adds "beat 4 of 6 last time" to the up-next card,
+  /// and a receipt that cannot be read leaves the card saying what it can say. The workouts
+  /// themselves are read with the loader, which states a failure by drawing nothing.
+  private func refreshSavedWorkouts() async {
+    let templates = environment.templates
+    let receipts = environment.receipts
+    await savedWorkouts.load {
+      let loaded = try await templates.loadTemplates()
+      var lastResult: WorkoutCard.LastResult?
+      if let upNext = WorkoutRotation.upNextOrder(loaded).first,
+        let session = try await templates.lastFinishedSession(for: upNext.id),
+        let scorecard = try? await receipts.load(session).scorecard
+      {
+        lastResult = WorkoutCard.LastResult(
+          workout: upNext.id, beaten: scorecard.beatenCount, compared: scorecard.comparedCount)
+      }
+      return SavedWorkouts(templates: loaded, lastResult: lastResult)
+    }
+  }
 
   private func startEmptyWorkout() {
     do {
