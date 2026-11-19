@@ -353,6 +353,20 @@ Selection rows, the unit switch and pickers stay silent.
     machined face, so a tag never imitates a control.
   - Reduce Motion drops the scale and keeps only the fill or opacity change. Disabled controls are
     never dimmed by a press style, so saved rows and inert titles keep full contrast.
+- **Target line** (set row): when a movement has a rep range and history on this exact machine, an
+  unlogged row is prefilled with the double-progression target and says where it came from in `provenance`
+  and `chalkDim`: "Target · One more rep than last time", "Top of your range; hold it", or "Every set hit
+  the top of your range: add one step" (one plate, "assumed step", when the machine has no saved step).
+  The "Last time" column still shows what last time was, so a target is never read as history. History
+  borrowed from another machine gives no target and the prefill is as it always was. It adds no motion.
+- **Beat mark** (set row): once a set is logged, a tag-shaped capsule under the values says how it compares
+  with the same set last time on this machine, in the figures of the set: "+1 rep", "+2.5 kg", "+5 lb · +1
+  rep", never a bare "Beat". A win is `plateGreen` on `plateGreenSurface` with an up arrow; a match is
+  "Matched" in `chalkDim` on `steelRaised` with an equals sign, so neither is carried by colour alone. A
+  set that fell short, a warm-up, a set with no partner and a set done on another machine show nothing.
+  It arrives through `hardsetArrival()`, the insertion-only opacity reveal on `Motion.reveal`, so the row's
+  height changes at once and nothing animates layout. The row's spoken label says it in the same words
+  ("plus 1 rep on last time"). It adds no token and no motion beyond `Motion.reveal`.
 - **Replaceable prefill**: when the keypad opens on a value the next key will replace, its display
   draws that value on `plateBlueSurface` with a hairline `plateBlue` ring, as selected text, until
   the first edit. Static; no motion.

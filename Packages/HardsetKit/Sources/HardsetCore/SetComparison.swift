@@ -50,17 +50,32 @@ public enum SetComparison: Hashable, Sendable {
       return "Matched"
     case let .beat(addedKg, addedReps):
       var parts: [String] = []
-      let added = StrengthMath.displayRounded(addedKg, in: unit)
-      if added > 0 {
-        let text = added == added.rounded()
-          ? String(Int(added))
-          : String(format: "%.1f", added)
-        parts.append("+\(text) \(unit.abbreviation)")
-      }
-      if addedReps > 0 {
-        parts.append(addedReps == 1 ? "+1 rep" : "+\(addedReps) reps")
-      }
+      if let weight = Self.addedWeight(addedKg, in: unit) { parts.append("+\(weight)") }
+      if addedReps > 0 { parts.append(addedReps == 1 ? "+1 rep" : "+\(addedReps) reps") }
       return parts.joined(separator: " · ")
     }
+  }
+
+  /// The mark as VoiceOver reads it: "plus 1 rep on last time", "plus 2.5 kg and 1 rep on last
+  /// time", "matched last time". It names exactly what the visible mark names, and no more.
+  public func spokenLabel(in unit: WeightUnit) -> String {
+    switch self {
+    case .matched:
+      return "matched last time"
+    case let .beat(addedKg, addedReps):
+      var parts: [String] = []
+      if let weight = Self.addedWeight(addedKg, in: unit) { parts.append(weight) }
+      if addedReps > 0 { parts.append(addedReps == 1 ? "1 rep" : "\(addedReps) reps") }
+      guard !parts.isEmpty else { return "ahead of last time" }
+      return "plus " + parts.joined(separator: " and ") + " on last time"
+    }
+  }
+
+  /// "2.5 kg" or "10 lb", whole numbers without a decimal, only when the rounded load grew.
+  private static func addedWeight(_ addedKg: Double, in unit: WeightUnit) -> String? {
+    let added = StrengthMath.displayRounded(addedKg, in: unit)
+    guard added > 0 else { return nil }
+    let text = added == added.rounded() ? String(Int(added)) : String(format: "%.1f", added)
+    return "\(text) \(unit.abbreviation)"
   }
 }

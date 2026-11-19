@@ -100,4 +100,20 @@ struct OverloadTargetTests {
         == "Every set hit the top of your range: add one plate (assumed step)"
     )
   }
+
+  @Test func targetsAreSpokenAsWhatToAim() {
+    #expect(SetTarget(weightKg: 40, reps: 11, rule: .addRep).spokenLabel(in: .kilograms)
+      == "target 11 reps")
+    #expect(SetTarget(weightKg: 40, reps: 12, rule: .holdTop).spokenLabel(in: .kilograms)
+      == "target 12 reps")
+    #expect(SetTarget(weightKg: 40, reps: 1, rule: .addRep).spokenLabel(in: .kilograms)
+      == "target 1 rep")
+    // When the load itself is the news, it is said.
+    #expect(
+      SetTarget(weightKg: 42.5, reps: 8, rule: .addLoad(stepKg: 2.5, isAssumedStep: false))
+        .spokenLabel(in: .kilograms) == "target 42.5 kg for 8 reps")
+    #expect(
+      SetTarget(weightKg: 43.09, reps: 8, rule: .addLoad(stepKg: 2.27, isAssumedStep: true))
+        .spokenLabel(in: .pounds) == "target 95 lb for 8 reps")
+  }
 }

@@ -212,8 +212,58 @@ private struct RowStates: View {
         setRowSample("No previous: an em dash in Last time") {
           row(blank, ordinal: 4, editable: true)
         }
+        setRowSample("Target, one more rep: the line says where the numbers came from") {
+          row(
+            targeted(40, 11, .addRep, last: (40, 10)), ordinal: 1, isNext: true, increment: 2.5,
+            previous: setRowPrior(40, 10), editable: true)
+        }
+        setRowSample("Target, every set at the top: add one step") {
+          row(
+            targeted(42.5, 8, .addLoad(stepKg: 2.5, isAssumedStep: false), last: (40, 12)),
+            ordinal: 1, isNext: true, previous: setRowPrior(40, 12), editable: true)
+        }
+        setRowSample("Target in pounds, assumed step: one plate") {
+          row(
+            targeted(43.09, 8, .addLoad(stepKg: 2.26796185, isAssumedStep: true), last: (40.82, 12)),
+            ordinal: 1, isNext: true, unit: .pounds, previous: setRowPrior(40.82, 12),
+            editable: true)
+        }
+        setRowSample("Beat mark: a rep more than last time") {
+          row(
+            draft(40, 11), ordinal: 1, isLogged: true, previous: setRowPrior(40, 10),
+            comparison: .beat(addedKg: 0, addedReps: 1), onUndo: {}, onEdit: {})
+        }
+        setRowSample("Beat mark: more load and a rep") {
+          row(
+            draft(42.5, 11), ordinal: 1, isLogged: true, previous: setRowPrior(40, 10),
+            comparison: .beat(addedKg: 2.5, addedReps: 1), onUndo: {}, onEdit: {})
+        }
+        setRowSample("Beat mark in pounds: ten pounds more") {
+          row(
+            draft(45.359237, 8), ordinal: 1, isLogged: true, unit: .pounds,
+            previous: setRowPrior(40.8233133, 8), comparison: .beat(addedKg: 4.5359237, addedReps: 0),
+            onUndo: {}, onEdit: {})
+        }
+        setRowSample("Matched: neutral, equals sign") {
+          row(
+            draft(40, 10), ordinal: 1, isLogged: true, previous: setRowPrior(40, 10),
+            comparison: .matched, onUndo: {}, onEdit: {})
+        }
+        setRowSample("Fell short, or no partner: no mark at all") {
+          row(
+            draft(40, 9), ordinal: 1, isLogged: true, previous: setRowPrior(40, 10),
+            onUndo: {}, onEdit: {})
+        }
       }
     }
+  }
+
+  private func targeted(
+    _ weightKg: Double, _ reps: Int, _ rule: SetTarget.Rule, last: (Double, Int)
+  ) -> SetEntryDraft {
+    SetEntryDraft(
+      target: SetTarget(weightKg: weightKg, reps: reps, rule: rule),
+      suggestion: setRowPrior(last.0, last.1))
   }
 
   private var blank: SetEntryDraft { SetEntryDraft(suggestion: nil) }
@@ -232,6 +282,7 @@ private struct RowStates: View {
     increment: Double? = nil,
     previous: PriorSetRecord? = nil,
     priorNote: String? = nil,
+    comparison: SetComparison? = nil,
     editingField: SetRowField? = nil,
     editingText: String? = nil,
     editable: Bool = false,
@@ -248,6 +299,7 @@ private struct RowStates: View {
       machineIncrementKg: increment,
       previous: previous,
       priorNote: priorNote,
+      comparison: comparison,
       editingField: editingField,
       editingText: editingText,
       onLog: {},

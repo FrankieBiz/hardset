@@ -24,6 +24,16 @@ public struct SetTarget: Hashable, Sendable {
     self.rule = rule
   }
 
+  /// The target as VoiceOver reads it after the row's own values: "target 11 reps", or, when the
+  /// load itself is the news, "target 42.5 kg for 8 reps".
+  public func spokenLabel(in unit: WeightUnit) -> String {
+    let repsText = reps == 1 ? "1 rep" : "\(reps) reps"
+    guard case .addLoad = rule else { return "target \(repsText)" }
+    let load = StrengthMath.displayRounded(weightKg, in: unit)
+    let loadText = load == load.rounded() ? String(Int(load)) : String(format: "%.1f", load)
+    return "target \(loadText) \(unit.abbreviation) for \(repsText)"
+  }
+
   /// Fixed copy, so a target never reads as an unexplained number.
   public var explanation: String {
     switch rule {

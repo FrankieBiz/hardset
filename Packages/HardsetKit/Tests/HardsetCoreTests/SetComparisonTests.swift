@@ -65,4 +65,24 @@ struct SetComparisonTests {
     let result = compare(45.359237, 10, against: previous(40.8233133, 10))
     #expect(result?.label(in: .pounds) == "+10 lb")
   }
+
+  @Test func spokenLabelsNameWhatGrew() {
+    #expect(SetComparison.beat(addedKg: 0, addedReps: 1).spokenLabel(in: .kilograms)
+      == "plus 1 rep on last time")
+    #expect(SetComparison.beat(addedKg: 0, addedReps: 2).spokenLabel(in: .kilograms)
+      == "plus 2 reps on last time")
+    #expect(SetComparison.beat(addedKg: 2.5, addedReps: 0).spokenLabel(in: .kilograms)
+      == "plus 2.5 kg on last time")
+    #expect(SetComparison.beat(addedKg: 2.5, addedReps: 1).spokenLabel(in: .kilograms)
+      == "plus 2.5 kg and 1 rep on last time")
+    // A load jump that cost reps names the load only, as the visible mark does.
+    #expect(SetComparison.beat(addedKg: 2.5, addedReps: -4).spokenLabel(in: .kilograms)
+      == "plus 2.5 kg on last time")
+    #expect(SetComparison.matched.spokenLabel(in: .kilograms) == "matched last time")
+  }
+
+  @Test func spokenLabelInPounds() {
+    #expect(SetComparison.beat(addedKg: 4.5359237, addedReps: 0).spokenLabel(in: .pounds)
+      == "plus 10 lb on last time")
+  }
 }
