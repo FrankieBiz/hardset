@@ -226,6 +226,25 @@ Selection rows, the unit switch and pickers stay silent.
   "Recent", "Custom", an untrained muscle) is filled only, so it never imitates a control. At
   accessibility sizes a wrapping tag, assumption chip or certainty capsule takes the control radius
   instead of a capsule, so wrapped text stays inside its outline.
+- **Library** (`LibraryView`, `LibraryScreen`): every selectable movement grouped by body part, with a
+  ledger of the count in each at the bottom. Movements with no body part come first under a `warning`
+  header with its `exclamationmark.triangle` symbol, "Needs a body part", because until one is tagged its
+  sets count toward no muscle. A row is a 56 pt `SelectionCardButtonStyle` button for the lifter's own
+  movement and opens the editor; a curated movement is a flat card with a "Curated" `HardsetTag` and does
+  not open it, so nothing that looks tappable does nothing. The footer lists every body part, zeros
+  included, in `figure` against `chalkDim` for a zero, each row under a `hairline`. It reads what is
+  there: loading is a quiet line, a failed read says so in `HardsetEmptyState`, and neither draws an empty
+  library. It adds no token and no motion.
+- **Movement editor** (`MovementEditorSheet`, `MovementEditorDraft`): a name field in `entryFieldChrome`,
+  body-part chips, a `SelectionRow` per muscle where the body part has more than one, up to three optional
+  secondary muscles chosen from chips (each counts half a set), and the equipment as chips. Chips wrap
+  into rows at ordinary sizes and stack one to a line at accessibility sizes; five segments could not hold
+  "Bodyweight" at a phone's width, so equipment is chips, not a `HardsetSegmentedControl`. Save is the one
+  `primary` 56 pt button and waits until there is a name and a primary muscle, saying which is missing in
+  `provenance` under it. A failed save is a native alert, because the sheet scrolls and a banner at the
+  top would be out of sight beside the button it answers; the sheet stays up with everything typed.
+  Nothing is inferred from the name, and what is saved is the lifter's own attribution at moderate
+  certainty. It adds no token and no motion.
 - **Selection** (`SelectionRow`, `SelectionCardButtonStyle`, `SelectionIndicator`): selected choices
   take the plate blue ring and `plateBlueSurface`, and the trailing indicator swaps an empty ring
   for a filled check, so the choice is carried by shape as well as colour. A pressed selection

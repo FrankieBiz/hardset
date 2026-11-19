@@ -8,6 +8,13 @@ private struct MachineTarget: Identifiable, Hashable {
   let id: UUID
 }
 
+/// The name typed for a movement the picker does not list, so `sheet(item:)` has something
+/// `Identifiable` to present.
+private nonisolated struct NewMovementName: Identifiable {
+  let name: String
+  var id: String { name }
+}
+
 /// The live workout, wired.
 ///
 /// Owns the `SessionCoordinator`, binds it to `SessionView`, and routes rest requests to the
@@ -37,6 +44,10 @@ public struct LiveSessionScreen: View {
   @State private var pickerEntries: [CatalogEntry] = []
   @State private var pickerRecent: [CatalogEntry] = []
   @State private var pickerError: String?
+  /// The name typed in the picker for a movement that is not on the list. Non-nil presents the
+  /// editor that asks which body part it trains, in place of adding it untagged on the spot.
+  @State private var newMovement: NewMovementName?
+  @State private var newMovementError: String?
   /// The exercise whose machine is being chosen. Non-nil presents the picker.
   ///
   /// Wrapped rather than a bare `UUID` because `sheet(item:)` needs `Identifiable`, and retroactively
@@ -193,10 +204,23 @@ public struct LiveSessionScreen: View {
           recent: pickerRecent,
           errorMessage: pickerError,
           onCancel: { isPickerPresented = false },
-          onCreate: catalog == nil ? nil : { name in createMovement(named: name) },
+          onCreate: catalog == nil ? nil : { name in newMovement = NewMovementName(name: name) },
           onSelect: { entry in addMovement(entry) }
         )
         .hardsetNavigationTitle("Add movement")
+        // Asks which body part the movement trains before saving it, so a movement the lifter makes
+        // mid-workout counts toward a muscle from its first set, and there is one way to make one.
+        .sheet(item: $newMovement, onDismiss: { newMovementError = nil }) { typed in
+          MovementEditorSheet(
+            title: "New movement",
+            confirmLabel: "Add to workout",
+            errorMessage: $newMovementError,
+            draft: MovementEditorDraft(name: typed.name),
+            onSave: { name, attribution in createMovement(named: name, attribution: attribution) },
+            onCancel: { newMovement = nil }
+          )
+          .hardsetSheet()
+        }
       }
       .hardsetSheet()
       // Searching hits the database, so it happens here rather than inside the picker, which
@@ -451,8 +475,10 @@ public struct LiveSessionScreen: View {
     }
   }
 
-  /// A movement outside the catalogue, named by the lifter and added in one step.
-  private func createMovement(named name: String) {
+  /// A movement outside the catalogue, named and tagged by the lifter and added in one step.
+  ///
+  /// A failure keeps the editor up with everything typed and says why, so trying again is one tap.
+  private func createMovement(named name: String, attribution: CustomAttribution) {
     guard let catalog else { return }
     let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
     begin(.addMovement)
@@ -460,19 +486,20 @@ public struct LiveSessionScreen: View {
     do {
       // Returns the existing movement for a name that is already there, so a second "Pendulum
       // Squat" is never created by retyping it.
-      entry = try catalog.createCustomExercise(named: trimmed)
+      entry = try catalog.createCustomExercise(named: trimmed, attribution: attribution)
     } catch CatalogSeederError.blankName {
-      pickerError = "Type the movement's name first."
+      newMovementError = "Type the movement's name first."
       return
     } catch {
-      pickerError = "“\(trimmed)” could not be added. Try again."
+      newMovementError = "“\(trimmed)” could not be added. Try again."
       noteOutcome(false)
       return
     }
     if noteOutcome(coordinator.addExercise(entry)) {
+      newMovement = nil
       isPickerPresented = false
     } else {
-      pickerError = failureMessage(for: .addMovement)
+      newMovementError = failureMessage(for: .addMovement)
     }
   }
 
