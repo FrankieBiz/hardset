@@ -601,6 +601,45 @@ struct WorkoutRootModelTests {
     #expect(try await upNext() == "Upper A")
   }
 
+  /// An imported workout is kept apart from native tracking on purpose: its movements are separate,
+  /// "Unevaluated Machine" copies. Repeating one would start a native workout on those copies, and
+  /// every record, mark and scorecard after it would compare against unevaluated history.
+  @Test("Repeat last workout skips imported workouts, even when one ended later")
+  @MainActor
+  func repeatLastWorkoutSkipsImports() async throws {
+    let f = try await savedWorkoutFixture()
+    try f.model.startWorkout(
+      from: plan(press: f.press, machine: nil), unit: .kilograms, rest: scratchRest())
+    try #require(f.model.coordinator).finish()
+    f.model.clearFinishedWorkout()
+    let csv = "Date,Workout Name,Duration,Exercise Name,Weight,Reps\n2026-11-01 10:00:00,Push,3600,Press,100,8\n"
+    _ = try await DataTransferStore(database: f.database).importWorkouts(
+      WorkoutCSVImport.preview(csv, strongUnit: .kilograms))
+
+    let canRepeat = try f.logger.hasRepeatableWorkout()
+    try f.model.repeatLastWorkout(unit: .kilograms)
+
+    #expect(canRepeat)
+    let live = try #require(f.model.coordinator)
+    #expect(live.exercises.map(\.exerciseID) == [f.press])
+  }
+
+  @Test("With only imported workouts there is nothing to repeat")
+  @MainActor
+  func onlyImportsMeansNothingToRepeat() async throws {
+    let f = try await savedWorkoutFixture()
+    let csv = "Date,Workout Name,Duration,Exercise Name,Weight,Reps\n2026-11-01 10:00:00,Push,3600,Press,100,8\n"
+    _ = try await DataTransferStore(database: f.database).importWorkouts(
+      WorkoutCSVImport.preview(csv, strongUnit: .kilograms))
+
+    let canRepeat = try f.logger.hasRepeatableWorkout()
+
+    #expect(!canRepeat)
+    #expect(throws: WorkoutRootError.nothingToRepeat) {
+      try f.model.repeatLastWorkout(unit: .kilograms)
+    }
+  }
+
   @Test("There is nothing to repeat before a workout has been finished")
   @MainActor
   func nothingToRepeat() async throws {

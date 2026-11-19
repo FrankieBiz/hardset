@@ -38,6 +38,8 @@ public struct WorkoutEditorScreen: View {
 
   /// - Parameters:
   ///   - template: The workout to change, or nil to make a new one, last in the rotation.
+  ///   - isDraft: True when `template` has not been saved yet, such as a plan made from a finished
+  ///     workout. It is edited and saved like a new workout, with no delete to offer.
   ///   - others: Every other saved workout, for the split balance.
   ///   - onSaved: Called after the workout was saved or deleted, so the Train tab re-reads.
   ///   - onClose: Dismisses the editor, saved or not.
@@ -46,6 +48,7 @@ public struct WorkoutEditorScreen: View {
     catalog: CatalogSeeder,
     volume: VolumeStore,
     template: WorkoutTemplate?,
+    isDraft: Bool = false,
     others: [WorkoutTemplate],
     onSaved: @escaping () -> Void,
     onClose: @escaping () -> Void
@@ -57,7 +60,7 @@ public struct WorkoutEditorScreen: View {
     self.onSaved = onSaved
     self.onClose = onClose
     if let template {
-      self._draft = State(initialValue: WorkoutDraft(template: template))
+      self._draft = State(initialValue: WorkoutDraft(template: template, isNew: isDraft))
     } else {
       let next = (others.map(\.position).max() ?? -1) + 1
       self._draft = State(initialValue: WorkoutDraft(newAtPosition: next))

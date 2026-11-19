@@ -178,6 +178,39 @@ struct ProgressTrendTests {
     #expect(elapsed < .milliseconds(50), "trend over 2,000 sets took \(elapsed)")
   }
 
+  @Test func bodyweightRepsAreOnlyComparedAtTheSameAddedLoad() {
+    // Pull-ups with +20 kg for 5 six weeks ago, then bodyweight for 10: not 100% better, because the
+    // two numbers are reps at different loads.
+    let dropped = ProgressTrendAnalyzer.trend(
+      key: key(),
+      samples: [s(day: 0, session: 0, kg: 20, reps: 5), s(day: 42, session: 1, kg: 0, reps: 10)],
+      incrementKg: nil, estimatesOneRepMax: false
+    )
+    // Adding load: 12 reps at bodyweight, then 6 at +10 kg, is not 50% worse.
+    let added = ProgressTrendAnalyzer.trend(
+      key: key(),
+      samples: [s(day: 0, session: 0, kg: 0, reps: 12), s(day: 42, session: 1, kg: 10, reps: 6)],
+      incrementKg: nil, estimatesOneRepMax: false
+    )
+    // The same load both times is a fair comparison.
+    let same = ProgressTrendAnalyzer.trend(
+      key: key(),
+      samples: [s(day: 0, session: 0, kg: 0, reps: 8), s(day: 42, session: 1, kg: 0, reps: 10)],
+      incrementKg: nil, estimatesOneRepMax: false
+    )
+    // A load within tolerance is the same load.
+    let noisy = ProgressTrendAnalyzer.trend(
+      key: key(),
+      samples: [s(day: 0, session: 0, kg: 10, reps: 8), s(day: 42, session: 1, kg: 10.004, reps: 10)],
+      incrementKg: nil, estimatesOneRepMax: false
+    )
+
+    #expect(dropped?.sixWeekChange == nil)
+    #expect(added?.sixWeekChange == nil)
+    #expect(abs((same?.sixWeekChange ?? 0) - 0.25) < 1e-9)
+    #expect(abs((noisy?.sixWeekChange ?? 0) - 0.25) < 1e-9)
+  }
+
   @Test func estimatedMaxTrendCarriesTheCertaintyOfItsLatestEstimate() {
     // Ten reps is moderate, five is high, twelve is low: certainty follows the reps behind it.
     func certainty(reps: Int) -> Certainty? {

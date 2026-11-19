@@ -649,6 +649,26 @@ public nonisolated struct LoggerStore: Sendable {
     }
   }
 
+  /// What a session's notes start with when a CSV import wrote it. The prefix holds no `%` or `_`,
+  /// so it matches literally. Receipts use the same marker to withhold records and the scorecard.
+  private static let importedSessionPattern = "Imported from %"
+
+  /// Whether "Repeat last workout" has anything to repeat: a finished workout of the lifter's own.
+  /// An imported workout never counts. Its movements are kept apart from the catalogue's on purpose,
+  /// as unevaluated copies, so a native workout started from one would log against them and every
+  /// record, mark and scorecard after it would compare with unevaluated history.
+  public func hasRepeatableWorkout() throws -> Bool {
+    try database.read { db in
+      let found = try Session
+        .where { $0.finishedAt.isNot(nil) && !$0.notes.like(Self.importedSessionPattern) }
+        .order { $0.finishedAt.desc() }
+        .limit(1)
+        .select(\.id)
+        .fetchOne(db)
+      return found != nil
+    }
+  }
+
   /// The plan of the workout finished most recently, for "Repeat last workout".
   ///
   /// Movements keep that workout's order, machines and rep ranges, and `workingSets` is how many
@@ -659,7 +679,7 @@ public nonisolated struct LoggerStore: Sendable {
   func lastFinishedPlan() throws -> RepeatablePlan? {
     try database.read { db in
       let latest = try Session
-        .where { $0.finishedAt.isNot(nil) }
+        .where { $0.finishedAt.isNot(nil) && !$0.notes.like(Self.importedSessionPattern) }
         .order { $0.finishedAt.desc() }
         .limit(1)
         .fetchOne(db)

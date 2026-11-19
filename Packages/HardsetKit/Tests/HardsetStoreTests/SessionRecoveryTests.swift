@@ -462,4 +462,40 @@ struct SessionRecoveryTests {
     #expect(recovered.exercises[0].slots.map { $0.draft.reps } == [13, 13])
     #expect(recovered.exercises[0].slots.map { $0.draft.weightKg } == [0, 0])
   }
+
+  /// Review focus: a pound lifter with no saved machine step gets a one-plate step of 5 lb, and a
+  /// restart must not turn it into 2.5 kg. The unit is the one thing resume cannot read back.
+  @Test("A restarted workout builds its assumed one-plate step in the lifter's unit")
+  func resumeUsesTheLiftersUnitForTheAssumedStep() throws {
+    let database = try migratedDatabase()
+    let store = LoggerStore(database: database)
+    let exercise = try seedExercise(database, "Chest Press")
+    let earlier = try SessionCoordinator.start(
+      store: store,
+      plan: [PlannedExercise(exerciseID: exercise, exerciseName: "Chest Press", plannedSets: 2)],
+      now: { self.start.addingTimeInterval(-86_400) }
+    )
+    for index in 0..<2 {
+      earlier.exercises[0].slots[index].draft = SetEntryDraft(weightKg: 40, reps: 12)
+      #expect(earlier.logSet(slotID: earlier.exercises[0].slots[index].id, inExercise: earlier.exercises[0].id))
+    }
+    try earlier.finish()
+    let range = try #require(RepRange(lower: 8, upper: 12))
+    let live = try SessionCoordinator.start(
+      store: store,
+      plan: [PlannedExercise(
+        exerciseID: exercise, exerciseName: "Chest Press", plannedSets: 2, repRange: range)],
+      templateID: TemplateID(), weightUnit: .pounds, now: { self.start }
+    )
+    let plate = 40 + 2.26796185
+    #expect(abs((live.exercises[0].slots[0].draft.weightKg ?? 0) - plate) < 1e-6)
+
+    let inPounds = try #require(
+      try SessionCoordinator.resume(store: store, weightUnit: .pounds, now: { self.start }))
+    let inKilograms = try #require(
+      try SessionCoordinator.resume(store: store, weightUnit: .kilograms, now: { self.start }))
+
+    #expect(abs((inPounds.exercises[0].slots[0].draft.weightKg ?? 0) - plate) < 1e-6)
+    #expect(inKilograms.exercises[0].slots[0].draft.weightKg == 42.5)
+  }
 }

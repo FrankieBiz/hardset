@@ -74,12 +74,19 @@ public struct WorkoutScorecard: Hashable, Sendable {
     /// A fraction, so 0.06 means +6%.
     public let fraction: Double
     public let metric: TrendMetric
+    /// How far to trust the figure. An estimated gain is a ratio of two estimates, so it carries the
+    /// weaker of their certainties; a gain in the heaviest load is measured, and has none.
+    public let certainty: Certainty?
 
-    public init(key: ProgressionKey, exerciseName: String, fraction: Double, metric: TrendMetric) {
+    public init(
+      key: ProgressionKey, exerciseName: String, fraction: Double, metric: TrendMetric,
+      certainty: Certainty? = nil
+    ) {
       self.key = key
       self.exerciseName = exerciseName
       self.fraction = fraction
       self.metric = metric
+      self.certainty = certainty
     }
   }
 
@@ -171,14 +178,18 @@ public struct WorkoutScorecard: Hashable, Sendable {
     let metric: TrendMetric
     let current: Double
     let previous: Double
+    var certainty: Certainty?
     if input.estimatesOneRepMax,
       let currentEstimate = bestEstimate(input.currentSets),
       let previousEstimate = bestEstimate(input.previousSets),
-      previousEstimate > 0
+      let currentValue = currentEstimate.value,
+      let previousValue = previousEstimate.value,
+      previousValue > 0
     {
       metric = .estimatedMax
-      current = currentEstimate
-      previous = previousEstimate
+      current = currentValue
+      previous = previousValue
+      certainty = Certainty.combine([currentEstimate.certainty, previousEstimate.certainty])
     } else {
       // A bodyweight movement has no heaviest load to compare.
       guard previousHeaviest > 0 else { return nil }
@@ -190,13 +201,17 @@ public struct WorkoutScorecard: Hashable, Sendable {
     let fraction = current / previous - 1
     guard fraction > 0 else { return nil }
     return Gain(
-      key: input.key, exerciseName: input.exerciseName, fraction: fraction, metric: metric
+      key: input.key, exerciseName: input.exerciseName, fraction: fraction, metric: metric,
+      certainty: certainty
     )
   }
 
-  private static func bestEstimate(_ sets: [PriorSetRecord]) -> Double? {
-    sets.compactMap {
-      StrengthMath.estimatedOneRepMax(weightKg: $0.weightKg, reps: $0.reps).value
-    }.max()
+  /// The best estimate among the sets, with its certainty: the figure and the trust in it come from
+  /// the same set.
+  private static func bestEstimate(_ sets: [PriorSetRecord]) -> Claim<Double>? {
+    sets
+      .map { StrengthMath.estimatedOneRepMax(weightKg: $0.weightKg, reps: $0.reps) }
+      .filter { $0.value != nil }
+      .max { ($0.value ?? 0) < ($1.value ?? 0) }
   }
 }

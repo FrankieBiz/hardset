@@ -116,4 +116,15 @@ struct OverloadTargetTests {
       SetTarget(weightKg: 43.09, reps: 8, rule: .addLoad(stepKg: 2.27, isAssumedStep: true))
         .spokenLabel(in: .pounds) == "target 95 lb for 8 reps")
   }
+
+  @Test func spokenTargetKeepsTheTypedPrecision() {
+    let posix = Locale(identifier: "en_US_POSIX")
+    #expect(
+      SetTarget(weightKg: 43.75, reps: 8, rule: .addLoad(stepKg: 1.25, isAssumedStep: false))
+        .spokenLabel(in: .kilograms, locale: posix) == "target 43.75 kg for 8 reps")
+    // 92.5 lb is a plate pair, not 93.
+    #expect(
+      SetTarget(weightKg: 92.5 * 0.45359237, reps: 8, rule: .addLoad(stepKg: 1.13, isAssumedStep: false))
+        .spokenLabel(in: .pounds, locale: posix) == "target 92.5 lb for 8 reps")
+  }
 }

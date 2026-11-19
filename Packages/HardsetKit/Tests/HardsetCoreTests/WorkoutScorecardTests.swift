@@ -69,6 +69,30 @@ struct WorkoutScorecardTests {
     #expect(abs((scorecard.biggestGain?.fraction ?? 0) - 0.0625) < 1e-9)
   }
 
+  @Test func anEstimatedGainCarriesTheWeakerCertaintyOfTheTwoEstimatesItCompares() {
+    // Five reps estimate with high certainty, ten with moderate. The gain is a ratio of two
+    // estimates, so it is only as sure as the weaker one, whichever session it came from.
+    func gainCertainty(current: Int, previous: Int) -> Certainty? {
+      let a = input(
+        ProgressionKey(exerciseID: ExerciseID()), "A",
+        current: [(60, current)], previous: [(40, previous)])
+      return WorkoutScorecard.make([a]).biggestGain?.certainty
+    }
+
+    #expect(gainCertainty(current: 5, previous: 5) == .high)
+    #expect(gainCertainty(current: 10, previous: 5) == .moderate)
+    #expect(gainCertainty(current: 5, previous: 10) == .moderate)
+    #expect(gainCertainty(current: 12, previous: 5) == .low)
+  }
+
+  @Test func aHeaviestLoadGainHasNoCertainty() {
+    let a = input(ProgressionKey(exerciseID: ExerciseID()), "A", current: [(45, 15)], previous: [(40, 15)])
+    let gain = WorkoutScorecard.make([a]).biggestGain
+
+    #expect(gain?.metric == .heaviestLoad)
+    #expect(gain?.certainty == nil)
+  }
+
   @Test func biggestGainFallsBackToHeaviestLoad() {
     let a = input(ProgressionKey(exerciseID: ExerciseID()), "A", current: [(40, 15)], previous: [(40, 15)])
     let b = input(ProgressionKey(exerciseID: ExerciseID()), "B", current: [(45, 15)], previous: [(40, 15)])

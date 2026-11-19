@@ -183,7 +183,16 @@ public struct WorkoutReceipt: Hashable, Sendable, Identifiable {
 
   /// Plain text fallback stays useful in iMessage and preserves equipment provenance.
   public func text(unit: WeightUnit, locale: Locale = .current) -> String {
-    var rows = ["HARDSET · Workout receipt", title.isEmpty ? "Workout" : title,
+    // The scorecard leads, so a shared receipt opens on how the workout went. A workout with none,
+    // such as an imported one, shares exactly what it always did.
+    var rows: [String] = []
+    if let scorecard {
+      rows += [
+        scorecard.headline, ScorecardCopy.recordsText(scorecard), ScorecardCopy.gainShareText(scorecard),
+      ]
+        .compactMap { $0 }
+    }
+    rows += ["HARDSET · Workout receipt", title.isEmpty ? "Workout" : title,
       startedAt.formatted(date: .abbreviated, time: .shortened)]
     for block in blocks {
       rows.append("\(block.exerciseName) · \(block.equipmentLabel)")

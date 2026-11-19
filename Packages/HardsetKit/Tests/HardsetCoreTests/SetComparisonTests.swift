@@ -85,4 +85,32 @@ struct SetComparisonTests {
     #expect(SetComparison.beat(addedKg: 4.5359237, addedReps: 0).spokenLabel(in: .pounds)
       == "plus 10 lb on last time")
   }
+
+  /// A typed load is a fact, so a difference between two typed loads keeps the precision they were
+  /// typed with. Only an estimate is rounded to a plate.
+  @Test func addedLoadKeepsTheTypedPrecision() {
+    let posix = Locale(identifier: "en_US_POSIX")
+    #expect(SetComparison.beat(addedKg: 1.25, addedReps: 0).label(in: .kilograms, locale: posix) == "+1.25 kg")
+    #expect(SetComparison.beat(addedKg: 3.75, addedReps: 0).label(in: .kilograms, locale: posix) == "+3.75 kg")
+    // 1.25 lb per side: a 2.5 lb microplate pair, stored as kilograms, still reads 2.5 lb.
+    #expect(SetComparison.beat(addedKg: 2.5 * 0.45359237, addedReps: 0).label(in: .pounds, locale: posix)
+      == "+2.5 lb")
+    #expect(SetComparison.beat(addedKg: 1.25, addedReps: 1).spokenLabel(in: .kilograms, locale: posix)
+      == "plus 1.25 kg and 1 rep on last time")
+  }
+
+  /// Weights within the detector's tolerance are the same weight, so a hair of float noise on the
+  /// load cannot turn fewer reps into a win.
+  @Test func aLoadWithinToleranceIsNotALoadJump() {
+    let previous = PriorSetRecord(weightKg: 40, reps: 10, completedAt: .distantPast)
+
+    // Typed as 88.2 lb: 40.0068 kg, which is the same load to the detector.
+    #expect(SetComparison.compare(weightKg: 40.0068, reps: 9, against: previous, repFloor: 8) == nil)
+    #expect(SetComparison.compare(weightKg: 40.0068, reps: 10, against: previous, repFloor: 8) == .matched)
+    // A real jump still counts, and so does the same sub-tolerance load with more reps.
+    #expect(SetComparison.compare(weightKg: 42.5, reps: 8, against: previous, repFloor: 8)
+      == .beat(addedKg: 2.5, addedReps: -2))
+    #expect(SetComparison.compare(weightKg: 40.0068, reps: 11, against: previous, repFloor: 8)
+      == .beat(addedKg: 0, addedReps: 1))
+  }
 }

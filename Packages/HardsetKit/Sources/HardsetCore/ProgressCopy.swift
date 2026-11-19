@@ -22,9 +22,14 @@ public enum ProgressCopy {
   /// movement has no session in the six-week window.
   public static func shortChangeText(for trend: MovementTrend) -> String? {
     guard let change = trend.sixWeekChange else { return nil }
-    let percent = (change * 100).rounded()
-    if percent == 0 { return "unchanged in 6 weeks" }
-    return "\(percent > 0 ? "+" : "−")\(Int(abs(percent)))% in 6 weeks"
+    if (change * 100).rounded() == 0 { return "unchanged in 6 weeks" }
+    return "\(signedPercent(change)) in 6 weeks"
+  }
+
+  /// A fraction as a signed whole percent with a true minus: 0.08 is "+8%", -0.03 is "−3%".
+  public static func signedPercent(_ fraction: Double) -> String {
+    let percent = (fraction * 100).rounded()
+    return "\(percent < 0 ? "−" : "+")\(Int(abs(percent)))%"
   }
 
   /// "Estimated max +8% in 6 weeks": the change, labelled with its metric.

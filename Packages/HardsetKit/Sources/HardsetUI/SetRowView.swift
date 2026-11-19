@@ -297,11 +297,25 @@ public struct SetRowView: View {
     .foregroundStyle(hue)
     .padding(.horizontal, Tokens.Spacing.snug)
     .padding(.vertical, Tokens.Spacing.tight)
-    .background(
-      isMatch ? Tokens.Color.steelRaised : Tokens.Color.plateGreenSurface, in: Capsule()
-    )
+    .background {
+      // A capsule, except where the words can wrap: its corner radius would then push the second
+      // line across the outline, so the control radius takes over, as it does for every tag.
+      let fill = isMatch ? Tokens.Color.steelRaised : Tokens.Color.plateGreenSurface
+      if isStacked {
+        RoundedRectangle(cornerRadius: Tokens.Radius.control).fill(fill)
+      } else {
+        Capsule().fill(fill)
+      }
+    }
     // Decorative, like a banner's stroke: the arrow, the words and the colour say what it is.
-    .overlay(Capsule().strokeBorder(hue.opacity(0.35), lineWidth: Tokens.Stroke.hairline))
+    .overlay {
+      if isStacked {
+        RoundedRectangle(cornerRadius: Tokens.Radius.control)
+          .strokeBorder(hue.opacity(0.35), lineWidth: Tokens.Stroke.hairline)
+      } else {
+        Capsule().strokeBorder(hue.opacity(0.35), lineWidth: Tokens.Stroke.hairline)
+      }
+    }
     .hardsetArrival()
   }
 

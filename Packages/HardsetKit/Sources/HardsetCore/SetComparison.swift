@@ -33,7 +33,8 @@ public enum SetComparison: Hashable, Sendable {
       return .beat(addedKg: sameLoad ? 0 : addedKg, addedReps: addedReps)
     }
 
-    if addedKg > 0, reps >= (repFloor ?? previous.reps) {
+    // Not within tolerance of the same load: a hair of float noise on a typed weight is not a jump.
+    if !sameLoad, addedKg > 0, reps >= (repFloor ?? previous.reps) {
       return .beat(addedKg: addedKg, addedReps: addedReps)
     }
 
@@ -42,15 +43,16 @@ public enum SetComparison: Hashable, Sendable {
 
   /// The mark the set row shows: "+2.5 kg · +1 rep", "+1 rep", or "Matched".
   ///
-  /// The load is rounded as every displayed load is rounded, so a pound lifter sees "+10 lb"
-  /// rather than "+9.99 lb". A part only appears when it grew.
-  public func label(in unit: WeightUnit) -> String {
+  /// A difference between two typed loads is itself a fact about typed loads, so it keeps the
+  /// precision they were typed with, up to two decimals: "+1.25 kg", never rounded to a plate the
+  /// way an estimate is. A part only appears when it grew.
+  public func label(in unit: WeightUnit, locale: Locale = .current) -> String {
     switch self {
     case .matched:
       return "Matched"
     case let .beat(addedKg, addedReps):
       var parts: [String] = []
-      if let weight = Self.addedWeight(addedKg, in: unit) { parts.append("+\(weight)") }
+      if let weight = Self.addedWeight(addedKg, in: unit, locale: locale) { parts.append("+\(weight)") }
       if addedReps > 0 { parts.append(addedReps == 1 ? "+1 rep" : "+\(addedReps) reps") }
       return parts.joined(separator: " · ")
     }
@@ -58,24 +60,23 @@ public enum SetComparison: Hashable, Sendable {
 
   /// The mark as VoiceOver reads it: "plus 1 rep on last time", "plus 2.5 kg and 1 rep on last
   /// time", "matched last time". It names exactly what the visible mark names, and no more.
-  public func spokenLabel(in unit: WeightUnit) -> String {
+  public func spokenLabel(in unit: WeightUnit, locale: Locale = .current) -> String {
     switch self {
     case .matched:
       return "matched last time"
     case let .beat(addedKg, addedReps):
       var parts: [String] = []
-      if let weight = Self.addedWeight(addedKg, in: unit) { parts.append(weight) }
+      if let weight = Self.addedWeight(addedKg, in: unit, locale: locale) { parts.append(weight) }
       if addedReps > 0 { parts.append(addedReps == 1 ? "1 rep" : "\(addedReps) reps") }
       guard !parts.isEmpty else { return "ahead of last time" }
       return "plus " + parts.joined(separator: " and ") + " on last time"
     }
   }
 
-  /// "2.5 kg" or "10 lb", whole numbers without a decimal, only when the rounded load grew.
-  private static func addedWeight(_ addedKg: Double, in unit: WeightUnit) -> String? {
-    let added = StrengthMath.displayRounded(addedKg, in: unit)
-    guard added > 0 else { return nil }
-    let text = added == added.rounded() ? String(Int(added)) : String(format: "%.1f", added)
-    return "\(text) \(unit.abbreviation)"
+  /// "2.5 kg" or "10 lb" as a typed load, only when the load grew by at least the 0.01 the display
+  /// can show.
+  private static func addedWeight(_ addedKg: Double, in unit: WeightUnit, locale: Locale) -> String? {
+    guard (unit.fromKilograms(addedKg) * 100).rounded() >= 1 else { return nil }
+    return "\(LoadText.entered(addedKg, in: unit, locale: locale)) \(unit.abbreviation)"
   }
 }

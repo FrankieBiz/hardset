@@ -195,4 +195,25 @@ struct WorkoutDraftTests {
     #expect(WorkoutDraft.restLabel(300) == "5 min")
     #expect(WorkoutDraft.restChoices.map(WorkoutDraft.restLabel).count == WorkoutDraft.restChoices.count)
   }
+
+  @Test("A plan made from a finished workout is new until it is saved, but keeps what it was given")
+  func draftFromASessionIsNew() {
+    let made = WorkoutTemplate(
+      name: "Upper A", position: 4,
+      exercises: [
+        TemplateExercise(
+          exerciseID: ExerciseID(), exerciseName: "Chest press", plannedSets: 3,
+          repRange: RepRange(lower: 8, upper: 12))
+      ])
+
+    let fresh = WorkoutDraft(template: made, isNew: true)
+    let editing = WorkoutDraft(template: made)
+
+    #expect(fresh.isNew)
+    #expect(!editing.isNew)
+    #expect(fresh.template.id == made.id)
+    #expect(fresh.template.position == 4)
+    #expect(fresh.template.exercises == made.exercises)
+    #expect(fresh.canSave)
+  }
 }

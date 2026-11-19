@@ -38,6 +38,49 @@
       }
     }
 
+    /// The scorecard at the top of a finished workout's receipt: a record on the yellow surface, the
+    /// biggest gain, a win, a record with no beaten pair, a match and a first time, in both
+    /// appearances, at the narrowest width and at an accessibility size.
+    @Test func workoutReceiptScorecard() async throws {
+      func key() -> ProgressionKey { ProgressionKey(exerciseID: ExerciseID()) }
+      func entry(_ name: String, _ outcome: WorkoutScorecard.Outcome) -> WorkoutScorecard.Entry {
+        WorkoutScorecard.Entry(key: key(), exerciseName: name, outcome: outcome)
+      }
+      let scorecard = WorkoutScorecard(
+        entries: [
+          entry("Incline Press", .beat(.beat(addedKg: 0, addedReps: 1))),
+          entry("Cable Row", .beat(.beat(addedKg: 2.5, addedReps: 1))),
+          entry("Pec Deck", .beat(nil)),
+          entry("Lateral Raise", .matched),
+          entry("Hack Squat", .firstTime),
+          entry("Curl", .notBeaten),
+        ],
+        beatenCount: 3, comparedCount: 5, recordMovementCount: 2,
+        biggestGain: .init(
+          key: key(), exerciseName: "Incline Press", fraction: 0.0625, metric: .estimatedMax,
+          certainty: .moderate))
+      let receipt = WorkoutReceipt(
+        id: SessionID(), title: "Push", startedAt: Date(timeIntervalSince1970: 1793527200),
+        finishedAt: Date(timeIntervalSince1970: 1793530800),
+        lines: [
+          .init(id: SetID(), exerciseName: "Incline Press", machineName: "Cybex · Station 2",
+            weightKg: 80, reps: 9, isWarmup: false)
+        ],
+        scorecard: scorecard)
+      try await Snapshot.capture("receipt-scorecard-dark-375", size: Snapshot.narrow) {
+        ScrollView { WorkoutReceiptView(receipt: receipt, unit: .kilograms) }
+          .background(Tokens.Color.canvas)
+      }
+      try await Snapshot.capture("receipt-scorecard-light-375", size: Snapshot.narrow, style: .light) {
+        ScrollView { WorkoutReceiptView(receipt: receipt, unit: .pounds) }
+          .background(Tokens.Color.canvas)
+      }
+      try await Snapshot.capture("receipt-scorecard-dark-ax3", typeSize: .accessibility3) {
+        ScrollView { WorkoutReceiptView(receipt: receipt, unit: .kilograms) }
+          .background(Tokens.Color.canvas)
+      }
+    }
+
     @Test func machineLoadStep() async throws {
       try await Snapshot.capture("machine-step-pounds-375", size: Snapshot.narrow) {
         LoadStepSheet(machineName: "Cybex Leg Press", incrementKg: 2.5, unit: .pounds, onSave: { _ in true }, onCancel: {})

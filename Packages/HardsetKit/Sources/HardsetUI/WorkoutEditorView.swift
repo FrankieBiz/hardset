@@ -136,6 +136,8 @@ public struct WorkoutEditorView: View {
 
       stepperRow(
         "Sets", value: "\(movement.plannedSets)",
+        decreaseLabel: "Fewer sets for \(movement.exerciseName)",
+        increaseLabel: "More sets for \(movement.exerciseName)",
         canDecrease: movement.plannedSets > WorkoutDraft.minimumSets,
         canIncrease: movement.plannedSets < WorkoutDraft.maximumSets,
         decrease: { draft.stepSets(movement.id, by: -1) },
@@ -157,12 +159,16 @@ public struct WorkoutEditorView: View {
           .foregroundStyle(Tokens.Color.chalk)
         stepperRow(
           "From", value: "\(range.lower)",
+          decreaseLabel: "Lower the bottom of the rep range for \(movement.exerciseName)",
+          increaseLabel: "Raise the bottom of the rep range for \(movement.exerciseName)",
           canDecrease: range.lower > 1, canIncrease: range.lower < range.upper,
           decrease: { draft.stepRepLower(movement.id, by: -1) },
           increase: { draft.stepRepLower(movement.id, by: 1) }
         )
         stepperRow(
           "To", value: "\(range.upper)",
+          decreaseLabel: "Lower the top of the rep range for \(movement.exerciseName)",
+          increaseLabel: "Raise the top of the rep range for \(movement.exerciseName)",
           canDecrease: range.upper > range.lower, canIncrease: range.upper < 50,
           decrease: { draft.stepRepUpper(movement.id, by: -1) },
           increase: { draft.stepRepUpper(movement.id, by: 1) }
@@ -212,9 +218,12 @@ public struct WorkoutEditorView: View {
   // MARK: - Controls
 
   /// A label, then a minus, the value in tabular figures, and a plus. Each button is a 44 pt
-  /// target, and one that cannot go further is dimmed as every disabled control is.
+  /// target, and one that cannot go further is dimmed as every disabled control is. The buttons are
+  /// icons, so what VoiceOver and Voice Control hear is spelled out, naming the movement: several
+  /// cards share one screen, and "Fewer sets" alone would not say whose.
   private func stepperRow(
-    _ title: String, value: String, canDecrease: Bool, canIncrease: Bool,
+    _ title: String, value: String, decreaseLabel: String, increaseLabel: String,
+    canDecrease: Bool, canIncrease: Bool,
     decrease: @escaping () -> Void, increase: @escaping () -> Void
   ) -> some View {
     HStack(spacing: Tokens.Spacing.regular) {
@@ -222,13 +231,14 @@ public struct WorkoutEditorView: View {
         .font(Tokens.Text.label)
         .foregroundStyle(Tokens.Color.chalk)
       Spacer(minLength: Tokens.Spacing.regular)
-      iconButton("minus", "Fewer \(title.lowercased())", enabled: canDecrease, action: decrease)
+      iconButton("minus", decreaseLabel, enabled: canDecrease, action: decrease)
       Text(value)
-        .font(Tokens.Text.setEntry)
+        .font(Tokens.Text.figure)
+        .monospacedDigit()
         .foregroundStyle(Tokens.Color.chalk)
         .frame(minWidth: Tokens.minimumTapTarget)
         .accessibilityLabel("\(title) \(value)")
-      iconButton("plus", "More \(title.lowercased())", enabled: canIncrease, action: increase)
+      iconButton("plus", increaseLabel, enabled: canIncrease, action: increase)
     }
   }
 

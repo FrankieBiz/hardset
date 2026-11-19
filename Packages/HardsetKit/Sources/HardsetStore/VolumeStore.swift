@@ -181,11 +181,15 @@ public nonisolated struct ProgressionStore: Sendable {
   /// Suspends the caller while GRDB reads samples and labels in one snapshot.
   public func loadHistory(for exerciseID: ExerciseID) async throws -> ProgressionHistory {
     try Task.checkCancellation()
-    let inputs = try await database.read { db in
-      try Self.readHistoryInputs(for: exerciseID, in: db)
+    // Analysed inside the read, on the database's own queue. The record replay is quadratic in a
+    // series' set count, and run after the read returned it would run on the caller's actor, which
+    // is the main actor for a screen: a long history would hold the interface up. This is the same
+    // reason `ProgressBoardStore` does its work inside its read.
+    let history = try await database.read { db in
+      Self.analyze(try Self.readHistoryInputs(for: exerciseID, in: db), exerciseID: exerciseID)
     }
     try Task.checkCancellation()
-    return Self.analyze(inputs, exerciseID: exerciseID)
+    return history
   }
 
   private struct HistoryInputs: Sendable {

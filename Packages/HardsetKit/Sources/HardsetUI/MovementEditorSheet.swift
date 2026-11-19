@@ -197,12 +197,16 @@ public struct MovementEditorSheet: View {
             chipGrid {
               ForEach(options, id: \.rawValue) { muscle in
                 let isChosen = draft.secondary.contains(muscle)
+                let isWaiting = !isChosen && draft.secondaryLimitReached
                 HardsetChip(
                   ExercisePickerView.displayName(MuscleKey(muscle)), isSelected: isChosen
                 ) {
                   draft.toggleSecondary(muscle)
                 }
-                .disabled(!isChosen && draft.secondaryLimitReached)
+                .disabled(isWaiting)
+                // A chip's style never reads isEnabled, so the wait is dimmed here, as every
+                // disabled control is.
+                .opacity(isWaiting ? 0.4 : 1)
               }
             }
           }

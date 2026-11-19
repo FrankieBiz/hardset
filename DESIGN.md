@@ -249,12 +249,14 @@ Selection rows, the unit switch and pickers stay silent.
   longest ago, or never, is the up-next card, in `hardsetCard`, with its name in `title`, "3 movements" in
   `label` and a context line in `provenance`: "Up next · last done 4 days ago · beat 4 of 6 last time".
   Its one `primary` 56 pt button reads "Start" and the name; starting is a single tap with no
-  confirmation, because the lifter is standing at a machine. The other workouts are control-radius cards
-  with a `secondary` Start and a `quiet` Edit, and "New workout" and "Repeat last workout" are `secondary`
-  buttons below them, the second only when a finished workout exists. Nothing is claimed that was not
-  measured: "beat 4 of 6" appears only when something was compared, and only on the workout it belongs to.
-  The order is the rotation, never a schedule or a streak. At accessibility sizes the buttons stack. It
-  adds no token and no motion.
+  confirmation, because the lifter is standing at a machine. It is the screen's one primary button:
+  while a saved workout is shown, the empty "Start workout" below it steps down to `secondary`. The
+  other workouts are control-radius cards with a `secondary` Start and a `quiet` Edit, and "New workout"
+  and "Repeat last workout" are `secondary` buttons below them, the second only when a finished workout
+  of the lifter's own exists (an imported one does not count). Nothing is claimed that was not measured:
+  "beat 4 of 6" appears only when something was compared, and only on the workout it belongs to. The
+  order is the rotation, never a schedule or a streak. At accessibility sizes the buttons stack. It adds
+  no token and no motion.
 - **Workout editor** (`WorkoutEditorView`, `WorkoutEditorScreen`, `WorkoutDraft`): a name field in
   `entryFieldChrome` and a card per movement. Each card has Sets and, once added, a rep range as large
   44 pt minus and plus controls around a `figure` value, so a plan made sitting down cannot hold a number
@@ -283,6 +285,24 @@ Selection rows, the unit switch and pickers stay silent.
   improved" at the top repeats the three biggest gains. Empty, it says "Log a workout and your progress
   shows up here"; loading is a quiet line and a failed read says so, never an empty board. It adds no
   token and no motion.
+- **Scorecard** (`WorkoutReceiptView`, `ScorecardCopy`): the block at the top of a finished workout's
+  receipt, in `hardsetCard`. The headline, "Beat last time on 5 of 7", is in `readout`; a record line sits
+  on `plateYellowSurface` with its trophy; "Biggest gain: Chest press, estimated max +6%" names its
+  metric, and an estimated gain wears a non-interactive `CertaintyCapsule` on its own line beneath it
+  (the share text says the same in words, "· Moderate confidence", because the receipt is rendered into an
+  image and holds no controls); and each movement that earned a mark has a row: `plateGreen` with an up arrow for a win, the
+  figures of the set ("+1 rep", "+2.5 kg · +1 rep"), `plateYellow` with the trophy for a record that no
+  set beat its partner on, and `chalkDim` for "Matched" and "First time on this machine". Counted by
+  movement. A movement with no earlier session on its machine is a first time and is left out of both
+  numbers; one that fell short is carried by the count and never drawn as a failure. The same words open
+  the share text, and the same view is rendered into the shared image. Finishing a workout opens its
+  receipt here; a discarded workout, and one finished with no sets, have none to open. It adds no token
+  and no motion.
+- **Save as workout** (receipt): a `secondary` button under the share actions, offered for a workout with
+  sets and not for an imported one, whose movements are kept apart from the catalogue's. It asks for a
+  name in `NameEntrySheet`, builds the plan from the workout's movements in their order with the number
+  of working sets logged, never counting warm-ups, and opens the workout editor on it as a new workout.
+  Once saved, a neutral `info` banner says where it is. It adds no token and no motion.
 - **Selection** (`SelectionRow`, `SelectionCardButtonStyle`, `SelectionIndicator`): selected choices
   take the plate blue ring and `plateBlueSurface`, and the trailing indicator swaps an empty ring
   for a filled check, so the choice is carried by shape as well as colour. A pressed selection
@@ -374,7 +394,10 @@ Selection rows, the unit switch and pickers stay silent.
 - **Beat mark** (set row): once a set is logged, a tag-shaped capsule under the values says how it compares
   with the same set last time on this machine, in the figures of the set: "+1 rep", "+2.5 kg", "+5 lb · +1
   rep", never a bare "Beat". A win is `plateGreen` on `plateGreenSurface` with an up arrow; a match is
-  "Matched" in `chalkDim` on `steelRaised` with an equals sign, so neither is carried by colour alone. A
+  "Matched" in `chalkDim` on `steelRaised` with an equals sign, so neither is carried by colour alone. It
+  wears a 0.35 hue outline, a decorative stroke like a banner's that never carries meaning and is exempt
+  from the 3:1 boundary rule, because the capsule's own fill vanishes on the logged row's tint. At
+  accessibility sizes, where its words can wrap, it takes the control radius instead of a capsule. A
   set that fell short, a warm-up, a set with no partner and a set done on another machine show nothing.
   It arrives through `hardsetArrival()`, the insertion-only opacity reveal on `Motion.reveal`, so the row's
   height changes at once and nothing animates layout. The row's spoken label says it in the same words

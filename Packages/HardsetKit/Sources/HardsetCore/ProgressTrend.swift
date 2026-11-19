@@ -77,9 +77,9 @@ public enum ProgressTrendAnalyzer {
       metric = .heaviestLoad
     }
 
-    let points: [(date: Date, value: Double)] = sessions.compactMap { session in
+    let points: [(date: Date, value: Double, topLoad: Double)] = sessions.compactMap { session in
       guard let value = value(of: metric, in: session.samples) else { return nil }
-      return (session.date, value)
+      return (session.date, value, session.samples.map(\.weightKg).max() ?? 0)
     }
     guard let latest = points.last else { return nil }
 
@@ -88,6 +88,13 @@ public enum ProgressTrendAnalyzer {
     let windowEnd = latestSession.date.addingTimeInterval(-35 * day)
     let base = points
       .filter { $0.date >= windowStart && $0.date <= windowEnd }
+      // Reps at the top load are only a fair comparison at the same top load: ten bodyweight
+      // pull-ups against five with 20 kg added is not an improvement of 100%, it is a different
+      // exercise's number. Other metrics are loads or estimates, which compare across sessions.
+      .filter {
+        metric != .repsAtTopLoad
+          || abs($0.topLoad - latest.topLoad) < PersonalRecordDetector.loadMatchingTolerance
+      }
       .map(\.value)
       .max()
     if let base, base > 0 {

@@ -51,9 +51,12 @@ public struct WorkoutDraft: Hashable, Sendable {
 
   /// A saved workout being changed. Its identity, place in the rotation and each movement's own
   /// identity are kept, so saving updates the plan rather than replacing it.
-  public init(template: WorkoutTemplate) {
+  ///
+  /// `isNew` is for a plan that has not been saved yet but arrives complete, such as one made from a
+  /// finished workout: it is edited and saved like any new workout, with no delete to offer.
+  public init(template: WorkoutTemplate, isNew: Bool = false) {
     self.name = template.name
-    self.isNew = false
+    self.isNew = isNew
     self.id = template.id
     self.position = template.position
     self.movements = template.exercises.map {

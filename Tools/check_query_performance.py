@@ -35,8 +35,8 @@ QUERIES = {
         ("exercise-3",),
     ),
     "last finished workout": (
-        'SELECT id, gymID, title, notes, startedAt, finishedAt FROM sessions WHERE finishedAt IS NOT NULL ORDER BY finishedAt DESC LIMIT 1',
-        (),
+        'SELECT id, gymID, title, notes, startedAt, finishedAt FROM sessions WHERE finishedAt IS NOT NULL AND notes NOT LIKE ? ORDER BY finishedAt DESC LIMIT 1',
+        ("Imported from %",),
     ),
     "session recovery": (
         'SELECT * FROM loggedSets WHERE sessionID = ? ORDER BY setOrdinal',

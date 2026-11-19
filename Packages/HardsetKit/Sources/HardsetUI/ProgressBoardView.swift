@@ -186,14 +186,24 @@ public struct ProgressBoardView: View {
             .foregroundStyle(Tokens.Color.warning)
         }
       }
-      // Room for the badge drawn over the corner, so the sentence never runs under it.
-      .padding(.trailing, row.trend.certainty == nil ? 0 : 96)
       .frame(maxWidth: .infinity, alignment: .leading)
+
+      // Room for the badge drawn over the card's corner. The badge itself, hidden, is the spacer, so
+      // the room is exactly its size at every Dynamic Type size and the sentence never runs under it.
+      if showsBadge(row) {
+        badge(for: row)
+          .hidden()
+          .frame(maxWidth: .infinity, alignment: .trailing)
+      }
     }
     .padding(.horizontal, Tokens.Spacing.regular)
     .padding(.vertical, Tokens.Spacing.snug)
     .frame(maxWidth: .infinity, minHeight: Tokens.loggerTapTarget, alignment: .leading)
     .contentShape(RoundedRectangle(cornerRadius: Tokens.Radius.control))
+  }
+
+  private func showsBadge(_ row: ProgressBoard.Row) -> Bool {
+    row.trend.metric == .estimatedMax && row.trend.certainty != nil
   }
 
   /// Beside every estimated-max figure, the certainty of the estimate behind it.

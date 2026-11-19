@@ -26,12 +26,12 @@ public struct SetTarget: Hashable, Sendable {
 
   /// The target as VoiceOver reads it after the row's own values: "target 11 reps", or, when the
   /// load itself is the news, "target 42.5 kg for 8 reps".
-  public func spokenLabel(in unit: WeightUnit) -> String {
+  public func spokenLabel(in unit: WeightUnit, locale: Locale = .current) -> String {
     let repsText = reps == 1 ? "1 rep" : "\(reps) reps"
     guard case .addLoad = rule else { return "target \(repsText)" }
-    let load = StrengthMath.displayRounded(weightKg, in: unit)
-    let loadText = load == load.rounded() ? String(Int(load)) : String(format: "%.1f", load)
-    return "target \(loadText) \(unit.abbreviation) for \(repsText)"
+    // A typed load plus a step is a typed load: 92.5 lb is said as 92.5, not rounded to a plate.
+    let load = LoadText.entered(weightKg, in: unit, locale: locale)
+    return "target \(load) \(unit.abbreviation) for \(repsText)"
   }
 
   /// Fixed copy, so a target never reads as an unexplained number.
