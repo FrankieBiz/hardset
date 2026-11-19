@@ -21,6 +21,7 @@ public struct HardsetEnvironment {
   public let transfer: DataTransferStore
   public let gyms: GymStore
   public let templates: TemplateStore
+  public let progressBoard: ProgressBoardStore
   /// Whether this launch replicates to iCloud. Shown in Settings, so a local-only build says
   /// plainly where the lifter's workouts live instead of leaving them to assume a backup.
   public let sync: SyncStatus?
@@ -36,6 +37,7 @@ public struct HardsetEnvironment {
     self.progression = ProgressionStore(database: database)
     self.gyms = GymStore(database: database)
     self.templates = TemplateStore(database: database)
+    self.progressBoard = ProgressBoardStore(database: database)
     self.health = DeviceHealthStore(database: database)
     self.receipts = ReceiptStore(database: database)
     self.transfer = DataTransferStore(database: database)
@@ -241,6 +243,18 @@ public struct HardsetRootView: View {
           trainTab
         }
       }
+      Tab("Progress", systemImage: "chart.line.uptrend.xyaxis", value: RootTab.progress) {
+        NavigationStack {
+          // The screen draws its own header; the title stays as the screen's accessible name. A
+          // finished workout, a deletion or an import changes it, so it re-reads on `dataRevision`.
+          ProgressScreen(
+            board: environment.progressBoard, progression: environment.progression, unit: unit,
+            onShowSettings: { isShowingSettings = true }, dataRevision: dataRevision
+          )
+          .navigationTitle("Progress")
+          .hardsetTabRoot()
+        }
+      }
       Tab("Volume", systemImage: "chart.bar.xaxis", value: RootTab.volume) {
         NavigationStack {
           // The screen draws its own header; the title stays as the screen's accessible name.
@@ -321,6 +335,9 @@ public struct HardsetRootView: View {
         onShowSettings: { isShowingSettings = true },
         onFinished: {
           model.clearFinishedWorkout()
+          // A finished workout changes what Progress, History and Volume read, which none of them
+          // can see from here.
+          dataRevision &+= 1
           // The workout just finished is now the last one, so the start screen says so, and a saved
           // workout it came from has a new last-done day and a new up-next.
           Task {
@@ -1004,7 +1021,7 @@ public struct HardsetRootView: View {
 
 /// The root's tabs, as the tab view's selection.
 private nonisolated enum RootTab: Hashable, Sendable {
-  case train, volume, history
+  case train, progress, volume, history
 }
 
 /// The start screen's gym card: a full-width card that is also one button.

@@ -178,6 +178,54 @@ struct ProgressTrendTests {
     #expect(elapsed < .milliseconds(50), "trend over 2,000 sets took \(elapsed)")
   }
 
+  @Test func estimatedMaxTrendCarriesTheCertaintyOfItsLatestEstimate() {
+    // Ten reps is moderate, five is high, twelve is low: certainty follows the reps behind it.
+    func certainty(reps: Int) -> Certainty? {
+      ProgressTrendAnalyzer.trend(
+        key: key(),
+        samples: [s(day: 0, session: 0, kg: 40, reps: reps), s(day: 7, session: 1, kg: 42.5, reps: reps)],
+        incrementKg: 2.5, estimatesOneRepMax: true
+      )?.certainty
+    }
+
+    #expect(certainty(reps: 5) == .high)
+    #expect(certainty(reps: 10) == .moderate)
+    #expect(certainty(reps: 12) == .low)
+  }
+
+  @Test func theCertaintyBelongsToTheSetThatMadeTheEstimate() {
+    // Ten reps at 40 estimates 53.3; three reps at 45 estimates 49.5, so the ten-rep set is best.
+    let trend = ProgressTrendAnalyzer.trend(
+      key: key(),
+      samples: [
+        s(day: 0, session: 0, kg: 40, reps: 8),
+        s(day: 7, session: 1, kg: 40, reps: 10),
+        s(day: 7, session: 1, kg: 45, reps: 3),
+      ],
+      incrementKg: 2.5, estimatesOneRepMax: true
+    )
+
+    #expect(trend?.metric == .estimatedMax)
+    #expect(trend?.certainty == .moderate)
+  }
+
+  @Test func onlyAnEstimateHasACertainty() {
+    let heaviest = ProgressTrendAnalyzer.trend(
+      key: key(),
+      samples: [s(day: 0, session: 0, kg: 40, reps: 15), s(day: 7, session: 1, kg: 42.5, reps: 15)],
+      incrementKg: 2.5, estimatesOneRepMax: true
+    )
+    let bodyweight = ProgressTrendAnalyzer.trend(
+      key: key(),
+      samples: [s(day: 0, session: 0, kg: 0, reps: 10), s(day: 7, session: 1, kg: 0, reps: 12)],
+      incrementKg: nil, estimatesOneRepMax: false
+    )
+
+    #expect(heaviest?.metric == .heaviestLoad)
+    #expect(heaviest?.certainty == nil)
+    #expect(bodyweight?.certainty == nil)
+  }
+
   @Test func mostImprovedOrdersByChange() {
     let changes: [Double?] = [0.05, 0.2, nil, -0.1, 0.1]
     let trends = changes.enumerated().map { index, change in

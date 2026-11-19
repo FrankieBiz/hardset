@@ -271,6 +271,18 @@ Selection rows, the unit switch and pickers stay silent.
   The neck is left out until something is planned for it. It sets no target and makes no judgement, and
   it says when planned sets sit on movements with no muscles recorded, because those count toward no
   group. It adds no token and no motion.
+- **Progress board** (`ProgressBoardView`, `ProgressScreen`, the Progress tab): every trained movement,
+  one row per movement and machine, grouped by body part under `SectionLabel` headers, with the movements
+  that have no body part last under the `warning` header. A row is a `SelectionCardButtonStyle` card: the
+  movement in `headline`, its machine in `provenance`, a small `plateBlue` sparkline of the last dozen
+  sessions (hidden from VoiceOver and dropped at accessibility sizes), and one sentence that names its
+  metric: "Estimated max +8% in 6 weeks", or "Not enough history" in `chalkDim` when no session sits six
+  weeks back. Beside every estimated-max figure sits its `CertaintyBadge`, drawn over the card's corner
+  as its own control so it never nests inside the card's button. A movement with no record in its last
+  three sessions is flagged "Stalled · 3 sessions" in `warning` with `pause.circle`, and no advice. "Most
+  improved" at the top repeats the three biggest gains. Empty, it says "Log a workout and your progress
+  shows up here"; loading is a quiet line and a failed read says so, never an empty board. It adds no
+  token and no motion.
 - **Selection** (`SelectionRow`, `SelectionCardButtonStyle`, `SelectionIndicator`): selected choices
   take the plate blue ring and `plateBlueSurface`, and the trailing indicator swaps an empty ring
   for a filled check, so the choice is carried by shape as well as colour. A pressed selection
@@ -376,7 +388,13 @@ Selection rows, the unit switch and pickers stay silent.
   muscles are solid plate blue; muscles that are counted but not modelled are hollow (plate blue
   outline on `plateBlueSurface`) and say so in words beside the bar.
 - **Charts**: one series per machine with its own colour and point symbol, a custom legend in app
-  type, and machine changes as 2 pt dashed `warning` rules.
+  type, and machine changes as 2 pt dashed `warning` rules. The chart opens on the estimated max,
+  which rises when the lifter does more weight or more reps, with the heaviest load as the other
+  segment; it opens on the heaviest load when no estimate can be made. A session that set a record is
+  marked on its line with a `star.fill` in `plateYellow`, drawn over the machine's own point, and the
+  legend says what the star means, so colour is never the only carrier. Beneath the chart a "Best at
+  each weight" table lists, per machine, the most reps at each weight and the day they were first
+  reached ("90 lb · 12 reps · Nov 4"): facts from the sets, so it carries no certainty badge.
 
 ## Accessibility floor
 

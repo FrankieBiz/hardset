@@ -24,6 +24,9 @@ public struct MovementTrend: Hashable, Sendable, Identifiable {
   /// those sessions are checked.
   public let stalledSessions: Int?
   public let latestDate: Date
+  /// How far to trust the latest estimate, from the reps behind it, so the figure and its badge can
+  /// sit together. Only an estimate has one: nil for a heaviest-load or bodyweight trend.
+  public let certainty: Certainty?
 
   public var id: ProgressionKey { key }
 
@@ -34,7 +37,8 @@ public struct MovementTrend: Hashable, Sendable, Identifiable {
     sixWeekChange: Double?,
     sessionCount: Int,
     stalledSessions: Int?,
-    latestDate: Date
+    latestDate: Date,
+    certainty: Certainty? = nil
   ) {
     self.key = key
     self.metric = metric
@@ -43,6 +47,7 @@ public struct MovementTrend: Hashable, Sendable, Identifiable {
     self.sessionCount = sessionCount
     self.stalledSessions = stalledSessions
     self.latestDate = latestDate
+    self.certainty = certainty
   }
 }
 
@@ -113,7 +118,8 @@ public enum ProgressTrendAnalyzer {
       sixWeekChange: change,
       sessionCount: sessions.count,
       stalledSessions: stalled,
-      latestDate: latestSession.date
+      latestDate: latestSession.date,
+      certainty: metric == .estimatedMax ? bestEstimateClaim(in: latestSession.samples)?.certainty : nil
     )
   }
 
@@ -201,9 +207,16 @@ public enum ProgressTrendAnalyzer {
   }
 
   private static func bestEstimate(in samples: [ProgressionSample]) -> Double? {
+    bestEstimateClaim(in: samples)?.value
+  }
+
+  /// The session's best estimate with its certainty, so the figure and the trust in it come from
+  /// the same set.
+  private static func bestEstimateClaim(in samples: [ProgressionSample]) -> Claim<Double>? {
     samples
-      .compactMap { StrengthMath.estimatedOneRepMax(weightKg: $0.weightKg, reps: $0.reps).value }
-      .max()
+      .map { StrengthMath.estimatedOneRepMax(weightKg: $0.weightKg, reps: $0.reps) }
+      .filter { $0.value != nil }
+      .max { ($0.value ?? 0) < ($1.value ?? 0) }
   }
 
   private static func value(of metric: TrendMetric, in samples: [ProgressionSample]) -> Double? {
