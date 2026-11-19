@@ -367,7 +367,7 @@ public nonisolated struct HistoryStore: Sendable {
   private static func readRecentSessions(limit: Int, in db: Database) throws -> [SessionSummary] {
     let sessions = try Session
       .where { $0.finishedAt.isNot(nil) }
-      .order { $0.startedAt.desc() }
+      .order { ($0.startedAt.desc(), $0.id.desc()) }
       .limit(limit)
       .fetchAll(db)
     guard !sessions.isEmpty else { return [] }
@@ -408,8 +408,9 @@ public nonisolated struct HistoryStore: Sendable {
     }
   }
 
-  /// Reuses `SessionVolume`'s rules so the history screen and the live screen cannot disagree
-  /// about what a session contained.
+  /// Applies `SessionVolume`'s rules so the history screen and the live screen cannot disagree
+  /// about what a session contained. Kept here as arithmetic over rows the query already read,
+  /// rather than rebuilding `ExerciseLogState` values.
   private static func volume(of sets: [LoggedSet]) -> SessionVolume {
     var workingSets = 0
     var warmupSets = 0

@@ -50,9 +50,9 @@ public struct MuscleHeatmapView: View {
                 .font(Tokens.Text.figure).monospacedDigit()
             }
             if muscle.tier == .counted { Text("Counted, not modelled").font(Tokens.Text.caption) }
-            ProgressView(value: report.sets(for: muscle), total: max(report.fractionalSets.values.max() ?? 0, 1))
-              .tint(Tokens.Color.plateBlue)
-              .accessibilityHidden(true)
+            MuscleShareGauge(
+              fraction: report.sets(for: muscle)
+                / max(report.fractionalSets.values.max() ?? 0, 1))
           }
           .frame(maxWidth: .infinity, alignment: .leading)
           .padding(Tokens.Spacing.regular)
@@ -66,5 +66,27 @@ public struct MuscleHeatmapView: View {
     }
     .foregroundStyle(Tokens.Color.chalk)
     .padding(Tokens.Spacing.loose)
+  }
+}
+
+/// A comparative gauge on the same tokens as the volume report, not a system progress view.
+///
+/// The report's gauges are square-ended bars scaled to the week's own maximum; this is the same
+/// measure on the same screen family, so it draws the same way and its track follows the palette.
+private struct MuscleShareGauge: View {
+  let fraction: Double
+
+  var body: some View {
+    let clamped = min(max(fraction, 0), 1)
+    GeometryReader { proxy in
+      ZStack(alignment: .leading) {
+        Rectangle().fill(Tokens.Color.steelRaised)
+        Rectangle()
+          .fill(Tokens.Color.plateBlue)
+          .frame(width: proxy.size.width * clamped)
+      }
+    }
+    .frame(height: 6)
+    .accessibilityHidden(true)
   }
 }

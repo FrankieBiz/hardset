@@ -214,7 +214,7 @@ Selection rows, the unit switch and pickers stay silent.
   push the list off screen; the banner is never height-capped.
 - **Arrival** (`hardsetArrival()`): the one public modifier that carries a message's
   insertion-only opacity reveal on `Motion.reveal`, with no animated transaction. The pickers and
-  the name entry sheet use it; the session and root screens adopt it when they are rebuilt.
+  the name entry sheet and the session use it; the root screens adopt it when they are rebuilt.
 - **Ledger** (`StatLedger`): a row of labelled figures separated by hairlines, used for session
   totals. Its values stay in the `setEntry` role, a step larger than the `figure` used inside rows
   and compact ledgers; a larger headline figure uses `readout`.

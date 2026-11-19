@@ -111,6 +111,9 @@ public enum PersonalRecordDetector {
     estimatesOneRepMax: Bool = true
   ) -> [PersonalRecord] {
     guard !candidate.isWarmup, candidate.weightKg >= 0, candidate.reps > 0 else { return [] }
+    // A load `StrengthMath` calls a data-entry error is not a record, for the same reason its
+    // estimated maximum is `.unevaluated`.
+    guard candidate.weightKg <= StrengthMath.implausibleWeightKg else { return [] }
     // Rule 1: nothing to beat.
     guard !history.isEmpty else { return [] }
 

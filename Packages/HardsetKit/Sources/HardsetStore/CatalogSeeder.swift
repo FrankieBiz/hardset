@@ -147,7 +147,8 @@ public nonisolated struct CatalogSeeder: Sendable {
   /// Selectable movements, newest user-created first, then curated alphabetically.
   ///
   /// Archived rows are excluded — that is what archiving is for — and the sort puts a movement
-  /// the user just created where they will look for it.
+  /// the user just created where they will look for it: at the top of their own group, newest
+  /// first, rather than filed alphabetically among movements they did not write.
   ///
   /// Movements created by a CSV import are excluded too. They carry no attribution and no
   /// verified equipment, and the import promises they stay separate from machine-level history;
@@ -159,7 +160,7 @@ public nonisolated struct CatalogSeeder: Sendable {
       try Exercise
         .where { !$0.isArchived }
         .where { !$0.notes.like(Self.importedNotesPattern) }
-        .order { ($0.isCurated, $0.name) }
+        .order { ($0.isCurated, $0.createdAt.desc(), $0.name) }
         .fetchAll(db)
         .map(CatalogEntry.init(row:))
     }

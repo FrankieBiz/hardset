@@ -135,8 +135,9 @@ nonisolated struct DeviceRestTimer: Hashable, Identifiable, Sendable {
   var sessionID: UUID?
   /// The AlarmKit alarm currently backing this timer, so it can be cancelled on relaunch.
   var alarmID: UUID?
-  /// Exactly one of `endsAt` / `pausedRemainingSeconds` is non-nil, or both are nil when
-  /// idle. `RestTimerState` is the only thing that should construct these two values.
+  /// The v1 rest-timer shape, kept because the schema is permanent. The shipped rest journal is
+  /// `deviceRestJournal` (`RestJournal.swift`); nothing reads or writes this table. Do not treat
+  /// these columns as the design: `RestTimerState` is what the app actually persists.
   var endsAt: Date?
   var pausedRemainingSeconds: Double?
   var updatedAt = Date(timeIntervalSince1970: 0)

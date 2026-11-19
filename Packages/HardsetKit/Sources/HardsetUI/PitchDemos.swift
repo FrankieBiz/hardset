@@ -230,7 +230,11 @@ public struct PitchRestDemo: View {
     .task {
       // A slow tick so a rest that runs out starts again: the demo is never left on an empty bar.
       while !Task.isCancelled {
-        try? await Task.sleep(for: .seconds(1))
+        do {
+          try await Task.sleep(for: .seconds(1))
+        } catch {
+          return
+        }
         timer.restartIfElapsed()
       }
     }

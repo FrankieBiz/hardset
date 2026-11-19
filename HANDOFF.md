@@ -1,5 +1,12 @@
 # Hardset — handoff
 
+> **Current state (19 November 2026).** This file began as the build brief and parts of it describe
+> the project as it was before the front-end rebuild. The app and widget now build in Debug and
+> Release on the macOS CI lane, the real app is driven through its UI journeys in the Simulator, and
+> the package suite is green. For the latest work, verification evidence and open gates, read
+> `.agents/HANDOFF.md` first; where this file disagrees with it or with the code, they win. Sections
+> 0, 2, 7 and 8 below are annotated accordingly.
+
 You are taking over an iOS 26 hypertrophy-logging app mid-build. This file is the whole briefing.
 Read it before touching anything. Everything it claims is verifiable from the repo.
 
@@ -45,8 +52,9 @@ below.
 cd Packages/HardsetKit && swift test --disable-sandbox
 ```
 
-Or `./test.sh` from the repo root, which also runs three tests that need isolated processes.
-**Current state: 274 tests, 34 suites, all passing, ~0.2s on the host.**
+Or `./test.sh` from the repo root, which also runs the engine-dependent tests in separate processes.
+**Current state: the Linux gate runs 240 Core tests in 29 suites and 304 Store tests in 30 suites;
+the macOS lane compiles the app and widget and runs the snapshot and real-app UI suites.**
 
 Everything with behaviour lives in `Packages/HardsetKit` and builds on macOS. That is deliberate —
 see §7.
@@ -160,6 +168,13 @@ Consequence: everything real was deliberately put in package targets. `HardsetAp
 lines of wiring with no logic. **Keep it that way** — anything you add there that a test could cover
 belongs in the package.
 
+**The app and widget compile, and the real app runs in the Simulator.** That is CI's job, not this
+Linux machine's: `.github/workflows/ios-ui.yml` builds both targets in Debug and Release, compiles
+the package tests for the Simulator, renders every screen, and drives `HardsetUITests` through the
+lifter journeys in dark and light. A green run is the native evidence; a Linux `make check` is not.
+The remaining "never verified" claims are narrower and real: no signed build has exercised CloudKit
+sync, AlarmKit alarms, HealthKit, or StoreKit, and nothing has run on a physical iPhone.
+
 **Nothing has run on a device.** No AlarmKit alarm has ever fired. No CloudKit sync has ever
 happened. `DEVICE-CHECKLIST.md` is the gate; its force-quit and Focus-breakthrough lines are where
 the flagship feature actually gets proven. The user has an iPhone and has agreed to run it.
@@ -168,21 +183,22 @@ the flagship feature actually gets proven. The user has an iPhone and has agreed
 
 ## 8. Next steps, in order
 
-1. **Wire `MachinePickerView` into `ExerciseSectionView`.** The store layer
-   (`GymStore.recentMachines`, `SessionCoordinator.changeMachine`) and the view both exist and are
-   tested, but nothing presents the picker yet. Until this lands, a user still cannot select a
-   machine, and machine-level tracking — the second differentiator — stays unreachable in practice.
-   This is the highest-value hour available.
-2. **Gym management UI.** `GymStore` can create gyms and machines; no screen calls it.
-3. **Exercise detail screen** wiring `ProgressionChartView` to `ProgressionStore.history(for:)`.
-   The chart and the query both exist and are tested; nothing navigates to them.
-4. **A settings screen** for `WeightUnit` — `WeightUnit` exists and is tested, but the unit is
-   hardcoded `.kilograms` at the root view.
-5. **Then**: the device checklist, before stacking more on an unproven foundation.
+The machine picker, gym management, exercise progress, settings/unit switching and onboarding are
+now wired (see `.agents/HANDOFF.md` and the plans under `docs/superpowers/plans/`). What remains:
 
-Deliberately **not** next, and why: subscriptions (nothing to sell until the app runs), the
-progression *prescription* engine (needs the device-verified logger first), and the 240-exercise
-catalogue (that is content work, ~260–340 hours, and a decision the user has not made).
+1. **Signed-device verification.** AlarmKit delivery with the phone locked, force-quit and Focus;
+   CloudKit sign-in/out with two devices; HealthKit permission paths; a real StoreKit purchase,
+   restore and refund. These are the gates in `DEVICE-CHECKLIST.md`, not unit-test work.
+2. **Publication gates.** A hosted privacy policy and support page, the App Store Connect privacy
+   questionnaire (purchase history), the final icon, and the signed archive.
+3. **Owner decisions.** Who authors the ~240-exercise catalogue, and the founding-price structure.
+4. **Remaining review items.** Native interaction checks that cannot be settled on Linux: multiple
+   `.sheet` modifiers on one anchor, the accessibility audit's scroll-dependent reports, and the
+   staged tour's VoiceOver behaviour.
+
+Deliberately **not** next, and why: the progression *prescription* engine (needs the device-verified
+logger first), and the full catalogue (content work, ~260–340 hours, and a decision the user has not
+made).
 
 ---
 

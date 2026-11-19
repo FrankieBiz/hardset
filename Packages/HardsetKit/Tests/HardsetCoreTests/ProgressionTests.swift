@@ -313,4 +313,34 @@ struct ProgressionTests {
     #expect(range.contains("not a change in strength"))
     #expect(ProgressionAnalyzer.source.methodology.contains("never merged"))
   }
+
+  /// Sessions can share a timestamp, and the input comes from a dictionary. Equal dates must
+  /// therefore still order by session id, so the chart and the change list cannot reorder between
+  /// launches on the same data.
+  @Test("Equal timestamps order deterministically, not by dictionary iteration")
+  func equalTimestampsOrderDeterministically() {
+    let first = SessionID()
+    let second = SessionID()
+    let a = ProgressionSample(
+      sessionID: first, machineID: hammer, weightKg: 100, reps: 8, completedAt: day(0))
+    let b = ProgressionSample(
+      sessionID: second, machineID: hammer, weightKg: 105, reps: 8, completedAt: day(0))
+
+    let forward = ProgressionAnalyzer.series(from: [a, b], exerciseID: exercise)
+    let backward = ProgressionAnalyzer.series(from: [b, a], exerciseID: exercise)
+    #expect(forward[0].points.map(\.sessionID) == backward[0].points.map(\.sessionID))
+
+    let expected = [first, second].sorted { $0.rawValue.uuidString < $1.rawValue.uuidString }
+    #expect(forward[0].points.map(\.sessionID) == expected)
+  }
+
+  /// Two changes can share the moment; a `ForEach` needs distinct identifiers for them.
+  @Test("Machine changes at one instant get distinct identifiers")
+  func machineChangeIDsAreDistinct() {
+    let a = MachineChange(
+      date: day(0), fromMachineID: hammer, toMachineID: cybex, heaviestLoadDeltaKg: 10)
+    let b = MachineChange(
+      date: day(0), fromMachineID: cybex, toMachineID: hammer, heaviestLoadDeltaKg: -10)
+    #expect(a.id != b.id)
+  }
 }

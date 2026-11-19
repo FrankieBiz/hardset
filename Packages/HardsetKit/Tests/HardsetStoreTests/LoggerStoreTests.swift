@@ -305,7 +305,7 @@ struct LoggerStoreTests {
     let exercise = try seedExercise(database)
     // History from an earlier session, so the first-session rule does not withhold claims.
     let earlier = try store.startSession(at: start.addingTimeInterval(-86_400))
-    let weights: [Double] = [0, 50, 99.99, 99.995, 100, 100.005, 100.01, 100.015, 110, 999, 1000, 1001]
+    let weights: [Double] = [0, 50, 99.99, 99.995, 100, 100.005, 100.01, 100.015, 110, 500, 500, 1001]
     let historicalReps = [12, 12, 8, 8, 8, 9, 10, 7, 1, 13, 20, 1]
     try database.write { db in
       for (ordinal, weight) in weights.enumerated() {
@@ -334,6 +334,14 @@ struct LoggerStoreTests {
         observedKinds.formUnion(expected.map(\.kind))
       }
     }
+    // The loop's heaviest-load case used an implausible load, which the detector now refuses.
+    // Exercise that claim with a plausible history before requiring every kind to be observed.
+    let plausible = PersonalRecordDetector.records(
+      for: .init(weightKg: 200, reps: 5),
+      history: [PriorSetRecord(weightKg: 100, reps: 5, completedAt: start)],
+      increment: 2.5)
+    #expect(plausible.contains { $0.kind == .heaviestLoad })
+    observedKinds.formUnion(plausible.map(\.kind))
     #expect(observedKinds == Set(PersonalRecordKind.allCases))
   }
 
@@ -747,5 +755,29 @@ struct LoggerStoreTests {
     let store = LoggerStore(database: database)
     let snapshot = try store.priorPerformanceSnapshot(for: [], asOf: start)
     #expect(snapshot.count == 0)
+  }
+
+  /// `sets(in:)` promises performed order. `setOrdinal` is numbered per movement, so ordering by
+  /// it alone interleaved two movements instead of following the clock.
+  @Test("A session's sets read in the order they were performed, across movements")
+  func setsReadInPerformedOrder() throws {
+    let database = try migratedDatabase()
+    let store = LoggerStore(database: database)
+    let press = try seedExercise(database, name: "Press")
+    let row = try seedExercise(database, name: "Row")
+    let session = try store.startSession(at: start)
+
+    _ = try store.logSet(
+      sessionID: session, exerciseID: press, draft: SetEntryDraft(weightKg: 100, reps: 8),
+      setOrdinal: 1, at: start.addingTimeInterval(60))
+    _ = try store.logSet(
+      sessionID: session, exerciseID: row, draft: SetEntryDraft(weightKg: 80, reps: 10),
+      setOrdinal: 1, at: start.addingTimeInterval(180))
+    _ = try store.logSet(
+      sessionID: session, exerciseID: press, draft: SetEntryDraft(weightKg: 100, reps: 8),
+      setOrdinal: 2, at: start.addingTimeInterval(300))
+
+    let sets = try store.sets(in: session)
+    #expect(sets.map(\.exerciseID) == [press, row, press])
   }
 }

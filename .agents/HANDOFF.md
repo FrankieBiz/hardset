@@ -907,3 +907,59 @@ configuration and physical-device validation remain documented separately.
 - Verified from CI (macOS runs): app and widget build in Debug and Release, macOS host build, package tests compile and the render suite passes with parallel testing off, every existing UI journey and the light pass pass, accessibility audit counts unchanged from the Phase 2 baseline. Linux `make check` exit 0. Reviewed from PNGs: every onboarding page, every tour step, Setup (fresh and existing), the rest chooser, Volume, Train start.
 - Traps found: a tab view inside the pager's page-style tab view jumps the pager (tour is drawn over the pager, R66); `accessibilityHidden` does not reach UIKit-hosted tab content, so VoiceOver can still reach the staged phone (a hosting controller per root was tried and reverted: wrong appearance); an even-odd `contentShape` left the spotlit check untappable, so touches are blocked by four views around the hole; the first staged captures drew loading lines (800 ms settle) and parallel Swift Testing starved time-sensitive `RestControllerTests`, so the render step runs with `-parallel-testing-enabled NO`; `@Entry`/GeometryReader targets, not preferences, cross the tab view; a DEBUG env var, not a launch argument, sets onboarding state for UI tests.
 - Final CI run 44298706264 on `6a0199c` is green end to end: Debug and Release builds, macOS host build, package tests, render suite, and every real-app journey including `testOnboardingJourneyDark` and `testTourReplayDark`. Onboarding audit notes (not fixed): the pitch progress segments report a small hit area, and the staged phone, which VoiceOver can reach, reports scaled text as clipped. Not built or decided: zoom receipts, "Repeat last workout" and the owner decisions in the device checklist.
+
+## Full-app review and defect fix wave — 2026-11-19
+
+- Maintainer: FrankieBiz <frankabisignano@gmail.com>.
+- Worktree `/home/frankbiz/orca/workspaces/hardset/flyingfish`; branch
+  `FrankieBiz/full-app-review-and`; baseline `9aa498b` (identical to `origin/main`, clean).
+- Objective: an independent review of the whole app, then correction of every confirmed defect and
+  inconsistency that does not require a device or a product decision.
+- Method: four read-only reviewers (Core, Store, UI, Feature/app shell) plus a coordinator pass over
+  docs, tooling, migrations and the generated project. Findings were re-checked against source
+  before any edit; documented product refusals were left alone.
+- Core fixes: a trailing decimal point no longer reads as a typed 0 kg (`NumericEntryBuffer.value`,
+  and adjusters no longer invent a value); a missing muscle `role` now counts as degraded instead of
+  silently halving credit; `LoadText` writes thousand-separator-free loads so receipt, chart and
+  logger agree; CSV preserves rows of empty cells; an inverted closed timeline is reported as
+  implausible instead of rendering a session with no length; a load above the plausibility ceiling
+  cannot become an unbeatable record; progression points, series and machine changes use total
+  orders (dictionary order no longer reorders equal timestamps); `MachineChange.id` is unique;
+  machine-change sentences use the locale's decimal separator; negative set indexes and a zero-row
+  resume are handled; the catalogue's citation path is corrected.
+- Store fixes: `recentMachines` scopes to the gym's machines before applying recency (the old code
+  could starve a quiet gym out of a global 10-machine window); `sets(in:)` returns performed order;
+  archived-gym fallback for the learned default; user-created movements sort newest-first as
+  documented; archive operations verify a row changed; session/plan reads have deterministic
+  tie-breaks; `logSet` refuses an untracked plan row; stale comments about bodyweight sync, the
+  unused rest table and CSV completeness are corrected.
+- UI fixes: the record certainty badge is reachable by VoiceOver again; rest durations are spoken as
+  durations; fractional sets use one locale-aware formatter; the next-rest chooser grids at
+  accessibility sizes instead of truncating; the session and rest bar use `hardsetArrival()` instead
+  of private copies; the muscle map draws a token gauge; volume gaps use `HardsetTag`; warm-ups are
+  pluralised; the keypad's rest countdown announces its time; tracked display/hero roles keep their
+  tracking; history cards press at 0.97; decorative symbols are hidden; dead `rowTitle`, methodology
+  helpers and prose were removed or corrected.
+- Feature/app fixes: the privacy manifest declares FileTimestamp (`C617.1`) for the export sweep;
+  the tour's staged roots no longer read or write the real pending-gym scene value and no longer
+  offer a dead replay row; the tour's Settings line matches what is shown; replay has a Close
+  control; app/widget plist versions come from build settings; `HealthBridge` no longer force-unwraps
+  a calendar date; the unused `RestTimerHooks.hasError` is removed; the light-mode UI test now
+  asserts its screens and the unused appearance parameter is gone.
+- Documentation corrected to the shipped state: `README.md`, `AGENTS.md` (counts, `Tokens.Text`,
+  `HardsetHealth`), root `HANDOFF.md` sections 2/7/8 and its status banner, and the two false claims
+  in `docs/MAC-VERIFICATION.md` about iCloud entitlements and a clean accessibility audit.
+- Verification: Linux `make check` exits 0 — 199 Swift files parsed, 240 Core tests in 29 suites,
+  304 Store tests in 30 suites, all eight query-plan gates, and 184 contrast pairs. The project
+  generator produces no diff. Native compilation and the UI/snapshot suites are for the macOS CI
+  lane; this entry does not claim them.
+- Settled: open-workout lookup keeps its index-serving `startedAt`-only order (the app never holds
+  two open sessions); CSV export stays a spreadsheet format and is documented as not a restore
+  format; `Tokens.Haptic.clank` stays as the named system fallback while `ClankPlayer` owns playback.
+- Known remaining, deliberately not changed: UI-test data is still shared between journeys (no store
+  reset); four `.sheet` modifiers on one anchor need device confirmation; the last-workout card still
+  disappears on a failed refresh by documented policy; `TourFixtures` builds on the main actor;
+  `HardsetEnvironment` is still constructed per root body evaluation; native CI for `9aa498b` on
+  `main` failed only because no macOS runner was acquired (the same SHA passed on the feature branch).
+- Next concrete step: push this branch and confirm the native CI run compiles the app and widget,
+  then finish the delivery protocol after it is green.

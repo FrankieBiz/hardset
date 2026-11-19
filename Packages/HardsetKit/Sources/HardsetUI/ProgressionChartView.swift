@@ -418,7 +418,10 @@ public struct ProgressionChartView: View {
   /// load, so the legend says so instead of reading "0 kg".
   private func latestPoint(_ points: [ProgressionPoint]) -> ProgressionPoint? {
     guard !isUnevaluated else { return nil }
-    return plottable(points).max { $0.date < $1.date }
+    return plottable(points).max {
+      if $0.date != $1.date { return $0.date < $1.date }
+      return $0.sessionID.rawValue.uuidString < $1.sessionID.rawValue.uuidString
+    }
   }
 
   private func value(_ point: ProgressionPoint) -> Double {

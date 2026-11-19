@@ -380,6 +380,11 @@ public final class SessionCoordinator {
     let exercise = exercises[exerciseIndex]
     let slot = exercise.slots[slotIndex]
     guard !slot.isLogged else { return true }
+    // A block with no plan row is the same inconsistency `changeMachine` and `removeExercise`
+    // refuse. Writing a set without one makes recovery attribute it to a different block.
+    guard let planRow = planRowIDs[exercise.id] else {
+      return fail(SessionCoordinatorError.untrackedExercise, .logSet)
+    }
 
     do {
       // The Store compares complete benchmarks before insertion, within the save
@@ -394,7 +399,7 @@ public final class SessionCoordinator {
         commandID: SetID(rawValue: slot.commandID),
         // Stamped so recovery can tell two blocks of the same movement apart. Without it,
         // grouping by exercise made both blocks claim the same sets and double-counted them.
-        sessionExerciseID: planRowIDs[exercise.id],
+        sessionExerciseID: planRow,
         draft: slot.draft,
         // Derived by the store from what is already written, NOT from the slot index. Recovered
         // slots are renumbered, so a slot-index ordinal reissues one that is already taken.

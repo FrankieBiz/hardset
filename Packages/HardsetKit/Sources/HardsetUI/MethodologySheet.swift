@@ -115,9 +115,6 @@ public struct MethodologySheet: View {
   static func level(for certainty: Certainty) -> CertaintyLevel {
     CertaintyLevel(certainty)
   }
-
-  static func label(for certainty: Certainty) -> String { level(for: certainty).label }
-  static func symbol(for certainty: Certainty) -> String { level(for: certainty).symbolName }
 }
 
 #if DEBUG

@@ -28,6 +28,7 @@ public struct PriorPerformance: Hashable, Sendable, Codable {
 
   /// What to pre-fill the nth set row with, as a real value.
   public func suggestion(forSetIndex index: Int) -> PriorSetRecord? {
+    guard index >= 0 else { return nil }
     if lastSets.indices.contains(index) { return lastSets[index] }
     return lastSets.last
   }

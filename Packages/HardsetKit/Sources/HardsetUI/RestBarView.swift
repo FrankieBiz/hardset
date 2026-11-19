@@ -16,8 +16,8 @@ import SwiftUI
 ///
 /// Laid out as one line when the countdown, its caption and four 56 pt controls fit, and as two
 /// lines — countdown above, controls below at equal widths — when they do not. Four 56 pt
-/// controls reserve over 300 pt on their own, so on most phones the second form is the one in use,
-/// and the countdown keeps its full size instead of being squeezed into what is left.
+/// controls with 8 pt gaps reserve 248 pt on their own, so on most phones the second form is the
+/// one in use, and the countdown keeps its full size instead of being squeezed into what is left.
 ///
 /// With a chooser (`onChooseNextRest`), the bar also offers the length of the rest after the next
 /// set: a quiet "Next rest" row under the controls opens a row of choices, and a drag up on the bar
@@ -37,6 +37,7 @@ public struct RestBarView: View {
   @State private var isChoosing = false
   @State private var chosenCount = 0
   @Environment(\.accessibilityReduceMotion) private var reduceMotion
+  @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
   /// - Parameters:
   ///   - nextRest: The length the next rest will have, marked among the choices.
@@ -135,23 +136,39 @@ public struct RestBarView: View {
       .accessibilityHint(isChoosing ? "Hides the lengths" : "Shows the lengths to choose from")
 
       if isChoosing {
-        HStack(spacing: Tokens.Spacing.snug) {
-          ForEach(restChoices, id: \.self) { duration in
-            HardsetChip(duration.clockString, isSelected: duration == nextRest) {
-              chosenCount += 1
-              onChooseNextRest?(duration)
-              isChoosing = false
+        // At accessibility sizes four labels cannot share one line without truncating, so the
+        // choices take a two-column grid and each keeps its whole word.
+        Group {
+          if dynamicTypeSize.isAccessibilitySize {
+            LazyVGrid(
+              columns: [
+                GridItem(.flexible(), spacing: Tokens.Spacing.snug),
+                GridItem(.flexible(), spacing: Tokens.Spacing.snug),
+              ],
+              spacing: Tokens.Spacing.snug
+            ) {
+              chooserChips
             }
-            .accessibilityLabel(ExerciseSectionView.spoken(duration))
+          } else {
+            HStack(spacing: Tokens.Spacing.snug) {
+              chooserChips
+              Spacer(minLength: 0)
+            }
           }
-          Spacer(minLength: 0)
         }
-        .transition(
-          .asymmetric(
-            insertion: .opacity.animation(
-              Tokens.Motion.adaptive(Tokens.Motion.reveal, reduceMotion: reduceMotion)),
-            removal: .identity))
+        .hardsetArrival()
       }
+    }
+  }
+
+  @ViewBuilder private var chooserChips: some View {
+    ForEach(restChoices, id: \.self) { duration in
+      HardsetChip(duration.clockString, isSelected: duration == nextRest) {
+        chosenCount += 1
+        onChooseNextRest?(duration)
+        isChoosing = false
+      }
+      .accessibilityLabel(ExerciseSectionView.spoken(duration))
     }
   }
 
@@ -295,7 +312,8 @@ public struct RestBarView: View {
       let left = Text(timerInterval: referenceDate...max(endsAt, referenceDate), countsDown: true)
       return Text("Resting, \(left) remaining\(after)")
     case .paused(let remaining):
-      return Text(verbatim: "Rest paused, \(remaining.clockString) remaining\(after)")
+      return Text(
+        verbatim: "Rest paused, \(ExerciseSectionView.spoken(remaining)) remaining\(after)")
     }
   }
 

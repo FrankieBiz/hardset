@@ -19,7 +19,7 @@ final class AppScreensUITests: XCTestCase {
   func testStartAndTabsDark() throws {
     continueAfterFailure = true
     let app = XCUIApplication()
-    launch(app, appearance: .dark)
+    launch(app)
 
     guard waitForStartScreen(app) else { return }
     capture(app, "01-start")
@@ -56,7 +56,7 @@ final class AppScreensUITests: XCTestCase {
   func testWorkoutJourneyDark() throws {
     continueAfterFailure = true
     let app = XCUIApplication()
-    launch(app, appearance: .dark)
+    launch(app)
 
     guard waitForStartScreen(app) else { return }
     app.buttons["Start workout"].tap()
@@ -105,7 +105,7 @@ final class AppScreensUITests: XCTestCase {
     // Recovery must read the committed set from disk, with its values and logged state intact.
     // Relaunching a real app exercises the startup and view wiring that Store tests cannot.
     app.terminate()
-    launch(app, appearance: .dark)
+    launch(app)
     let recoveredRows = app.descendants(matching: .any)
       .matching(NSPredicate(format: "label == %@", savedLabel))
     XCTAssertTrue(recoveredRows.firstMatch.waitForExistence(timeout: 30))
@@ -142,7 +142,7 @@ final class AppScreensUITests: XCTestCase {
   func testCorrectionsAndDiscardDark() throws {
     continueAfterFailure = true
     let app = XCUIApplication()
-    launch(app, appearance: .dark)
+    launch(app)
 
     guard waitForStartScreen(app) else { return }
     app.buttons["Start workout"].tap()
@@ -212,7 +212,7 @@ final class AppScreensUITests: XCTestCase {
   func testGymPickerDark() throws {
     continueAfterFailure = true
     let app = XCUIApplication()
-    launch(app, appearance: .dark)
+    launch(app)
 
     guard waitForStartScreen(app) else { return }
     let card = app.buttons.matching(NSPredicate(format: "label CONTAINS[c] 'gym'")).firstMatch
@@ -239,21 +239,27 @@ final class AppScreensUITests: XCTestCase {
   func testScreensInLightMode() throws {
     continueAfterFailure = true
     let app = XCUIApplication()
-    launch(app, appearance: .light)
+    launch(app)
 
     guard waitForStartScreen(app) else { return }
+    XCTAssertTrue(app.buttons["Start workout"].exists, "The start screen lost its start action")
     capture(app, "30-light-start")
     audit(app, screen: "light start")
     openTab(app, "Volume")
+    XCTAssertTrue(
+      app.staticTexts["Volume"].firstMatch.waitForExistence(timeout: 5),
+      "The Volume screen did not draw its header")
     capture(app, "31-light-volume")
     openTab(app, "History")
+    XCTAssertTrue(
+      app.staticTexts["History"].firstMatch.waitForExistence(timeout: 5),
+      "The History screen did not draw its header")
     capture(app, "32-light-history")
     openTab(app, "Train")
     app.buttons["Settings"].tap()
-    if app.buttons["Done"].waitForExistence(timeout: 5) {
-      capture(app, "33-light-settings")
-      app.buttons["Done"].tap()
-    }
+    XCTAssertTrue(app.buttons["Done"].waitForExistence(timeout: 5), "Settings did not open")
+    capture(app, "33-light-settings")
+    app.buttons["Done"].tap()
 
     writeAuditReport(named: "accessibility-audit-light")
   }
@@ -268,7 +274,7 @@ final class AppScreensUITests: XCTestCase {
   func testOnboardingJourneyDark() throws {
     continueAfterFailure = true
     let app = XCUIApplication()
-    launch(app, appearance: .dark, showsOnboarding: true)
+    launch(app, showsOnboarding: true)
 
     // Welcome.
     XCTAssertTrue(app.staticTexts["Hardset"].waitForExistence(timeout: 30))
@@ -366,7 +372,7 @@ final class AppScreensUITests: XCTestCase {
   func testTourReplayDark() throws {
     continueAfterFailure = true
     let app = XCUIApplication()
-    launch(app, appearance: .dark)
+    launch(app)
 
     guard waitForStartScreen(app) else { return }
     app.buttons["Settings"].tap()
@@ -396,12 +402,10 @@ final class AppScreensUITests: XCTestCase {
   // MARK: - Helpers
 
   /// Launches the app. Appearance is set by CI with `simctl ui` around separate passes, because
-  /// `XCUIDevice.appearance` did not reach the system on the runner: every "dark" screenshot came
-  /// out light. The parameter names which pass a test belongs to.
+  /// `XCUIDevice.appearance` did not reach the system on the runner; the pass is chosen by the
+  /// test method CI selects, not by this helper.
   @MainActor
-  private func launch(
-    _ app: XCUIApplication, appearance: XCUIDevice.Appearance, showsOnboarding: Bool = false
-  ) {
+  private func launch(_ app: XCUIApplication, showsOnboarding: Bool = false) {
     // Keeps the app's stderr, so a runtime trap's message survives for CI to collect.
     app.launchEnvironment["HARDSET_CAPTURE_STDERR"] = "1"
     // Every journey but the onboarding one starts past the first-launch sequence; that one starts

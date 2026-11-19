@@ -13,7 +13,7 @@ public enum LoadText {
     -> String
   {
     unit.fromKilograms(kilograms)
-      .formatted(.number.precision(.fractionLength(0...2)).locale(locale))
+      .formatted(.number.precision(.fractionLength(0...2)).grouping(.never).locale(locale))
   }
 
   /// An estimated load in `unit`, rounded to 0.5 kg or 1 lb.
@@ -21,6 +21,6 @@ public enum LoadText {
     -> String
   {
     StrengthMath.displayRounded(kilograms, in: unit)
-      .formatted(.number.precision(.fractionLength(0...1)).locale(locale))
+      .formatted(.number.precision(.fractionLength(0...1)).grouping(.never).locale(locale))
   }
 }

@@ -61,6 +61,18 @@ struct SessionTimelineTests {
     }
   }
 
+  /// The memberwise initializer is public, so a corrupt or imported row can be closed with an
+  /// inverted span. It has no duration, and it must not render as a session with no length at all.
+  @Test("A closed session with an inverted span is reported as implausible")
+  func invertedSpanIsImplausible() {
+    let timeline = SessionTimeline(
+      startedAt: start, finishedAt: start.addingTimeInterval(-60)
+    )
+    #expect(!timeline.isOpen)
+    #expect(timeline.duration == nil)
+    #expect(timeline.isImplausible)
+  }
+
   @Test("A session longer than any real workout is flagged rather than displayed")
   func implausibleIsFlagged() throws {
     var absurd = SessionTimeline(startedAt: start)

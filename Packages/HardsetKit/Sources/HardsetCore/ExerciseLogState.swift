@@ -236,7 +236,7 @@ public struct ExerciseLogState: Hashable, Sendable, Identifiable {
     // `build` never creates warm-up rows, so its row count is a working-row count; comparing it
     // with every logged set would turn each logged warm-up into a phantom working row.
     let workingLogged = slots.count { !$0.isWarmup }
-    let target = plannedSets ?? max(state.slots.count, workingLogged)
+    let target = max(plannedSets ?? max(state.slots.count, workingLogged), 1)
     if target > workingLogged {
       for index in workingLogged..<target {
         slots.append(SetSlot(draft: SetEntryDraft(suggestion: state.suggestion(forSetIndex: index))))

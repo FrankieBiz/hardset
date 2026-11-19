@@ -198,6 +198,70 @@ struct GymStoreTests {
     #expect(try gyms.recentMachines(for: exercise, at: away).map(\.id) == [awayMachine])
   }
 
+  /// The recency window must be scoped before it is truncated: a gym with a small machine list
+  /// still knows the machine used there, however busy the lifter has been elsewhere.
+  @Test("A gym's suggestion survives a busier gym filling the recency window")
+  func scopedRecencyIsNotStarvedByOtherGyms() throws {
+    let (_, gyms, logger, exercise) = try fixture()
+    let home = try gyms.createGym(name: "Home", now: now)
+    let away = try gyms.createGym(name: "Away", now: now)
+    let homeMachine = try gyms.createMachine(at: home, name: "Leg Press", now: now)
+
+    let homeSession = try logger.startSession(gymID: home, at: now)
+    _ = try logger.logSet(
+      sessionID: homeSession, exerciseID: exercise, machineID: homeMachine,
+      draft: SetEntryDraft(weightKg: 100, reps: 8), setOrdinal: 0, at: now
+    )
+    try logger.finishSession(homeSession, at: now.addingTimeInterval(60))
+
+    for index in 0..<12 {
+      let machine = try gyms.createMachine(at: away, name: "Press \(index)", now: now)
+      let at = now.addingTimeInterval(Double(index + 1) * 3_600)
+      let session = try logger.startSession(gymID: away, at: at)
+      _ = try logger.logSet(
+        sessionID: session, exerciseID: exercise, machineID: machine,
+        draft: SetEntryDraft(weightKg: 100, reps: 8), setOrdinal: 0, at: at
+      )
+      try logger.finishSession(session, at: at.addingTimeInterval(60))
+    }
+
+    #expect(try gyms.recentMachines(for: exercise, at: home).map(\.id) == [homeMachine])
+    #expect(try gyms.recentMachines(for: exercise).count == 5)
+  }
+
+  @Test("Archiving something that is not live reports failure instead of claiming success")
+  func archivingRefusesMissing() throws {
+    let (_, gyms, _, _) = try fixture()
+    let gym = try gyms.createGym(name: "Gym", now: now)
+    let machine = try gyms.createMachine(at: gym, name: "Leg Press", now: now)
+
+    try gyms.archiveMachine(machine)
+    #expect(throws: MachineProfileError.machineUnavailable) {
+      try gyms.archiveMachine(machine)
+    }
+    try gyms.archiveGym(gym)
+    #expect(throws: EquipmentNameError.unavailable) {
+      try gyms.archiveGym(gym)
+    }
+    #expect(throws: EquipmentNameError.unavailable) {
+      try gyms.archiveGym(GymID())
+    }
+  }
+
+  @Test("The learned gym falls back past an archived newest gym")
+  func lastUsedSkipsArchived() throws {
+    let (_, gyms, logger, _) = try fixture()
+    let old = try gyms.createGym(name: "Old", now: now)
+    let newest = try gyms.createGym(name: "New", now: now)
+    try logger.finishSession(try logger.startSession(gymID: old, at: now), at: now.addingTimeInterval(600))
+    try logger.finishSession(
+      try logger.startSession(gymID: newest, at: now.addingTimeInterval(3_600)),
+      at: now.addingTimeInterval(4_200))
+    try gyms.archiveGym(newest)
+
+    #expect(try gyms.selection().lastUsed == old)
+  }
+
   @Test("An archived machine drops out of suggestions but its sets remain")
   func archivedMachineNotSuggested() throws {
     let (_, gyms, logger, exercise) = try fixture()

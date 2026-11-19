@@ -84,7 +84,9 @@ public struct NumericEntryBuffer: Hashable, Sendable {
   /// Deliberately not `Double`. There is no zero default, because "no weight entered" and
   /// "zero added load" are different facts and must not share a representation.
   public var value: Double? {
-    guard !text.isEmpty, text != "." else { return nil }
+    // A trailing separator is an unfinished number, not zero: "0." must not read as a typed
+    // 0 kg while the lifter is still entering the fraction.
+    guard !text.isEmpty, text != ".", !text.hasSuffix(".") else { return nil }
     return Double(text)
   }
 
@@ -135,9 +137,12 @@ public struct NumericEntryBuffer: Hashable, Sendable {
   }
 
   /// Adjusts the value by a signed delta (e.g. +2.5, -2.5 kg or +1, -1 rep), clamping to a minimum of 0.
+  ///
+  /// Does nothing when no number has been typed: a step button must adjust a value, never invent
+  /// one. The pad disables the buttons in that state as well, so the behaviour is visible.
   public mutating func adjust(by delta: Double) {
     replaceOnFirstEntry = false
-    let current = value ?? 0
+    guard let current = value else { return }
     let updated = max(0, current + delta)
     let fraction = allowsDecimal ? maximumFractionDigits : 0
     text = Self.seedText(updated, fractionDigits: fraction)

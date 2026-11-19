@@ -124,7 +124,7 @@ public struct VolumeReportView: View {
       // working sets, they just cannot be credited to a muscle. So no "≥" here.
       HStack(alignment: .firstTextBaseline, spacing: Tokens.Spacing.snug) {
         Text(report.hardSets, format: .number)
-          .font(Tokens.Text.hero)
+          .hardsetText(.hero)
           .foregroundStyle(Tokens.Color.chalk)
         Text(verbatim: "\(report.hardSets == 1 ? "working set" : "working sets") \(period)")
           .font(Tokens.Text.unit)
@@ -323,18 +323,11 @@ public struct VolumeReportView: View {
           }
 
           // Tags, not chips: a fill and no control border, because none of them does anything
-          // when tapped and none of them should look as if it might.
+          // when tapped and none of them should look as if it might. The shared tag also carries
+          // the accessibility-size radius and wrapping policy.
           FlowLayout(spacing: Tokens.Spacing.snug) {
             ForEach(gaps, id: \.self) { muscle in
-              Text(ExercisePickerView.displayName(MuscleKey(muscle)))
-                .font(Tokens.Text.caption.weight(.medium))
-                .foregroundStyle(Tokens.Color.chalkDim)
-                .padding(.horizontal, Tokens.Spacing.snug)
-                .padding(.vertical, Tokens.Spacing.tight)
-                .background(
-                  Tokens.Color.steelRaised,
-                  in: RoundedRectangle(cornerRadius: Tokens.Radius.control / 2)
-                )
+              HardsetTag(ExercisePickerView.displayName(MuscleKey(muscle)))
             }
           }
           .accessibilityElement(children: .combine)
@@ -344,7 +337,7 @@ public struct VolumeReportView: View {
   }
 
   static func format(_ sets: Double) -> String {
-    sets == sets.rounded() ? String(Int(sets)) : String(format: "%.1f", sets)
+    sets.formatted(.number.precision(.fractionLength(0...1)))
   }
 }
 

@@ -37,8 +37,16 @@ struct PersonalRecordsTests {
 
   @Test("A trivial increase is not a record")
   func trivialIncreaseIsNotARecord() {
-    // +0.5 kg on 100 clears neither 2.5% nor one 2.5 kg plate step.
+    // +0.5 kg on 100 clears neither 2.5% nor the default 5 lb (2.268 kg) step.
     #expect(!records(100.5, 8, history: [(100, 8)]).contains(.heaviestLoad))
+  }
+
+  /// `StrengthMath` calls a load above this a data-entry error and refuses its estimated maximum.
+  /// The heaviest-load path must agree, or a typo becomes an unbeatable record.
+  @Test("A load above the plausibility ceiling is not a record")
+  func implausibleLoadIsNotARecord() {
+    let ceiling = StrengthMath.implausibleWeightKg
+    #expect(records(ceiling + 1, 5, history: [(100, 8)]).isEmpty)
   }
 
   @Test("A real load increase is a heaviest-weight record")
