@@ -119,6 +119,18 @@ public nonisolated struct CatalogSeeder: Sendable {
   /// "unknown" primary muscle, so volume reports it as not attributed rather than inventing
   /// muscles; attribution is a later, explicit choice.
   public func createCustomExercise(named name: String, now: Date = Date()) throws -> CatalogEntry {
+    try createCustomExercise(named: name, attribution: nil, now: now)
+  }
+
+  /// Saves a movement with the muscles and equipment the lifter chose, stored as their own
+  /// attribution so volume counts its sets from the first one.
+  ///
+  /// A live movement of the same name is returned unchanged, whatever `attribution` says: choosing
+  /// an existing movement must never rewrite what the lifter already told it. Retagging one is
+  /// `updateCustomExercise`. With no attribution this is the unattributed movement it always was.
+  public func createCustomExercise(
+    named name: String, attribution: CustomAttribution?, now: Date = Date()
+  ) throws -> CatalogEntry {
     let cleaned = Self.normalized(name)
     guard !cleaned.isEmpty else { throw CatalogSeederError.blankName }
     return try database.write { db in
@@ -126,19 +138,57 @@ public nonisolated struct CatalogSeeder: Sendable {
         .where { !$0.isArchived }
         .order { ($0.isCurated.desc(), $0.createdAt, $0.id) }
         .fetchAll(db)
-        .first {
-          !Self.isImported($0)
-            && Self.normalized($0.name).compare(
-              cleaned, options: [.caseInsensitive, .diacriticInsensitive]) == .orderedSame
-        }
+        .first { !Self.isImported($0) && Self.isSameName($0.name, cleaned) }
       if let existing { return CatalogEntry(row: existing) }
 
       let id = UUID()
-      try Exercise.insert { Exercise.Draft(id: id, name: cleaned, createdAt: now) }.execute(db)
+      try Exercise.insert {
+        Exercise.Draft(
+          id: id, name: cleaned,
+          modality: attribution?.modality?.rawValue ?? "unknown",
+          primaryMuscle: attribution?.primary.rawValue ?? "unknown",
+          secondaryMusclesJSON: attribution.map { MuscleColumn.encode($0.contributions) } ?? "[]",
+          createdAt: now)
+      }.execute(db)
       guard let inserted = try Exercise.where({ $0.id.eq(id) }).fetchOne(db) else {
         throw CatalogSeederError.notSaved
       }
       return CatalogEntry(row: inserted)
+    }
+  }
+
+  /// Retags a movement the lifter made: its name, muscles and, when one is given, equipment.
+  ///
+  /// A curated movement is the catalogue's finding and is never retagged. The new name may not be
+  /// another live movement's, ignoring case and diacritics, though its own name in another case is
+  /// fine. Sets already logged on it are counted from the next read, since volume reads the movement.
+  @discardableResult
+  public func updateCustomExercise(
+    _ id: ExerciseID, name: String, attribution: CustomAttribution
+  ) throws -> CatalogEntry {
+    let cleaned = Self.normalized(name)
+    guard !cleaned.isEmpty else { throw CatalogSeederError.blankName }
+    return try database.write { db in
+      guard let row = try Exercise.where({ $0.id.eq(id.rawValue) }).fetchOne(db) else {
+        throw CatalogSeederError.notFound
+      }
+      guard !row.isCurated else { throw CatalogSeederError.curatedNotEditable }
+      let others = try Exercise.where { !$0.isArchived && $0.id.neq(id.rawValue) }.fetchAll(db)
+      if others.contains(where: { !Self.isImported($0) && Self.isSameName($0.name, cleaned) }) {
+        throw CatalogSeederError.duplicateName
+      }
+      try Exercise.where { $0.id.eq(id.rawValue) }
+        .update {
+          $0.name = #bind(cleaned)
+          $0.modality = #bind(attribution.modality?.rawValue ?? row.modality)
+          $0.primaryMuscle = #bind(attribution.primary.rawValue)
+          $0.secondaryMusclesJSON = #bind(MuscleColumn.encode(attribution.contributions))
+        }
+        .execute(db)
+      guard let updated = try Exercise.where({ $0.id.eq(id.rawValue) }).fetchOne(db) else {
+        throw CatalogSeederError.notSaved
+      }
+      return CatalogEntry(row: updated)
     }
   }
 
@@ -223,6 +273,12 @@ public nonisolated struct CatalogSeeder: Sendable {
   private static func normalized(_ name: String) -> String {
     name.split(whereSeparator: \.isWhitespace).joined(separator: " ")
   }
+
+  /// Equal ignoring case, diacritics and spacing. `cleaned` is already normalized.
+  private static func isSameName(_ stored: String, _ cleaned: String) -> Bool {
+    normalized(stored).compare(cleaned, options: [.caseInsensitive, .diacriticInsensitive])
+      == .orderedSame
+  }
 }
 
 public nonisolated enum CatalogSeederError: Error, Equatable, Sendable {
@@ -231,6 +287,12 @@ public nonisolated enum CatalogSeederError: Error, Equatable, Sendable {
   /// The insert completed but the row could not be read back. Nothing is returned to log
   /// against, because an entry the database does not hold would fail at the first set.
   case notSaved
+  /// A curated movement is the catalogue's finding, and its muscles are not the lifter's to change.
+  case curatedNotEditable
+  /// Another live movement already has this name.
+  case duplicateName
+  /// No movement has this id.
+  case notFound
 }
 
 /// Maps a stored row into the shared `CatalogEntry` value.

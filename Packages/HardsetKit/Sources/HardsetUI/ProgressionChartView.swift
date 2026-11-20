@@ -36,7 +36,7 @@ public struct ProgressionChartView: View {
   /// `false` for movements whose logged load is not the load moved (bodyweight work), where no
   /// one-rep max is ever estimated. Says so instead of blaming the rep count.
   private let estimatesOneRepMax: Bool
-  @State private var metric: ProgressionMetric = .heaviestLoad
+  @State private var metric: ProgressionMetric
   @Environment(\.dynamicTypeSize) private var dynamicTypeSize
   /// Grows with the axis labels, so larger text does not squeeze the plot itself.
   @ScaledMetric(relativeTo: .footnote) private var plotHeight: CGFloat = 220
@@ -45,11 +45,20 @@ public struct ProgressionChartView: View {
   public struct SeriesInput: Identifiable, Hashable, Sendable {
     public let label: String
     public let points: [ProgressionPoint]
+    /// The sessions in which this machine's line set a record, marked on it with a star.
+    public let recordSessionIDs: Set<SessionID>
+    /// The most reps at each weight this machine has seen, heaviest first, for the table beneath.
+    public let bestAtWeight: [BestAtWeight]
     public var id: String { label }
 
-    public init(label: String, points: [ProgressionPoint]) {
+    public init(
+      label: String, points: [ProgressionPoint], recordSessionIDs: Set<SessionID> = [],
+      bestAtWeight: [BestAtWeight] = []
+    ) {
       self.label = label
       self.points = points
+      self.recordSessionIDs = recordSessionIDs
+      self.bestAtWeight = bestAtWeight
     }
   }
 
@@ -65,6 +74,18 @@ public struct ProgressionChartView: View {
     self.machineChanges = machineChanges
     self.unit = unit
     self.onExplain = onExplain
+    self._metric = State(
+      initialValue: Self.opensOn(series: series, estimatesOneRepMax: estimatesOneRepMax))
+  }
+
+  /// The graph opens on the estimated max, because that is the line that rises when the lifter does
+  /// more weight or more reps. It opens on the heaviest load when no estimate can be made: a history
+  /// of high-rep sets, or bodyweight work, has no estimate to open on.
+  private static func opensOn(series: [SeriesInput], estimatesOneRepMax: Bool) -> ProgressionMetric {
+    guard estimatesOneRepMax,
+      series.contains(where: { $0.points.contains { $0.bestEstimatedOneRepMaxKg != nil } })
+    else { return .heaviestLoad }
+    return .estimatedOneRepMax
   }
 
   public var body: some View {
@@ -79,7 +100,7 @@ public struct ProgressionChartView: View {
       } else {
         HardsetSegmentedControl(
           selection: $metric,
-          segments: ProgressionMetric.allCases.map { HardsetSegment($0.label, value: $0) }
+          segments: Self.metricOrder.map { HardsetSegment($0.label, value: $0) }
         )
 
         VStack(alignment: .leading, spacing: Tokens.Spacing.loose) {
@@ -95,10 +116,17 @@ public struct ProgressionChartView: View {
             .frame(height: Tokens.Stroke.hairline)
             .accessibilityHidden(true)
           legend(plotted)
+          if plotted.contains(where: { !$0.recordSessionIDs.isEmpty }) {
+            recordKey(plotted)
+          }
         }
         .padding(Tokens.Spacing.loose)
         .frame(maxWidth: .infinity, alignment: .leading)
         .hardsetCard()
+
+        if plotted.contains(where: { !$0.bestAtWeight.isEmpty }) {
+          bestAtEachWeight(plotted)
+        }
 
         if !machineChanges.isEmpty {
           machineChangeNotes
@@ -116,6 +144,9 @@ public struct ProgressionChartView: View {
       }
     }
   }
+
+  /// Estimated max leads, because it is where the graph opens; the heaviest load is the toggle.
+  private static let metricOrder: [ProgressionMetric] = [.estimatedOneRepMax, .heaviestLoad]
 
   // MARK: - Metric header
 
@@ -184,6 +215,7 @@ public struct ProgressionChartView: View {
     // Resolved once, outside the axis and annotation builders, so those closures capture plain
     // values rather than reaching back into the token namespace.
     let caveat = Tokens.Color.warning
+    let recordColour = Tokens.Color.plateYellow
     let grid = Tokens.Color.hairline
     let axisText = Tokens.Color.chalkDim
     let axisFont = Tokens.Text.caption
@@ -204,7 +236,7 @@ public struct ProgressionChartView: View {
           // at the legend's precision with its unit, and the word "estimate" with its confidence
           // when it is one. Charts' automatic labels read the raw plotted number with no unit.
           .accessibilityLabel(pointLabel(entry, point))
-          .accessibilityValue(pointValue(point))
+          .accessibilityValue(pointValue(point, isRecord: entry.recordSessionIDs.contains(point.sessionID)))
           PointMark(
             x: .value("Date", point.date),
             y: .value(metric.label, value(point))
@@ -213,6 +245,21 @@ public struct ProgressionChartView: View {
           .symbol(by: .value("Machine", entry.name))
           // The same session as the line mark above; read once, not twice.
           .accessibilityHidden(true)
+          // A record is a fact the detector found, marked where it happened: a star, in the record
+          // colour, over the machine's own point. The shape and the legend say what it means, so
+          // the colour is never the only carrier.
+          if entry.recordSessionIDs.contains(point.sessionID) {
+            PointMark(
+              x: .value("Date", point.date),
+              y: .value(metric.label, value(point))
+            )
+            .symbol {
+              Image(systemName: "star.fill")
+                .font(axisFont)
+                .foregroundStyle(recordColour)
+            }
+            .accessibilityHidden(true)
+          }
         }
       }
       // A switch is drawn on the chart, not just described below it, so the eye meets the caveat
@@ -300,6 +347,21 @@ public struct ProgressionChartView: View {
     }
   }
 
+  /// The star's one-line key, shown only when a record is on the chart.
+  private func recordKey(_ plotted: [PlottedSeries]) -> some View {
+    HStack(spacing: Tokens.Spacing.regular) {
+      Image(systemName: "star.fill")
+        .font(Tokens.Text.caption)
+        .foregroundStyle(Tokens.Color.plateYellow)
+        .frame(width: Tokens.Spacing.section)
+        .accessibilityHidden(true)
+      Text("A session that set a record")
+        .font(Tokens.Text.provenance)
+        .foregroundStyle(Tokens.Color.chalkDim)
+    }
+    .accessibilityElement(children: .combine)
+  }
+
   private func legendGlyph(index: Int) -> some View {
     let colour = Self.colour(at: index)
     return ZStack {
@@ -338,11 +400,66 @@ public struct ProgressionChartView: View {
     "\(entry.name), \(point.date.formatted(.dateTime.day().month(.wide).year()))"
   }
 
-  private func pointValue(_ point: ProgressionPoint) -> String {
+  private func pointValue(_ point: ProgressionPoint, isRecord: Bool) -> String {
     let figure = "\(valueText(point)) \(unit.abbreviation)"
-    guard metric == .estimatedOneRepMax else { return figure }
+    let record = isRecord ? "record set" : nil
+    guard metric == .estimatedOneRepMax else { return [figure, record].compactMap { $0 }.joined(separator: ", ") }
     let confidence = point.bestEstimateCertainty.map { MethodologySheet.level(for: $0).label }
-    return [figure, "estimate", confidence].compactMap { $0 }.joined(separator: ", ")
+    return [figure, "estimate", confidence, record].compactMap { $0 }.joined(separator: ", ")
+  }
+
+  // MARK: - Best at each weight
+
+  /// For each machine, the most reps ever done at each weight it has seen and the day they were
+  /// first reached: "90 lb · 12 reps · Nov 4". A table of facts from the sets, not an estimate, so it
+  /// carries no certainty badge, and it is per machine because a weight on one machine is not a
+  /// weight on another.
+  private func bestAtEachWeight(_ plotted: [PlottedSeries]) -> some View {
+    VStack(alignment: .leading, spacing: Tokens.Spacing.regular) {
+      SectionLabel("Best at each weight")
+      ForEach(plotted.filter { !$0.bestAtWeight.isEmpty }) { entry in
+        VStack(alignment: .leading, spacing: 0) {
+          if plotted.count > 1 {
+            Text(entry.name)
+              .font(Tokens.Text.provenance)
+              .foregroundStyle(Tokens.Color.chalkDim)
+              .padding(.bottom, Tokens.Spacing.tight)
+          }
+          ForEach(entry.bestAtWeight) { best in
+            bestRow(best)
+          }
+        }
+      }
+    }
+  }
+
+  private func bestRow(_ best: BestAtWeight) -> some View {
+    let weight = LoadText.entered(best.weightKg, in: unit)
+    let reps = best.reps == 1 ? "1 rep" : "\(best.reps) reps"
+    let date = best.achievedAt.formatted(.dateTime.month(.abbreviated).day().year())
+    return HStack(alignment: .firstTextBaseline, spacing: Tokens.Spacing.regular) {
+      HStack(alignment: .firstTextBaseline, spacing: Tokens.Spacing.tight) {
+        Text(weight)
+          .font(Tokens.Text.figure)
+          .foregroundStyle(Tokens.Color.chalk)
+        Text(unit.abbreviation)
+          .font(Tokens.Text.unit)
+          .foregroundStyle(Tokens.Color.chalkDim)
+      }
+      Text(reps)
+        .font(Tokens.Text.figure)
+        .foregroundStyle(Tokens.Color.chalk)
+      Spacer(minLength: Tokens.Spacing.regular)
+      Text(date)
+        .font(Tokens.Text.provenance)
+        .foregroundStyle(Tokens.Color.chalkDim)
+    }
+    .padding(.vertical, Tokens.Spacing.snug)
+    .overlay(alignment: .top) {
+      Rectangle().fill(Tokens.Color.hairline).frame(height: Tokens.Stroke.hairline)
+    }
+    .accessibilityElement(children: .ignore)
+    .accessibilityLabel("\(weight) \(unit.abbreviation), \(reps), first reached \(date)")
   }
 
   // MARK: - Machine changes
@@ -380,6 +497,8 @@ public struct ProgressionChartView: View {
     let index: Int
     let name: String
     let points: [ProgressionPoint]
+    let recordSessionIDs: Set<SessionID>
+    let bestAtWeight: [BestAtWeight]
     var id: Int { index }
   }
 
@@ -400,7 +519,10 @@ public struct ProgressionChartView: View {
         name = "\(input.label) (\(ordinal))"
       }
       used.insert(name)
-      result.append(PlottedSeries(index: index, name: name, points: input.points))
+      result.append(
+        PlottedSeries(
+          index: index, name: name, points: input.points,
+          recordSessionIDs: input.recordSessionIDs, bestAtWeight: input.bestAtWeight))
     }
     return result
   }

@@ -47,6 +47,7 @@ public struct SetRowView: View {
   private let machineIncrementKg: Double?
   private let previous: PriorSetRecord?
   private let priorNote: String?
+  private let comparison: SetComparison?
   private let editingField: SetRowField?
   private let editingText: String?
   private let onLog: () -> Void
@@ -60,6 +61,9 @@ public struct SetRowView: View {
   /// - Parameter showsInlineLabels: Draws "Last time" and the unit inside the row. A caller that
   ///   draws a column header above its rows passes `false`; accessibility sizes always show them,
   ///   because the stacked layout has no columns for a header to label.
+  /// - Parameter comparison: How a logged set compares with the same set last time on this machine,
+  ///   drawn as a small mark under the row: "+1 rep", "+2.5 kg · +1 rep", or "Matched". `nil` draws
+  ///   nothing, which is the answer for a set that fell short, has no partner, or is a warm-up.
   /// - Parameter editingField: The field the keypad is on, drawn with the focus ring. `nil` when
   ///   the keypad is elsewhere or closed.
   /// - Parameter editingText: What has been typed into that field so far, exactly as typed, so
@@ -83,6 +87,7 @@ public struct SetRowView: View {
     machineIncrementKg: Double? = nil,
     previous: PriorSetRecord? = nil,
     priorNote: String? = nil,
+    comparison: SetComparison? = nil,
     editingField: SetRowField? = nil,
     editingText: String? = nil,
     onLog: @escaping () -> Void,
@@ -101,6 +106,7 @@ public struct SetRowView: View {
     self.machineIncrementKg = machineIncrementKg
     self.previous = previous
     self.priorNote = priorNote
+    self.comparison = comparison
     self.editingField = editingField
     self.editingText = editingText
     self.onLog = onLog
@@ -119,11 +125,13 @@ public struct SetRowView: View {
       if isStacked {
         VStack(spacing: Tokens.Spacing.snug) {
           stackedLayout
+          targetOrBeatMark
           inlineAdjusters
         }
       } else {
         VStack(spacing: Tokens.Spacing.snug) {
           rowLayout
+          targetOrBeatMark
           inlineAdjusters
         }
       }
@@ -252,6 +260,63 @@ public struct SetRowView: View {
       logButton
     }
     .padding(.vertical, Tokens.Spacing.tight)
+  }
+
+  /// Under the columns, one of two lines and never both. An unlogged row prefilled from a rep range
+  /// says where its numbers came from, in the words of the rule, so a target is never read as
+  /// history. A logged row says how it compares with last time, if it does.
+  @ViewBuilder private var targetOrBeatMark: some View {
+    if !isLogged, let target = draft.target {
+      Text("Target · \(target.explanation)")
+        .hardsetText(.provenance)
+        .foregroundStyle(Tokens.Color.chalkDim)
+        .fixedSize(horizontal: false, vertical: true)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, Tokens.Spacing.snug)
+    } else if isLogged, let comparison {
+      beatMark(comparison)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, Tokens.Spacing.snug)
+    }
+  }
+
+  /// A tag-shaped mark, not a control: it names what grew, in the words and figures of the set. A
+  /// win is `plateGreen` with an up arrow; a match is `chalkDim` with an equals sign, so neither is
+  /// carried by colour alone. It arrives with the standard reveal, so the row's height changes at
+  /// once and nothing animates layout.
+  private func beatMark(_ comparison: SetComparison) -> some View {
+    let isMatch = comparison == .matched
+    let hue = isMatch ? Tokens.Color.chalkDim : Tokens.Color.plateGreen
+    return HStack(spacing: Tokens.Spacing.tight) {
+      Image(systemName: isMatch ? "equal" : "arrow.up")
+        .accessibilityHidden(true)
+      Text(comparison.label(in: unit))
+    }
+    .hardsetText(.caption, weight: .semibold)
+    .monospacedDigit()
+    .foregroundStyle(hue)
+    .padding(.horizontal, Tokens.Spacing.snug)
+    .padding(.vertical, Tokens.Spacing.tight)
+    .background {
+      // A capsule, except where the words can wrap: its corner radius would then push the second
+      // line across the outline, so the control radius takes over, as it does for every tag.
+      let fill = isMatch ? Tokens.Color.steelRaised : Tokens.Color.plateGreenSurface
+      if isStacked {
+        RoundedRectangle(cornerRadius: Tokens.Radius.control).fill(fill)
+      } else {
+        Capsule().fill(fill)
+      }
+    }
+    // Decorative, like a banner's stroke: the arrow, the words and the colour say what it is.
+    .overlay {
+      if isStacked {
+        RoundedRectangle(cornerRadius: Tokens.Radius.control)
+          .strokeBorder(hue.opacity(0.35), lineWidth: Tokens.Stroke.hairline)
+      } else {
+        Capsule().strokeBorder(hue.opacity(0.35), lineWidth: Tokens.Stroke.hairline)
+      }
+    }
+    .hardsetArrival()
   }
 
   /// The −/+ machine-step pair, on the next set up and on a row being edited only.
@@ -439,6 +504,9 @@ public struct SetRowView: View {
       )
     }
     if let priorNote { parts.append(priorNote) }
+    // What the numbers came from, or how they went, said once and in the same words as the mark.
+    if !isLogged, let target = draft.target { parts.append(target.spokenLabel(in: unit)) }
+    if isLogged, let comparison { parts.append(comparison.spokenLabel(in: unit)) }
     if isLogged {
       parts.append("logged")
     } else if isNext {

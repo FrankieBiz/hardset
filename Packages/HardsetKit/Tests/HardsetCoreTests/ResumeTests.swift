@@ -175,4 +175,55 @@ struct ResumeTests {
     #expect(state.priorNote == "From another machine")
     #expect(state.slots[0].draft.weightKg == 80)
   }
+
+  @Test("Targets reach only the rows still open, and the rows already logged are untouched")
+  func resumeTargetsOnlyOpenRows() {
+    let range = RepRange(lower: 8, upper: 12)!
+    let state = ExerciseLogState.resume(
+      exerciseID: exercise, machineID: machine, exerciseName: "Chest Press",
+      loggedSets: logged([(40, 11, false)]),
+      snapshot: snapshot(sets: [(40, 10), (40, 9), (40, 8)]),
+      plannedSets: 3,
+      repRange: range
+    )
+
+    #expect(state.repRange == range)
+    #expect(state.slots[0].isLogged)
+    #expect(state.slots[0].draft.target == nil)
+    #expect(state.slots[0].draft.reps == 11)
+    // Open rows take the target for their own working position, not the first row's.
+    #expect(state.slots[1].draft.reps == 10)
+    #expect(state.slots[2].draft.reps == 9)
+    #expect(state.slots[1].draft.target != nil)
+    #expect(state.slots[2].draft.target != nil)
+  }
+
+  @Test("A logged warm-up does not shift the working position the targets use")
+  func resumeWarmupDoesNotShiftTargets() {
+    let range = RepRange(lower: 8, upper: 12)!
+    let state = ExerciseLogState.resume(
+      exerciseID: exercise, machineID: machine, exerciseName: "Chest Press",
+      loggedSets: logged([(20, 12, true), (40, 11, false)]),
+      snapshot: snapshot(sets: [(40, 10), (40, 9)]),
+      plannedSets: 2,
+      repRange: range
+    )
+
+    #expect(state.slots.count == 3)
+    #expect(state.slots[2].draft.reps == 10)
+    #expect(state.slots[2].draft.target != nil)
+  }
+
+  @Test("Without a rep range a resumed workout prefills as it always has")
+  func resumeWithoutRangeHasNoTargets() {
+    let state = ExerciseLogState.resume(
+      exerciseID: exercise, machineID: machine, exerciseName: "Chest Press",
+      loggedSets: logged([(40, 11, false)]),
+      snapshot: snapshot(sets: [(40, 10), (40, 9)]),
+      plannedSets: 2
+    )
+
+    #expect(state.slots[1].draft.reps == 9)
+    #expect(state.slots[1].draft.target == nil)
+  }
 }

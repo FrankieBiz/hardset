@@ -36,6 +36,9 @@ public struct WorkoutReceiptView: View {
           .font(Tokens.Text.provenance)
           .foregroundStyle(Tokens.Color.chalkDim)
       }
+      if let scorecard = receipt.scorecard {
+        scorecardBlock(scorecard)
+      }
       if receipt.lines.isEmpty {
         Text("No sets were logged in this workout.")
           .font(Tokens.Text.provenance)
@@ -67,6 +70,96 @@ public struct WorkoutReceiptView: View {
     .foregroundStyle(Tokens.Color.chalk)
     .padding(Tokens.Spacing.section)
     .background(Tokens.Color.canvas)
+  }
+
+  // MARK: - Scorecard
+
+  /// How the workout went against last time, at the top: the headline in the figure role, the
+  /// records on the record surface, the biggest gain, and a mark for each movement that earned one.
+  ///
+  /// Counted by movement, and every word comes from `ScorecardCopy`, which the share text uses too,
+  /// so the image, the screen and the text never disagree. A first time on a machine is stated as a
+  /// first time and left out of the count; a movement that fell short is carried by the headline and
+  /// not drawn as a failure. The same view is rendered into the shared image, so it holds no controls.
+  private func scorecardBlock(_ card: WorkoutScorecard) -> some View {
+    VStack(alignment: .leading, spacing: Tokens.Spacing.regular) {
+      Text(card.headline)
+        .font(Tokens.Text.readout)
+        .fixedSize(horizontal: false, vertical: true)
+        .accessibilityAddTraits(.isHeader)
+
+      if let records = ScorecardCopy.recordsText(card) {
+        Label(records, systemImage: "trophy.fill")
+          .font(Tokens.Text.labelEmphasis)
+          .foregroundStyle(Tokens.Color.plateYellow)
+          .padding(.horizontal, Tokens.Spacing.regular)
+          .padding(.vertical, Tokens.Spacing.snug)
+          .frame(maxWidth: .infinity, alignment: .leading)
+          .background(
+            Tokens.Color.plateYellowSurface,
+            in: RoundedRectangle(cornerRadius: Tokens.Radius.control))
+          .overlay(
+            RoundedRectangle(cornerRadius: Tokens.Radius.control)
+              .strokeBorder(Tokens.Color.plateYellow.opacity(0.35), lineWidth: Tokens.Stroke.hairline)
+          )
+      }
+
+      if let gain = ScorecardCopy.gainText(card) {
+        VStack(alignment: .leading, spacing: Tokens.Spacing.snug) {
+          Text(gain)
+            .font(Tokens.Text.label)
+            .fixedSize(horizontal: false, vertical: true)
+          // An estimate never stands without its certainty. Not a control: the receipt is rendered
+          // into the shared image, so the capsule is the badge's face and does nothing when tapped.
+          if let certainty = card.biggestGain?.certainty {
+            CertaintyCapsule(level: MethodologySheet.level(for: certainty), isInteractive: false)
+          }
+        }
+        .accessibilityElement(children: .combine)
+      }
+
+      VStack(alignment: .leading, spacing: 0) {
+        ForEach(card.entries) { entry in
+          if let mark = ScorecardCopy.markText(entry, unit: unit) {
+            scorecardRow(entry, mark: mark)
+          }
+        }
+      }
+    }
+    .padding(Tokens.Spacing.loose)
+    .frame(maxWidth: .infinity, alignment: .leading)
+    .hardsetCard()
+  }
+
+  /// One movement and what it earned. A win is `plateGreen` with an up arrow, a record `plateYellow`
+  /// with the trophy, and a match or a first time `chalkDim`, so none is carried by colour alone.
+  private func scorecardRow(_ entry: WorkoutScorecard.Entry, mark: String) -> some View {
+    let (hue, symbol): (Color, String?) =
+      switch entry.outcome {
+      case .beat(nil): (Tokens.Color.plateYellow, "trophy.fill")
+      case .beat: (Tokens.Color.plateGreen, "arrow.up")
+      case .matched: (Tokens.Color.chalkDim, "equal")
+      case .firstTime, .notBeaten: (Tokens.Color.chalkDim, nil)
+      }
+    return HStack(alignment: .firstTextBaseline, spacing: Tokens.Spacing.regular) {
+      Text(entry.exerciseName)
+        .font(Tokens.Text.label)
+        .fixedSize(horizontal: false, vertical: true)
+      Spacer(minLength: Tokens.Spacing.regular)
+      HStack(spacing: Tokens.Spacing.tight) {
+        if let symbol {
+          Image(systemName: symbol).accessibilityHidden(true)
+        }
+        Text(mark)
+      }
+      .hardsetText(.provenance)
+      .foregroundStyle(hue)
+    }
+    .padding(.vertical, Tokens.Spacing.snug)
+    .overlay(alignment: .top) {
+      Rectangle().fill(Tokens.Color.hairline).frame(height: Tokens.Stroke.hairline)
+    }
+    .accessibilityElement(children: .combine)
   }
 
   /// One set: its load and reps as figures, then anything it earned. The delete control, when

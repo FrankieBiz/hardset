@@ -76,4 +76,20 @@ struct TourFixturesTests {
     let stepKg = try #require(staged.machines.first?.stackIncrementKg)
     #expect(abs(WeightUnit.pounds.fromKilograms(stepKg) - 20) < 0.001)
   }
+
+  /// The tour stages the Train, Volume and History tabs; the Progress tab and saved workouts are
+  /// new, and no tour step points at them. The staged environment still carries their stores, and
+  /// they read the staged history honestly: nothing is saved, and the board holds what was trained.
+  @Test func theStagedHistoryFeedsTheProgressBoardAndNoWorkoutIsSaved() async throws {
+    let staged = try TourFixtures.make(stage: .start, now: Self.now)
+
+    let templates = try await staged.environment.templates.loadTemplates()
+    #expect(templates.isEmpty)
+    let board = try await staged.environment.progressBoard.loadBoard()
+    let rows = board.sections.flatMap(\.rows)
+    #expect(!rows.isEmpty)
+    #expect(rows.allSatisfy { $0.trend.sessionCount > 0 })
+    // Every staged movement and machine is its own row, never merged.
+    #expect(Set(rows.map(\.id)).count == rows.count)
+  }
 }

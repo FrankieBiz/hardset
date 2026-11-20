@@ -379,4 +379,123 @@ struct SessionRecoveryTests {
     #expect(live.exercises.count == 1)
     #expect(live.lastError != nil)
   }
+
+  /// Review focus: a workout killed mid-session must not forget its plan. The rep range is on the
+  /// session's own rows, so the open rows get their targets back without the template.
+  @Test("A restarted workout rebuilds its targets from the session's own rep range")
+  func resumeRebuildsTargets() throws {
+    let database = try migratedDatabase()
+    let store = LoggerStore(database: database)
+    let exercise = try seedExercise(database, "Chest Press")
+    let (gym, machine) = try seedGymAndMachine(database, machine: "Press")
+    let earlier = try SessionCoordinator.start(
+      store: store, gymID: gym,
+      plan: [PlannedExercise(
+        exerciseID: exercise, machineID: machine, exerciseName: "Chest Press", plannedSets: 2)],
+      now: { self.start.addingTimeInterval(-86_400) }
+    )
+    for (index, set) in [(40.0, 10), (40.0, 9)].enumerated() {
+      earlier.exercises[0].slots[index].draft = SetEntryDraft(weightKg: set.0, reps: set.1)
+      #expect(earlier.logSet(slotID: earlier.exercises[0].slots[index].id, inExercise: earlier.exercises[0].id))
+    }
+    try earlier.finish()
+
+    let range = try #require(RepRange(lower: 8, upper: 12))
+    let live = try SessionCoordinator.start(
+      store: store, gymID: gym, title: "Upper A",
+      plan: [PlannedExercise(
+        exerciseID: exercise, machineID: machine, exerciseName: "Chest Press", plannedSets: 3,
+        repRange: range)],
+      templateID: TemplateID(), weightUnit: .kilograms, now: { self.start }
+    )
+    #expect(live.exercises[0].slots.map { $0.draft.reps } == [11, 10, 10])
+    #expect(live.logSet(slotID: live.exercises[0].slots[0].id, inExercise: live.exercises[0].id))
+
+    let recovered = try #require(
+      try SessionCoordinator.resume(store: store, weightUnit: .kilograms, now: { self.start }))
+
+    let state = recovered.exercises[0]
+    #expect(state.repRange == range)
+    #expect(state.slots[0].isLogged)
+    #expect(state.slots[0].draft.target == nil)
+    #expect(state.slots[1].draft.target != nil)
+    #expect(state.slots[2].draft.target != nil)
+    #expect(state.slots[1].draft.reps == 10)
+    // The set logged before the restart still compares with its partner from last time.
+    #expect(recovered.comparison(forSlotID: state.slots[0].id, inExercise: state.id)
+      == .beat(addedKg: 0, addedReps: 1))
+  }
+
+  @Test("A bodyweight movement recovered after a restart still only adds reps")
+  func resumeKeepsBodyweightTargetsRepsOnly() throws {
+    let database = try migratedDatabase()
+    let store = LoggerStore(database: database)
+    let exercise = ExerciseID()
+    try database.write { db in
+      try Exercise.insert {
+        Exercise.Draft(id: exercise.rawValue, name: "Pull-up", modality: "bodyweight")
+      }
+      .execute(db)
+    }
+    let earlier = try SessionCoordinator.start(
+      store: store,
+      plan: [PlannedExercise(exerciseID: exercise, exerciseName: "Pull-up", plannedSets: 2)],
+      now: { self.start.addingTimeInterval(-86_400) }
+    )
+    for index in 0..<2 {
+      earlier.exercises[0].slots[index].draft = SetEntryDraft(weightKg: 0, reps: 12)
+      #expect(earlier.logSet(slotID: earlier.exercises[0].slots[index].id, inExercise: earlier.exercises[0].id))
+    }
+    try earlier.finish()
+    let range = try #require(RepRange(lower: 8, upper: 12))
+    let live = try SessionCoordinator.start(
+      store: store,
+      plan: [PlannedExercise(
+        exerciseID: exercise, exerciseName: "Pull-up", plannedSets: 2, repRange: range)],
+      templateID: TemplateID(), weightUnit: .kilograms, now: { self.start }
+    )
+    #expect(live.exercises[0].slots.map { $0.draft.reps } == [13, 13])
+
+    let recovered = try #require(
+      try SessionCoordinator.resume(store: store, weightUnit: .kilograms, now: { self.start }))
+
+    #expect(recovered.exercises[0].slots.map { $0.draft.reps } == [13, 13])
+    #expect(recovered.exercises[0].slots.map { $0.draft.weightKg } == [0, 0])
+  }
+
+  /// Review focus: a pound lifter with no saved machine step gets a one-plate step of 5 lb, and a
+  /// restart must not turn it into 2.5 kg. The unit is the one thing resume cannot read back.
+  @Test("A restarted workout builds its assumed one-plate step in the lifter's unit")
+  func resumeUsesTheLiftersUnitForTheAssumedStep() throws {
+    let database = try migratedDatabase()
+    let store = LoggerStore(database: database)
+    let exercise = try seedExercise(database, "Chest Press")
+    let earlier = try SessionCoordinator.start(
+      store: store,
+      plan: [PlannedExercise(exerciseID: exercise, exerciseName: "Chest Press", plannedSets: 2)],
+      now: { self.start.addingTimeInterval(-86_400) }
+    )
+    for index in 0..<2 {
+      earlier.exercises[0].slots[index].draft = SetEntryDraft(weightKg: 40, reps: 12)
+      #expect(earlier.logSet(slotID: earlier.exercises[0].slots[index].id, inExercise: earlier.exercises[0].id))
+    }
+    try earlier.finish()
+    let range = try #require(RepRange(lower: 8, upper: 12))
+    let live = try SessionCoordinator.start(
+      store: store,
+      plan: [PlannedExercise(
+        exerciseID: exercise, exerciseName: "Chest Press", plannedSets: 2, repRange: range)],
+      templateID: TemplateID(), weightUnit: .pounds, now: { self.start }
+    )
+    let plate = 40 + 2.26796185
+    #expect(abs((live.exercises[0].slots[0].draft.weightKg ?? 0) - plate) < 1e-6)
+
+    let inPounds = try #require(
+      try SessionCoordinator.resume(store: store, weightUnit: .pounds, now: { self.start }))
+    let inKilograms = try #require(
+      try SessionCoordinator.resume(store: store, weightUnit: .kilograms, now: { self.start }))
+
+    #expect(abs((inPounds.exercises[0].slots[0].draft.weightKg ?? 0) - plate) < 1e-6)
+    #expect(inKilograms.exercises[0].slots[0].draft.weightKg == 42.5)
+  }
 }

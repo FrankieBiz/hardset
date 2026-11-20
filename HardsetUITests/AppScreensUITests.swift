@@ -334,8 +334,9 @@ final class AppScreensUITests: XCTestCase {
     // Tapped where the spotlight is. The staged row is one accessibility element with named actions,
     // so there is no separate "Log set" button to query; a touch at the check's place is also the
     // honest test that the hole lets a touch through while the scrim stops every other one. The
-    // check sits at the right of the third Leg Press row, a little over half way down the screen.
-    app.coordinate(withNormalizedOffset: CGVector(dx: 0.767, dy: 0.555)).tap()
+    // check sits at the right of the third Leg Press row, about 61% of the way down the screen: the
+    // two logged rows above it each carry a "Matched" beat mark, which sits it lower than it was.
+    app.coordinate(withNormalizedOffset: CGVector(dx: 0.767, dy: 0.609)).tap()
     XCTAssertTrue(app.buttons["tour-next"].waitForExistence(timeout: 10), "logging the staged set unlocks Next")
     capture(app, "49-onboarding-tour-2-logged")
 

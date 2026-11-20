@@ -63,9 +63,77 @@ public nonisolated struct ReceiptStore: Sendable {
           history[key, default: []].append(.init(weightKg: set.weightKg, reps: set.reps, completedAt: set.completedAt))
         }
       }
+      let plan = try SessionExercise.where { $0.sessionID.eq(id.rawValue) }
+        .order { $0.position }.fetchAll(db)
+      let scorecard = imported
+        ? nil
+        : Self.scorecard(
+          sets: sets, lines: lines, prior: prior, plan: plan, names: names, modalities: modalities)
       return WorkoutReceipt(id: id, title: session.title, startedAt: session.startedAt,
-        finishedAt: end, lines: lines, notes: session.notes)
+        finishedAt: end, lines: lines, notes: session.notes, scorecard: scorecard)
     }
+  }
+
+  /// Scores the workout against the last session that trained each movement on the same machine.
+  ///
+  /// Counted by movement, in the order each was first performed. A movement's current sets are this
+  /// session's working sets, and its previous sets are the working sets of the most recent earlier
+  /// session with any on that machine, both in performed order. A machine is never compared with
+  /// another, as everywhere else. The rep range is the one this session's own plan row remembers,
+  /// so a plan changed since makes no difference. A movement set a record when any of its lines
+  /// did. Nil when no movement had a working set, rather than a card with nothing on it.
+  private static func scorecard(
+    sets: [LoggedSet], lines: [WorkoutReceipt.Line], prior: [LoggedSet], plan: [SessionExercise],
+    names: [UUID: String], modalities: [UUID: ExerciseModality?]
+  ) -> WorkoutScorecard? {
+    func key(_ set: LoggedSet) -> ProgressionKey {
+      ProgressionKey(
+        exerciseID: ExerciseID(rawValue: set.exerciseID),
+        machineID: set.machineID.map(MachineID.init(rawValue:)))
+    }
+    func record(_ set: LoggedSet) -> PriorSetRecord {
+      PriorSetRecord(weightKg: set.weightKg, reps: set.reps, completedAt: set.completedAt)
+    }
+    func performedBefore(_ lhs: LoggedSet, _ rhs: LoggedSet) -> Bool {
+      (lhs.completedAt, lhs.setOrdinal, lhs.id.uuidString) < (rhs.completedAt, rhs.setOrdinal, rhs.id.uuidString)
+    }
+
+    var order: [ProgressionKey] = []
+    var current: [ProgressionKey: [PriorSetRecord]] = [:]
+    var recorded = Set<ProgressionKey>()
+    // `lines` were built one per set, in the same order.
+    for (set, line) in zip(sets, lines) {
+      let setKey = key(set)
+      if !order.contains(setKey) { order.append(setKey) }
+      if !set.isWarmup { current[setKey, default: []].append(record(set)) }
+      if !line.records.isEmpty { recorded.insert(setKey) }
+    }
+
+    let earlier = Dictionary(grouping: prior, by: key)
+    let inputs = order.map { movement -> ScorecardInput in
+      let sessions = Dictionary(grouping: earlier[movement] ?? [], by: \.sessionID)
+      let latest = sessions.values.max { lhs, rhs in
+        let left = lhs.map(\.completedAt).min() ?? .distantPast
+        let right = rhs.map(\.completedAt).min() ?? .distantPast
+        return left != right ? left < right : lhs[0].sessionID.uuidString < rhs[0].sessionID.uuidString
+      }
+      let planRow =
+        plan.first { $0.exerciseID == movement.exerciseID.rawValue && $0.machineID == movement.machineID?.rawValue }
+        ?? plan.first { $0.exerciseID == movement.exerciseID.rawValue }
+      return ScorecardInput(
+        key: movement,
+        exerciseName: names[movement.exerciseID.rawValue] ?? "Unknown movement",
+        currentSets: current[movement] ?? [],
+        previousSets: (latest ?? []).sorted(by: performedBefore).map(record),
+        repRange: planRow.flatMap { row in
+          row.repRangeLower.flatMap { lower in row.repRangeUpper.flatMap { RepRange(lower: lower, upper: $0) } }
+        },
+        setRecord: recorded.contains(movement),
+        estimatesOneRepMax: (modalities[movement.exerciseID.rawValue] ?? nil)?.estimatesOneRepMax ?? true
+      )
+    }
+    let card = WorkoutScorecard.make(inputs)
+    return card.entries.isEmpty ? nil : card
   }
 
   // MARK: - Corrections

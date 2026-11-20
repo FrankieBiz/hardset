@@ -19,7 +19,7 @@
       switch section {
       case .logControl: 780
       case .fields: 760
-      case .rows: 1800
+      case .rows: 3000
       }
     }
 
@@ -39,11 +39,12 @@
       }
     }
 
-    /// The rows stacked at an accessibility size, where the log control says "Log set" or "Logged".
+    /// The rows stacked at an accessibility size, where the log control says "Log set" or "Logged",
+    /// and the target line and the beat mark wrap under the values.
     @Test func accessibilitySizes() async throws {
       try await Snapshot.capture(
         "kit-setrow-rows-dark-ax3",
-        size: CGSize(width: Self.width, height: 6_400),
+        size: CGSize(width: Self.width, height: 9_600),
         typeSize: .accessibility3
       ) {
         SetRowCatalogView(section: .rows)

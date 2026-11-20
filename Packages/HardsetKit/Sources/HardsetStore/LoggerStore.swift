@@ -33,7 +33,7 @@ public nonisolated struct LoggerStore: Sendable {
     title: String = "",
     at startedAt: Date
   ) throws -> SessionID {
-    try startSession(gymID: gymID, title: title, at: startedAt, plan: []).sessionID
+    try startSession(gymID: gymID, title: title, at: startedAt, plan: [], templateID: nil).sessionID
   }
 
   /// Saves the session and its entire plan in one transaction. A failed plan row
@@ -42,7 +42,8 @@ public nonisolated struct LoggerStore: Sendable {
     gymID: GymID?,
     title: String,
     at startedAt: Date,
-    plan: [PlannedExercise]
+    plan: [PlannedExercise],
+    templateID: TemplateID? = nil
   ) throws -> (sessionID: SessionID, planRowIDs: [UUID]) {
     let id = SessionID()
     let rowIDs = plan.map { _ in UUID() }
@@ -64,7 +65,8 @@ public nonisolated struct LoggerStore: Sendable {
           title: title,
           notes: "",
           startedAt: startedAt,
-          finishedAt: nil
+          finishedAt: nil,
+          templateID: templateID?.rawValue
         )
       }
       .execute(db)
@@ -77,7 +79,9 @@ public nonisolated struct LoggerStore: Sendable {
             exerciseID: planned.exerciseID.rawValue,
             machineID: planned.machineID?.rawValue,
             position: position,
-            plannedSets: planned.plannedSets
+            plannedSets: planned.plannedSets,
+            repRangeLower: planned.repRange?.lower,
+            repRangeUpper: planned.repRange?.upper
           )
         }
         .execute(db)
@@ -308,8 +312,9 @@ public nonisolated struct LoggerStore: Sendable {
     guard db.changesCount == 1 else { throw LoggerStoreError.writeNotApplied }
   }
 
-  /// At most 14 actual sets preserve every comparison the Core detector makes:
-  /// all-time load, reps near the candidate load, and the best load at each
+  /// At most 15 actual sets preserve every comparison the Core detector makes:
+  /// all-time load, reps near the candidate load, the heaviest set with at least
+  /// the candidate's reps (at any rep count), and the best load at each
   /// estimable rep count. The estimate formula remains solely in HardsetCore.
   private static func recordComparisonSets(
     in db: Database,
@@ -348,6 +353,15 @@ public nonisolated struct LoggerStore: Sendable {
       .order { $0.reps.desc() }
       .limit(1).fetchOne(db)
     if let mostReps { comparisons.append(record(from: mostReps)) }
+
+    // "More weight for the same reps" compares with every earlier set of at least this many reps,
+    // so it works above the twelve the estimate stops at, and for bodyweight work. The ordering
+    // is the heaviest-set index order, so the first row that qualifies ends the read.
+    let heaviestAtReps = try history
+      .where { $0.reps >= candidate.reps }
+      .order { ($0.weightKg.desc(), $0.reps.desc(), $0.completedAt.desc(), $0.id.desc()) }
+      .limit(1).fetchOne(db)
+    if let heaviestAtReps { comparisons.append(record(from: heaviestAtReps)) }
 
     if estimatesOneRepMax,
       StrengthMath.estimatedOneRepMax(weightKg: candidate.weightKg, reps: candidate.reps).value != nil
@@ -568,23 +582,125 @@ public nonisolated struct LoggerStore: Sendable {
   /// last time is overwhelmingly the one the lifter is standing at. Only this gym's machines are
   /// considered, so a recent trip elsewhere cannot hide the usual one.
   public func mostRecentMachine(for exerciseID: ExerciseID, at gymID: GymID) throws -> MachineRecord? {
-    try database.read { db in
-      let machines = try Machine
-        .where { $0.gymID.eq(gymID.rawValue) && !$0.isArchived }
-        .fetchAll(db)
-      var best: (machine: Machine, at: Date)?
-      for machine in machines {
-        let latest = try LoggedSet
-          .where { $0.exerciseID.eq(exerciseID.rawValue) && $0.machineID.eq(machine.id) }
-          .order { $0.completedAt.desc() }
-          .limit(1)
-          .select(\.completedAt)
-          .fetchOne(db)
-        guard let latest else { continue }
-        if let current = best, current.at >= latest { continue }
-        best = (machine, latest)
+    try database.read { db in try Self.readMostRecentMachine(for: exerciseID, at: gymID, in: db) }
+  }
+
+  private static func readMostRecentMachine(
+    for exerciseID: ExerciseID, at gymID: GymID, in db: Database
+  ) throws -> MachineRecord? {
+    let machines = try Machine
+      .where { $0.gymID.eq(gymID.rawValue) && !$0.isArchived }
+      .fetchAll(db)
+    var best: (machine: Machine, at: Date)?
+    for machine in machines {
+      let latest = try LoggedSet
+        .where { $0.exerciseID.eq(exerciseID.rawValue) && $0.machineID.eq(machine.id) }
+        .order { $0.completedAt.desc() }
+        .limit(1)
+        .select(\.completedAt)
+        .fetchOne(db)
+      guard let latest else { continue }
+      if let current = best, current.at >= latest { continue }
+      best = (machine, latest)
+    }
+    return best.map { MachineRecord(row: $0.machine) }
+  }
+
+  /// The machine each saved movement opens on when a workout starts at `gymID`.
+  ///
+  /// A saved machine is used only when it belongs to the gym the workout starts at and has not been
+  /// retired. Otherwise the movement opens on the machine last used for it here, which is the rule
+  /// `addExercise` already applies, or on none. With no gym recorded nothing can vouch for a saved
+  /// machine, so none is used. A workout never carries a machine from another gym, which is what
+  /// `startSession` would refuse. Read in one transaction, in the order given.
+  func resolvedMachines(
+    for movements: [(exerciseID: ExerciseID, savedMachineID: MachineID?)], at gymID: GymID?
+  ) throws -> [MachineRecord?] {
+    guard let gymID else { return movements.map { _ in nil } }
+    return try database.read { db in
+      let saved = Array(Set(movements.compactMap { $0.savedMachineID?.rawValue }))
+      let rows = saved.isEmpty ? [] : try Machine.where { $0.id.in(saved) }.fetchAll(db)
+      let byID = Dictionary(uniqueKeysWithValues: rows.map { ($0.id, $0) })
+      return try movements.map { movement -> MachineRecord? in
+        if let id = movement.savedMachineID?.rawValue, let row = byID[id],
+          row.gymID == gymID.rawValue, !row.isArchived
+        {
+          return MachineRecord(row: row)
+        }
+        return try Self.readMostRecentMachine(for: movement.exerciseID, at: gymID, in: db)
       }
-      return best.map { MachineRecord(row: $0.machine) }
+    }
+  }
+
+  /// How each movement's load is applied, for the movements that exist. An unknown or missing
+  /// modality is simply absent, and callers do not assume it is bodyweight.
+  public func modalities(for exerciseIDs: [ExerciseID]) throws -> [ExerciseID: ExerciseModality] {
+    guard !exerciseIDs.isEmpty else { return [:] }
+    let raws = Array(Set(exerciseIDs.map(\.rawValue)))
+    return try database.read { db in
+      let rows: [(UUID, String)] = try Exercise.where { $0.id.in(raws) }
+        .select { ($0.id, $0.modality) }
+        .fetchAll(db)
+      return rows.reduce(into: [ExerciseID: ExerciseModality]()) { result, row in
+        if let modality = ExerciseModality(rawValue: row.1) {
+          result[ExerciseID(rawValue: row.0)] = modality
+        }
+      }
+    }
+  }
+
+  /// What a session's notes start with when a CSV import wrote it. The prefix holds no `%` or `_`,
+  /// so it matches literally. Receipts use the same marker to withhold records and the scorecard.
+  private static let importedSessionPattern = "Imported from %"
+
+  /// Whether "Repeat last workout" has anything to repeat: a finished workout of the lifter's own.
+  /// An imported workout never counts. Its movements are kept apart from the catalogue's on purpose,
+  /// as unevaluated copies, so a native workout started from one would log against them and every
+  /// record, mark and scorecard after it would compare with unevaluated history.
+  public func hasRepeatableWorkout() throws -> Bool {
+    try database.read { db in
+      let found = try Session
+        .where { $0.finishedAt.isNot(nil) && !$0.notes.like(Self.importedSessionPattern) }
+        .order { $0.finishedAt.desc() }
+        .limit(1)
+        .select(\.id)
+        .fetchOne(db)
+      return found != nil
+    }
+  }
+
+  /// The plan of the workout finished most recently, for "Repeat last workout".
+  ///
+  /// Movements keep that workout's order, machines and rep ranges, and `workingSets` is how many
+  /// working sets were logged for each, never counting warm-ups. Nil when no workout is finished.
+  /// Ordered by finish time alone, which is the order of the index that finds it: the last workout
+  /// is the one you ended last, and two ending in the same millisecond is not something a lifter can
+  /// do, so there is no tie-break to pay a sort for.
+  func lastFinishedPlan() throws -> RepeatablePlan? {
+    try database.read { db in
+      let latest = try Session
+        .where { $0.finishedAt.isNot(nil) && !$0.notes.like(Self.importedSessionPattern) }
+        .order { $0.finishedAt.desc() }
+        .limit(1)
+        .fetchOne(db)
+      guard let latest else { return nil }
+      let id = SessionID(rawValue: latest.id)
+      let planned = try Self.readSessionExercises(in: id, db: db)
+      let rows = try SessionExercise.where { $0.sessionID.eq(latest.id) }.fetchAll(db)
+      let counts = try TemplateStore.workingSetCounts(for: rows, in: db)
+      return RepeatablePlan(
+        title: latest.title,
+        templateID: latest.templateID.map(TemplateID.init(rawValue:)),
+        movements: planned.map { entry in
+          RepeatableMovement(
+            exerciseID: entry.exerciseID,
+            exerciseName: entry.exerciseName,
+            savedMachineID: entry.machineID,
+            workingSets: counts[entry.id] ?? 0,
+            repRange: entry.repRange
+          )
+        }
+      )
     }
   }
 
@@ -638,10 +754,13 @@ public nonisolated struct LoggerStore: Sendable {
     guard !rows.isEmpty else { return [] }
 
     let exerciseIDs = Array(Set(rows.map(\.exerciseID)))
-    let names = try Exercise
+    let exerciseRows = try Exercise
       .where { $0.id.in(exerciseIDs) }
       .fetchAll(db)
-      .reduce(into: [UUID: String]()) { $0[$1.id] = $1.name }
+    let names = exerciseRows.reduce(into: [UUID: String]()) { $0[$1.id] = $1.name }
+    let modalities = exerciseRows.reduce(into: [UUID: ExerciseModality]()) {
+      $0[$1.id] = ExerciseModality(rawValue: $1.modality)
+    }
 
     let machineIDs = Array(Set(rows.compactMap(\.machineID)))
     let machines =
@@ -663,7 +782,11 @@ public nonisolated struct LoggerStore: Sendable {
         machineName: row.machineID.flatMap { machines[$0]?.name },
         position: row.position,
         plannedSets: row.plannedSets,
-        machineIncrementKg: row.machineID.flatMap { machines[$0]?.stackIncrementKg }
+        machineIncrementKg: row.machineID.flatMap { machines[$0]?.stackIncrementKg },
+        repRange: row.repRangeLower.flatMap { lower in
+          row.repRangeUpper.flatMap { RepRange(lower: lower, upper: $0) }
+        },
+        modality: modalities[row.exerciseID]
       )
     }
   }
@@ -874,10 +997,29 @@ public nonisolated struct PlannedExerciseRecord: Hashable, Sendable, Identifiabl
   /// The machine's real load step, when known. Carried here so recovery restores it — without it,
   /// a recovered session falls back to a default step the equipment may not be able to hit.
   public let machineIncrementKg: Double?
+  /// The reps this movement was planned for, copied onto the session's row when it started.
+  public let repRange: RepRange?
+  /// How the load is applied, when the movement's row names a known modality.
+  public let modality: ExerciseModality?
 
   public var progressionKey: ProgressionKey {
     ProgressionKey(exerciseID: exerciseID, machineID: machineID)
   }
+}
+
+/// A finished workout's plan, ready to start again.
+nonisolated struct RepeatablePlan: Hashable, Sendable {
+  let title: String
+  let templateID: TemplateID?
+  let movements: [RepeatableMovement]
+}
+
+nonisolated struct RepeatableMovement: Hashable, Sendable {
+  let exerciseID: ExerciseID
+  let exerciseName: String
+  let savedMachineID: MachineID?
+  let workingSets: Int
+  let repRange: RepRange?
 }
 
 public enum LoggerStoreError: Error, Equatable, Sendable {

@@ -173,4 +173,36 @@ struct PersonalRecordsTests {
     #expect(heaviest.previousWeightKg == 100)
     #expect(heaviest.weightKg == 110)
   }
+
+  @Test func heavierAtSameRepsIsALoadAtRepsRecord() {
+    let r = PersonalRecordDetector.records(for: .init(weightKg: 42.5, reps: 10), history: history([(50, 5), (40, 10)]), increment: 2.5)
+    #expect(r.map(\.kind).contains(.loadAtReps)); #expect(!r.map(\.kind).contains(.heaviestLoad))
+    let rec = r.first { $0.kind == .loadAtReps }
+    #expect(rec?.previousWeightKg == 40); #expect(rec?.previousReps == 10)
+  }
+
+  @Test func loadAtRepsNeedsTheMargin() {
+    let r = PersonalRecordDetector.records(for: .init(weightKg: 41, reps: 10), history: history([(50, 5), (40, 10)]), increment: 2.5)
+    #expect(!r.map(\.kind).contains(.loadAtReps))
+  }
+
+  @Test func loadAtRepsComparesAgainstSetsWithAtLeastAsManyReps() {
+    let r = PersonalRecordDetector.records(for: .init(weightKg: 42.5, reps: 10), history: history([(50, 5), (40, 12)]), increment: 2.5)
+    #expect(r.first { $0.kind == .loadAtReps }?.previousReps == 12)
+  }
+
+  @Test func noLongerEarlierSetMeansNoLoadAtRepsRecord() {
+    let r = PersonalRecordDetector.records(for: .init(weightKg: 42.5, reps: 10), history: history([(50, 5)]), increment: 2.5)
+    #expect(!r.map(\.kind).contains(.loadAtReps))
+  }
+
+  @Test func loadAtRepsWorksAboveTwelveReps() {
+    let r = PersonalRecordDetector.records(for: .init(weightKg: 32.5, reps: 15), history: history([(50, 5), (30, 15)]), increment: 2.5)
+    #expect(r.map(\.kind) == [.loadAtReps])
+  }
+
+  @Test func heaviestEverIsNotAlsoALoadAtRepsRecord() {
+    let r = PersonalRecordDetector.records(for: .init(weightKg: 45, reps: 10), history: history([(40, 10)]), increment: 2.5)
+    #expect(r.map(\.kind).contains(.heaviestLoad)); #expect(!r.map(\.kind).contains(.loadAtReps))
+  }
 }

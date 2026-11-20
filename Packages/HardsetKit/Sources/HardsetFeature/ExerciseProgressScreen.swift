@@ -84,7 +84,10 @@ public struct ExerciseProgressScreen: View {
         (lhs.points.last?.date ?? .distantPast) > (rhs.points.last?.date ?? .distantPast)
       }
       .map {
-        ProgressionChartView.SeriesInput(label: history.label(for: $0.key), points: $0.points)
+        ProgressionChartView.SeriesInput(
+          label: history.label(for: $0.key), points: $0.points,
+          recordSessionIDs: history.recordSessionIDs[$0.key] ?? [],
+          bestAtWeight: history.bestAtWeight[$0.key] ?? [])
       }
   }
 

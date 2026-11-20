@@ -226,6 +226,83 @@ Selection rows, the unit switch and pickers stay silent.
   "Recent", "Custom", an untrained muscle) is filled only, so it never imitates a control. At
   accessibility sizes a wrapping tag, assumption chip or certainty capsule takes the control radius
   instead of a capsule, so wrapped text stays inside its outline.
+- **Library** (`LibraryView`, `LibraryScreen`): every selectable movement grouped by body part, with a
+  ledger of the count in each at the bottom. Movements with no body part come first under a `warning`
+  header with its `exclamationmark.triangle` symbol, "Needs a body part", because until one is tagged its
+  sets count toward no muscle. A row is a 56 pt `SelectionCardButtonStyle` button for the lifter's own
+  movement and opens the editor; a curated movement is a flat card with a "Curated" `HardsetTag` and does
+  not open it, so nothing that looks tappable does nothing. The footer lists every body part, zeros
+  included, in `figure` against `chalkDim` for a zero, each row under a `hairline`. It reads what is
+  there: loading is a quiet line, a failed read says so in `HardsetEmptyState`, and neither draws an empty
+  library. It adds no token and no motion.
+- **Movement editor** (`MovementEditorSheet`, `MovementEditorDraft`): a name field in `entryFieldChrome`,
+  body-part chips, a `SelectionRow` per muscle where the body part has more than one, up to three optional
+  secondary muscles chosen from chips (each counts half a set), and the equipment as chips. Chips wrap
+  into rows at ordinary sizes and stack one to a line at accessibility sizes; five segments could not hold
+  "Bodyweight" at a phone's width, so equipment is chips, not a `HardsetSegmentedControl`. Save is the one
+  `primary` 56 pt button and waits until there is a name and a primary muscle, saying which is missing in
+  `provenance` under it. A failed save is a native alert, because the sheet scrolls and a banner at the
+  top would be out of sight beside the button it answers; the sheet stays up with everything typed.
+  Nothing is inferred from the name, and what is saved is the lifter's own attribution at moderate
+  certainty. It adds no token and no motion.
+- **Workout cards** (`WorkoutCardsView`, `WorkoutCard`): the Train tab's saved workouts. The workout done
+  longest ago, or never, is the up-next card, in `hardsetCard`, with its name in `title`, "3 movements" in
+  `label` and a context line in `provenance`: "Up next · last done 4 days ago · beat 4 of 6 last time".
+  Its one `primary` 56 pt button reads "Start" and the name; starting is a single tap with no
+  confirmation, because the lifter is standing at a machine. It is the screen's one primary button:
+  while a saved workout is shown, the empty "Start workout" below it steps down to `secondary`. The
+  other workouts are control-radius cards with a `secondary` Start and a `quiet` Edit, and "New workout"
+  and "Repeat last workout" are `secondary` buttons below them, the second only when a finished workout
+  of the lifter's own exists (an imported one does not count). Nothing is claimed that was not measured:
+  "beat 4 of 6" appears only when something was compared, and only on the workout it belongs to. The
+  order is the rotation, never a schedule or a streak. At accessibility sizes the buttons stack. It adds
+  no token and no motion.
+- **Workout editor** (`WorkoutEditorView`, `WorkoutEditorScreen`, `WorkoutDraft`): a name field in
+  `entryFieldChrome` and a card per movement. Each card has Sets and, once added, a rep range as large
+  44 pt minus and plus controls around a `figure` value, so a plan made sitting down cannot hold a number
+  the plan refuses; a rest as a rail of chips, none first; a machine tag only for a movement saved with one,
+  with "Use the usual machine" to clear it; and move up, move down and remove as round header controls,
+  dimmed to 0.4 when they cannot move. "Add movement" is the dashed slot and opens the same picker and the
+  same movement editor as the live workout. Save is the one `primary` 56 pt button and says what is
+  missing under it. A failed save or delete is a native alert, because the editor scrolls. Deleting
+  archives: workouts already done from it keep every set. It adds no token and no motion.
+- **Split balance** (`SplitBalance`, inside the workout editor): planned sets per body group across one
+  rotation, each saved workout counted once, in the sentence-case `label` role. A group reads "12 sets
+  touch it", which is a count of sets and never a total of its muscles, or "Nothing planned" in `warning`
+  with its `exclamationmark.triangle` symbol, so the gap is carried by shape and word as well as colour.
+  The neck is left out until something is planned for it. It sets no target and makes no judgement, and
+  it says when planned sets sit on movements with no muscles recorded, because those count toward no
+  group. It adds no token and no motion.
+- **Progress board** (`ProgressBoardView`, `ProgressScreen`, the Progress tab): every trained movement,
+  one row per movement and machine, grouped by body part under `SectionLabel` headers, with the movements
+  that have no body part last under the `warning` header. A row is a `SelectionCardButtonStyle` card: the
+  movement in `headline`, its machine in `provenance`, a small `plateBlue` sparkline of the last dozen
+  sessions (hidden from VoiceOver and dropped at accessibility sizes), and one sentence that names its
+  metric: "Estimated max +8% in 6 weeks", or "Not enough history" in `chalkDim` when no session sits six
+  weeks back. Beside every estimated-max figure sits its `CertaintyBadge`, drawn over the card's corner
+  as its own control so it never nests inside the card's button. A movement with no record in its last
+  three sessions is flagged "Stalled · 3 sessions" in `warning` with `pause.circle`, and no advice. "Most
+  improved" at the top repeats the three biggest gains. Empty, it says "Log a workout and your progress
+  shows up here"; loading is a quiet line and a failed read says so, never an empty board. It adds no
+  token and no motion.
+- **Scorecard** (`WorkoutReceiptView`, `ScorecardCopy`): the block at the top of a finished workout's
+  receipt, in `hardsetCard`. The headline, "Beat last time on 5 of 7", is in `readout`; a record line sits
+  on `plateYellowSurface` with its trophy; "Biggest gain: Chest press, estimated max +6%" names its
+  metric, and an estimated gain wears a non-interactive `CertaintyCapsule` on its own line beneath it
+  (the share text says the same in words, "· Moderate confidence", because the receipt is rendered into an
+  image and holds no controls); and each movement that earned a mark has a row: `plateGreen` with an up arrow for a win, the
+  figures of the set ("+1 rep", "+2.5 kg · +1 rep"), `plateYellow` with the trophy for a record that no
+  set beat its partner on, and `chalkDim` for "Matched" and "First time on this machine". Counted by
+  movement. A movement with no earlier session on its machine is a first time and is left out of both
+  numbers; one that fell short is carried by the count and never drawn as a failure. The same words open
+  the share text, and the same view is rendered into the shared image. Finishing a workout opens its
+  receipt here; a discarded workout, and one finished with no sets, have none to open. It adds no token
+  and no motion.
+- **Save as workout** (receipt): a `secondary` button under the share actions, offered for a workout with
+  sets and not for an imported one, whose movements are kept apart from the catalogue's. It asks for a
+  name in `NameEntrySheet`, builds the plan from the workout's movements in their order with the number
+  of working sets logged, never counting warm-ups, and opens the workout editor on it as a new workout.
+  Once saved, a neutral `info` banner says where it is. It adds no token and no motion.
 - **Selection** (`SelectionRow`, `SelectionCardButtonStyle`, `SelectionIndicator`): selected choices
   take the plate blue ring and `plateBlueSurface`, and the trailing indicator swaps an empty ring
   for a filled check, so the choice is carried by shape as well as colour. A pressed selection
@@ -308,6 +385,23 @@ Selection rows, the unit switch and pickers stay silent.
     machined face, so a tag never imitates a control.
   - Reduce Motion drops the scale and keeps only the fill or opacity change. Disabled controls are
     never dimmed by a press style, so saved rows and inert titles keep full contrast.
+- **Target line** (set row): when a movement has a rep range and history on this exact machine, an
+  unlogged row is prefilled with the double-progression target and says where it came from in `provenance`
+  and `chalkDim`: "Target · One more rep than last time", "Top of your range; hold it", or "Every set hit
+  the top of your range: add one step" (one plate, "assumed step", when the machine has no saved step).
+  The "Last time" column still shows what last time was, so a target is never read as history. History
+  borrowed from another machine gives no target and the prefill is as it always was. It adds no motion.
+- **Beat mark** (set row): once a set is logged, a tag-shaped capsule under the values says how it compares
+  with the same set last time on this machine, in the figures of the set: "+1 rep", "+2.5 kg", "+5 lb · +1
+  rep", never a bare "Beat". A win is `plateGreen` on `plateGreenSurface` with an up arrow; a match is
+  "Matched" in `chalkDim` on `steelRaised` with an equals sign, so neither is carried by colour alone. It
+  wears a 0.35 hue outline, a decorative stroke like a banner's that never carries meaning and is exempt
+  from the 3:1 boundary rule, because the capsule's own fill vanishes on the logged row's tint. At
+  accessibility sizes, where its words can wrap, it takes the control radius instead of a capsule. A
+  set that fell short, a warm-up, a set with no partner and a set done on another machine show nothing.
+  It arrives through `hardsetArrival()`, the insertion-only opacity reveal on `Motion.reveal`, so the row's
+  height changes at once and nothing animates layout. The row's spoken label says it in the same words
+  ("plus 1 rep on last time"). It adds no token and no motion beyond `Motion.reveal`.
 - **Replaceable prefill**: when the keypad opens on a value the next key will replace, its display
   draws that value on `plateBlueSurface` with a hairline `plateBlue` ring, as selected text, until
   the first edit. Static; no motion.
@@ -317,7 +411,13 @@ Selection rows, the unit switch and pickers stay silent.
   muscles are solid plate blue; muscles that are counted but not modelled are hollow (plate blue
   outline on `plateBlueSurface`) and say so in words beside the bar.
 - **Charts**: one series per machine with its own colour and point symbol, a custom legend in app
-  type, and machine changes as 2 pt dashed `warning` rules.
+  type, and machine changes as 2 pt dashed `warning` rules. The chart opens on the estimated max,
+  which rises when the lifter does more weight or more reps, with the heaviest load as the other
+  segment; it opens on the heaviest load when no estimate can be made. A session that set a record is
+  marked on its line with a `star.fill` in `plateYellow`, drawn over the machine's own point, and the
+  legend says what the star means, so colour is never the only carrier. Beneath the chart a "Best at
+  each weight" table lists, per machine, the most reps at each weight and the day they were first
+  reached ("90 lb · 12 reps · Nov 4"): facts from the sets, so it carries no certainty badge.
 
 ## Accessibility floor
 

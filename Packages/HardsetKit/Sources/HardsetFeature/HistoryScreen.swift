@@ -34,6 +34,7 @@ public struct HistoryScreen: View {
   private let store: HistoryStore
   private let unit: WeightUnit
   private let progression: ProgressionStore?
+  private let saveAsWorkout: SaveAsWorkoutTools?
   private let onHistoryChanged: (() -> Void)?
   private let onShowSettings: (() -> Void)?
   /// Changes when saved history changed somewhere this screen cannot see, such as an import in
@@ -46,6 +47,7 @@ public struct HistoryScreen: View {
   /// - Parameters:
   ///   - progression: Opens each movement's load history from a receipt. Defaults to the receipt
   ///     store's own reader over the same database.
+  ///   - saveAsWorkout: Offers "Save as workout" on a receipt, when present.
   ///   - onHistoryChanged: Called after a workout or set was deleted, so other screens showing
   ///     history, such as the start screen's last workout, can re-read.
   ///   - onShowSettings: Draws the Settings button in the header, as the Train tab does.
@@ -55,6 +57,7 @@ public struct HistoryScreen: View {
     unit: WeightUnit,
     receipts: ReceiptStore? = nil,
     progression: ProgressionStore? = nil,
+    saveAsWorkout: SaveAsWorkoutTools? = nil,
     onHistoryChanged: (() -> Void)? = nil,
     onShowSettings: (() -> Void)? = nil,
     dataRevision: Int = 0
@@ -66,6 +69,7 @@ public struct HistoryScreen: View {
     // The receipt store reads the same database, so load history works even when the caller only
     // wires receipts.
     self.progression = progression ?? receipts?.progression
+    self.saveAsWorkout = saveAsWorkout
     self.onHistoryChanged = onHistoryChanged
     self.onShowSettings = onShowSettings
   }
@@ -118,7 +122,7 @@ public struct HistoryScreen: View {
       if let receipts {
         WorkoutReceiptScreen(
           sessionID: id.id, store: receipts, unit: unit, progression: progression,
-          onChanged: { receiptChanged = true }
+          saveAsWorkout: saveAsWorkout, onChanged: { receiptChanged = true }
         )
         .hardsetSheet()
       }
