@@ -56,8 +56,14 @@ public enum Tokens {
     /// The momentary fill of a pressed key or secondary button. In both normal appearances it is
     /// darker than `steelRaised`, so a press sinks rather than lights up. Opaque, so text on it
     /// stays measurable rather than depending on what happens to be underneath.
+    ///
+    /// Dark is `#111216`, below the first sleeker-pass spec's `#1B1C22`. With no outline to hold the
+    /// boundary, that value was 1.01:1 against the new dark `steel`, so a pressed button or chip
+    /// inside a card lost its face entirely. `#111216` is 1.09:1 against `steel`, 1.08:1 against
+    /// `canvas` and 1.24:1 below `steelRaised`, so it reads as sunk on every surface it is pressed
+    /// on. `Tools/check_contrast.py` gates both steps.
     public static let steelPressed = swatch(
-      light: 0xE6E6EB, dark: 0x1B1C22, highLight: 0xE6E6EA, highDark: 0x26262B
+      light: 0xE6E6EB, dark: 0x111216, highLight: 0xE6E6EA, highDark: 0x26262B
     )
     /// Retired with the machined face it lit. Nothing draws a raised edge any more.
     ///

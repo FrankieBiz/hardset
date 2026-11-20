@@ -55,11 +55,16 @@ BOUNDARY_ON = {"controlEdge": SURFACES + ["steelPressed"]}
 # quietly flatten it. Each floor sits just under the value the design was built around (dark
 # 1.18, 1.14 and 1.34; light 1.12, 1.16 and 1.12). Normal appearances only: under Increase Contrast
 # the steps collapse to one colour by design, and the outline carries the structure instead.
-# (upper surface, lower surface, floor in dark, floor in light)
+# The two pressed steps guard a pressed face against vanishing: with no outline, a pressed control
+# on a card or on the canvas must still be distinguishable from what it is pressed on. The ratio is
+# symmetric, so "upper" and "lower" only name the pair.
+# (surface, surface, floor in dark, floor in light)
 STEPS = [
     ("steel", "canvas", 1.17, 1.11),
     ("steelRaised", "steel", 1.13, 1.15),
     ("controlFillOnCanvas", "canvas", 1.33, 1.11),
+    ("steel", "steelPressed", 1.08, 1.22),
+    ("canvas", "steelPressed", 1.07, 1.10),
 ]
 
 

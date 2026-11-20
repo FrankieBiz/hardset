@@ -70,7 +70,7 @@ primary appearance; light is derived from the same roles and held to the same fl
 | `steel` | `#1A1B21` | `#FFFFFF` | Cards, rows, sheets' content |
 | `steelRaised` | `#24262D` | `#EEEEF2` | Fields, keys, chips and secondary buttons that sit on `steel` |
 | `controlFillOnCanvas` | `#24262D` | `#FFFFFF` | Fill of a control that sits directly on `canvas`: header buttons, Train and Settings buttons |
-| `steelPressed` | `#1B1C22` | `#E6E6EB` | Momentary pressed fill, darker than `steelRaised` so a press sinks |
+| `steelPressed` | `#111216` | `#E6E6EB` | Momentary pressed fill, darker than `steelRaised` so a press sinks, and distinct from both `steel` and `canvas` so a pressed control with no outline keeps a visible face |
 | `hairline` | `#2E3039` | `#DEDEE4` | Decorative separators inside a card; never a boundary |
 | `controlEdge` | `#7B7E8C` | `#7E8190` | The outline of an input, and of every control under Increase Contrast or Button Shapes |
 | `chalk` | `#F3F3F5` | `#141519` | Chalk / graphite body text and values |
@@ -93,7 +93,9 @@ Steps: surfaces separate by fill, not by line. Canvas to `steel` is 1.18:1 in da
 light; `steelRaised` on `steel` is 1.14:1 in dark and 1.16:1 in light. `steelRaised` cannot be
 brighter in dark: `plateBlue` text on it is 7.12:1 against the 7:1 floor. A control that sits
 directly on `canvas` takes `controlFillOnCanvas`, because light `steelRaised` on `canvas` is only
-1.04:1. The machined edge colours `edgeLight` and `edgeShadow` are retired with the raised face they
+1.04:1. `steelPressed` is below the original proposal in dark (`#111216`, not `#1B1C22`): with no outline, the
+proposed value was 1.01:1 against `steel`, so a pressed control inside a card lost its face; this one is 1.09:1
+against `steel`, 1.08:1 against `canvas` and still darker than `steelRaised`. The machined edge colours `edgeLight` and `edgeShadow` are retired with the raised face they
 drew. `edgeShadow` is deleted. `edgeLight` is still defined for one reader, the staged phone's rim in
 `ScaledPhoneFrame`, which was held out of the phase that retired the machined skin; that rim becomes
 `hairline` and the token is deleted when the file next changes. Nothing else uses it.
