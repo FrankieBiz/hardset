@@ -333,9 +333,9 @@ Selection rows, the unit switch and pickers stay silent.
   width. A frame that is not interactive is inert to touch and marked hidden from VoiceOver; an
   interactive one, for the steps that ask the lifter to tap, is neither. The marking does not reach the
   staged roots' UIKit-hosted tab bars: XCUITest still lists two of them at every inert tour step (open
-  finding, CI run 44738794794; a hosting controller changed the roots' appearance and a single hidden
-  leaf changed nothing), so how VoiceOver reads the tour is for a device. It adds no token and no
-  motion.
+  finding, CI run 44755327282, recorded in `docs/KNOWN-ISSUES.md`; a hosting controller changed the
+  roots' appearance and a single hidden leaf changed nothing), so how VoiceOver reads the tour is for
+  a device. It adds no token and no motion.
 - **Pitch pages** (`PitchPage`, `PitchSetRowPage`, `PitchEstimatePage`, `PitchRestPage`): three
   pages with one anatomy, a `title` headline, two lines in `label` and one live element that is the
   real component, never a picture. "One tap per set" is a real set row prefilled from last time; its
