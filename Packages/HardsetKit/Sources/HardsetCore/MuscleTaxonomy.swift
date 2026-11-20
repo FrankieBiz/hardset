@@ -494,7 +494,7 @@ public struct DecodedAttribution: Hashable, Sendable {
   public let contributions: [MuscleContribution]
   /// Elements that could not be read at all.
   public let unreadableEntryCount: Int
-  /// Fields that were present but unparseable and fell back to a default.
+  /// Fields that were absent or present but unparseable and fell back to a default.
   public let degradedFieldCount: Int
 
   public init(
@@ -566,6 +566,7 @@ public enum MuscleColumn {
         }
       } else {
         role = .indirect
+        degraded += 1
       }
 
       let certainty: Certainty

@@ -921,3 +921,59 @@ configuration and physical-device validation remain documented separately.
 - Failed approaches and traps: `#expect(try …)` and `#expect(await …)` do not compile in these tests (hoist to a local); a mutating call cannot sit inside `#expect`; async GRDB `read`/`write` need `await` in async tests; `ORDER BY … id DESC` tie-breaks forced a sort in the query gate (dropped for the last-done lookups, whose timestamps cannot tie); `SELECT *` in the gate's before-and-after comparison widens when a migration adds columns (name the columns). A mutation check (break the rule, watch the test fail) was run for the rules most likely to regress.
 - Open and owner decisions: delivery (a PR, or a push to `main` per AGENTS.md, which the global rules default to a PR); imported (Strong or Hevy) history never appears on the Progress tab, because the importer files it under separate "Unevaluated Machine" movements; rep ranges and set counts are 44 pt steppers, not keypad fields; equipment in the movement editor is chips, not a segmented control (five segments cannot hold "Bodyweight" at 402 pt); a hand-built workout cannot pin a machine (a start uses the machine last used at the gym); the single-exercise history still replays every session for record stars (about 0.8 s per 2,000 sets of one machine in a debug build); the tour has no Progress step. Deferred minors: renaming a new movement to an existing name in the picker or workout-editor sheet returns the existing movement and drops the tagging just typed (the Library refuses it); the Progress badge shows the latest estimate's certainty, not the weaker of the two estimates behind the six-week change (the scorecard does take the weaker); a machine movement with no machine has no series on the board; Most improved ranks percentages of different metrics together; the live set-row comparison and the receipt scorecard pick their earlier session by different rules.
 - Next concrete step: run `make mac-test` (or push the branch for the macOS CI) and read the new snapshot images, then choose the delivery.
+
+## Full-app review and defect fix wave — 2026-11-19
+
+- Maintainer: FrankieBiz <frankabisignano@gmail.com>.
+- Worktree `/home/frankbiz/orca/workspaces/hardset/flyingfish`; branch
+  `FrankieBiz/full-app-review-and`; baseline `9aa498b` (identical to `origin/main`, clean).
+- Objective: an independent review of the whole app, then correction of every confirmed defect and
+  inconsistency that does not require a device or a product decision.
+- Method: four read-only reviewers (Core, Store, UI, Feature/app shell) plus a coordinator pass over
+  docs, tooling, migrations and the generated project. Findings were re-checked against source
+  before any edit; documented product refusals were left alone.
+- Core fixes: a trailing decimal point no longer reads as a typed 0 kg (`NumericEntryBuffer.value`,
+  and adjusters no longer invent a value); a missing muscle `role` now counts as degraded instead of
+  silently halving credit; `LoadText` writes thousand-separator-free loads so receipt, chart and
+  logger agree; CSV preserves rows of empty cells; an inverted closed timeline is reported as
+  implausible instead of rendering a session with no length; a load above the plausibility ceiling
+  cannot become an unbeatable record; progression points, series and machine changes use total
+  orders (dictionary order no longer reorders equal timestamps); `MachineChange.id` is unique;
+  machine-change sentences use the locale's decimal separator; negative set indexes and a zero-row
+  resume are handled; the catalogue's citation path is corrected.
+- Store fixes: `recentMachines` scopes to the gym's machines before applying recency (the old code
+  could starve a quiet gym out of a global 10-machine window); `sets(in:)` returns performed order;
+  archived-gym fallback for the learned default; user-created movements sort newest-first as
+  documented; archive operations verify a row changed; session/plan reads have deterministic
+  tie-breaks; `logSet` refuses an untracked plan row; stale comments about bodyweight sync, the
+  unused rest table and CSV completeness are corrected.
+- UI fixes: the record certainty badge is reachable by VoiceOver again; rest durations are spoken as
+  durations; fractional sets use one locale-aware formatter; the next-rest chooser grids at
+  accessibility sizes instead of truncating; the session and rest bar use `hardsetArrival()` instead
+  of private copies; the muscle map draws a token gauge; volume gaps use `HardsetTag`; warm-ups are
+  pluralised; the keypad's rest countdown announces its time; tracked display/hero roles keep their
+  tracking; history cards press at 0.97; decorative symbols are hidden; dead `rowTitle`, methodology
+  helpers and prose were removed or corrected.
+- Feature/app fixes: the privacy manifest declares FileTimestamp (`C617.1`) for the export sweep;
+  the tour's staged roots no longer read or write the real pending-gym scene value and no longer
+  offer a dead replay row; the tour's Settings line matches what is shown; replay has a Close
+  control; app/widget plist versions come from build settings; `HealthBridge` no longer force-unwraps
+  a calendar date; the unused `RestTimerHooks.hasError` is removed; the light-mode UI test now
+  asserts its screens and the unused appearance parameter is gone.
+- Documentation corrected to the shipped state: `README.md`, `AGENTS.md` (counts, `Tokens.Text`,
+  `HardsetHealth`), root `HANDOFF.md` sections 2/7/8 and its status banner, and the two false claims
+  in `docs/MAC-VERIFICATION.md` about iCloud entitlements and a clean accessibility audit.
+- Verification: Linux `make check` exits 0 — 199 Swift files parsed, 240 Core tests in 29 suites,
+  304 Store tests in 30 suites, all eight query-plan gates, and 184 contrast pairs. The project
+  generator produces no diff. Native compilation and the UI/snapshot suites are for the macOS CI
+  lane; this entry does not claim them.
+- Settled: open-workout lookup keeps its index-serving `startedAt`-only order (the app never holds
+  two open sessions); CSV export stays a spreadsheet format and is documented as not a restore
+  format; `Tokens.Haptic.clank` stays as the named system fallback while `ClankPlayer` owns playback.
+- Known remaining, deliberately not changed: UI-test data is still shared between journeys (no store
+  reset); four `.sheet` modifiers on one anchor need device confirmation; the last-workout card still
+  disappears on a failed refresh by documented policy; `TourFixtures` builds on the main actor;
+  `HardsetEnvironment` is still constructed per root body evaluation; native CI for `9aa498b` on
+  `main` failed only because no macOS runner was acquired (the same SHA passed on the feature branch).
+- Next concrete step: push this branch and confirm the native CI run compiles the app and widget,
+  then finish the delivery protocol after it is green.

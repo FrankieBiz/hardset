@@ -80,13 +80,14 @@ public struct NumericPad: View {
 
   /// A step that would invent a value or overflow the field is disabled rather than applied.
   ///
-  /// Subtracting from an empty field used to write "0", which reads as a value and made the row
-  /// loggable at a load nobody typed. Adding past the field's digit limit produced a number the
-  /// keys themselves could never enter.
+  /// Adjusting only ever changes a number the lifter has typed: an empty field has nothing to
+  /// step from, so every adjuster is off until a value exists. Subtracting below zero is refused
+  /// for the same reason the operation itself clamps.
   private func isAdjusterEnabled(_ delta: Double) -> Bool {
-    if delta < 0 { return buffer.value != nil }
+    guard let current = buffer.value else { return false }
+    if delta < 0 { return current > 0 }
     let limit = (0..<buffer.maximumIntegerDigits).reduce(1.0) { power, _ in power * 10 }
-    return (buffer.value ?? 0) + delta < limit
+    return current + delta < limit
   }
 
   private var keys: [[Key]] {
@@ -178,18 +179,20 @@ public struct NumericPad: View {
       }
       Spacer(minLength: Tokens.Spacing.snug)
       if let restEndsAt {
+        let interval = Date()...max(restEndsAt, Date())
+        let remaining = Text(timerInterval: interval, countsDown: true)
         HStack(spacing: Tokens.Spacing.tight) {
           Image(systemName: "timer")
             .accessibilityHidden(true)
           // System-rendered from the deadline, like the rest bar it stands in for.
-          Text(timerInterval: Date()...max(restEndsAt, Date()), countsDown: true)
+          remaining
             .lineLimit(1)
             .fixedSize()
         }
         .font(Tokens.Text.figure)
         .foregroundStyle(Tokens.Color.plateBlue)
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel("Resting")
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(Text("Resting, \(remaining) remaining"))
       }
     }
     .padding(.horizontal, Tokens.Spacing.tight)

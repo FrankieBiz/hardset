@@ -205,6 +205,16 @@ struct ExerciseLogStateTests {
     #expect(state.loggedCount == 0)
   }
 
+  @Test("A negative set index asks for nothing rather than the final set")
+  func negativeIndexHasNoSuggestion() {
+    let key = ProgressionKey(exerciseID: exercise, machineID: machine)
+    let state = ExerciseLogState.build(
+      exerciseID: exercise, machineID: machine, exerciseName: "Leg Press",
+      snapshot: snapshot(key: key, sets: [(100, 10), (105, 8)])
+    )
+    #expect(state.suggestion(forSetIndex: -1) == nil)
+  }
+
   /// Within a session the honest suggestion is what you just did, not last week.
   @Test("A new row opens at what was just logged")
   func appendUsesThisSession() {

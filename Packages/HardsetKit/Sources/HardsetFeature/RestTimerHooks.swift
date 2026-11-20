@@ -12,10 +12,8 @@ import HardsetCore
 @MainActor
 public struct RestTimerHooks {
   public var metadata: () -> RestMetadata?
-  public var hasError: () -> Bool
   /// What is wrong with the rest timer, so the interface can say it in the right words and offer
-  /// the action that can actually help. `nil` while it works. `hasError` stays for callers that
-  /// only need to know that something is wrong.
+  /// the action that can actually help. `nil` while it works.
   public var issue: () -> RestTimerIssue?
   public var retry: () -> Void
   /// Replaces a saved rest that cannot be read with no rest. Offered only for
@@ -30,7 +28,6 @@ public struct RestTimerHooks {
   public init(
     state: @escaping () -> RestTimerState = { .idle },
     metadata: @escaping () -> RestMetadata? = { nil },
-    hasError: @escaping () -> Bool = { false },
     issue: @escaping () -> RestTimerIssue? = { nil },
     retry: @escaping () -> Void = {},
     resetRestTimer: @escaping () -> Void = {},
@@ -40,7 +37,6 @@ public struct RestTimerHooks {
     cancel: @escaping () -> Void = {}
   ) {
     self.metadata = metadata
-    self.hasError = hasError
     self.issue = issue
     self.retry = retry
     self.resetRestTimer = resetRestTimer

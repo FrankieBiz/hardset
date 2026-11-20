@@ -35,6 +35,9 @@ public struct SessionTimeline: Hashable, Sendable, Codable {
   /// True when the recorded span exceeds what a human workout can be. Used to quarantine
   /// bad rows instead of rendering them as achievements.
   public var isImplausible: Bool {
+    // A closed session with no duration can only come from an inverted or corrupt span. It is
+    // reported as unknown length rather than rendered as a session with no time at all.
+    if finishedAt != nil, duration == nil { return true }
     guard let duration else { return false }
     return duration > Self.plausibleLimit
   }

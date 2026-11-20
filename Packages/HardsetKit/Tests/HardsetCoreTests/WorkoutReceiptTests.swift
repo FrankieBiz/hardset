@@ -155,6 +155,10 @@ struct LoadTextTests {
     #expect(LoadText.entered(102.25, in: .kilograms, locale: posix) == "102.25")
     #expect(LoadText.entered(100, in: .pounds, locale: posix) == "220.46")
     #expect(LoadText.entered(WeightUnit.pounds.toKilograms(225), in: .pounds, locale: posix) == "225")
+    // No digit grouping: the logger writes a typed 1002.5 the way the keypad took it.
+    #expect(LoadText.entered(1002.5, in: .kilograms, locale: posix) == "1002.5")
+    #expect(
+      LoadText.entered(1002.5, in: .kilograms, locale: Locale(identifier: "de_DE")) == "1002,5")
   }
 
   /// An estimate implying ten-gram precision reads as a measurement.

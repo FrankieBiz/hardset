@@ -38,17 +38,31 @@
 				<string>CA92.1</string>
 			</array>
 		</dict>
+		<dict>
+			<!-- File timestamp, for this app's own export folders only.
+			     DataTransferStore.removeStaleExports reads a folder's content modification date
+			     to sweep exports older than an hour. C617.1 covers files inside the app's own
+			     container, which is the only place this call site touches. This is our own use,
+			     not GRDB's: the note below about the database library does not cover it. -->
+			<key>NSPrivacyAccessedAPIType</key>
+			<string>NSPrivacyAccessedAPICategoryFileTimestamp</string>
+			<key>NSPrivacyAccessedAPITypeReasons</key>
+			<array>
+				<string>C617.1</string>
+			</array>
+		</dict>
 	</array>
 
 	<!-- Not declared, on purpose:
-	     * FileTimestamp / DiskSpace on GRDB's account. GRDB 7.11.1 ships its own manifest with
-	       an EMPTY NSPrivacyAccessedAPITypes, calls no timestamp APIs (only fileExists and
-	       removeItem), and links libsqlite3 dynamically, so SQLite's internal stat/fstat never
-	       enter our binary. This flips only if SQLite is ever statically linked (SQLCipher or a
-	       vendored amalgamation) -- verify before upload with:
+	     * DiskSpace on GRDB's account. GRDB 7.11.1 ships its own manifest with an EMPTY
+	       NSPrivacyAccessedAPITypes, calls no timestamp APIs (only fileExists and removeItem),
+	       and links libsqlite3 dynamically, so SQLite's internal stat/fstat never enter our
+	       binary. This flips only if SQLite is ever statically linked (SQLCipher or a vendored
+	       amalgamation) -- verify before upload with:
 	         nm -u Hardset.app/Hardset | grep -E 'getattrlist|_stat|_fstat|statfs'
+	       FileTimestamp IS declared above for our own export-folder sweep.
 	     * SystemBootTime, ActiveKeyboards: nothing in this stack calls them.
 	     Note SQLiteData and swift-structured-queries ship no manifest of their own, which is
-	     why the declaration above is ours to make. -->
+	     why the declarations above are ours to make. -->
 </dict>
 </plist>

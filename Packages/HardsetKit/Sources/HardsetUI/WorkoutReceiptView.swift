@@ -27,7 +27,7 @@ public struct WorkoutReceiptView: View {
   public var body: some View {
     VStack(alignment: .leading, spacing: Tokens.Spacing.section) {
       Text("HARDSET")
-        .font(Tokens.Text.display)
+        .hardsetText(.display)
         .foregroundStyle(Tokens.Color.plateBlue)
       VStack(alignment: .leading, spacing: Tokens.Spacing.tight) {
         Text(receipt.title.isEmpty ? "Workout receipt" : receipt.title)

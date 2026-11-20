@@ -85,6 +85,13 @@ public struct OnboardingFlow: View {
   /// A fixed-height row, so the pages do not jump when "Skip" arrives on the second page.
   private var topBar: some View {
     HStack {
+      // A replay is presented full screen, and Welcome offers no Skip, so it needs a way out that
+      // does not require walking the tour again.
+      if case .replay = model.mode {
+        Button("Close") { onFinish(nil) }
+          .buttonStyle(HardsetButtonStyle(.quiet, fullWidth: false))
+          .accessibilityLabel("Close the tour")
+      }
       Spacer()
       if model.canSkip {
         Button("Skip") { model.skip() }

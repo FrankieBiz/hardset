@@ -95,7 +95,9 @@ public nonisolated struct GymStore: Sendable {
   /// would either orphan them or cascade away real training history.
   public func archiveGym(_ id: GymID) throws {
     try database.write { db in
-      try Gym.where { $0.id.eq(id.rawValue) }.update { $0.isArchived = #bind(true) }.execute(db)
+      try Gym.where { $0.id.eq(id.rawValue) && !$0.isArchived }
+        .update { $0.isArchived = #bind(true) }.execute(db)
+      guard db.changesCount == 1 else { throw EquipmentNameError.unavailable }
     }
   }
 
@@ -195,7 +197,9 @@ public nonisolated struct GymStore: Sendable {
 
   public func archiveMachine(_ id: MachineID) throws {
     try database.write { db in
-      try Machine.where { $0.id.eq(id.rawValue) }.update { $0.isArchived = #bind(true) }.execute(db)
+      try Machine.where { $0.id.eq(id.rawValue) && !$0.isArchived }
+        .update { $0.isArchived = #bind(true) }.execute(db)
+      guard db.changesCount == 1 else { throw MachineProfileError.machineUnavailable }
     }
   }
 
@@ -223,33 +227,39 @@ public nonisolated struct GymStore: Sendable {
   public func recentMachines(
     for exerciseID: ExerciseID, at gymID: GymID? = nil, limit: Int = 5
   ) throws -> [MachineRecord] {
-    try database.read { db in
-      let sets = try LoggedSet
-        .where { $0.exerciseID.eq(exerciseID.rawValue) }
-        .where { $0.machineID.isNot(nil) }
-        .order { $0.completedAt.desc() }
-        .limit(200)
-        .fetchAll(db)
-
-      var seen: [UUID] = []
-      for set in sets {
-        guard let machineID = set.machineID, !seen.contains(machineID) else { continue }
-        seen.append(machineID)
-        if seen.count >= limit * 2 { break }
+    guard limit > 0 else { return [] }
+    return try database.read { db -> [MachineRecord] in
+      // Scope to this gym's live machines *before* the recency window is truncated: the request
+      // is "the machine you last used here", and another gym's equipment must not fill the window.
+      let live: [Machine] = try Machine.where { !$0.isArchived }.fetchAll(db)
+      let scoped: [Machine]
+      if let gymID {
+        scoped = live.filter { $0.gymID == gymID.rawValue }
+      } else {
+        scoped = live
       }
-      guard !seen.isEmpty else { return [] }
+      guard !scoped.isEmpty else { return [] }
+      let ids: [UUID] = scoped.map(\.id)
+      let byID: [UUID: Machine] = Dictionary(uniqueKeysWithValues: scoped.map { ($0.id, $0) })
 
-      let rows = try Machine
-        .where { $0.id.in(seen) }
-        .where { !$0.isArchived }
-        .fetchAll(db)
-      let byID = Dictionary(uniqueKeysWithValues: rows.map { ($0.id, $0) })
-
-      return seen
-        .compactMap { byID[$0] }
-        .filter { gymID == nil || $0.gymID == gymID?.rawValue }
-        .prefix(limit)
-        .map(MachineRecord.init(row:))
+      // One indexed `LIMIT 1` per machine at this gym, rather than a global window that another
+      // gym's equipment can fill. The counts here are a building's worth of machines.
+      var recent: [(id: UUID, date: Date)] = []
+      for id in ids {
+        let latest: Date? = try LoggedSet
+          .where { $0.exerciseID.eq(exerciseID.rawValue) }
+          .where { $0.machineID.eq(id) }
+          .order { $0.completedAt.desc() }
+          .limit(1)
+          .fetchOne(db)?
+          .completedAt
+        if let latest { recent.append((id, latest)) }
+      }
+      recent.sort {
+        if $0.date != $1.date { return $0.date > $1.date }
+        return $0.id.uuidString < $1.id.uuidString
+      }
+      return recent.prefix(limit).compactMap { byID[$0.id] }.map(MachineRecord.init(row:))
     }
   }
 }
@@ -283,14 +293,20 @@ extension GymStore {
   }
 
   private nonisolated static func readLastUsedGym(in db: Database) throws -> GymID? {
-    let row = try Session
+    // The newest session naming a gym may name one since archived. Skip those and take the newest
+    // live gym under a small bound rather than losing the learned default entirely.
+    let rows = try Session
       .where { $0.gymID.isNot(nil) }
-      .order { $0.startedAt.desc() }
-      .fetchOne(db)
-    guard let raw = row?.gymID else { return nil }
-    // Archived gyms are not offered: the equipment list would be empty.
-    let live = try Gym.where { $0.id.eq(raw) }.where { !$0.isArchived }.fetchOne(db)
-    return live.map { GymID(rawValue: $0.id) }
+      .order { ($0.startedAt.desc(), $0.id.desc()) }
+      .limit(10)
+      .fetchAll(db)
+    for row in rows {
+      guard let raw = row.gymID else { continue }
+      // Archived gyms are not offered: the equipment list would be empty.
+      let live = try Gym.where { $0.id.eq(raw) && !$0.isArchived }.fetchCount(db)
+      if live > 0 { return GymID(rawValue: raw) }
+    }
+    return nil
   }
 }
 

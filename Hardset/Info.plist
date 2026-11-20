@@ -21,9 +21,9 @@
 	<key>CFBundleDisplayName</key>
 	<string>Hardset</string>
 	<key>CFBundleShortVersionString</key>
-	<string>1.0</string>
+	<string>$(MARKETING_VERSION)</string>
 	<key>CFBundleVersion</key>
-	<string>1</string>
+	<string>$(CURRENT_PROJECT_VERSION)</string>
 	<!-- The launch fills with the app's own canvas colour, so opening the app does not flash
 	     system white or black before the first screen draws. -->
 	<key>UILaunchScreen</key>

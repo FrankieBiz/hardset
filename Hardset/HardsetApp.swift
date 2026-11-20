@@ -129,7 +129,6 @@ private struct RootView: View {
       hooks: RestTimerHooks(
         state: { restTimer.state },
         metadata: { restTimer.metadata },
-        hasError: { restTimer.lastError != nil },
         issue: { restTimer.issue.map { RestTimerIssue($0) } },
         retry: { restTimer.retry() },
         resetRestTimer: { restTimer.resetAfterRecoveryFailure() },

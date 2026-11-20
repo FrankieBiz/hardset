@@ -296,4 +296,16 @@ struct CustomExerciseTests {
     #expect(after.sets(for: .lats) == 3)
     #expect(after.sets(for: .biceps) == 1.5)
   }
+
+  /// A movement the lifter just wrote belongs where they will look for it: first in their own
+  /// group, newest first. Filing it alphabetically hid it below older creations.
+  @Test("Newest user-created movements sort first")
+  func newestCustomMovementFirst() throws {
+    let database = try migratedDatabase()
+    let seeder = CatalogSeeder(database: database)
+    _ = try seeder.createCustomExercise(named: "Zercher Squat", now: now)
+    _ = try seeder.createCustomExercise(named: "Alpha Raise", now: now.addingTimeInterval(60))
+
+    #expect(try seeder.selectableExercises().map(\.name) == ["Alpha Raise", "Zercher Squat"])
+  }
 }

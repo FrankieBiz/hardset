@@ -714,6 +714,8 @@ public nonisolated struct LoggerStore: Sendable {
   }
 
   private static func readOpenSession(in db: Database) throws -> SessionRecord? {
+    // Ordered only by `startedAt` so the partial open-session index can serve both the filter and
+    // the order. The app never holds two open sessions at once, so there is no tie to break.
     try Session
       .where { $0.finishedAt.is(nil) }
       .order { $0.startedAt.desc() }
@@ -730,7 +732,7 @@ public nonisolated struct LoggerStore: Sendable {
   private static func readSets(in sessionID: SessionID, db: Database) throws -> [LoggedSetRecord] {
     try LoggedSet
       .where { $0.sessionID.eq(sessionID.rawValue) }
-      .order { $0.setOrdinal }
+      .order { ($0.completedAt, $0.setOrdinal, $0.id) }
       .fetchAll(db)
       .map(LoggedSetRecord.init(row:))
   }
@@ -749,7 +751,7 @@ public nonisolated struct LoggerStore: Sendable {
   ) throws -> [PlannedExerciseRecord] {
     let rows = try SessionExercise
       .where { $0.sessionID.eq(sessionID.rawValue) }
-      .order { $0.position }
+      .order { ($0.position, $0.id) }
       .fetchAll(db)
     guard !rows.isEmpty else { return [] }
 

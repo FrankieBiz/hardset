@@ -127,7 +127,7 @@ private struct StagedItemSheetModifier<Item: Identifiable & Hashable, Sheet: Vie
         }
         .animation(
           Tokens.Motion.adaptive(Tokens.Motion.state, reduceMotion: reduceMotion),
-          value: item?.id.hashValue
+          value: item
         )
         .onChange(of: item == nil) { old, new in
           if !old && new { onDismiss?() }

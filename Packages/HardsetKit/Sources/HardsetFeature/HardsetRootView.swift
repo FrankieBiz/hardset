@@ -141,18 +141,23 @@ public struct HardsetRootView: View {
   private let hooks: RestTimerHooks
   /// Replays the first-launch tour. `nil` where nothing hosts one, and Settings then offers no row.
   private let onShowTour: (() -> Void)?
+  /// False for the tour's staged roots, which must not read or write the scene's real pending gym
+  /// pick: their gyms are fixtures, and a drop would erase the daily app's choice.
+  private let restoresSceneState: Bool
 
   public init(
     environment: HardsetEnvironment,
     unit: WeightUnit? = nil,
     hooks: RestTimerHooks = .inert,
     restAfterSet: Duration? = nil,
-    onShowTour: (() -> Void)? = nil
+    onShowTour: (() -> Void)? = nil,
+    restoresSceneState: Bool = true
   ) {
     self.environment = environment
     self.unitOverride = unit
     self.hooks = hooks
     self.onShowTour = onShowTour
+    self.restoresSceneState = restoresSceneState
     _model = State(initialValue: WorkoutRootModel(
       logger: environment.logger, catalog: environment.catalog, gyms: environment.gyms,
       restAfterSet: restAfterSet, onStartRest: { duration, metadata in hooks.start(duration, metadata) }
@@ -339,7 +344,7 @@ public struct HardsetRootView: View {
     model.weightUnit = unit
     await model.load()
     guard model.isReady else { return }
-    restorePendingGymPick()
+    if restoresSceneState { restorePendingGymPick() }
     await refreshLastWorkout()
     await refreshSavedWorkouts()
   }
@@ -856,6 +861,7 @@ public struct HardsetRootView: View {
   /// it, so iOS ending the app in the background between choosing and starting does not lose it.
   private func chooseGym(_ id: GymID?) {
     model.selectedGym = id
+    guard restoresSceneState else { return }
     pendingGymPick = id?.rawValue.uuidString ?? Self.noGymPick
   }
 
@@ -935,7 +941,7 @@ public struct HardsetRootView: View {
       try model.startWorkout()
       startFailed = false
       // The pick is spent: the session recorded it, and the learned default takes over again.
-      pendingGymPick = ""
+      if restoresSceneState { pendingGymPick = "" }
     } catch {
       startFailed = true
     }

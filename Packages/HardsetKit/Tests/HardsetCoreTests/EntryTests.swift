@@ -50,8 +50,18 @@ struct NumericEntryBufferTests {
     buffer.appendDecimalSeparator()
     #expect(buffer.displayText == "0.")
     // "0." alone is not yet a number.
+    #expect(buffer.value == nil)
     buffer.append(digit: 5)
     #expect(buffer.value == 0.5)
+  }
+
+  /// A step button adjusts a number; it must not create one from an empty field.
+  @Test("Adjusting an empty buffer does nothing")
+  func adjustOnEmptyIsNoOp() {
+    var buffer = NumericEntryBuffer()
+    buffer.adjust(by: 2.5)
+    #expect(buffer.value == nil)
+    #expect(buffer.displayText.isEmpty)
   }
 
   @Test("Only one decimal point is accepted")

@@ -43,6 +43,7 @@ public struct HardsetEmptyState: View {
           .font(Tokens.Text.title)
           .foregroundStyle(Tokens.Color.chalkDim)
           .frame(width: socketSize, height: socketSize)
+          .accessibilityHidden(true)
           .background(
             Tokens.Color.steelRaised,
             in: RoundedRectangle(cornerRadius: Tokens.Radius.card)

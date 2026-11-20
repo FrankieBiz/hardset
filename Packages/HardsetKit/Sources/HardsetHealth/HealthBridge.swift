@@ -63,7 +63,9 @@ public final class HealthBridge {
     isWorking = true
     defer { isWorking = false }
     do {
-      let cutoff = Calendar.current.date(byAdding: .day, value: -365, to: Date())!
+      guard let cutoff = Calendar.current.date(byAdding: .day, value: -365, to: Date()) else {
+        return
+      }
       let predicate = HKQuery.predicateForSamples(withStart: cutoff, end: nil)
       let weights = try await HKSampleQueryDescriptor(predicates: [.quantitySample(type: HKQuantityType(.bodyMass), predicate: predicate)],
         sortDescriptors: [SortDescriptor(\.startDate, order: .reverse)], limit: 1000).result(for: health)

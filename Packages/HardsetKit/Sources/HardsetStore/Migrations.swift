@@ -238,9 +238,10 @@ public nonisolated enum HardsetMigrations {
 
       // MARK: Bodyweight
       //
-      // User-TYPED bodyweight only. This is the app's own data and may synchronize.
-      // Anything read out of HealthKit must go to "deviceHealthSamples" instead --
-      // see that table's note.
+      // User-TYPED bodyweight only. The table exists locally but is deliberately NOT registered
+      // with the SyncEngine (see `deferredSyncTableNames` and DECISIONS.md §5): a bodyweight tied
+      // to an identity is personal health information however it was entered. Anything read out
+      // of HealthKit goes to "deviceHealthSamples" instead -- see that table's note.
       try #sql(
         """
         CREATE TABLE "bodyweightEntries" (
