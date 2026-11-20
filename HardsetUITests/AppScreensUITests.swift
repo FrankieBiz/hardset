@@ -134,6 +134,17 @@ final class AppScreensUITests: XCTestCase {
       app.buttons["Finish"].tap()
     }
     XCTAssertTrue(app.buttons["Start workout"].waitForExistence(timeout: 5))
+    // Finishing opens the workout's receipt over the start screen, by design, and it stays up until
+    // it is closed. This journey never closed it, so the pictures and audits below that are named for
+    // the start screen, History and Volume were all of the receipt (main's own 17-history-with-workout
+    // and 18-volume-with-workout show it). It is audited here for what it is, then closed, so that
+    // what follows is those screens.
+    let receiptDone = app.buttons["Done"]
+    XCTAssertTrue(receiptDone.waitForExistence(timeout: 10), "Finishing a workout opens its receipt")
+    capture(app, "15b-workout-receipt")
+    audit(app, screen: "workout receipt")
+    receiptDone.tap()
+    XCTAssertTrue(waitUntilGone(receiptDone), "Done closes the receipt")
     capture(app, "16-start-last-workout")
     openTab(app, "History")
     capture(app, "17-history-with-workout")
@@ -634,6 +645,12 @@ final class AppScreensUITests: XCTestCase {
     finish.tap()
     XCTAssertTrue(app.buttons["Finish"].waitForExistence(timeout: 5))
     app.buttons["Finish"].tap()
+    // Finishing opens the receipt over the start screen. Left open it covers every screen the
+    // journey goes on to, so it is closed before the fixture is handed back.
+    let receiptDone = app.buttons["Done"]
+    XCTAssertTrue(receiptDone.waitForExistence(timeout: 10), "Finishing a workout opens its receipt")
+    receiptDone.tap()
+    XCTAssertTrue(waitUntilGone(receiptDone), "Done closes the receipt")
     XCTAssertTrue(app.buttons["Start workout"].waitForExistence(timeout: 5))
   }
 
