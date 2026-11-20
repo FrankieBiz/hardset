@@ -187,6 +187,22 @@ struct ProgressBoardStoreTests {
     #expect(history.machineChanges.isEmpty)
   }
 
+  @Test("Machine and cable movements with nil equipment explain the missing identity",
+    arguments: ["machine", "cable"])
+  func missingMachineIsExplicit(modality: String) async throws {
+    let database = try migratedDatabase()
+    let lift = try exercise(database, "Unidentified press", muscle: "chest", modality: modality)
+    try train(database, lift, sets: [(40, 8)], daysAgo: 1)
+    let board = try await ProgressBoardStore(database: database).loadBoard()
+    let row = try #require(board.sections.first?.rows.first)
+    #expect(row.id.machineID == nil)
+    #expect(row.machineName == "No machine recorded")
+    #expect(ProgressCopy.spokenRow(row).contains("No machine recorded"))
+    let chart = try await ProgressionStore(database: database).loadHistory(for: lift)
+    #expect(chart.series.count == 1)
+    #expect(chart.label(for: row.id) == "No machine recorded")
+  }
+
   @Test("Warm-ups never reach a trend")
   func warmupsAreNotTrained() async throws {
     let database = try migratedDatabase()

@@ -282,7 +282,8 @@ Selection rows, the unit switch and pickers stay silent.
   weeks back. Beside every estimated-max figure sits its `CertaintyBadge`, drawn over the card's corner
   as its own control so it never nests inside the card's button. A six-week change uses the weaker
   certainty of its two estimates. Imported history has its own series and says "Imported · machine
-  not recorded" in the same `provenance` role. A movement with no record in its last
+  not recorded" in the same `provenance` role. Machine and cable movements whose sets have no
+  machine say "No machine recorded" there and in the chart legend. A movement with no record in its last
   three sessions is flagged "Stalled · 3 sessions" in `warning` with `pause.circle`, and no advice. "Most
   improved · estimated max" at the top repeats the three biggest estimated-max gains; load and rep
   percentages stay in their own movement rows. Empty, it says "Log a workout and your progress

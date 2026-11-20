@@ -65,18 +65,24 @@ public nonisolated struct ProgressBoardStore: Sendable {
       guard let exercise = byExercise[key.exerciseID.rawValue] else { continue }
       let machine = key.machineID.flatMap { machines[$0.rawValue] }
       // An unknown modality is not assumed to be bodyweight, so it still estimates.
-      let estimates = ExerciseModality(rawValue: exercise.modality)?.estimatesOneRepMax ?? true
+      let modality = ExerciseModality(rawValue: exercise.modality)
+      let estimates = modality?.estimatesOneRepMax ?? true
       guard
         let trend = ProgressTrendAnalyzer.trend(
           key: key, samples: samples, incrementKg: machine?.stackIncrementKg,
           estimatesOneRepMax: estimates)
       else { continue }
+      let machineLabel: String?
+      if key.isImported { machineLabel = ProgressCopy.importedHistory }
+      else if let machine { machineLabel = MachineRecord(row: machine).displayName }
+      else if key.machineID == nil && (modality == .machine || modality == .cable) {
+        machineLabel = ProgressCopy.noMachineRecorded
+      } else { machineLabel = nil }
       entries.append(
         ProgressBoard.Entry(
           row: ProgressBoard.Row(
             trend: trend, exerciseName: exercise.name,
-            machineName: key.isImported ? "Imported · machine not recorded"
-              : machine.map { MachineRecord(row: $0).displayName }),
+            machineName: machineLabel),
           bodyPart: MuscleFilterCategory.category(for: MuscleKey(stored: exercise.primaryMuscle))
         ))
     }

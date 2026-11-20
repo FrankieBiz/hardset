@@ -153,6 +153,38 @@
         typeSize: .accessibility3) { Self.screen(board) }
     }
 
+    @Test func machineMovementWithoutMachineIdentity() async throws {
+      let database = try DatabaseQueue()
+      try HardsetMigrations.migrator().migrate(database)
+      let catalog = CatalogSeeder(database: database)
+      try catalog.seed(now: Self.day)
+      let lift = try #require(try catalog.selectableExercises().first { $0.modality == .machine })
+      let logger = LoggerStore(database: database)
+      let session = try logger.startSession(at: Self.day)
+      try logger.logSet(sessionID: session, exerciseID: lift.id,
+        draft: .init(weightKg: 40, reps: 8), at: Self.day)
+      try logger.finishSession(session, at: Self.day.addingTimeInterval(3600))
+      let board = try await ProgressBoardStore(database: database).loadBoard()
+      let history = try await ProgressionStore(database: database).loadHistory(for: lift.id)
+      try await Snapshot.capture("kit-progressboard-no-machine-dark", size: Self.phone) { Self.screen(board) }
+      try await Snapshot.capture("kit-progressboard-no-machine-light", size: Self.phone, style: .light) { Self.screen(board) }
+      try await Snapshot.capture("kit-progressboard-no-machine-ax3", size: CGSize(width: 402, height: 2400),
+        typeSize: .accessibility3) { Self.screen(board) }
+      try await Snapshot.capture("kit-progresschart-no-machine-dark", size: Self.tall) {
+        NavigationStack {
+          ScrollView {
+            ProgressionChartView(series: history.series.map {
+              .init(label: history.label(for: $0.key), points: $0.points)
+            }, unit: .kilograms, onExplain: {})
+            .padding(Tokens.Spacing.loose)
+          }
+          .background(Tokens.Color.canvas)
+          .hardsetNavigationTitle(lift.name)
+        }
+        .tint(Tokens.Color.plateBlue)
+      }
+    }
+
     // MARK: - Chart marks
 
     private static func point(
