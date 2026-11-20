@@ -120,6 +120,22 @@
           .tint(Tokens.Color.plateBlue)
         }
       }
+      try await Snapshot.capture("kit-progresschart-imported-ax3", size: CGSize(width: 402, height: 3000),
+        typeSize: .accessibility3) {
+        NavigationStack {
+          ScrollView {
+            ProgressionChartView(series: history.series.map {
+              .init(label: history.label(for: $0.key), points: $0.points,
+                recordSessionIDs: history.recordSessionIDs[$0.key] ?? [],
+                bestAtWeight: history.bestAtWeight[$0.key] ?? [])
+            }, unit: .kilograms, onExplain: {})
+            .padding(Tokens.Spacing.loose)
+          }
+          .background(Tokens.Color.canvas)
+          .hardsetNavigationTitle("Chest Press")
+        }
+        .tint(Tokens.Color.plateBlue)
+      }
     }
 
     @Test func changeWithWeakerPriorEstimate() async throws {
@@ -170,18 +186,23 @@
       try await Snapshot.capture("kit-progressboard-no-machine-light", size: Self.phone, style: .light) { Self.screen(board) }
       try await Snapshot.capture("kit-progressboard-no-machine-ax3", size: CGSize(width: 402, height: 2400),
         typeSize: .accessibility3) { Self.screen(board) }
-      try await Snapshot.capture("kit-progresschart-no-machine-dark", size: Self.tall) {
-        NavigationStack {
-          ScrollView {
-            ProgressionChartView(series: history.series.map {
-              .init(label: history.label(for: $0.key), points: $0.points)
-            }, unit: .kilograms, onExplain: {})
-            .padding(Tokens.Spacing.loose)
+      for accessible in [false, true] {
+        let suffix = accessible ? "ax3" : "dark"
+        try await Snapshot.capture("kit-progresschart-no-machine-" + suffix,
+          size: CGSize(width: 402, height: accessible ? 2400 : 1400),
+          typeSize: accessible ? .accessibility3 : .large) {
+          NavigationStack {
+            ScrollView {
+              ProgressionChartView(series: history.series.map {
+                .init(label: history.label(for: $0.key), points: $0.points)
+              }, unit: .kilograms, onExplain: {})
+              .padding(Tokens.Spacing.loose)
+            }
+            .background(Tokens.Color.canvas)
+            .hardsetNavigationTitle(lift.name)
           }
-          .background(Tokens.Color.canvas)
-          .hardsetNavigationTitle(lift.name)
+          .tint(Tokens.Color.plateBlue)
         }
-        .tint(Tokens.Color.plateBlue)
       }
     }
 

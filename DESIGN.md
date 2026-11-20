@@ -415,7 +415,8 @@ Selection rows, the unit switch and pickers stay silent.
   muscles are solid plate blue; muscles that are counted but not modelled are hollow (plate blue
   outline on `plateBlueSurface`) and say so in words beside the bar.
 - **Charts**: one series per machine with its own colour and point symbol, a custom legend in app
-  type, and machine changes as 2 pt dashed `warning` rules. The chart opens on the estimated max,
+  type, with equipment provenance allowed to wrap fully at accessibility sizes, and machine changes
+  as 2 pt dashed `warning` rules. The chart opens on the estimated max,
   which rises when the lifter does more weight or more reps, with the heaviest load as the other
   segment; it opens on the heaviest load when no estimate can be made. A session that set a record is
   marked on its line with a `star.fill` in `plateYellow`, drawn over the machine's own point, and the
