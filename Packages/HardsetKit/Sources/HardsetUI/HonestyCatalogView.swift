@@ -100,7 +100,8 @@ private struct HonestyBadgeStates: View {
   private var live: some View {
     VStack(alignment: .leading, spacing: Tokens.Spacing.snug) {
       honestyNote(
-        "Interactive badge at each level the engine can produce. The outline is full strength")
+        "Interactive badge at each level the engine can produce. Outlined in its hue only under "
+          + "Increase Contrast or Button Shapes")
       ForEach(HonestySample.walk, id: \.reps) { sample in
         CertaintyBadge(
           level: sample.level, methodology: sample.methodology, citation: sample.citation)
@@ -108,21 +109,21 @@ private struct HonestyBadgeStates: View {
     }
   }
 
-  /// The static capsule, which states a level without offering to open anything: a faint outline,
-  /// so it never imitates a control.
+  /// The static capsule, which states a level without offering to open anything: no outline in any
+  /// setting, so it never imitates a control.
   private var statics: some View {
     VStack(alignment: .leading, spacing: Tokens.Spacing.snug) {
-      honestyNote("Static capsule: the same word and symbol, a faint outline")
+      honestyNote("Static capsule: the same word and symbol, no outline")
       ForEach(HonestySample.walk, id: \.reps) { sample in
         CertaintyCapsule(level: sample.level, isInteractive: false)
       }
     }
   }
 
-  /// The badge pressed: the opacity press, with the capsule's outline and word at the same colour.
+  /// The badge pressed: the opacity press, with the capsule's word at the same colour.
   private var pressed: some View {
     VStack(alignment: .leading, spacing: Tokens.Spacing.snug) {
-      honestyNote("Pressed: dims to 80%, no steel face to sink")
+      honestyNote("Pressed: dims to 80%, no flat face to sink")
       HardsetPressFace(isPressed: true, reduceMotion: false) {
         CertaintyCapsule(level: .high, isInteractive: true)
           .frame(
@@ -203,7 +204,7 @@ private struct HonestyChipStates: View {
     CatalogSection("Assumption chip") {
       VStack(alignment: .leading, spacing: Tokens.Spacing.loose) {
         sample("Rest") { live(assumption) }
-        sample("Pressed: sinks to steelPressed, the edge and label stay full strength") {
+        sample("Pressed: sinks to steelPressed, the label stays full strength") {
           pressedFace(assumption)
         }
         sample("Long label: wraps, never truncates") { live(long) }
