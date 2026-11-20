@@ -228,7 +228,7 @@ public nonisolated struct ProgressionStore: Sendable {
     var recordSessions: [ProgressionKey: Set<SessionID>] = [:]
     var ledgers: [ProgressionKey: [BestAtWeight]] = [:]
     for one in series {
-      let samples = inputs.samples.filter { $0.machineID == one.key.machineID }
+      let samples = inputs.samples.filter { $0.machineID == one.key.machineID && $0.isImported == one.key.isImported }
       recordSessions[one.key] = ProgressTrendAnalyzer.recordSessionIDs(
         samples: samples, incrementKg: one.key.machineID.flatMap { inputs.increments[$0] },
         estimatesOneRepMax: inputs.estimatesOneRepMax
@@ -245,20 +245,23 @@ public nonisolated struct ProgressionStore: Sendable {
   private static func readSamples(for exerciseID: ExerciseID, limit: Int, in db: Database) throws
     -> [ProgressionSample]
   {
-    try LoggedSet
+    let rows = try LoggedSet
       .where { $0.exerciseID.eq(exerciseID.rawValue) }
       .where { !$0.isWarmup }
       .order { ($0.completedAt.desc(), $0.setOrdinal.desc(), $0.id.desc()) }
       .limit(limit)
       .fetchAll(db)
-      .reversed()
-      .map {
+    let sessionIDs = Array(Set(rows.map(\.sessionID)))
+    let imported = Set(try Session.where { $0.id.in(sessionIDs) && $0.notes.like("Imported from %") }
+      .select(\.id).fetchAll(db))
+    return rows.reversed().map {
         ProgressionSample(
           sessionID: SessionID(rawValue: $0.sessionID),
           machineID: $0.machineID.map(MachineID.init(rawValue:)),
           weightKg: $0.weightKg,
           reps: $0.reps,
-          completedAt: $0.completedAt
+          completedAt: $0.completedAt,
+          isImported: imported.contains($0.sessionID)
         )
       }
   }
@@ -318,6 +321,7 @@ public nonisolated struct ProgressionHistory: Hashable, Sendable {
 
   /// Label for a series. Free-weight work and a deleted machine are named rather than blank.
   public func label(for key: ProgressionKey) -> String {
+    if key.isImported { return "Imported · machine not recorded" }
     guard let machineID = key.machineID else { return "Free weight" }
     return machineNames[machineID] ?? "Unnamed machine"
   }

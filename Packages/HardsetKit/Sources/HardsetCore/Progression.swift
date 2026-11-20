@@ -7,19 +7,22 @@ public struct ProgressionSample: Hashable, Sendable {
   public let weightKg: Double
   public let reps: Int
   public let completedAt: Date
+  public let isImported: Bool
 
   public init(
     sessionID: SessionID,
     machineID: MachineID?,
     weightKg: Double,
     reps: Int,
-    completedAt: Date
+    completedAt: Date,
+    isImported: Bool = false
   ) {
     self.sessionID = sessionID
     self.machineID = machineID
     self.weightKg = weightKg
     self.reps = reps
     self.completedAt = completedAt
+    self.isImported = isImported
   }
 }
 
@@ -155,17 +158,18 @@ public enum ProgressionAnalyzer {
     from samples: [ProgressionSample], exerciseID: ExerciseID, estimatesOneRepMax: Bool = true
   ) -> [ProgressionSeries] {
     // Group by machine, then by session within it.
-    var byMachine: [MachineID?: [SessionID: [ProgressionSample]]] = [:]
+    var byMachine: [ProgressionKey: [SessionID: [ProgressionSample]]] = [:]
     for sample in samples {
-      byMachine[sample.machineID, default: [:]][sample.sessionID, default: []].append(sample)
+      let key = ProgressionKey(exerciseID: exerciseID, machineID: sample.machineID, isImported: sample.isImported)
+      byMachine[key, default: [:]][sample.sessionID, default: []].append(sample)
     }
 
     return byMachine
-      .map { machineID, sessions in
+      .map { key, sessions in
         let points = sessions
           .map { sessionID, samples in
             point(
-              sessionID: sessionID, machineID: machineID, samples: samples,
+              sessionID: sessionID, machineID: key.machineID, samples: samples,
               estimatesOneRepMax: estimatesOneRepMax
             )
           }
@@ -174,7 +178,7 @@ public enum ProgressionAnalyzer {
             return $0.sessionID.rawValue.uuidString < $1.sessionID.rawValue.uuidString
           }
         return ProgressionSeries(
-          key: ProgressionKey(exerciseID: exerciseID, machineID: machineID),
+          key: key,
           points: points
         )
       }
@@ -184,6 +188,7 @@ public enum ProgressionAnalyzer {
         let left = lhs.points.last?.date ?? .distantPast
         let right = rhs.points.last?.date ?? .distantPast
         if left != right { return left > right }
+        if lhs.key.isImported != rhs.key.isImported { return !lhs.key.isImported }
         return (lhs.key.machineID?.rawValue.uuidString ?? "")
           < (rhs.key.machineID?.rawValue.uuidString ?? "")
       }
@@ -254,7 +259,7 @@ public enum ProgressionAnalyzer {
     // machine. The session id is kept so equal timestamps still order deterministically.
     var perSessionMachine:
       [SessionMachineKey: (sessionID: SessionID, date: Date, machineID: MachineID?, heaviest: Double)] = [:]
-    for sample in samples {
+    for sample in samples where !sample.isImported {
       let key = SessionMachineKey(sessionID: sample.sessionID, machineID: sample.machineID)
       if let existing = perSessionMachine[key] {
         perSessionMachine[key] = (
@@ -302,7 +307,8 @@ public enum ProgressionAnalyzer {
       Each point is your best work in one session on one specific machine: the heaviest load you \
       moved, and where the rep counts allow it, the best estimated one-rep max. Sessions on \
       different machines are drawn as separate lines and never merged, because the same number on \
-      different equipment is not the same effort. Sets with no machine recorded form their own line.
+      different equipment is not the same effort. Sets with no machine recorded form their own line. \
+      Imported history is labelled as imported with no machine recorded and stays separate from native history.
       """,
     citation: nil,
     validRange: """

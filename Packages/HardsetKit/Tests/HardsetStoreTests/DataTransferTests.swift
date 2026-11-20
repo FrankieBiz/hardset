@@ -37,6 +37,18 @@ struct DataTransferTests {
     #expect(try await db.read { try LoggedSet.fetchAll($0).count } == 2)
   }
 
+  @Test("Re-exported unknown movements reuse their imported series despite case or spacing changes")
+  func normalizedUnknownMovementAcrossExports() async throws {
+    let db = try database()
+    let transfer = DataTransferStore(database: db)
+    _ = try await transfer.importWorkouts(WorkoutCSVImport.preview(csv, strongUnit: .kilograms))
+    let later = csv.replacingOccurrences(of: "2026-11-01", with: "2026-11-08")
+      .replacingOccurrences(of: ",Press,", with: ", press ,")
+    _ = try await transfer.importWorkouts(WorkoutCSVImport.preview(later, strongUnit: .kilograms))
+    #expect(try await db.read { try Exercise.fetchAll($0).count } == 1)
+    #expect(try await db.read { try LoggedSet.fetchAll($0).count } == 4)
+  }
+
   @Test("Hevy English timestamps, quoted fields and canonical units")
   func hevy() throws {
     let text = "title,start_time,end_time,exercise_title,set_index,set_type,weight_kg,reps\nPush,\"1 Nov 2026, 10:00\",\"1 Nov 2026, 11:00\",\"Press, seated\",0,warmup,20,10\n"

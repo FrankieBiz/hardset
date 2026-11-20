@@ -56,6 +56,24 @@ QUERIES = {
         'SELECT * FROM loggedSets WHERE exerciseID = ? AND machineID IS NULL AND NOT isWarmup AND reps >= ? ORDER BY weightKg DESC, reps DESC, completedAt DESC, id DESC LIMIT 1',
         ("exercise-3", 8),
     ),
+    "import provenance": (
+        "SELECT id FROM sessions WHERE id IN (?, ?) AND notes LIKE 'Imported from %'",
+        ("session-100", "session-101"),
+    ),
+    "native comparison": (
+        "SELECT * FROM loggedSets WHERE exerciseID = ? AND machineID IS NULL AND NOT isWarmup "
+        "AND NOT EXISTS (SELECT 1 FROM sessions WHERE sessions.id = loggedSets.sessionID AND sessions.notes LIKE 'Imported from %') "
+        "ORDER BY weightKg DESC, reps DESC, completedAt DESC, id DESC LIMIT 1",
+        ("exercise-3",),
+    ),
+    "recent native movements": (
+        "SELECT exerciseID, max(completedAt) FROM loggedSets "
+        "WHERE NOT EXISTS (SELECT 1 FROM sessions WHERE sessions.id = loggedSets.sessionID AND sessions.notes LIKE 'Imported from %') "
+        "GROUP BY exerciseID", (),
+    ),
+    "import movement candidates": (
+        'SELECT * FROM exercises WHERE NOT isArchived ORDER BY id', (),
+    ),
     "progress board sets": (
         'SELECT exerciseID, machineID, sessionID, weightKg, reps, completedAt FROM loggedSets WHERE NOT isWarmup',
         (),
@@ -68,7 +86,7 @@ QUERIES = {
 
 # Queries that return a whole table's worth by design, so they cannot be a keyed lookup: the work
 # is the size of the answer. They may scan, but they may not sort or build a temporary tree.
-WHOLE_HISTORY = {"progress board sets"}
+WHOLE_HISTORY = {"progress board sets", "import movement candidates", "recent native movements"}
 
 
 def is_unbounded(name, plan):
@@ -174,6 +192,7 @@ def main():
         'INSERT INTO sessionExercises (id, sessionID, exerciseID, position) VALUES (?, ?, ?, ?)',
         ((f"plan-{i}", f"session-{i // 5}", f"exercise-{i % 50}", i % 5) for i in range(25_000)),
     )
+    db.execute("UPDATE sessions SET notes = 'Imported from Strong' WHERE id = 'session-100'")
     before = {name: measure(db, *query) for name, query in QUERIES.items()}
     if upgrade:
         apply_migration_sql(db, upgrade)

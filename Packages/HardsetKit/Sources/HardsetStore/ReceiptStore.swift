@@ -32,7 +32,9 @@ public nonisolated struct ReceiptStore: Sendable {
       let machineIndex = Dictionary(uniqueKeysWithValues: machines.map { ($0.id, $0) })
       let prior = try LoggedSet.where { $0.exerciseID.in(exerciseIDs) }
         .where { !$0.isWarmup && $0.completedAt < session.startedAt }
-        .where { $0.sessionID.neq(id.rawValue) }.fetchAll(db)
+        .where { $0.sessionID.neq(id.rawValue) }
+        .where { #sql("NOT EXISTS (SELECT 1 FROM sessions WHERE sessions.id = \($0.sessionID) AND sessions.notes LIKE 'Imported from %')", as: Bool.self) }
+        .fetchAll(db)
       var history = Dictionary(grouping: prior) {
         ProgressionKey(exerciseID: ExerciseID(rawValue: $0.exerciseID), machineID: $0.machineID.map(MachineID.init(rawValue:)))
       }.mapValues { $0.map { PriorSetRecord(weightKg: $0.weightKg, reps: $0.reps, completedAt: $0.completedAt) } }

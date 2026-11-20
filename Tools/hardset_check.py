@@ -142,7 +142,7 @@ def package_manifest(kind, pins):
         dependencies = "dependencies: [" + ", ".join(entries) + "],"
         targets += ''',
     .target(name: "HardsetStore", dependencies: ["HardsetCore", .product(name: "SQLiteData", package: "sqlite-data")], swiftSettings: isolated),
-    .testTarget(name: "HardsetStoreTests", dependencies: ["HardsetStore", "HardsetCore", .product(name: "GRDB", package: "GRDB.swift")], swiftSettings: concurrency)'''
+    .testTarget(name: "HardsetStoreTests", dependencies: ["HardsetStore", "HardsetCore", .product(name: "GRDB", package: "GRDB.swift")], resources: [.copy("Fixtures")], swiftSettings: concurrency)'''
     return f'''// swift-tools-version: 6.2
 import PackageDescription
 {CONCURRENCY}
@@ -216,6 +216,7 @@ def test(kind, package, swift, cache, shared, refresh):
         excluded = tuple(item.relative_to(tests).as_posix() for item in tests.rglob("*.swift")
                          if item.name not in selected)
         copy_exact(tests, workspace / "Tests/HardsetStoreTests", excluded=excluded)
+        shutil.copytree(tests / "Fixtures", workspace / "Tests/HardsetStoreTests/Fixtures", dirs_exist_ok=True)
     write_if_changed(workspace / "Package.swift", package_manifest(kind, pins))
     environment = os.environ.copy()
     environment["XDG_CACHE_HOME"] = str(shared / "xdg")

@@ -224,6 +224,7 @@ public nonisolated struct CatalogSeeder: Sendable {
     guard limit > 0 else { return [] }
     return try database.read { db -> [CatalogEntry] in
       let query = LoggedSet
+      .where { #sql("NOT EXISTS (SELECT 1 FROM sessions WHERE sessions.id = \($0.sessionID) AND sessions.notes LIKE 'Imported from %')", as: Bool.self) }
         .group { $0.exerciseID }
         .select { ($0.exerciseID, $0.completedAt.max()) }
       let grouped: [(UUID, Date?)] = try query.fetchAll(db)
@@ -271,12 +272,12 @@ public nonisolated struct CatalogSeeder: Sendable {
   }
 
   /// Trimmed, with each run of inner whitespace collapsed to one space.
-  private static func normalized(_ name: String) -> String {
+  static func normalized(_ name: String) -> String {
     name.split(whereSeparator: \.isWhitespace).joined(separator: " ")
   }
 
   /// Equal ignoring case, diacritics and spacing. `cleaned` is already normalized.
-  private static func isSameName(_ stored: String, _ cleaned: String) -> Bool {
+  static func isSameName(_ stored: String, _ cleaned: String) -> Bool {
     normalized(stored).compare(cleaned, options: [.caseInsensitive, .diacriticInsensitive])
       == .orderedSame
   }

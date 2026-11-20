@@ -87,6 +87,6 @@ public struct ProgressBoard: Hashable, Sendable {
   }
 
   private static func identity(_ key: ProgressionKey) -> String {
-    key.exerciseID.description + "/" + (key.machineID?.description ?? "")
+    key.exerciseID.description + "/" + (key.machineID?.description ?? "") + "/" + String(key.isImported)
   }
 }

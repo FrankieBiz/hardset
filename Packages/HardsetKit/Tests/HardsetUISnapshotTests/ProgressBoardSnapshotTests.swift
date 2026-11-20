@@ -1,5 +1,7 @@
 #if canImport(UIKit)
   import Foundation
+  import GRDB
+  import HardsetStore
   import HardsetCore
   import HardsetUI
   import SwiftUI
@@ -83,6 +85,41 @@
         "kit-progressboard-dark-ax3", size: CGSize(width: 402, height: 4000),
         typeSize: .accessibility3
       ) { Self.screen(Self.board) }
+    }
+
+    @Test func matchedImportedHistory() async throws {
+      let database = try DatabaseQueue()
+      try HardsetMigrations.migrator().migrate(database)
+      let movement = try CatalogSeeder(database: database).createCustomExercise(named: "Chest Press")
+      let csv = "Date,Workout Name,Duration,Exercise Name,Set Order,Weight,Reps\n"
+        + "2026-09-20 10:00:00,Push,1h,Chest Press,1,40,8\n"
+        + "2026-11-01 10:00:00,Push,1h,chest press,1,45,8\n"
+      let preview = try WorkoutCSVImport.preview(csv, strongUnit: .kilograms)
+      _ = try await DataTransferStore(database: database).importWorkouts(preview)
+      let board = try await ProgressBoardStore(database: database).loadBoard()
+      let history = try await ProgressionStore(database: database).loadHistory(for: movement.id)
+      for light in [false, true] {
+        let style: UIUserInterfaceStyle = light ? .light : .dark
+        let suffix = light ? "light" : "dark"
+        try await Snapshot.capture("kit-progressboard-imported-" + suffix, size: Self.tall, style: style) {
+          Self.screen(board)
+        }
+        try await Snapshot.capture("kit-progresschart-imported-" + suffix, size: Self.tall, style: style) {
+          NavigationStack {
+            ScrollView {
+              ProgressionChartView(series: history.series.map {
+                .init(label: history.label(for: $0.key), points: $0.points,
+                  recordSessionIDs: history.recordSessionIDs[$0.key] ?? [],
+                  bestAtWeight: history.bestAtWeight[$0.key] ?? [])
+              }, unit: .kilograms, onExplain: {})
+              .padding(Tokens.Spacing.loose)
+            }
+            .background(Tokens.Color.canvas)
+            .hardsetNavigationTitle("Chest Press")
+          }
+          .tint(Tokens.Color.plateBlue)
+        }
+      }
     }
 
     // MARK: - Chart marks

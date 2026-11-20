@@ -54,8 +54,22 @@ public struct ProgressionKey: Hashable, Sendable, Codable {
   public let exerciseID: ExerciseID
   public let machineID: MachineID?
 
-  public init(exerciseID: ExerciseID, machineID: MachineID? = nil) {
+  /// Imported equipment is unknown, even when its movement matches a native one. This keeps
+  /// imported sets apart from both named machines and native free-weight history.
+  public let isImported: Bool
+
+  public init(exerciseID: ExerciseID, machineID: MachineID? = nil, isImported: Bool = false) {
     self.exerciseID = exerciseID
     self.machineID = machineID
+    self.isImported = isImported
+  }
+
+  private enum CodingKeys: String, CodingKey { case exerciseID, machineID, isImported }
+
+  public init(from decoder: any Decoder) throws {
+    let values = try decoder.container(keyedBy: CodingKeys.self)
+    exerciseID = try values.decode(ExerciseID.self, forKey: .exerciseID)
+    machineID = try values.decodeIfPresent(MachineID.self, forKey: .machineID)
+    isImported = try values.decodeIfPresent(Bool.self, forKey: .isImported) ?? false
   }
 }

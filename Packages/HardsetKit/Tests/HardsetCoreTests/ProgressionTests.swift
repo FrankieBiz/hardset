@@ -343,4 +343,14 @@ struct ProgressionTests {
       date: day(0), fromMachineID: cybex, toMachineID: hammer, heaviestLoadDeltaKg: -10)
     #expect(a.id != b.id)
   }
+  @Test("Progression keys written before import provenance still decode as native")
+  func legacyProgressionKeyDecodes() throws {
+    let key = ProgressionKey(exerciseID: exercise, machineID: hammer)
+    let encoded = try JSONEncoder().encode(key)
+    var object = try #require(JSONSerialization.jsonObject(with: encoded) as? [String: Any])
+    object.removeValue(forKey: "isImported")
+    let legacy = try JSONSerialization.data(withJSONObject: object)
+    #expect(try JSONDecoder().decode(ProgressionKey.self, from: legacy) == key)
+  }
+
 }
