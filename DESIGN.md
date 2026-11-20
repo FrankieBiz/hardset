@@ -280,9 +280,12 @@ Selection rows, the unit switch and pickers stay silent.
   sessions (hidden from VoiceOver and dropped at accessibility sizes), and one sentence that names its
   metric: "Estimated max +8% in 6 weeks", or "Not enough history" in `chalkDim` when no session sits six
   weeks back. Beside every estimated-max figure sits its `CertaintyBadge`, drawn over the card's corner
-  as its own control so it never nests inside the card's button. A movement with no record in its last
+  as its own control so it never nests inside the card's button. A six-week change uses the weaker
+  certainty of its two estimates. Imported history has its own series and says "Imported · machine
+  not recorded" in the same `provenance` role. A movement with no record in its last
   three sessions is flagged "Stalled · 3 sessions" in `warning` with `pause.circle`, and no advice. "Most
-  improved" at the top repeats the three biggest gains. Empty, it says "Log a workout and your progress
+  improved · estimated max" at the top repeats the three biggest estimated-max gains; load and rep
+  percentages stay in their own movement rows. Empty, it says "Log a workout and your progress
   shows up here"; loading is a quiet line and a failed read says so, never an empty board. It adds no
   token and no motion.
 - **Scorecard** (`WorkoutReceiptView`, `ScorecardCopy`): the block at the top of a finished workout's

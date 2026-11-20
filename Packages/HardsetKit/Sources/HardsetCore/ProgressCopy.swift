@@ -9,6 +9,9 @@ import Foundation
 /// rather than borrowing another window.
 public enum ProgressCopy {
   public static let notEnoughHistory = "Not enough history"
+  public static var mostImprovedTitle: String {
+    "Most improved · " + metricName(ProgressTrendAnalyzer.mostImprovedMetric).lowercased()
+  }
 
   public static func metricName(_ metric: TrendMetric) -> String {
     switch metric {

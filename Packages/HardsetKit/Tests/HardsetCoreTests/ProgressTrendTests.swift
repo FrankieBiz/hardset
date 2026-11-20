@@ -311,4 +311,13 @@ struct ProgressTrendTests {
     }
   }
 
+  @Test("Most improved compares only estimated maxima, never load or rep percentages")
+  func mostImprovedDoesNotMixMetrics() {
+    let trends = [TrendMetric.estimatedMax, .heaviestLoad, .repsAtTopLoad].enumerated().map { index, metric in
+      MovementTrend(key: ProgressionKey(exerciseID: ExerciseID()), metric: metric, sparkline: [1, 2],
+        sixWeekChange: Double(index + 1) * 0.1, sessionCount: 2, stalledSessions: nil, latestDate: day(42))
+    }
+    #expect(ProgressTrendAnalyzer.mostImproved(trends).map(\.metric) == [.estimatedMax])
+  }
+
 }

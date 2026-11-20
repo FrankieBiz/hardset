@@ -7,7 +7,7 @@ import SwiftUI
 /// A row is one movement on one machine, as it is one series everywhere else, and says what it
 /// measures: "Estimated max +8% in 6 weeks", never a bare number. Where that figure is an estimate
 /// its certainty sits beside it, and a movement with no session six weeks back says "Not enough
-/// history" rather than borrowing another window. At the top, the three biggest gains. A movement
+/// history" rather than borrowing another window. At the top, the three biggest estimated-max gains. A movement
 /// that has not set a record in its last three sessions is flagged "Stalled" in the warning colour,
 /// with no advice attached: it is a fact about the sessions, not a prescription.
 ///
@@ -95,7 +95,7 @@ public struct ProgressBoardView: View {
 
   private var mostImprovedStrip: some View {
     VStack(alignment: .leading, spacing: Tokens.Spacing.snug) {
-      SectionLabel("Most improved")
+      SectionLabel(ProgressCopy.mostImprovedTitle)
       ForEach(board.mostImproved) { row in
         rowCard(row, showsSparkline: false)
       }

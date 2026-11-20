@@ -175,15 +175,26 @@ public enum ProgressTrendAnalyzer {
     return records
   }
 
-  /// The three largest positive six-week gains, largest first.
+  /// The ranking is deliberately one metric: percentages of load and reps cannot be ordered
+  /// alongside percentages of estimated max. Other metrics remain visible in body-part sections.
+  public static let mostImprovedMetric: TrendMetric = .estimatedMax
+
+  /// The three largest positive six-week estimated-max gains, largest first.
   public static func mostImproved(_ trends: [MovementTrend], limit: Int = 3) -> [MovementTrend] {
     trends
-      .filter { ($0.sixWeekChange ?? 0) > 0 }
+      .filter { $0.metric == mostImprovedMetric && ($0.sixWeekChange ?? 0) > 0 }
       .sorted { lhs, rhs in
         let left = lhs.sixWeekChange ?? 0
         let right = rhs.sixWeekChange ?? 0
         if left != right { return left > right }
-        return lhs.latestDate > rhs.latestDate
+        if lhs.latestDate != rhs.latestDate { return lhs.latestDate > rhs.latestDate }
+        if lhs.key.exerciseID != rhs.key.exerciseID {
+          return lhs.key.exerciseID.rawValue.uuidString < rhs.key.exerciseID.rawValue.uuidString
+        }
+        if lhs.key.machineID != rhs.key.machineID {
+          return (lhs.key.machineID?.rawValue.uuidString ?? "") < (rhs.key.machineID?.rawValue.uuidString ?? "")
+        }
+        return !lhs.key.isImported && rhs.key.isImported
       }
       .prefix(limit)
       .map { $0 }

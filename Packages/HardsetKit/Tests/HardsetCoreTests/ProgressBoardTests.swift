@@ -90,4 +90,13 @@ struct ProgressBoardTests {
     #expect(ProgressBoard.empty.sections.isEmpty)
     #expect(ProgressBoard.empty.mostImproved.isEmpty)
   }
+  @Test("Even directly constructed boards keep incomparable metrics out of the ranking")
+  func rankingAlwaysNamesOneMetric() {
+    let row = ProgressBoard.Row(trend: MovementTrend(key: ProgressionKey(exerciseID: ExerciseID()),
+      metric: .heaviestLoad, sparkline: [1, 2], sixWeekChange: 1, sessionCount: 2,
+      stalledSessions: nil, latestDate: epoch), exerciseName: "High-rep squat")
+    #expect(ProgressBoard(sections: [], mostImproved: [row]).mostImproved.isEmpty)
+    #expect(ProgressCopy.mostImprovedTitle == "Most improved · estimated max")
+  }
+
 }

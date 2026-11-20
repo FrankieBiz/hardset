@@ -140,6 +140,19 @@
         typeSize: .accessibility3) { Self.screen(board) }
     }
 
+    @Test func mixedMetricsNeverShareARanking() async throws {
+      let rows = [
+        Self.row("Chest press", machine: "Hammer Strength", metric: .estimatedMax, change: 0.08, certainty: .high),
+        Self.row("High-rep squat", machine: nil, metric: .heaviestLoad, change: 0.9),
+        Self.row("Pull-up", machine: nil, metric: .repsAtTopLoad, change: 0.99),
+      ]
+      let board = ProgressBoard.make(rows.map { .init(row: $0, bodyPart: .chest) })
+      try await Snapshot.capture("kit-progressboard-mixed-metrics-dark", size: Self.tall) { Self.screen(board) }
+      try await Snapshot.capture("kit-progressboard-mixed-metrics-light", size: Self.tall, style: .light) { Self.screen(board) }
+      try await Snapshot.capture("kit-progressboard-mixed-metrics-ax3", size: CGSize(width: 402, height: 3000),
+        typeSize: .accessibility3) { Self.screen(board) }
+    }
+
     // MARK: - Chart marks
 
     private static func point(

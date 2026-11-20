@@ -8,7 +8,7 @@ import Foundation
 /// where it can be seen and tagged.
 public struct ProgressBoard: Hashable, Sendable {
   public let sections: [Section]
-  /// The largest six-week gains across every movement, whichever section each is in.
+  /// The largest six-week estimated-max gains across movements, whichever section each is in.
   public let mostImproved: [Row]
 
   public struct Row: Hashable, Sendable, Identifiable {
@@ -53,7 +53,7 @@ public struct ProgressBoard: Hashable, Sendable {
 
   public init(sections: [Section], mostImproved: [Row]) {
     self.sections = sections
-    self.mostImproved = mostImproved
+    self.mostImproved = mostImproved.filter { $0.trend.metric == ProgressTrendAnalyzer.mostImprovedMetric }
   }
 
   /// Groups entries in body-part order with the untagged last, newest-trained movement first in
