@@ -232,8 +232,19 @@ public nonisolated struct DataTransferStore: Sendable {
               completedAt: workout.startedAt)
           }.execute(db)
         }
+        // Matching an existing movement must neither overwrite its notes nor discard the CSV's.
+        // Exports repeat an exercise note on every set, so retain each distinct note once per
+        // movement in this workout's own notes, inside the same atomic import transaction.
+        var seenNotes: [String: Set<String>] = [:]
+        let noteLines = workout.sets.compactMap { set -> String? in
+          guard !set.notes.isEmpty,
+            seenNotes[set.exercise, default: []].insert(set.notes).inserted else { return nil }
+          return "\(set.exercise): \(set.notes)"
+        }
+        let noteSuffix = ". Set timestamps are unavailable; grouped at workout start."
+          + (noteLines.isEmpty ? "" : "\n\n" + noteLines.joined(separator: "\n"))
         try db.execute(sql: "UPDATE sessions SET notes = notes || ? WHERE id = ?",
-          arguments: [". Set timestamps are unavailable; grouped at workout start.", session.uuidString.lowercased()])
+          arguments: [noteSuffix, session.uuidString.lowercased()])
       }
       if importedWorkouts > 0 {
         // A digest, not the file: re-exports repeat the whole history, so copies added up.
