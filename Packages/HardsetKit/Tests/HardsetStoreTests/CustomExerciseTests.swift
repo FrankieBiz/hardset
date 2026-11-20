@@ -184,6 +184,89 @@ struct CustomExerciseTests {
     #expect(again.isUnattributed)
   }
 
+  @Test("A new movement named like an existing one is refused, and the existing one is not touched",
+        arguments: ["nautilus LEVER row", "  Nautilus   lever row \n", "Nautílus lever row"])
+  func newMovementRefusesTakenCustomName(name: String) throws {
+    let database = try migratedDatabase()
+    let seeder = CatalogSeeder(database: database)
+    let first = try seeder.createCustomExercise(
+      named: "Nautilus lever row",
+      attribution: CustomAttribution(primary: .upperBack, modality: .cable), now: now)
+    let typed = try #require(CustomAttribution(primary: .lats, secondary: [.biceps], modality: .machine))
+
+    #expect(throws: CatalogSeederError.duplicateName) {
+      try seeder.createNewCustomExercise(named: name, attribution: typed, now: now)
+    }
+
+    // Nothing was written: one movement, still tagged as it was, not as the refused editor said.
+    let all = try seeder.selectableExercises()
+    #expect(all.map(\.id) == [first.id])
+    let kept = try #require(all.first)
+    #expect(kept.primaryMuscle.storedValue == "upperBack")
+    #expect(kept.modality == .cable)
+  }
+
+  @Test("A new movement named like a catalogue movement is refused too")
+  func newMovementRefusesTakenCuratedName() throws {
+    let database = try migratedDatabase()
+    let seeder = CatalogSeeder(database: database)
+    try seeder.seed([legPress], now: now)
+    let typed = try #require(CustomAttribution(primary: .chest))
+
+    #expect(throws: CatalogSeederError.duplicateName) {
+      try seeder.createNewCustomExercise(named: "leg press", attribution: typed, now: now)
+    }
+
+    let all = try seeder.selectableExercises()
+    #expect(all.count == 1)
+    #expect(all.first?.primaryMuscle.storedValue == "quadriceps")
+  }
+
+  @Test("A name nobody else has is saved with the lifter's tags, as the idempotent call saves it")
+  func newMovementSavesFreshName() throws {
+    let database = try migratedDatabase()
+    let seeder = CatalogSeeder(database: database)
+    let attribution = try #require(
+      CustomAttribution(primary: .lats, secondary: [.biceps], modality: .machine))
+
+    let entry = try seeder.createNewCustomExercise(
+      named: "  Nautilus   lever row ", attribution: attribution, now: now)
+
+    #expect(entry.name == "Nautilus lever row")
+    #expect(entry.primaryMuscle.storedValue == "lats")
+    #expect(entry.modality == .machine)
+    #expect(!entry.isUnattributed)
+    #expect(try seeder.selectableExercises().map(\.id) == [entry.id])
+  }
+
+  @Test("A retired movement's name, or an imported one's, is free to use again")
+  func newMovementIgnoresArchivedAndImportedNames() throws {
+    let database = try migratedDatabase()
+    let seeder = CatalogSeeder(database: database)
+    let retired = try seeder.createCustomExercise(named: "Retired")
+    try database.write { db in
+      try Exercise.where { $0.id.eq(retired.id.rawValue) }.update { $0.isArchived = #bind(true) }.execute(db)
+    }
+    let attribution = try #require(CustomAttribution(primary: .lats))
+
+    let again = try seeder.createNewCustomExercise(named: "retired", attribution: attribution, now: now)
+
+    #expect(again.id != retired.id)
+    #expect(try seeder.selectableExercises().map(\.id) == [again.id])
+  }
+
+  @Test("A blank name is still refused as blank, not as taken")
+  func newMovementRefusesBlankName() throws {
+    let database = try migratedDatabase()
+    let seeder = CatalogSeeder(database: database)
+    let attribution = try #require(CustomAttribution(primary: .lats))
+
+    #expect(throws: CatalogSeederError.blankName) {
+      try seeder.createNewCustomExercise(named: "  \n ", attribution: attribution, now: now)
+    }
+    #expect(try seeder.selectableExercises().isEmpty)
+  }
+
   @Test("Retagging a custom movement replaces its muscles and may rename it")
   func updateRetagsCustomMovement() throws {
     let database = try migratedDatabase()

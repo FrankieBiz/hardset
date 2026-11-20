@@ -484,11 +484,14 @@ public struct LiveSessionScreen: View {
     begin(.addMovement)
     let entry: CatalogEntry
     do {
-      // Returns the existing movement for a name that is already there, so a second "Pendulum
-      // Squat" is never created by retyping it.
-      entry = try catalog.createCustomExercise(named: trimmed, attribution: attribution)
+      // Refuses a name that is already there, so a second "Pendulum Squat" is never created by
+      // retyping it. Handing back the existing one would throw away the muscles just chosen.
+      entry = try catalog.createNewCustomExercise(named: trimmed, attribution: attribution)
     } catch CatalogSeederError.blankName {
       newMovementError = "Type the movement's name first."
+      return
+    } catch CatalogSeederError.duplicateName {
+      newMovementError = MovementEditorDraft.nameTakenMessage(trimmed)
       return
     } catch {
       newMovementError = "“\(trimmed)” could not be added. Try again."

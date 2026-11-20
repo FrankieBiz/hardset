@@ -171,13 +171,16 @@ public struct WorkoutEditorScreen: View {
   private func createMovement(named name: String, attribution: CustomAttribution) {
     let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
     do {
-      // Returns the existing movement for a name that is already there, so retyping one selects it.
-      let entry = try catalog.createCustomExercise(named: trimmed, attribution: attribution)
+      // Refuses a name that is already there: selecting the existing movement would throw away the
+      // muscles just chosen. The picker above lists it, so it is one tap to choose it instead.
+      let entry = try catalog.createNewCustomExercise(named: trimmed, attribution: attribution)
       draft.add(entry)
       newMovement = nil
       isPickingMovement = false
     } catch CatalogSeederError.blankName {
       newMovementError = "Type the movement's name first."
+    } catch CatalogSeederError.duplicateName {
+      newMovementError = MovementEditorDraft.nameTakenMessage(trimmed)
     } catch {
       newMovementError = "“\(trimmed)” could not be added. Try again."
     }
