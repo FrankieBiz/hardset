@@ -256,6 +256,23 @@ struct ProgressTrendTests {
     #expect(trend.certainty == scorecard.biggestGain?.certainty)
   }
 
+  @Test("Equal estimates select the same supported baseline regardless of set order", arguments: [false, true])
+  func equalEstimateCertaintyAgrees(reversed: Bool) throws {
+    let low = s(day: 0, session: 0, kg: 40, reps: 12)
+    let high = s(day: 0, session: 0, kg: 48, reps: 5)
+    let prior = reversed ? [high, low] : [low, high]
+    let current = s(day: 42, session: 1, kg: 72, reps: 5)
+    let trend = try #require(ProgressTrendAnalyzer.trend(key: key(), samples: prior + [current],
+      incrementKg: 2.5, estimatesOneRepMax: true))
+    func record(_ sample: ProgressionSample) -> PriorSetRecord {
+      PriorSetRecord(weightKg: sample.weightKg, reps: sample.reps, completedAt: sample.completedAt)
+    }
+    let card = WorkoutScorecard.make([ScorecardInput(key: key(), exerciseName: "Press",
+      currentSets: [record(current)], previousSets: prior.map(record))])
+    #expect(trend.certainty == .high)
+    #expect(card.biggestGain?.certainty == trend.certainty)
+  }
+
   @Test func onlyAnEstimateHasACertainty() {
     let heaviest = ProgressTrendAnalyzer.trend(
       key: key(),

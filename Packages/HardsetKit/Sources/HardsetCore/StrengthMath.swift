@@ -82,4 +82,13 @@ public enum StrengthMath {
     case .kilograms: return (displayed * 2).rounded() / 2
     }
   }
+  /// One selection rule for chart points, Progress changes and receipt gains. Equal-valued
+  /// estimates keep the better-supported claim, so set order cannot change the displayed trust.
+  static func bestSupportedEstimate(_ estimates: [Claim<Double>]) -> Claim<Double>? {
+    estimates.filter { $0.value != nil }.max {
+      if $0.value != $1.value { return ($0.value ?? 0) < ($1.value ?? 0) }
+      return $0.certainty < $1.certainty
+    }
+  }
+
 }

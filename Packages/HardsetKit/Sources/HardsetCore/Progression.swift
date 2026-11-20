@@ -202,15 +202,10 @@ public enum ProgressionAnalyzer {
     // Only estimable sets contribute. A session of high-rep work yields no estimate at all rather
     // than an extrapolated one.
     let estimable = estimatesOneRepMax ? samples : []
-    let estimates = estimable.compactMap { sample -> (value: Double, certainty: Certainty)? in
-      let claim = StrengthMath.estimatedOneRepMax(weightKg: sample.weightKg, reps: sample.reps)
-      return claim.value.map { ($0, claim.certainty) }
-    }
-    // The winning estimate keeps its own certainty. Two sets estimating the same value keep the
-    // better-supported one, because that is the estimate the point is entitled to.
-    let best = estimates.max { lhs, rhs in
-      lhs.value != rhs.value ? lhs.value < rhs.value : lhs.certainty < rhs.certainty
-    }
+    // Equal estimates keep the same better-supported claim as trends and receipt gains.
+    let best = StrengthMath.bestSupportedEstimate(estimable.map {
+      StrengthMath.estimatedOneRepMax(weightKg: $0.weightKg, reps: $0.reps)
+    })
     return ProgressionPoint(
       sessionID: sessionID,
       machineID: machineID,

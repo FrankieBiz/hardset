@@ -233,13 +233,9 @@ public enum ProgressTrendAnalyzer {
   /// The session's best estimate with its certainty, so the figure and the trust in it come from
   /// the same set.
   private static func bestEstimateClaim(in samples: [ProgressionSample]) -> Claim<Double>? {
-    samples
-      .map { StrengthMath.estimatedOneRepMax(weightKg: $0.weightKg, reps: $0.reps) }
-      .filter { $0.value != nil }
-      .max {
-        if $0.value != $1.value { return ($0.value ?? 0) < ($1.value ?? 0) }
-        return $0.certainty < $1.certainty
-      }
+    StrengthMath.bestSupportedEstimate(samples.map {
+      StrengthMath.estimatedOneRepMax(weightKg: $0.weightKg, reps: $0.reps)
+    })
   }
 
   private static func value(of metric: TrendMetric, in samples: [ProgressionSample]) -> Double? {
