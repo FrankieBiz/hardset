@@ -53,9 +53,11 @@
     }
 
     private static func screen(_ board: ProgressBoard) -> some View {
-      NavigationStack {
+      let count = board.sections.reduce(0) { $0 + $1.rows.count }
+      let subtitle: String? = count == 0 ? nil : count == 1 ? "1 movement" : "\(count) movements"
+      return NavigationStack {
         ProgressBoardView(
-          board: board, title: "Progress", subtitle: "6 movements", onShowSettings: {},
+          board: board, title: "Progress", subtitle: subtitle, onShowSettings: {},
           onSelect: { _ in }
         )
         .hardsetTabRoot()
