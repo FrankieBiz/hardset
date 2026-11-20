@@ -73,6 +73,12 @@ final class AppScreensUITests: XCTestCase {
       .firstMatch
     XCTAssertTrue(bench.waitForExistence(timeout: 5))
     capture(app, "11-movement-picker")
+    // The first audit is of the picker as the lifter meets it, keyboard up. Rows behind the keyboard
+    // were reported for contrast measured on the keyboard's pixels, not their own, so the audit that
+    // judges the picker is the second, with the keyboard down and every row in view.
+    audit(app, screen: "movement picker (keyboard up)")
+    dismissKeyboard(app)
+    capture(app, "11b-movement-picker-keyboard-down")
     audit(app, screen: "movement picker")
     bench.tap()
 
@@ -135,6 +141,11 @@ final class AppScreensUITests: XCTestCase {
     openTab(app, "Volume")
     capture(app, "18-volume-with-workout")
     audit(app, screen: "volume with a workout")
+    // The first audit saw the top of the list. The muscle rows below it were reported as sitting
+    // behind the map button and the tab bar, so the list is audited again scrolled to them.
+    app.swipeUp()
+    capture(app, "18b-volume-with-workout-scrolled")
+    audit(app, screen: "volume with a workout, scrolled")
 
     writeAuditReport(named: "accessibility-audit-workout")
   }
@@ -640,6 +651,23 @@ final class AppScreensUITests: XCTestCase {
       "\(step): the staged start screen's button is reachable by accessibility")
   }
 
+  /// Puts the keyboard down, so that what is audited is the screen and not the keyboard over it. The
+  /// return key is the search key in the picker; failing that, the list dismisses the keyboard as it
+  /// scrolls. If the keyboard is still up afterwards the audit would be of its pixels, so that fails.
+  @MainActor
+  private func dismissKeyboard(_ app: XCUIApplication) {
+    guard app.keyboards.count > 0 else { return }
+    let search = app.keyboards.buttons.matching(NSPredicate(format: "label ==[c] 'search'")).firstMatch
+    if search.exists {
+      search.tap()
+    } else {
+      app.swipeUp()
+    }
+    let deadline = Date().addingTimeInterval(5)
+    while app.keyboards.count > 0 && Date() < deadline { Thread.sleep(forTimeInterval: 0.2) }
+    XCTAssertEqual(app.keyboards.count, 0, "The keyboard is still up, so the audit would be of it")
+  }
+
   /// True once the element is no longer on screen: a sheet that has finished closing, rather than one
   /// still sliding away, whose controls a query would otherwise find beside the next sheet's.
   @MainActor
@@ -682,8 +710,11 @@ final class AppScreensUITests: XCTestCase {
         let element = issue.element
         let label = element?.label ?? "no element"
         let frame = element.map { "\($0.frame)" } ?? "no frame"
+        // The element's type and identifier, which a report line with no label could not otherwise be
+        // traced from. `nil` element: the audit named nothing it could be pointed at.
+        let kind = element.map { "type \($0.elementType.rawValue) id '\($0.identifier)'" } ?? "no type"
         self?.auditReport.append(
-          "[\(screen)] \(issue.compactDescription) | \(label) | \(frame) | \(issue.detailedDescription)"
+          "[\(screen)] \(issue.compactDescription) | \(label) | \(frame) | \(kind) | \(issue.detailedDescription)"
         )
         return true
       }
