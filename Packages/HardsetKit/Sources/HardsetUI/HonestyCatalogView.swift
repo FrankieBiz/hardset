@@ -232,14 +232,14 @@ private struct HonestyChipStates: View {
   @ViewBuilder
   private func pressedFace(_ assumption: Assumption) -> some View {
     if dynamicTypeSize.isAccessibilitySize {
-      pressedFace(assumption, in: RoundedRectangle(cornerRadius: Tokens.Radius.control))
+      pressedFace(assumption, in: Tokens.Shape.control)
     } else {
       pressedFace(assumption, in: Capsule())
     }
   }
 
   private func pressedFace<S: InsettableShape>(_ assumption: Assumption, in shape: S) -> some View {
-    MachinedPressFace(shape: shape, outlined: true, isPressed: true, reduceMotion: false) {
+    ControlPressFace(shape: shape, outline: .onRequest, isPressed: true, reduceMotion: false) {
       HStack(spacing: Tokens.Spacing.tight) {
         Text(assumption.label)
           .foregroundStyle(Tokens.Color.chalk)

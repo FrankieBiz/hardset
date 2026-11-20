@@ -1,8 +1,8 @@
 import SwiftUI
 
-/// Every token and primitive of the design system on one scrolling page: the palette, machined
-/// surfaces, type roles, buttons and keys in their live and pressed states, certainty badges, and
-/// the motion and haptic vocabularies.
+/// Every token and primitive of the design system on one scrolling page: the palette, surfaces and
+/// their fill steps, type roles, buttons and keys in their live and pressed states, certainty
+/// badges, and the motion and haptic vocabularies.
 ///
 /// It exists so the design can be reviewed from images. The development machine cannot compile
 /// SwiftUI, so a macOS CI lane renders this view to PNG in each appearance (dark, light, Increase
@@ -13,7 +13,7 @@ public struct TokenCatalogView: View {
   /// The six catalogue sections, in page order. The snapshot suite renders them one at a time so
   /// that each image is as tall as its own section and nothing is cropped.
   public enum Section: String, CaseIterable, Sendable {
-    case palette, machined, type, buttons, certainty, motion
+    case palette, surfaces, type, buttons, certainty, motion
   }
 
   private let section: Section?
@@ -44,7 +44,7 @@ public struct TokenCatalogView: View {
   private func sectionView(_ section: Section) -> some View {
     switch section {
     case .palette: PaletteSection()
-    case .machined: MachinedSection()
+    case .surfaces: SurfacesSection()
     case .type: TypeSection()
     case .buttons: ButtonSection()
     case .certainty: CertaintySection()
@@ -67,15 +67,15 @@ private struct PaletteEntry: Identifiable {
 }
 
 private enum PaletteCatalog {
-  /// Ordered as the design document is: surfaces, edges, text, then the plate hues in family
+  /// Ordered as the design document is: surfaces, separators, text, then the plate hues in family
   /// order, the warning hue, and the chart series.
   static let entries: [PaletteEntry] = [
     PaletteEntry(name: "canvas", color: Tokens.Color.canvas, isText: false),
     PaletteEntry(name: "steel", color: Tokens.Color.steel, isText: false),
     PaletteEntry(name: "steelRaised", color: Tokens.Color.steelRaised, isText: false),
+    PaletteEntry(
+      name: "controlFillOnCanvas", color: Tokens.Color.controlFillOnCanvas, isText: false),
     PaletteEntry(name: "steelPressed", color: Tokens.Color.steelPressed, isText: false),
-    PaletteEntry(name: "edgeLight", color: Tokens.Color.edgeLight, isText: false),
-    PaletteEntry(name: "edgeShadow", color: Tokens.Color.edgeShadow, isText: false),
     PaletteEntry(name: "hairline", color: Tokens.Color.hairline, isText: false),
     PaletteEntry(name: "controlEdge", color: Tokens.Color.controlEdge, isText: false),
     PaletteEntry(name: "chalk", color: Tokens.Color.chalk, isText: true),
@@ -180,53 +180,81 @@ private struct PaletteSample: View {
   }
 }
 
-// MARK: - Machined
+// MARK: - Surfaces
 
-private struct MachinedSection: View {
+/// The fill steps and the flat faces that sit on them. Raised, pressed and outlined samples are
+/// drawn twice: on the canvas, where a control takes `controlFillOnCanvas`, and inside a card,
+/// where it takes `steelRaised`. In dark the two are the same colour; in light they are not, and
+/// that is the pair worth looking at. Then the floating shadow, and the one labelled knurl sample.
+private struct SurfacesSection: View {
   var body: some View {
-    CatalogSection("Machined") {
+    CatalogSection("Surfaces") {
       VStack(alignment: .leading, spacing: Tokens.Spacing.regular) {
+        caption("On the canvas: controlFillOnCanvas")
+        samples
+        caption("In a card: steelRaised")
+        samples
+          .padding(Tokens.Spacing.regular)
+          .hardsetCard()
+        caption("Floating: a soft shadow, light appearance only")
+        Text("Pinned over scrolling content")
+          .font(Tokens.Text.caption)
+          .foregroundStyle(Tokens.Color.chalk)
+          .frame(maxWidth: .infinity, minHeight: Tokens.loggerTapTarget)
+          .background(Tokens.Color.steelRaised, in: Tokens.Shape.card)
+          .hardsetFloating()
         HStack(spacing: Tokens.Spacing.regular) {
-          MachinedSample(title: "Raised", style: .raised)
-          MachinedSample(title: "Outlined", style: .outlined)
-          MachinedSample(title: "Pressed", style: .pressed)
-        }
-        HStack(spacing: Tokens.Spacing.regular) {
-          MachinedSample(title: "", style: .knurled)
+          SurfaceSample(title: "", style: .knurled)
             .frame(width: 120, height: Tokens.loggerTapTarget)
-          Text("Knurl: texture for a control's face, never behind text")
+          Text("Knurl: texture for a face that carries no text, never behind text")
             .font(Tokens.Text.caption)
             .foregroundStyle(Tokens.Color.chalkDim)
         }
       }
     }
   }
+
+  private var samples: some View {
+    HStack(spacing: Tokens.Spacing.regular) {
+      SurfaceSample(title: "Raised", style: .raised)
+      SurfaceSample(title: "Pressed", style: .pressed)
+      SurfaceSample(title: "Input", style: .outlined)
+    }
+  }
+
+  private func caption(_ text: String) -> some View {
+    Text(text)
+      .font(Tokens.Text.caption)
+      .foregroundStyle(Tokens.Color.chalkDim)
+  }
 }
 
-private struct MachinedSample: View {
+private struct SurfaceSample: View {
+  /// `outlined` is an input: the one face that keeps its outline in every setting. `raised` and
+  /// `pressed` show the outline only under Increase Contrast or Button Shapes.
   enum Style { case raised, outlined, pressed, knurled }
 
   let title: String
   let style: Style
 
   var body: some View {
-    let shape = RoundedRectangle(cornerRadius: Tokens.Radius.control)
+    let shape = Tokens.Shape.control
     let label = Text(title)
       .font(Tokens.Text.caption)
       .foregroundStyle(Tokens.Color.chalk)
       .frame(maxWidth: .infinity, minHeight: Tokens.loggerTapTarget)
     switch style {
     case .raised:
-      label.machinedRaised(shape)
+      label.controlFace(shape)
     case .outlined:
-      label.machinedRaised(shape, outlined: true)
+      label.controlFace(shape, outline: .always)
     case .pressed:
-      label.machinedPressed(shape)
+      label.controlFacePressed(shape)
     case .knurled:
       // The knurl is clipped to rectangular bounds, so the rounded face clips it back to its
       // corners. Its title is empty: the knurl must never sit behind text, so it is labelled
       // beside the sample instead.
-      label.machinedRaised(shape).knurl().clipShape(shape)
+      label.controlFace(shape).knurl().clipShape(shape)
     }
   }
 }
@@ -298,6 +326,7 @@ private struct ButtonSection: View {
         Button("Primary disabled") {}
           .buttonStyle(HardsetButtonStyle(.primary))
           .disabled(true)
+        SecondaryInCard()
         KeyRows()
       }
     }
@@ -309,8 +338,6 @@ private struct ButtonSection: View {
 /// drawn with `isPressed: true`.
 private struct ButtonVariantRows: View {
   let variant: ButtonVariant
-
-  @Environment(\.accessibilityShowButtonShapes) private var showsButtonShapes
 
   var body: some View {
     VStack(alignment: .leading, spacing: Tokens.Spacing.snug) {
@@ -342,11 +369,27 @@ private struct ButtonVariantRows: View {
       size: size,
       fullWidth: true,
       isPressed: true,
-      isEnabled: true,
-      showsButtonShapes: showsButtonShapes
+      isEnabled: true
     ) {
       Text(name)
     }
+  }
+}
+
+/// A secondary button inside a card, which takes `steelRaised`; the rows above are on the canvas
+/// and take `controlFillOnCanvas`. Worth comparing in light, where the two differ.
+private struct SecondaryInCard: View {
+  var body: some View {
+    VStack(alignment: .leading, spacing: Tokens.Spacing.snug) {
+      Text("secondary in a card")
+        .font(Tokens.Text.caption)
+        .foregroundStyle(Tokens.Color.chalkDim)
+      Button("Secondary 44") {}
+        .buttonStyle(HardsetButtonStyle(.secondary))
+    }
+    .padding(Tokens.Spacing.regular)
+    .frame(maxWidth: .infinity, alignment: .leading)
+    .hardsetCard()
   }
 }
 

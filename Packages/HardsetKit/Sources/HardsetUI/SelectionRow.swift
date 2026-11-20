@@ -3,7 +3,7 @@ import SwiftUI
 /// A tactile, high-density selection row for gym-floor interaction.
 ///
 /// Used across machine and gym selection. Enforces the 56 pt logger tap target, the card surface
-/// with a decorative hairline, clear hierarchy, and accessible traits. Selected rows take the
+/// (a fill step, no border), clear hierarchy, and accessible traits. Selected rows take the
 /// plate blue ring and tint, and the indicator on the right swaps an empty ring for a filled check,
 /// so the choice is carried by shape as well as colour.
 public struct SelectionRow: View {
@@ -116,7 +116,7 @@ struct SelectionRowLabel: View {
     .padding(.vertical, Tokens.Spacing.snug)
     // Inside the label, so the 56 pt frame and the tappable shape are the same rectangle.
     .frame(maxWidth: .infinity, minHeight: Tokens.loggerTapTarget, alignment: .leading)
-    .contentShape(RoundedRectangle(cornerRadius: Tokens.Radius.control))
+    .contentShape(Tokens.Shape.control)
   }
 
   private var stacksTag: Bool { dynamicTypeSize.isAccessibilitySize }
@@ -200,7 +200,7 @@ struct SelectionCardFace<Label: View>: View {
     label
       .background {
         if isPressed {
-          RoundedRectangle(cornerRadius: cornerRadius)
+          Tokens.Shape.rounded(cornerRadius)
             .fill(Tokens.Color.steelPressed)
         }
       }
@@ -284,7 +284,7 @@ private struct SelectionIconSquare: View {
       )
       .background(
         Tokens.Color.steelRaised,
-        in: RoundedRectangle(cornerRadius: Tokens.Radius.control)
+        in: Tokens.Shape.control
       )
       .accessibilityHidden(true)
   }

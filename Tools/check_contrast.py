@@ -4,7 +4,9 @@
 Reads the `swatch(light:dark:highLight:highDark:)` literals out of DesignTokens.swift, so the
 numbers checked are the numbers the app renders. Exits non-zero if any text role falls under 7:1
 or any control boundary under 3:1 against the surfaces it is drawn on, in any of the four
-appearances (light, dark, and each with Increase Contrast).
+appearances (light, dark, and each with Increase Contrast). It also holds the fill steps between
+surfaces, which separate a card from the canvas now that cards carry no border, to the values the
+design was built around.
 
 Usage: python3 Tools/check_contrast.py [path/to/DesignTokens.swift]
 """
@@ -24,7 +26,9 @@ SWATCH = re.compile(
 SERIES = re.compile(r"swatch\(light: 0x([0-9A-Fa-f]{6}), dark: 0x([0-9A-Fa-f]{6})\)")
 
 # Text and symbol roles: 7:1 (WCAG 2.2 SC 1.4.6) against every listed surface.
-SURFACES = ["canvas", "steel", "steelRaised"]
+# `controlFillOnCanvas` is the fill of a control that sits straight on the canvas; text and the
+# outline of an input are drawn on it as on any other surface.
+SURFACES = ["canvas", "steel", "steelRaised", "controlFillOnCanvas"]
 TEXT_ON = {
     "chalk": SURFACES,
     "chalkDim": SURFACES,
@@ -46,6 +50,17 @@ PRESSED = {
 # Boundaries that identify a control: 3:1 (SC 1.4.11). A pressed face keeps its control edge, so
 # `steelPressed` is a surface it must clear too.
 BOUNDARY_ON = {"controlEdge": SURFACES + ["steelPressed"]}
+# Steps between surfaces. These are not WCAG floors. With the stroke gone from cards and labelled
+# controls, the step between two fills is what separates them, so a later colour change must not
+# quietly flatten it. Each floor sits just under the value the design was built around (dark
+# 1.18, 1.14 and 1.34; light 1.12, 1.16 and 1.12). Normal appearances only: under Increase Contrast
+# the steps collapse to one colour by design, and the outline carries the structure instead.
+# (upper surface, lower surface, floor in dark, floor in light)
+STEPS = [
+    ("steel", "canvas", 1.17, 1.11),
+    ("steelRaised", "steel", 1.13, 1.15),
+    ("controlFillOnCanvas", "canvas", 1.33, 1.11),
+]
 
 
 def linear(channel):
@@ -85,7 +100,7 @@ def load(path):
 def main():
     path = Path(sys.argv[1]) if len(sys.argv) > 1 else DEFAULT
     palette, series = load(path)
-    required = set(TEXT_ON) | set(BOUNDARY_ON) | set(TINTS) | {"canvas", "steel"}
+    required = set(TEXT_ON) | set(BOUNDARY_ON) | set(TINTS) | set(SURFACES) | {"steelPressed"}
     missing = sorted(name for name in required if name not in palette)
     if missing:
         print(f"Missing swatches in {path}: {', '.join(missing)}")
@@ -113,6 +128,14 @@ def main():
     for fg, backgrounds in BOUNDARY_ON.items():
         for bg in backgrounds:
             check(fg, bg, 3.0)
+    for upper, lower, dark_floor, light_floor in STEPS:
+        for appearance, floor in (("dark", dark_floor), ("light", light_floor)):
+            value = ratio(palette[upper][appearance], palette[lower][appearance])
+            checked += 1
+            if value < floor:
+                failures.append(
+                    f"step {upper} on {lower} ({appearance}): {value:.3f}:1 < {floor}:1"
+                )
     for index, (light, dark) in enumerate(series):
         for bg in ("canvas", "steel"):
             for value, appearance in ((light, "light"), (dark, "dark")):

@@ -332,7 +332,7 @@ public struct ExerciseSectionView: View {
       )
   }
 
-  /// A set chip is a machined raised face that sinks on press; an unset one keeps its plate blue
+  /// A set chip is a raised flat face that sinks on press; an unset one keeps its plate blue
   /// tint and takes the opacity press, because it draws its own fill and outline. The two are
   /// separate buttons because a button takes one style, and the label is shared so they cannot
   /// drift apart.
@@ -353,7 +353,7 @@ public struct ExerciseSectionView: View {
       Button(action: action) {
         machineChipContent
       }
-      .buttonStyle(MachinedPressStyle(shape: Capsule(), outlined: true))
+      .buttonStyle(ControlPressStyle(shape: Capsule(), outline: .always))
     }
   }
 

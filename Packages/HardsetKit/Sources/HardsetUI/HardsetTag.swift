@@ -2,9 +2,9 @@ import SwiftUI
 
 /// A non-interactive label on a row: a modality, "Recent", "Custom".
 ///
-/// Filled but never outlined. The outline is what tells the lifter something can be tapped, so a
-/// tag that wore one would be claiming to be a control it is not. It has no edge light either: a
-/// tag is flat `steelRaised`, never a machined face.
+/// Filled but never outlined, in any setting. An outline is what tells the lifter something can
+/// be tapped, so a tag that wore one, even under Increase Contrast or Button Shapes, would be
+/// claiming to be a control it is not. A tag is flat `steelRaised`.
 ///
 /// A capsule at ordinary sizes. At accessibility sizes a long tag wraps to several lines, and a
 /// capsule's corner radius, half its height, then pushes the wrapped text across its edge, so there
@@ -41,7 +41,7 @@ public struct HardsetTag: View {
     .padding(.vertical, Tokens.Spacing.tight)
     .background {
       if isLarge {
-        RoundedRectangle(cornerRadius: Tokens.Radius.control).fill(Tokens.Color.steelRaised)
+        Tokens.Shape.control.fill(Tokens.Color.steelRaised)
       } else {
         Capsule().fill(Tokens.Color.steelRaised)
       }

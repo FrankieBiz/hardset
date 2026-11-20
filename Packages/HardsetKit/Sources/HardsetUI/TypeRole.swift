@@ -13,7 +13,6 @@ extension Tokens.Text {
     case title
     case headline
     case label
-    case labelEmphasis
     case provenance
     case unit
     case caption
@@ -30,7 +29,6 @@ extension Tokens.Text {
       case .title: Tokens.Text.title
       case .headline: Tokens.Text.headline
       case .label: Tokens.Text.label
-      case .labelEmphasis: Tokens.Text.labelEmphasis
       case .provenance: Tokens.Text.provenance
       case .unit: Tokens.Text.unit
       case .caption: Tokens.Text.caption
@@ -51,7 +49,7 @@ extension Tokens.Text {
       case .setEntry: .title2
       case .title: .title3
       case .headline, .figure: .headline
-      case .label, .labelEmphasis: .body
+      case .label: .body
       case .provenance, .unit: .callout
       case .sectionHeader: .subheadline
       case .caption: .footnote
@@ -75,16 +73,16 @@ extension Tokens.Text {
       }
     }
 
-    /// Tracking as a fraction of the text size. Large condensed faces tighten slightly so the
+    /// Tracking as a fraction of the text size. Large condensed figures tighten slightly so the
     /// stamped figures sit as one plate; the small roles open slightly for legibility. Every
-    /// other role keeps the font's own spacing.
+    /// other role keeps the font's own spacing, `display` included: the system font applies its
+    /// own optical tracking at large sizes, and a second value on top would be a guess.
     public var trackingRatio: Double {
       switch self {
-      case .hero, .display: -0.02
+      case .hero: -0.02
       case .readout: -0.01
       case .caption, .unit: 0.01
-      case .title, .headline, .label, .labelEmphasis, .provenance, .sectionHeader, .setEntry,
-        .figure:
+      case .display, .title, .headline, .label, .provenance, .sectionHeader, .setEntry, .figure:
         0
       }
     }

@@ -70,7 +70,7 @@ extension View {
       background(Tokens.Color.steel, in: RoundedRectangle(cornerRadius: Tokens.Radius.card))
         .overlay {
           RoundedRectangle(cornerRadius: Tokens.Radius.card)
-            .strokeBorder(Tokens.Color.edgeLight, lineWidth: Tokens.Stroke.hairline)
+            .strokeBorder(Tokens.Color.hairline, lineWidth: Tokens.Stroke.hairline)
         }
     #endif
   }
