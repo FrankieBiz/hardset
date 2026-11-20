@@ -242,6 +242,20 @@ struct ProgressTrendTests {
     #expect(trend?.certainty == .moderate)
   }
 
+  @Test("Six-week change and scorecard both report the weaker estimate", arguments: [true, false])
+  func changeCarriesWeakerCertainty(priorIsLow: Bool) throws {
+    let prior = s(day: 0, session: 0, kg: 40, reps: priorIsLow ? 12 : 5)
+    let current = s(day: 42, session: 1, kg: 60, reps: priorIsLow ? 5 : 12)
+    let trend = try #require(ProgressTrendAnalyzer.trend(key: key(), samples: [prior, current],
+      incrementKg: 2.5, estimatesOneRepMax: true))
+    let scorecard = WorkoutScorecard.make([ScorecardInput(key: key(), exerciseName: "Press",
+      currentSets: [PriorSetRecord(weightKg: current.weightKg, reps: current.reps, completedAt: current.completedAt)],
+      previousSets: [PriorSetRecord(weightKg: prior.weightKg, reps: prior.reps, completedAt: prior.completedAt)],
+      repRange: nil, setRecord: false)])
+    #expect(trend.certainty == .low)
+    #expect(trend.certainty == scorecard.biggestGain?.certainty)
+  }
+
   @Test func onlyAnEstimateHasACertainty() {
     let heaviest = ProgressTrendAnalyzer.trend(
       key: key(),

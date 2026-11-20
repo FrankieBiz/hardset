@@ -122,6 +122,24 @@
       }
     }
 
+    @Test func changeWithWeakerPriorEstimate() async throws {
+      let key = ProgressionKey(exerciseID: ExerciseID(), machineID: MachineID())
+      let samples = [
+        ProgressionSample(sessionID: SessionID(), machineID: key.machineID, weightKg: 40, reps: 12,
+          completedAt: Self.day.addingTimeInterval(-42 * 86_400)),
+        ProgressionSample(sessionID: SessionID(), machineID: key.machineID, weightKg: 60, reps: 5,
+          completedAt: Self.day),
+      ]
+      let trend = try #require(ProgressTrendAnalyzer.trend(key: key, samples: samples,
+        incrementKg: 2.5, estimatesOneRepMax: true))
+      let board = ProgressBoard.make([.init(row: .init(trend: trend, exerciseName: "Chest press",
+        machineName: "Hammer Strength"), bodyPart: .chest)])
+      try await Snapshot.capture("kit-progressboard-weaker-certainty-dark", size: Self.tall) { Self.screen(board) }
+      try await Snapshot.capture("kit-progressboard-weaker-certainty-light", size: Self.tall, style: .light) { Self.screen(board) }
+      try await Snapshot.capture("kit-progressboard-weaker-certainty-ax3", size: CGSize(width: 402, height: 2400),
+        typeSize: .accessibility3) { Self.screen(board) }
+    }
+
     // MARK: - Chart marks
 
     private static func point(

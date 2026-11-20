@@ -24,8 +24,9 @@ public struct MovementTrend: Hashable, Sendable, Identifiable {
   /// those sessions are checked.
   public let stalledSessions: Int?
   public let latestDate: Date
-  /// How far to trust the latest estimate, from the reps behind it, so the figure and its badge can
-  /// sit together. Only an estimate has one: nil for a heaviest-load or bodyweight trend.
+  /// How far to trust the displayed estimate/change. A six-week ratio carries the weaker of
+  /// its two estimates, using the same combination rule as the scorecard. Without a comparison
+  /// window this is the latest estimate's certainty. Non-estimate metrics have none.
   public let certainty: Certainty?
 
   public var id: ProgressionKey { key }
@@ -77,9 +78,10 @@ public enum ProgressTrendAnalyzer {
       metric = .heaviestLoad
     }
 
-    let points: [(date: Date, value: Double, topLoad: Double)] = sessions.compactMap { session in
+    let points: [(date: Date, value: Double, topLoad: Double, certainty: Certainty?)] = sessions.compactMap { session in
       guard let value = value(of: metric, in: session.samples) else { return nil }
-      return (session.date, value, session.samples.map(\.weightKg).max() ?? 0)
+      return (session.date, value, session.samples.map(\.weightKg).max() ?? 0,
+        metric == .estimatedMax ? bestEstimateClaim(in: session.samples)?.certainty : nil)
     }
     guard let latest = points.last else { return nil }
 
@@ -95,10 +97,12 @@ public enum ProgressTrendAnalyzer {
         metric != .repsAtTopLoad
           || abs($0.topLoad - latest.topLoad) < PersonalRecordDetector.loadMatchingTolerance
       }
-      .map(\.value)
-      .max()
-    if let base, base > 0 {
-      change = latest.value / base - 1
+      .max {
+        if $0.value != $1.value { return $0.value < $1.value }
+        return ($0.certainty ?? .unevaluated) < ($1.certainty ?? .unevaluated)
+      }
+    if let base, base.value > 0 {
+      change = latest.value / base.value - 1
     } else {
       change = nil
     }
@@ -126,7 +130,9 @@ public enum ProgressTrendAnalyzer {
       sessionCount: sessions.count,
       stalledSessions: stalled,
       latestDate: latestSession.date,
-      certainty: metric == .estimatedMax ? bestEstimateClaim(in: latestSession.samples)?.certainty : nil
+      certainty: metric == .estimatedMax
+        ? Certainty.combine([latest.certainty, change == nil ? nil : base?.certainty].compactMap { $0 })
+        : nil
     )
   }
 
@@ -219,7 +225,10 @@ public enum ProgressTrendAnalyzer {
     samples
       .map { StrengthMath.estimatedOneRepMax(weightKg: $0.weightKg, reps: $0.reps) }
       .filter { $0.value != nil }
-      .max { ($0.value ?? 0) < ($1.value ?? 0) }
+      .max {
+        if $0.value != $1.value { return ($0.value ?? 0) < ($1.value ?? 0) }
+        return $0.certainty < $1.certainty
+      }
   }
 
   private static func value(of metric: TrendMetric, in samples: [ProgressionSample]) -> Double? {
