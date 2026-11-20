@@ -136,9 +136,9 @@ public enum ProgressTrendAnalyzer {
   /// like a run of records. `lastSessions` limits which sessions are tested, not what they are
   /// tested against.
   ///
-  /// Every tested set is compared with all earlier sets, so testing every session costs the square
-  /// of the set count. A screen that replays many movements passes `lastSessions`; the single
-  /// exercise screen, which needs every record mark, leaves it nil.
+  /// Incremental all-time landmarks preserve every comparison the detector needs, so every
+  /// record mark can be replayed without rescanning or re-estimating the whole history per set.
+  /// `lastSessions` still bounds the stall check's work without truncating its benchmarks.
   public static func recordSessionIDs(
     samples: [ProgressionSample],
     incrementKg: Double?,
@@ -149,26 +149,22 @@ public enum ProgressTrendAnalyzer {
     guard sessions.count > 1 else { return [] }
 
     var records = Set<SessionID>()
-    var history: [PriorSetRecord] = []
+    var history = RecordReplayIndex(samples: samples)
     let firstTested = max(1, sessions.count - (lastSessions ?? sessions.count))
 
     for (index, session) in sessions.enumerated() {
-      var sessionHistory = history
       for sample in session.samples.sorted(by: { $0.completedAt < $1.completedAt }) {
         if index >= firstTested {
           let found = PersonalRecordDetector.records(
             for: .init(weightKg: sample.weightKg, reps: sample.reps),
-            history: sessionHistory,
+            history: history.comparisons(for: sample),
             increment: incrementKg,
             estimatesOneRepMax: estimatesOneRepMax
           )
           if !found.isEmpty { records.insert(session.id) }
         }
-        sessionHistory.append(
-          PriorSetRecord(weightKg: sample.weightKg, reps: sample.reps, completedAt: sample.completedAt)
-        )
+        history.append(sample)
       }
-      history = sessionHistory
     }
     return records
   }

@@ -274,4 +274,27 @@ struct ProgressTrendTests {
     }
     #expect(ProgressTrendAnalyzer.mostImproved(trends).compactMap(\.sixWeekChange) == [0.2, 0.1, 0.05])
   }
+  @Test("Incremental replay preserves the full detector at tolerance edges and arbitrary rep counts",
+    arguments: [true, false])
+  func replayMatchesFullHistory(estimates: Bool) {
+    let loads = [0.0, 40, 40.009, 40.01, 40.011, 42.5, 50, 100, 105, 1001]
+    let reps = [1, 5, 8, 12, 13, 20, 999]
+    let samples = (0..<350).map { index in
+      s(day: index / 5, session: index / 5, kg: loads[(index * 7) % loads.count],
+        reps: reps[(index * 11) % reps.count])
+    }
+    var index = RecordReplayIndex(samples: samples)
+    var full: [PriorSetRecord] = []
+    for sample in samples {
+      let candidate = PersonalRecordDetector.Candidate(weightKg: sample.weightKg, reps: sample.reps)
+      let expected = PersonalRecordDetector.records(for: candidate, history: full,
+        increment: 5, estimatesOneRepMax: estimates)
+      let actual = PersonalRecordDetector.records(for: candidate, history: index.comparisons(for: sample),
+        increment: 5, estimatesOneRepMax: estimates)
+      #expect(actual == expected)
+      index.append(sample)
+      full.append(PriorSetRecord(weightKg: sample.weightKg, reps: sample.reps, completedAt: sample.completedAt))
+    }
+  }
+
 }
