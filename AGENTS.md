@@ -15,9 +15,9 @@ Before finishing any task, run:
 make check
 ```
 Or individually:
-- `hardset-check core`: 240 Core unit tests in 29 suites
-- `hardset-check store`: 304 Store tests in 30 suites with official SQLite UUID extension loaded
-- `hardset-check parse`: Swift syntax check across all 199 files
+- `hardset-check core`: 379 Core unit tests in 44 suites
+- `hardset-check store`: 367 Store tests in 33 suites with official SQLite UUID extension loaded
+- `hardset-check parse`: Swift syntax check across all 245 files
 - `python3 Tools/generate_project.py`: Project file regeneration check
 
 ## Orchestration Model Rules & Memory

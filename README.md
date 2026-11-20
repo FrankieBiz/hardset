@@ -44,7 +44,7 @@ make check          # Linux: syntax, Core, Store, query plans, palette contrast
 ./test.sh           # full HardsetKit suite, with engine-dependent tests in separate processes
 ```
 
-The Linux gate runs 240 Core tests in 29 suites and 304 Store tests in 30 suites. The macOS lane
+The Linux gate runs 379 Core tests in 44 suites and 367 Store tests in 33 suites. The macOS lane
 compiles the app and widget, runs 148 snapshot/UI-logic tests, and drives the real app through its
 UI journeys. The script's separate processes exist because SQLiteData's non-live `SyncEngine`
 attaches an in-memory metadatabase at a fixed shared-cache path, and the task local that resets it
