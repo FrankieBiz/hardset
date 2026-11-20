@@ -601,10 +601,11 @@ public final class SessionCoordinator {
     lastFailedCommand = nil
   }
 
-  /// Moves an exercise to a different machine, re-prefilling from that machine's history.
+  /// Moves an exercise to a different machine, re-prefilling the open rows nobody has typed into.
   ///
-  /// Reads history for just the new key. Logged sets keep the machine they were performed on,
-  /// because they were performed on it.
+  /// Reads history for just the new key, which excludes this workout; what was already done on the
+  /// destination in this workout is `ExerciseLogState`'s to apply on top, because only it knows.
+  /// Logged sets keep the machine they were performed on, because they were performed on it.
   @discardableResult
   public func changeMachine(
     to machineID: MachineID?,

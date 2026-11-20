@@ -51,8 +51,7 @@ public struct ExerciseLogState: Hashable, Sendable, Identifiable {
   public let id: UUID
   public let exerciseID: ExerciseID
   /// Mutable, because a lifter can find their usual machine occupied and move mid-exercise.
-  /// Changing it re-prefills the unlogged rows from the new machine's history — see
-  /// `changeMachine`.
+  /// Changing it re-prefills the open rows the lifter has not typed into — see `changeMachine`.
   public private(set) var machineID: MachineID?
   public let exerciseName: String
   /// Shown on the Lock Screen while resting, so the user knows which station they left.
@@ -417,8 +416,17 @@ public struct ExerciseLogState: Hashable, Sendable, Identifiable {
   /// Moves this exercise to a different machine mid-session.
   ///
   /// Already-logged rows are left exactly as they are: those sets were performed on the previous
-  /// machine, and rewriting them would be falsifying the record. Only the unlogged rows re-prefill,
-  /// from the new machine's history, because that is what the lifter is about to do.
+  /// machine, and rewriting them would be falsifying the record.
+  ///
+  /// Open rows re-prefill, because that is what the lifter is about to do, with two rules about
+  /// whose numbers they are:
+  ///
+  /// - A row the lifter has typed into is theirs and is left alone, whole. Re-prefilling is for a row
+  ///   still holding the number the app put there; a number the lifter chose is never replaced
+  ///   without asking, and a machine change is not a question.
+  /// - What was just done on the destination in this workout wins over its history, as it does for
+  ///   `appendSlot`, so the card never says two different things. A machine with a set saved
+  ///   today is also never "borrowed": that label is for a machine with nothing of its own.
   ///
   /// `prior` is the new machine's history, which only the store can supply — this type holds no
   /// database handle and must not start pretending otherwise.
@@ -434,16 +442,25 @@ public struct ExerciseLogState: Hashable, Sendable, Identifiable {
     // Refreshed, not carried. A 2.5 kg plate step and a 10 kg selectorized stack demand different
     // margins before a load counts as a record.
     self.machineIncrementKg = newIncrement
-    self.prior = newPrior
-    self.priorNote = newNote
+
+    // The destination's own sets from this workout, newest working set. A note means the caller
+    // fell back to other equipment's history; with sets of its own saved today the destination has
+    // no use for that fallback, neither for prefill nor for the "Last time" column, so both go
+    // rather than leave another machine's numbers standing as this one's.
+    let today = lastLoggedByKey[progressionKey]
+    let borrowedIsUnneeded = today != nil && newNote != nil
+    let prior = borrowedIsUnneeded ? nil : newPrior
+    let note = borrowedIsUnneeded ? nil : newNote
+    self.prior = prior
+    self.priorNote = note
 
     // Before any working set, the machine is usually being chosen as the lifter reaches it, so
     // open as many rows as last time on that machine, as `build` would have. Rows are only ever
     // added here, never removed, and never once work on this movement has been saved. They are
     // prefilled with the rest, just below.
-    if !slots.contains(where: { $0.isLogged && !$0.isWarmup }), let newPrior {
+    if !slots.contains(where: { $0.isLogged && !$0.isWarmup }), let prior {
       var working = workingSetCount
-      while working < newPrior.lastSets.count {
+      while working < prior.lastSets.count {
         slots.append(SetSlot(draft: SetEntryDraft(suggestion: nil)))
         working += 1
       }
@@ -451,15 +468,21 @@ public struct ExerciseLogState: Hashable, Sendable, Identifiable {
 
     // Warm-ups keep their drafts: history holds no warm-ups, and a working load in a warm-up row
     // is one tap from recording a warm-up at working weight (see `appendSlot`). Open working rows
-    // re-prefill from the new machine, with a target when its history can build one.
+    // re-prefill unless typed into: from today's set on this machine if there is one, otherwise
+    // from the machine's history, with a target when that can build one.
     let targets = Self.targets(
-      prior: newPrior, priorNote: newNote, repRange: repRange, count: workingSetCount,
+      prior: prior, priorNote: note, repRange: repRange, count: workingSetCount,
       incrementKg: newIncrement, unit: weightUnit, addsLoad: addsLoad
     )
     for index in slots.indices where !slots[index].isLogged && !slots[index].isWarmup {
-      let workingIndex = slots[..<index].count { !$0.isWarmup }
-      slots[index].draft = Self.draft(
-        prior: newPrior, workingIndex: workingIndex, target: targets[workingIndex])
+      guard !slots[index].draft.holdsTypedValues else { continue }
+      if let today {
+        slots[index].draft = SetEntryDraft(suggestion: today)
+      } else {
+        let workingIndex = slots[..<index].count { !$0.isWarmup }
+        slots[index].draft = Self.draft(
+          prior: prior, workingIndex: workingIndex, target: targets[workingIndex])
+      }
     }
   }
 
@@ -520,5 +543,19 @@ public struct ExerciseLogState: Hashable, Sendable, Identifiable {
     )
     guard !slot.isWarmup else { return }
     lastLoggedByKey[key] = record
+  }
+}
+
+extension SetEntryDraft {
+  /// Whether the lifter has put a number in this row that the app did not.
+  ///
+  /// A draft is seeded from a target or a suggestion and carries it, so "typed" is "differs from
+  /// the seed": it needs no flag for every writer (keypad, steppers, a restored undo) to remember
+  /// to raise. A row blank by seeding is typed once either field has a value. A value typed back to
+  /// exactly the seed is indistinguishable from it, and is the same number either way.
+  fileprivate var holdsTypedValues: Bool {
+    let seedWeight = target?.weightKg ?? suggestion?.weightKg
+    let seedReps = target?.reps ?? suggestion?.reps
+    return weightKg != seedWeight || reps != seedReps
   }
 }

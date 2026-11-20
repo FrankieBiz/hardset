@@ -502,4 +502,164 @@ struct ExerciseLogStateTests {
 
     #expect(built.comparison(forSlotID: doneBefore) == nil)
   }
+
+  // MARK: - A machine change and what the lifter already did or typed
+
+  private func history(_ machineID: MachineID, _ sets: [(Double, Int)]) -> PriorPerformance {
+    PriorPerformance(
+      key: ProgressionKey(exerciseID: exercise, machineID: machineID),
+      lastSets: sets.map { PriorSetRecord(weightKg: $0.0, reps: $0.1, completedAt: now) },
+      heaviestSet: nil)
+  }
+
+  /// A block on `machine` with 95 x 8 history, three rows open.
+  private func threeRowBlock() -> ExerciseLogState {
+    let key = ProgressionKey(exerciseID: exercise, machineID: machine)
+    return ExerciseLogState.build(
+      exerciseID: exercise, machineID: machine, exerciseName: "Press",
+      snapshot: snapshot(key: key, sets: [(95, 8), (95, 8), (95, 8)]), plannedSets: 3)
+  }
+
+  @Test("A machine change keeps what the lifter typed in an open row, and re-prefills the rest")
+  func machineChangeKeepsTypedRow() {
+    var state = threeRowBlock()
+    // Typed, not logged: this is the lifter's own number, and nothing in history knows about it.
+    state.slots[1].draft.weightKg = 87.5
+    state.slots[1].draft.reps = 6
+
+    state.changeMachine(
+      to: otherMachine, machineName: "Other", machineIncrementKg: nil,
+      prior: history(otherMachine, [(60, 10), (60, 10), (60, 10)]))
+
+    #expect(state.slots[1].draft.weightKg == 87.5)
+    #expect(state.slots[1].draft.reps == 6)
+    #expect(state.slots[1].draft.isLoggable)
+    // The rows still holding their own prefill follow the machine, as before.
+    #expect(state.slots[0].draft.weightKg == 60)
+    #expect(state.slots[2].draft.weightKg == 60)
+  }
+
+  @Test("A typed row survives a change to a machine that has no history at all")
+  func machineChangeKeepsTypedRowWithoutHistory() {
+    var state = threeRowBlock()
+    state.slots[1].draft.weightKg = 87.5
+    state.slots[1].draft.reps = 6
+
+    state.changeMachine(to: otherMachine, machineName: "Other", machineIncrementKg: nil, prior: nil)
+
+    #expect(state.slots[1].draft.weightKg == 87.5)
+    #expect(state.slots[1].draft.reps == 6)
+    #expect(state.slots[1].draft.isLoggable)
+    // An untouched row has nothing honest to hold, so it empties rather than keep the old load.
+    #expect(state.slots[0].draft.weightKg == nil)
+    #expect(!state.slots[0].draft.isLoggable)
+  }
+
+  @Test("A row with only one field typed is kept whole, not mixed with the new machine's numbers")
+  func machineChangeKeepsPartlyTypedRow() {
+    var state = threeRowBlock()
+    state.slots[2].draft.reps = 5
+
+    state.changeMachine(
+      to: otherMachine, machineName: "Other", machineIncrementKg: nil,
+      prior: history(otherMachine, [(60, 10), (60, 10), (60, 10)]))
+
+    #expect(state.slots[2].draft.reps == 5)
+    #expect(state.slots[2].draft.weightKg == 95)
+  }
+
+  @Test("A typed row is kept across a change however the number got there, including a stepper")
+  func machineChangeKeepsSteppedRow() {
+    var state = threeRowBlock()
+    state.slots[0].draft.weightKg = 97.5
+
+    state.changeMachine(
+      to: otherMachine, machineName: "Other", machineIncrementKg: nil,
+      prior: history(otherMachine, [(60, 10), (60, 10), (60, 10)]))
+
+    #expect(state.slots[0].draft.weightKg == 97.5)
+  }
+
+  @Test("An undone set's values are the lifter's and survive a machine change")
+  func machineChangeKeepsUndoneRow() {
+    var state = threeRowBlock()
+    state.slots[0].draft.weightKg = 100
+    state.markLogged(slotID: state.slots[0].id, setID: SetID(), completedAt: now)
+    state.unmarkLogged(slotID: state.slots[0].id)
+
+    state.changeMachine(
+      to: otherMachine, machineName: "Other", machineIncrementKg: nil,
+      prior: history(otherMachine, [(60, 10)]))
+
+    #expect(state.slots[0].draft.weightKg == 100)
+  }
+
+  @Test("Returning to a machine used today prefills open rows from what was just done on it")
+  func returnToMachineUsesTodaysSet() {
+    let priorHere = history(machine, [(95, 8), (95, 8), (95, 8)])
+    var state = threeRowBlock()
+    // The lifter hand-typed 100 x 8 and logged it, so it is not any history's number.
+    state.slots[0].draft.weightKg = 100
+    state.markLogged(slotID: state.slots[0].id, setID: SetID(), completedAt: now)
+
+    state.changeMachine(
+      to: otherMachine, machineName: "Other", machineIncrementKg: nil,
+      prior: history(otherMachine, [(60, 10), (60, 10), (60, 10)]))
+    state.changeMachine(to: machine, machineName: "Press", machineIncrementKg: nil, prior: priorHere)
+
+    // Same answer as "Add set" gives on this machine, so the card does not say two things.
+    #expect(state.slots[1].draft.weightKg == 100)
+    #expect(state.slots[1].draft.reps == 8)
+    #expect(state.slots[2].draft.weightKg == 100)
+    state.appendSlot()
+    #expect(state.slots[3].draft.weightKg == 100)
+    // The "Last time" column is still last time's, never today's.
+    #expect(state.previousSet(forSlotID: state.slots[1].id)?.weightKg == 95)
+  }
+
+  @Test("A machine trained on today is not called borrowed when the lifter comes back to it")
+  func machineWithSetsTodayIsNeverBorrowed() {
+    let borrowed = history(machine, [(95, 8), (95, 8)])
+    var state = threeRowBlock()
+    state.changeMachine(
+      to: otherMachine, machineName: "Other", machineIncrementKg: nil,
+      prior: borrowed, priorNote: "From another machine")
+    #expect(state.priorNote == "From another machine")
+    state.slots[1].draft = SetEntryDraft(weightKg: 70, reps: 10)
+    state.markLogged(slotID: state.slots[1].id, setID: SetID(), completedAt: now)
+
+    state.changeMachine(to: machine, machineName: "Press", machineIncrementKg: nil,
+      prior: history(machine, [(95, 8), (95, 8)]))
+    state.changeMachine(
+      to: otherMachine, machineName: "Other", machineIncrementKg: nil,
+      prior: borrowed, priorNote: "From another machine")
+
+    #expect(state.priorNote == nil)
+    // Another machine's history is not offered as this machine's "last time" either.
+    #expect(state.previousSet(forSlotID: state.slots[2].id) == nil)
+    // Open rows start at what was just done here, not at the other machine's load.
+    for slot in state.slots where !slot.isLogged {
+      #expect(slot.draft.weightKg == 70)
+      #expect(slot.draft.reps == 10)
+    }
+  }
+
+  @Test("A machine with sets saved only as a warm-up is still labelled borrowed")
+  func warmupOnlyMachineStillBorrows() {
+    let borrowed = history(machine, [(95, 8)])
+    var state = threeRowBlock()
+    state.changeMachine(
+      to: otherMachine, machineName: "Other", machineIncrementKg: nil,
+      prior: borrowed, priorNote: "From another machine")
+    state.appendSlot(isWarmup: true)
+    let warmup = state.slots.first { $0.isWarmup }!
+    state.slots[state.slots.firstIndex { $0.id == warmup.id }!].draft = SetEntryDraft(weightKg: 20, reps: 10)
+    state.markLogged(slotID: warmup.id, setID: SetID(), completedAt: now)
+
+    state.changeMachine(
+      to: otherMachine, machineName: "Other", machineIncrementKg: nil,
+      prior: borrowed, priorNote: "From another machine")
+
+    #expect(state.priorNote == "From another machine")
+  }
 }
