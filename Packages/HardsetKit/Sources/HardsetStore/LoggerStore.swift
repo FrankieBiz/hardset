@@ -902,8 +902,15 @@ public nonisolated struct LoggerStore: Sendable {
           .fetchOne(db)
         guard let latest else { continue }
 
+        // The indexed newest timestamp bounds this read to ties. Core owns which session wins,
+        // so the live row and receipt agree even when imports/sync preserve equal timestamps.
+        let ties = try exact.where { $0.completedAt.eq(latest.completedAt) }
+          .select(\.sessionID).fetchAll(db)
+        guard let previous = PreviousSession.latest(in: ties.map {
+          (SessionID(rawValue: $0), latest.completedAt)
+        }) else { continue }
         let lastSets = try exact
-          .where { $0.sessionID.eq(latest.sessionID) }
+          .where { $0.sessionID.eq(previous.rawValue) }
           .order { ($0.setOrdinal, $0.completedAt, $0.id) }
           .fetchAll(db)
           .map(Self.record(from:))

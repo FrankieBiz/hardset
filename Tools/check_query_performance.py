@@ -56,6 +56,12 @@ QUERIES = {
         'SELECT * FROM loggedSets WHERE exerciseID = ? AND machineID IS NULL AND NOT isWarmup AND reps >= ? ORDER BY weightKg DESC, reps DESC, completedAt DESC, id DESC LIMIT 1',
         ("exercise-3", 8),
     ),
+    "previous session ties": (
+        "SELECT sessionID FROM loggedSets WHERE exerciseID = ? AND machineID IS NULL AND NOT isWarmup "
+        "AND completedAt = (SELECT max(completedAt) FROM loggedSets WHERE exerciseID = ? AND machineID IS NULL AND NOT isWarmup) "
+        "AND NOT EXISTS (SELECT 1 FROM sessions WHERE sessions.id = loggedSets.sessionID AND sessions.notes LIKE 'Imported from %')",
+        ("exercise-3", "exercise-3"),
+    ),
     "import provenance": (
         "SELECT id FROM sessions WHERE id IN (?, ?) AND notes LIKE 'Imported from %'",
         ("session-100", "session-101"),

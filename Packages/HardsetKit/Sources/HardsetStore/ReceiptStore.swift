@@ -113,12 +113,11 @@ public nonisolated struct ReceiptStore: Sendable {
 
     let earlier = Dictionary(grouping: prior, by: key)
     let inputs = order.map { movement -> ScorecardInput in
-      let sessions = Dictionary(grouping: earlier[movement] ?? [], by: \.sessionID)
-      let latest = sessions.values.max { lhs, rhs in
-        let left = lhs.map(\.completedAt).min() ?? .distantPast
-        let right = rhs.map(\.completedAt).min() ?? .distantPast
-        return left != right ? left < right : lhs[0].sessionID.uuidString < rhs[0].sessionID.uuidString
-      }
+      let candidates = earlier[movement] ?? []
+      let latest = PreviousSession.latest(in: candidates.map {
+        (SessionID(rawValue: $0.sessionID), $0.completedAt)
+      })
+      let previous = candidates.filter { $0.sessionID == latest?.rawValue }
       let planRow =
         plan.first { $0.exerciseID == movement.exerciseID.rawValue && $0.machineID == movement.machineID?.rawValue }
         ?? plan.first { $0.exerciseID == movement.exerciseID.rawValue }
@@ -126,7 +125,7 @@ public nonisolated struct ReceiptStore: Sendable {
         key: movement,
         exerciseName: names[movement.exerciseID.rawValue] ?? "Unknown movement",
         currentSets: current[movement] ?? [],
-        previousSets: (latest ?? []).sorted(by: performedBefore).map(record),
+        previousSets: previous.sorted(by: performedBefore).map(record),
         repRange: planRow.flatMap { row in
           row.repRangeLower.flatMap { lower in row.repRangeUpper.flatMap { RepRange(lower: lower, upper: $0) } }
         },
