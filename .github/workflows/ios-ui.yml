@@ -168,6 +168,26 @@ jobs:
             -retry-tests-on-failure -test-iterations 2 \
             -resultBundlePath app-screens/ui-light.xcresult \
             2>&1 | tee ui-test-light.log | grep -E "error:|Test [Cc]ase|TEST (SUCCEEDED|FAILED)|Executed" || true
+          # The same journeys once more, one launch each, in reverse of their normal order. Every
+          # journey starts from an empty store (HARDSET_STORE=reset), so the order must not change what
+          # any of them finds; a journey that leaned on another's leftovers fails here and not in the
+          # passes above, which run in name order. Each test sets the appearance its name says, and its
+          # screenshots go to their own directory so they do not overwrite the ones above.
+          mkdir -p app-screens-reverse
+          REVERSE_FAILED=0
+          for TEST in $(grep -oE 'func test[A-Za-z0-9_]+' HardsetUITests/AppScreensUITests.swift | sed 's/^func //' | sort -r); do
+            case "$TEST" in
+              *Light*) xcrun simctl ui "$UDID" appearance light ;;
+              *) xcrun simctl ui "$UDID" appearance dark ;;
+            esac
+            TEST_RUNNER_HARDSET_UI_SHOT_DIR="$GITHUB_WORKSPACE/app-screens-reverse" \
+              xcodebuild test-without-building $COMMON \
+              -only-testing:HardsetUITests/AppScreensUITests/$TEST \
+              -retry-tests-on-failure -test-iterations 2 \
+              -resultBundlePath "app-screens-reverse/$TEST.xcresult" \
+              2>&1 | tee "app-screens-reverse/$TEST.log" | grep -E "error:|Test [Cc]ase|TEST (SUCCEEDED|FAILED)|Executed" || true
+            grep -qE "TEST (EXECUTE )?SUCCEEDED" "app-screens-reverse/$TEST.log" || { echo "Reverse order: $TEST failed"; REVERSE_FAILED=1; }
+          done
           kill "$LOG_PID" || true
           APP_BUNDLE=$(find dd/Build/Products -name Hardset.app -type d | head -n 1)
           BUNDLE_ID=$(/usr/libexec/PlistBuddy -c "Print :CFBundleIdentifier" "$APP_BUNDLE/Info.plist" 2>/dev/null || true)
@@ -176,6 +196,7 @@ jobs:
           cp -R "$HOME/Library/Developer/CoreSimulator/Devices/$UDID/data/Library/Logs/CrashReporter" app-screens/simulator-crashes 2>/dev/null || true
           ls -la app-screens
           grep -qE "TEST (EXECUTE )?SUCCEEDED" ui-test.log && grep -qE "TEST (EXECUTE )?SUCCEEDED" ui-test-light.log
+          [ "$REVERSE_FAILED" = 0 ]
 
       # When the app dies under test, its crash report is the only explanation. Simulator crashes
       # land in the host's DiagnosticReports.
@@ -193,6 +214,7 @@ jobs:
           path: |
             snapshots/
             app-screens/
+            app-screens-reverse/
             *.log
           if-no-files-found: warn
           retention-days: 14

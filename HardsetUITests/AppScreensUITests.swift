@@ -11,6 +11,10 @@ import XCTest
 /// Audit issues are recorded rather than failing the run, so one finding cannot hide the screens
 /// after it; the report is written next to the screenshots. With `HARDSET_UI_SHOT_DIR` set (CI
 /// passes it through `TEST_RUNNER_`), screenshots and the report land in that directory.
+///
+/// Every journey launches the app with an empty store (`HARDSET_STORE=reset`) and checks that it
+/// got one, so none depends on what another left behind and they pass in any order. A journey that
+/// needs data makes it through the real screens first.
 final class AppScreensUITests: XCTestCase {
   private var auditReport: [String] = []
 
@@ -105,7 +109,7 @@ final class AppScreensUITests: XCTestCase {
     // Recovery must read the committed set from disk, with its values and logged state intact.
     // Relaunching a real app exercises the startup and view wiring that Store tests cannot.
     app.terminate()
-    launch(app)
+    launch(app, keepsStore: true)
     let recoveredRows = app.descendants(matching: .any)
       .matching(NSPredicate(format: "label == %@", savedLabel))
     XCTAssertTrue(recoveredRows.firstMatch.waitForExistence(timeout: 30))
@@ -137,7 +141,7 @@ final class AppScreensUITests: XCTestCase {
 
   /// Mistakes are reversible: a logged set is undone from its long-press menu, a movement is
   /// removed from its card menu, and an accidental workout is discarded from the header menu,
-  /// leaving nothing in History. Runs first (alphabetical order) on a fresh simulator.
+  /// leaving nothing in History.
   @MainActor
   func testCorrectionsAndDiscardDark() throws {
     continueAfterFailure = true
@@ -324,7 +328,8 @@ final class AppScreensUITests: XCTestCase {
     XCTAssertTrue(addMovement.waitForExistence(timeout: 5), "and the workout is where it was left")
   }
 
-  /// The main screens again in light mode, over whatever the dark journey left behind.
+  /// The main screens again in light mode, over a finished workout it makes for itself, so the
+  /// start screen's last workout, History and Volume are drawn with data rather than empty.
   @MainActor
   func testScreensInLightMode() throws {
     continueAfterFailure = true
@@ -332,6 +337,7 @@ final class AppScreensUITests: XCTestCase {
     launch(app)
 
     guard waitForStartScreen(app) else { return }
+    finishOneWorkout(app)
     XCTAssertTrue(app.buttons["Start workout"].exists, "The start screen lost its start action")
     capture(app, "30-light-start")
     audit(app, screen: "light start")
@@ -495,26 +501,78 @@ final class AppScreensUITests: XCTestCase {
   /// Launches the app. Appearance is set by CI with `simctl ui` around separate passes, because
   /// `XCUIDevice.appearance` did not reach the system on the runner; the pass is chosen by the
   /// test method CI selects, not by this helper.
+  ///
+  /// - Parameter keepsStore: Leaves the database as the last launch left it. Only a journey that
+  ///   relaunches to prove recovery passes it; every first launch starts from an empty store.
   @MainActor
-  private func launch(_ app: XCUIApplication, showsOnboarding: Bool = false) {
+  private func launch(
+    _ app: XCUIApplication, showsOnboarding: Bool = false, keepsStore: Bool = false
+  ) {
     // Keeps the app's stderr, so a runtime trap's message survives for CI to collect.
     app.launchEnvironment["HARDSET_CAPTURE_STDERR"] = "1"
     // Every journey but the onboarding one starts past the first-launch sequence; that one starts
     // as a fresh install would.
     app.launchEnvironment["HARDSET_ONBOARDING"] = showsOnboarding ? "reset" : "skip"
+    // The store, and the preferences beside it, are emptied before the app opens them unless the
+    // journey is picking up after a relaunch of its own.
+    app.launchEnvironment["HARDSET_STORE"] = keepsStore ? "keep" : "reset"
     app.launch()
   }
 
-  /// Waits for the start screen, and when it does not come, says what is showing instead.
+  /// Waits for the start screen, and when it does not come, says what is showing instead. The
+  /// first launch of every journey is on an empty store, so it also waits for the start screen's own
+  /// statement that there are no sessions: a store that was not reset would show a last workout or
+  /// resume one, and the journeys that follow would be testing another journey's leftovers.
   @MainActor
   private func waitForStartScreen(_ app: XCUIApplication) -> Bool {
-    if app.buttons["Start workout"].waitForExistence(timeout: 30) { return true }
+    if app.buttons["Start workout"].waitForExistence(timeout: 30) {
+      let noSessions = app.descendants(matching: .any)
+        .matching(NSPredicate(format: "label == 'No sessions yet'")).firstMatch
+      XCTAssertTrue(
+        noSessions.waitForExistence(timeout: 10),
+        "The journey did not start from an empty store: the start screen shows a session.")
+      return true
+    }
     capture(app, "00-launch-did-not-reach-start")
     XCTFail(
       "The start screen did not appear within 30 seconds. If the startup failure screen is "
         + "showing, the simulator build could not create the database or the sync engine."
     )
     return false
+  }
+
+  /// A finished one-set workout, made through the real screens: Bench Press, 100 for 8, logged and
+  /// finished. The fixture for a journey that needs History and Volume to hold something.
+  @MainActor
+  private func finishOneWorkout(_ app: XCUIApplication) {
+    app.buttons["Start workout"].tap()
+    let addMovement = app.buttons["Add movement"]
+    XCTAssertTrue(addMovement.waitForExistence(timeout: 5))
+    addMovement.tap()
+    let bench = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Barbell Bench Press'"))
+      .firstMatch
+    XCTAssertTrue(bench.waitForExistence(timeout: 5))
+    bench.tap()
+    let row = app.descendants(matching: .any)
+      .matching(NSPredicate(format: "label BEGINSWITH 'Set 1'")).firstMatch
+    XCTAssertTrue(row.waitForExistence(timeout: 5))
+    row.coordinate(withNormalizedOffset: CGVector(dx: 0.44, dy: 0.5)).tap()
+    XCTAssertTrue(app.buttons["Next field"].waitForExistence(timeout: 5))
+    for key in ["1", "0", "0"] { app.buttons[key].tap() }
+    app.buttons["Next field"].tap()
+    app.buttons["8"].tap()
+    app.buttons["Done"].tap()
+    row.coordinate(withNormalizedOffset: CGVector(dx: 0.93, dy: 0.5)).tap()
+    let loggedRow = app.descendants(matching: .any)
+      .matching(NSPredicate(format: "label BEGINSWITH 'Set 1,' AND label CONTAINS ', logged'"))
+      .firstMatch
+    XCTAssertTrue(loggedRow.waitForExistence(timeout: 5), "The fixture set must actually be saved.")
+    let finish = app.buttons["Finish workout"]
+    XCTAssertTrue(finish.waitForExistence(timeout: 5))
+    finish.tap()
+    XCTAssertTrue(app.buttons["Finish"].waitForExistence(timeout: 5))
+    app.buttons["Finish"].tap()
+    XCTAssertTrue(app.buttons["Start workout"].waitForExistence(timeout: 5))
   }
 
   /// True once the element is no longer on screen: a sheet that has finished closing, rather than one
