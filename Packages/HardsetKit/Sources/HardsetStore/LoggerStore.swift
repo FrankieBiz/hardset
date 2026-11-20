@@ -328,6 +328,7 @@ public nonisolated struct LoggerStore: Sendable {
       .where { $0.exerciseID.eq(key.exerciseID.rawValue) }
       .where { $0.machineID.is(machineID) }
       .where { !$0.isWarmup }
+      .where { #sql("NOT EXISTS (SELECT 1 FROM sessions WHERE sessions.id = \($0.sessionID) AND sessions.notes LIKE 'Imported from %')", as: Bool.self) }
     // Rule 1 covers the whole first session on a lift, not only its first set. Until a working
     // set exists from another session there is no baseline, and an ordinary ramp would announce
     // a record on every step. Once one exists, this session's earlier sets are history too.
@@ -654,9 +655,8 @@ public nonisolated struct LoggerStore: Sendable {
   private static let importedSessionPattern = "Imported from %"
 
   /// Whether "Repeat last workout" has anything to repeat: a finished workout of the lifter's own.
-  /// An imported workout never counts. Its movements are kept apart from the catalogue's on purpose,
-  /// as unevaluated copies, so a native workout started from one would log against them and every
-  /// record, mark and scorecard after it would compare with unevaluated history.
+  /// An imported workout never counts: its equipment was not recorded, so repeating its plan
+  /// cannot vouch for the machines today's workout would use.
   public func hasRepeatableWorkout() throws -> Bool {
     try database.read { db in
       let found = try Session
@@ -809,6 +809,7 @@ public nonisolated struct LoggerStore: Sendable {
           .where { $0.exerciseID.eq(key.exerciseID.rawValue) }
           .where { $0.machineID.eq(machineID) }
           .where { !$0.isWarmup }
+          .where { #sql("NOT EXISTS (SELECT 1 FROM sessions WHERE sessions.id = \($0.sessionID) AND sessions.notes LIKE 'Imported from %')", as: Bool.self) }
           .order { $0.completedAt.desc() }
           .limit(limit)
           .fetchAll(db)
@@ -817,6 +818,7 @@ public nonisolated struct LoggerStore: Sendable {
           .where { $0.exerciseID.eq(key.exerciseID.rawValue) }
           .where { $0.machineID.is(nil) }
           .where { !$0.isWarmup }
+          .where { #sql("NOT EXISTS (SELECT 1 FROM sessions WHERE sessions.id = \($0.sessionID) AND sessions.notes LIKE 'Imported from %')", as: Bool.self) }
           .order { $0.completedAt.desc() }
           .limit(limit)
           .fetchAll(db)
@@ -887,6 +889,7 @@ public nonisolated struct LoggerStore: Sendable {
       let history = LoggedSet
         .where { $0.exerciseID.eq(exerciseID) }
         .where { !$0.isWarmup }
+        .where { #sql("NOT EXISTS (SELECT 1 FROM sessions WHERE sessions.id = \($0.sessionID) AND sessions.notes LIKE 'Imported from %')", as: Bool.self) }
         .where { #sql("\($0.sessionID) IS NOT \(excluded)", as: Bool.self) }
       // Discover only equipment identifiers, rather than decoding every prior
       // set. DISTINCT uses the exercise/machine index and includes free weights.
@@ -899,8 +902,15 @@ public nonisolated struct LoggerStore: Sendable {
           .fetchOne(db)
         guard let latest else { continue }
 
+        // The indexed newest timestamp bounds this read to ties. Core owns which session wins,
+        // so the live row and receipt agree even when imports/sync preserve equal timestamps.
+        let ties = try exact.where { $0.completedAt.eq(latest.completedAt) }
+          .select(\.sessionID).fetchAll(db)
+        guard let previous = PreviousSession.latest(in: ties.map {
+          (SessionID(rawValue: $0), latest.completedAt)
+        }) else { continue }
         let lastSets = try exact
-          .where { $0.sessionID.eq(latest.sessionID) }
+          .where { $0.sessionID.eq(previous.rawValue) }
           .order { ($0.setOrdinal, $0.completedAt, $0.id) }
           .fetchAll(db)
           .map(Self.record(from:))

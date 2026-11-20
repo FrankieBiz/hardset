@@ -107,6 +107,7 @@ let package = Package(
         "HardsetStore", "HardsetCore",
         .product(name: "GRDB", package: "GRDB.swift"),
       ],
+      resources: [.copy("Fixtures")],
       swiftSettings: strictConcurrency
     ),
 

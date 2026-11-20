@@ -399,6 +399,37 @@ struct ReceiptStoreTests {
     #expect(scorecard.headline == "Beat last time on 1 of 1")
   }
 
+  @Test("Live and receipt comparisons pick the most recent working set, with a session-ID tie break",
+    arguments: [false, true])
+  func previousSessionRuleAgrees(tied: Bool) async throws {
+    let (db, exercise, machine) = try await scorecardFixture()
+    let start = Date(timeIntervalSince1970: 1_000_000)
+    let high = UUID(uuidString: "00000000-0000-0000-0000-000000000002")!
+    let low = UUID(uuidString: "00000000-0000-0000-0000-000000000001")!
+    try await db.write { db in
+      for id in [high, low] {
+        try Session.insert { Session.Draft(id: id, startedAt: start,
+          finishedAt: start.addingTimeInterval(3600)) }.execute(db)
+      }
+      let values: [(UUID, UUID, Double, Double, Int)] = [
+        (high, high, 40, 10, 0), (high, UUID(), 40, 200, 1),
+        (low, UUID(uuidString: "FFFFFFFF-FFFF-FFFF-FFFF-FFFFFFFFFFFF")!, 50, tied ? 200 : 100, 0),
+      ]
+      for (session, set, weight, offset, ordinal) in values {
+        try LoggedSet.insert { LoggedSet.Draft(id: set, sessionID: session,
+          exerciseID: exercise.rawValue, machineID: machine.rawValue, setOrdinal: ordinal,
+          weightKg: weight, reps: 8, completedAt: start.addingTimeInterval(offset)) }.execute(db)
+      }
+    }
+    let key = ProgressionKey(exerciseID: exercise, machineID: machine)
+    let prior = try LoggerStore(database: db).priorPerformanceSnapshot(for: [key], asOf: start)
+    #expect(prior.prior(for: key)?.lastSets.map(\.weightKg) == [40, 40])
+    let current = try await seedFinished(db, exercise: exercise, machine: machine,
+      sets: [(40, 8)], at: start.addingTimeInterval(86_400))
+    let receipt = try await ReceiptStore(database: db).load(current)
+    #expect(receipt.scorecard?.entries.first?.outcome == .matched)
+  }
+
   @Test("The scorecard reads the rep range from the session, so a load jump inside it counts")
   func receiptScorecardUsesTheSessionsRepRange() async throws {
     let (db, exercise, machine) = try await scorecardFixture()

@@ -20,13 +20,13 @@ struct ProgressBoardStoreTests {
 
   private func exercise(
     _ database: any DatabaseWriter, _ name: String, muscle: String = "unknown",
-    modality: String = "machine", notes: String = "", archived: Bool = false
+    modality: String = "machine", notes: String = "", archived: Bool = false, curated: Bool = false
   ) throws -> ExerciseID {
     let id = ExerciseID()
     try database.write { db in
       try Exercise.insert {
         Exercise.Draft(
-          id: id.rawValue, name: name, modality: modality, primaryMuscle: muscle, notes: notes,
+          id: id.rawValue, name: name, isCurated: curated, modality: modality, primaryMuscle: muscle, notes: notes,
           isArchived: archived)
       }
       .execute(db)
@@ -113,8 +113,8 @@ struct ProgressBoardStoreTests {
     #expect(board.sections.first?.category == .quads)
   }
 
-  @Test("Imported and archived movements are left off the board")
-  func boardExcludesImportedAndArchived() async throws {
+  @Test("Legacy imported movements remain visible while archived movements stay retired")
+  func boardIncludesImportedExcludesArchived() async throws {
     let database = try migratedDatabase()
     let kept = try exercise(database, "Chest Press", muscle: "chest")
     let imported = try exercise(
@@ -125,7 +125,82 @@ struct ProgressBoardStoreTests {
 
     let board = try await ProgressBoardStore(database: database).loadBoard()
 
-    #expect(board.sections.flatMap(\.rows).map(\.exerciseName) == ["Chest Press"])
+    let rows = board.sections.flatMap(\.rows)
+    #expect(Set(rows.map(\.exerciseName)) == ["Chest Press", "Bench (Imported • Strong)"])
+    #expect(rows.first { $0.id.exerciseID == imported }?.machineName == "Imported · machine not recorded")
+  }
+
+  @Test("Strong history matches two live movements, creates only the unknown one, and stays separate")
+  func strongImportMatchesMovements() async throws {
+    let database = try migratedDatabase()
+    let press = try exercise(database, "Chest Press", muscle: "chest", curated: true)
+    let pull = try exercise(database, "Lat Pulldown", muscle: "lats", curated: true)
+    let hammer = try machine(database, "Hammer")
+    let life = try machine(database, "Life")
+    try train(database, press, machine: hammer, sets: [(80, 8)], daysAgo: 7)
+    try train(database, press, machine: life, sets: [(100, 8)], daysAgo: 2)
+    let url = try #require(Bundle.module.url(forResource: "strong-progress", withExtension: "csv", subdirectory: "Fixtures"))
+    let csv = try String(contentsOf: url, encoding: .utf8)
+    let preview = try WorkoutCSVImport.preview(csv, strongUnit: .kilograms, timeZone: TimeZone(secondsFromGMT: 0)!)
+    let transfer = DataTransferStore(database: database)
+    #expect(try await transfer.importWorkouts(preview) == 6)
+    let stored = try await database.read { db in
+      (try Exercise.fetchAll(db), try LoggedSet.fetchAll(db).filter { $0.machineID == nil })
+    }
+    #expect(stored.0.count == 3)
+    #expect(stored.1.filter { $0.exerciseID == press.rawValue }.count == 2)
+    #expect(stored.1.filter { $0.exerciseID == pull.rawValue }.count == 2)
+    await #expect(throws: WorkoutImportError.alreadyImported) { try await transfer.importWorkouts(preview) }
+    #expect(try await database.read { try LoggedSet.fetchAll($0).count } == 8)
+    let board = try await ProgressBoardStore(database: database).loadBoard()
+    let pressRows = board.sections.flatMap(\.rows).filter { $0.id.exerciseID == press }
+    #expect(pressRows.count == 3)
+    #expect(pressRows.contains { $0.machineName == "Imported · machine not recorded" })
+    let chart = try await ProgressionStore(database: database).loadHistory(for: press)
+    #expect(chart.series.count == 3)
+    #expect(chart.series.contains { chart.label(for: $0.key) == "Imported · machine not recorded" && $0.points.count == 2 })
+  }
+
+  @Test("Matching a custom movement never seeds native free-weight comparisons")
+  func importedAndNativeNoMachineStaySeparate() async throws {
+    let database = try migratedDatabase()
+    let seeder = CatalogSeeder(database: database)
+    let lift = try seeder.createCustomExercise(named: "Custom Press")
+    let csv = "Date,Workout Name,Duration,Exercise Name,Set Order,Weight,Reps\n"
+      + "2026-09-20 10:00:00,Push,1h,custom  PRESS,1,200,8\n"
+    let preview = try WorkoutCSVImport.preview(csv, strongUnit: .kilograms)
+    _ = try await DataTransferStore(database: database).importWorkouts(preview)
+    let logger = LoggerStore(database: database)
+    let key = ProgressionKey(exerciseID: lift.id)
+    #expect(try logger.priorPerformanceSnapshot(for: [key], asOf: now).prior(for: key) == nil)
+    let date = preview.sessions[0].finishedAt.addingTimeInterval(86_400)
+    let first = try logger.startSession(at: date)
+    let result = try logger.logSet(sessionID: first, exerciseID: lift.id,
+      draft: SetEntryDraft(weightKg: 40, reps: 8), recordIncrement: nil, at: date)
+    #expect(result.records.isEmpty)
+    try logger.finishSession(first, at: date.addingTimeInterval(3600))
+    let receipt = try await ReceiptStore(database: database).load(first)
+    #expect(receipt.scorecard?.entries.first?.outcome == .firstTime)
+    let history = try await ProgressionStore(database: database).loadHistory(for: lift.id)
+    #expect(history.series.count == 2)
+    #expect(Set(history.series.map { $0.key.isImported }) == [false, true])
+    #expect(history.machineChanges.isEmpty)
+  }
+
+  @Test("Machine and cable movements with nil equipment explain the missing identity",
+    arguments: ["machine", "cable"])
+  func missingMachineIsExplicit(modality: String) async throws {
+    let database = try migratedDatabase()
+    let lift = try exercise(database, "Unidentified press", muscle: "chest", modality: modality)
+    try train(database, lift, sets: [(40, 8)], daysAgo: 1)
+    let board = try await ProgressBoardStore(database: database).loadBoard()
+    let row = try #require(board.sections.first?.rows.first)
+    #expect(row.id.machineID == nil)
+    #expect(row.machineName == "No machine recorded")
+    #expect(ProgressCopy.spokenRow(row).contains("No machine recorded"))
+    let chart = try await ProgressionStore(database: database).loadHistory(for: lift)
+    #expect(chart.series.count == 1)
+    #expect(chart.label(for: row.id) == "No machine recorded")
   }
 
   @Test("Warm-ups never reach a trend")

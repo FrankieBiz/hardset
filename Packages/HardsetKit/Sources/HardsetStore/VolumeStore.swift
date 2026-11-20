@@ -181,10 +181,8 @@ public nonisolated struct ProgressionStore: Sendable {
   /// Suspends the caller while GRDB reads samples and labels in one snapshot.
   public func loadHistory(for exerciseID: ExerciseID) async throws -> ProgressionHistory {
     try Task.checkCancellation()
-    // Analysed inside the read, on the database's own queue. The record replay is quadratic in a
-    // series' set count, and run after the read returned it would run on the caller's actor, which
-    // is the main actor for a screen: a long history would hold the interface up. This is the same
-    // reason `ProgressBoardStore` does its work inside its read.
+    // Analyse on the database queue so decoding and record replay release the caller's actor,
+    // just as the Progress board does. The replay uses incremental all-time comparisons.
     let history = try await database.read { db in
       Self.analyze(try Self.readHistoryInputs(for: exerciseID, in: db), exerciseID: exerciseID)
     }
@@ -198,6 +196,7 @@ public nonisolated struct ProgressionStore: Sendable {
     /// Each machine's real load step, so a record on a 5 kg stack needs a genuine 5 kg.
     let increments: [MachineID: Double]
     let estimatesOneRepMax: Bool
+    let requiresMachineIdentity: Bool
   }
 
   private static func readHistoryInputs(for exerciseID: ExerciseID, in db: Database) throws
@@ -208,12 +207,14 @@ public nonisolated struct ProgressionStore: Sendable {
     // The movement's modality decides whether its load may be estimated at all. An unknown or
     // missing modality is not assumed to be bodyweight.
     let modality = try Exercise.where { $0.id.eq(exerciseID.rawValue) }.select(\.modality).fetchOne(db)
-    let estimates = modality.flatMap(ExerciseModality.init(rawValue:))?.estimatesOneRepMax ?? true
+    let knownModality = modality.flatMap(ExerciseModality.init(rawValue:))
+    let estimates = knownModality?.estimatesOneRepMax ?? true
     // One read for both, so labelling a history stays a single query however much it carries.
     let machines = try readMachines(ids, in: db)
     return HistoryInputs(
       samples: samples, names: machines.names, increments: machines.increments,
-      estimatesOneRepMax: estimates
+      estimatesOneRepMax: estimates,
+      requiresMachineIdentity: knownModality == .machine || knownModality == .cable
     )
   }
 
@@ -228,7 +229,7 @@ public nonisolated struct ProgressionStore: Sendable {
     var recordSessions: [ProgressionKey: Set<SessionID>] = [:]
     var ledgers: [ProgressionKey: [BestAtWeight]] = [:]
     for one in series {
-      let samples = inputs.samples.filter { $0.machineID == one.key.machineID }
+      let samples = inputs.samples.filter { $0.machineID == one.key.machineID && $0.isImported == one.key.isImported }
       recordSessions[one.key] = ProgressTrendAnalyzer.recordSessionIDs(
         samples: samples, incrementKg: one.key.machineID.flatMap { inputs.increments[$0] },
         estimatesOneRepMax: inputs.estimatesOneRepMax
@@ -238,6 +239,7 @@ public nonisolated struct ProgressionStore: Sendable {
     return ProgressionHistory(
       series: series, machineChanges: changes, machineNames: inputs.names,
       estimatesOneRepMax: inputs.estimatesOneRepMax,
+      requiresMachineIdentity: inputs.requiresMachineIdentity,
       recordSessionIDs: recordSessions, bestAtWeight: ledgers
     )
   }
@@ -245,20 +247,23 @@ public nonisolated struct ProgressionStore: Sendable {
   private static func readSamples(for exerciseID: ExerciseID, limit: Int, in db: Database) throws
     -> [ProgressionSample]
   {
-    try LoggedSet
+    let rows = try LoggedSet
       .where { $0.exerciseID.eq(exerciseID.rawValue) }
       .where { !$0.isWarmup }
       .order { ($0.completedAt.desc(), $0.setOrdinal.desc(), $0.id.desc()) }
       .limit(limit)
       .fetchAll(db)
-      .reversed()
-      .map {
+    let sessionIDs = Array(Set(rows.map(\.sessionID)))
+    let imported = Set(try Session.where { $0.id.in(sessionIDs) && $0.notes.like("Imported from %") }
+      .select(\.id).fetchAll(db))
+    return rows.reversed().map {
         ProgressionSample(
           sessionID: SessionID(rawValue: $0.sessionID),
           machineID: $0.machineID.map(MachineID.init(rawValue:)),
           weightKg: $0.weightKg,
           reps: $0.reps,
-          completedAt: $0.completedAt
+          completedAt: $0.completedAt,
+          isImported: imported.contains($0.sessionID)
         )
       }
   }
@@ -294,6 +299,8 @@ public nonisolated struct ProgressionHistory: Hashable, Sendable {
   /// `false` for a movement whose logged load is not the load moved, such as bodyweight work, so
   /// a chart can say why no one-rep max is estimated rather than blame the rep range.
   public let estimatesOneRepMax: Bool
+  /// Machine/cable movements cannot call nil equipment "Free weight".
+  public let requiresMachineIdentity: Bool
   /// For each series, the sessions in which at least one record was set, so the chart can mark
   /// them. Records are the detector's alone, measured against that machine's own history.
   public let recordSessionIDs: [ProgressionKey: Set<SessionID>]
@@ -305,6 +312,7 @@ public nonisolated struct ProgressionHistory: Hashable, Sendable {
     machineChanges: [MachineChange],
     machineNames: [MachineID: String],
     estimatesOneRepMax: Bool = true,
+    requiresMachineIdentity: Bool = false,
     recordSessionIDs: [ProgressionKey: Set<SessionID>] = [:],
     bestAtWeight: [ProgressionKey: [BestAtWeight]] = [:]
   ) {
@@ -312,13 +320,17 @@ public nonisolated struct ProgressionHistory: Hashable, Sendable {
     self.machineChanges = machineChanges
     self.machineNames = machineNames
     self.estimatesOneRepMax = estimatesOneRepMax
+    self.requiresMachineIdentity = requiresMachineIdentity
     self.recordSessionIDs = recordSessionIDs
     self.bestAtWeight = bestAtWeight
   }
 
   /// Label for a series. Free-weight work and a deleted machine are named rather than blank.
   public func label(for key: ProgressionKey) -> String {
-    guard let machineID = key.machineID else { return "Free weight" }
+    if key.isImported { return ProgressCopy.importedHistory }
+    guard let machineID = key.machineID else {
+      return requiresMachineIdentity ? ProgressCopy.noMachineRecorded : "Free weight"
+    }
     return machineNames[machineID] ?? "Unnamed machine"
   }
 

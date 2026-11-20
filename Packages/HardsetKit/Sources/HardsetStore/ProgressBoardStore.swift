@@ -25,10 +25,8 @@ public nonisolated struct ProgressBoardStore: Sendable {
   }
 
   private static func readBoard(in db: Database) throws -> ProgressBoard {
-    // Archived movements are retired, and imported ones are deliberately kept as separate,
-    // unevaluated series, so neither claims progress here.
+    // Archived movements are retired. Imported equipment stays an explicitly unknown series.
     let exercises = try Exercise.where { !$0.isArchived }.fetchAll(db)
-      .filter { !$0.notes.hasPrefix(CatalogSeeder.importedNotesPrefix) }
     guard !exercises.isEmpty else { return .empty }
     let byExercise = Dictionary(uniqueKeysWithValues: exercises.map { ($0.id, $0) })
 
@@ -36,15 +34,21 @@ public nonisolated struct ProgressBoardStore: Sendable {
       .where { !$0.isWarmup }
       .select { ($0.exerciseID, $0.machineID, $0.sessionID, $0.weightKg, $0.reps, $0.completedAt) }
       .fetchAll(db)
+    let sessionIDs = Array(Set(sets.map { $0.2 }))
+    let imported = Set(try Session.where { $0.id.in(sessionIDs) && $0.notes.like("Imported from %") }
+      .select(\.id).fetchAll(db))
     var grouped: [ProgressionKey: [ProgressionSample]] = [:]
     for (exerciseID, machineID, sessionID, weightKg, reps, completedAt) in sets
     where byExercise[exerciseID] != nil {
+      let isImported = imported.contains(sessionID)
+        || byExercise[exerciseID]?.notes.hasPrefix(CatalogSeeder.importedNotesPrefix) == true
       let key = ProgressionKey(
-        exerciseID: ExerciseID(rawValue: exerciseID), machineID: machineID.map(MachineID.init(rawValue:)))
+        exerciseID: ExerciseID(rawValue: exerciseID), machineID: machineID.map(MachineID.init(rawValue:)),
+        isImported: isImported)
       grouped[key, default: []].append(
         ProgressionSample(
           sessionID: SessionID(rawValue: sessionID), machineID: key.machineID, weightKg: weightKg,
-          reps: reps, completedAt: completedAt))
+          reps: reps, completedAt: completedAt, isImported: isImported))
     }
     guard !grouped.isEmpty else { return .empty }
 
@@ -61,17 +65,24 @@ public nonisolated struct ProgressBoardStore: Sendable {
       guard let exercise = byExercise[key.exerciseID.rawValue] else { continue }
       let machine = key.machineID.flatMap { machines[$0.rawValue] }
       // An unknown modality is not assumed to be bodyweight, so it still estimates.
-      let estimates = ExerciseModality(rawValue: exercise.modality)?.estimatesOneRepMax ?? true
+      let modality = ExerciseModality(rawValue: exercise.modality)
+      let estimates = modality?.estimatesOneRepMax ?? true
       guard
         let trend = ProgressTrendAnalyzer.trend(
           key: key, samples: samples, incrementKg: machine?.stackIncrementKg,
           estimatesOneRepMax: estimates)
       else { continue }
+      let machineLabel: String?
+      if key.isImported { machineLabel = ProgressCopy.importedHistory }
+      else if let machine { machineLabel = MachineRecord(row: machine).displayName }
+      else if key.machineID == nil && (modality == .machine || modality == .cable) {
+        machineLabel = ProgressCopy.noMachineRecorded
+      } else { machineLabel = nil }
       entries.append(
         ProgressBoard.Entry(
           row: ProgressBoard.Row(
             trend: trend, exerciseName: exercise.name,
-            machineName: machine.map { MachineRecord(row: $0).displayName }),
+            machineName: machineLabel),
           bodyPart: MuscleFilterCategory.category(for: MuscleKey(stored: exercise.primaryMuscle))
         ))
     }

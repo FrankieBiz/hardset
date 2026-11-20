@@ -242,6 +242,37 @@ struct ProgressTrendTests {
     #expect(trend?.certainty == .moderate)
   }
 
+  @Test("Six-week change and scorecard both report the weaker estimate", arguments: [true, false])
+  func changeCarriesWeakerCertainty(priorIsLow: Bool) throws {
+    let prior = s(day: 0, session: 0, kg: 40, reps: priorIsLow ? 12 : 5)
+    let current = s(day: 42, session: 1, kg: 60, reps: priorIsLow ? 5 : 12)
+    let trend = try #require(ProgressTrendAnalyzer.trend(key: key(), samples: [prior, current],
+      incrementKg: 2.5, estimatesOneRepMax: true))
+    let scorecard = WorkoutScorecard.make([ScorecardInput(key: key(), exerciseName: "Press",
+      currentSets: [PriorSetRecord(weightKg: current.weightKg, reps: current.reps, completedAt: current.completedAt)],
+      previousSets: [PriorSetRecord(weightKg: prior.weightKg, reps: prior.reps, completedAt: prior.completedAt)],
+      repRange: nil, setRecord: false)])
+    #expect(trend.certainty == .low)
+    #expect(trend.certainty == scorecard.biggestGain?.certainty)
+  }
+
+  @Test("Equal estimates select the same supported baseline regardless of set order", arguments: [false, true])
+  func equalEstimateCertaintyAgrees(reversed: Bool) throws {
+    let low = s(day: 0, session: 0, kg: 40, reps: 12)
+    let high = s(day: 0, session: 0, kg: 48, reps: 5)
+    let prior = reversed ? [high, low] : [low, high]
+    let current = s(day: 42, session: 1, kg: 72, reps: 5)
+    let trend = try #require(ProgressTrendAnalyzer.trend(key: key(), samples: prior + [current],
+      incrementKg: 2.5, estimatesOneRepMax: true))
+    func record(_ sample: ProgressionSample) -> PriorSetRecord {
+      PriorSetRecord(weightKg: sample.weightKg, reps: sample.reps, completedAt: sample.completedAt)
+    }
+    let card = WorkoutScorecard.make([ScorecardInput(key: key(), exerciseName: "Press",
+      currentSets: [record(current)], previousSets: prior.map(record))])
+    #expect(trend.certainty == .high)
+    #expect(card.biggestGain?.certainty == trend.certainty)
+  }
+
   @Test func onlyAnEstimateHasACertainty() {
     let heaviest = ProgressTrendAnalyzer.trend(
       key: key(),
@@ -274,4 +305,36 @@ struct ProgressTrendTests {
     }
     #expect(ProgressTrendAnalyzer.mostImproved(trends).compactMap(\.sixWeekChange) == [0.2, 0.1, 0.05])
   }
+  @Test("Incremental replay preserves the full detector at tolerance edges and arbitrary rep counts",
+    arguments: [true, false])
+  func replayMatchesFullHistory(estimates: Bool) {
+    let loads = [0.0, 40, 40.009, 40.01, 40.011, 42.5, 50, 100, 105, 1001]
+    let reps = [1, 5, 8, 12, 13, 20, 999]
+    let samples = (0..<350).map { index in
+      s(day: index / 5, session: index / 5, kg: loads[(index * 7) % loads.count],
+        reps: reps[(index * 11) % reps.count])
+    }
+    var index = RecordReplayIndex(samples: samples)
+    var full: [PriorSetRecord] = []
+    for sample in samples {
+      let candidate = PersonalRecordDetector.Candidate(weightKg: sample.weightKg, reps: sample.reps)
+      let expected = PersonalRecordDetector.records(for: candidate, history: full,
+        increment: 5, estimatesOneRepMax: estimates)
+      let actual = PersonalRecordDetector.records(for: candidate, history: index.comparisons(for: sample),
+        increment: 5, estimatesOneRepMax: estimates)
+      #expect(actual == expected)
+      index.append(sample)
+      full.append(PriorSetRecord(weightKg: sample.weightKg, reps: sample.reps, completedAt: sample.completedAt))
+    }
+  }
+
+  @Test("Most improved compares only estimated maxima, never load or rep percentages")
+  func mostImprovedDoesNotMixMetrics() {
+    let trends = [TrendMetric.estimatedMax, .heaviestLoad, .repsAtTopLoad].enumerated().map { index, metric in
+      MovementTrend(key: ProgressionKey(exerciseID: ExerciseID()), metric: metric, sparkline: [1, 2],
+        sixWeekChange: Double(index + 1) * 0.1, sessionCount: 2, stalledSessions: nil, latestDate: day(42))
+    }
+    #expect(ProgressTrendAnalyzer.mostImproved(trends).map(\.metric) == [.estimatedMax])
+  }
+
 }

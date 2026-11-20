@@ -209,9 +209,8 @@ public struct WorkoutScorecard: Hashable, Sendable {
   /// The best estimate among the sets, with its certainty: the figure and the trust in it come from
   /// the same set.
   private static func bestEstimate(_ sets: [PriorSetRecord]) -> Claim<Double>? {
-    sets
-      .map { StrengthMath.estimatedOneRepMax(weightKg: $0.weightKg, reps: $0.reps) }
-      .filter { $0.value != nil }
-      .max { ($0.value ?? 0) < ($1.value ?? 0) }
+    StrengthMath.bestSupportedEstimate(sets.map {
+      StrengthMath.estimatedOneRepMax(weightKg: $0.weightKg, reps: $0.reps)
+    })
   }
 }

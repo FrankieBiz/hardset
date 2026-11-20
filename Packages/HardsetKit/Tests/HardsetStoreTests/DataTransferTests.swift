@@ -37,6 +37,41 @@ struct DataTransferTests {
     #expect(try await db.read { try LoggedSet.fetchAll($0).count } == 2)
   }
 
+  @Test("Re-exported unknown movements reuse their imported series despite case or spacing changes")
+  func normalizedUnknownMovementAcrossExports() async throws {
+    let db = try database()
+    let transfer = DataTransferStore(database: db)
+    _ = try await transfer.importWorkouts(WorkoutCSVImport.preview(csv, strongUnit: .kilograms))
+    let later = csv.replacingOccurrences(of: "2026-11-01", with: "2026-11-08")
+      .replacingOccurrences(of: ",Press,", with: ", press ,")
+    _ = try await transfer.importWorkouts(WorkoutCSVImport.preview(later, strongUnit: .kilograms))
+    #expect(try await db.read { try Exercise.fetchAll($0).count } == 1)
+    #expect(try await db.read { try LoggedSet.fetchAll($0).count } == 4)
+  }
+
+  @Test("Matching a movement preserves imported notes without overwriting native notes")
+  func matchedMovementKeepsNotes() async throws {
+    let db = try database()
+    let id = UUID()
+    try await db.write { db in
+      try Exercise.insert { Exercise.Draft(id: id, name: "Press", notes: "My setup") }.execute(db)
+    }
+    let repeated = csv.replacingOccurrences(of: ",100,7,,", with: ",100,7,,Keep this")
+    _ = try await DataTransferStore(database: db).importWorkouts(
+      WorkoutCSVImport.preview(repeated, strongUnit: .kilograms))
+    let stored = try await db.read { db in
+      (try Exercise.fetchAll(db), try Session.fetchAll(db))
+    }
+    #expect(stored.0.count == 1)
+    #expect(stored.0.first?.id == id)
+    #expect(stored.0.first?.notes == "My setup")
+    let session = try #require(stored.1.first)
+    #expect(session.notes.components(separatedBy: "Press: Keep this").count == 2)
+    #expect(session.notes.hasPrefix("Imported from Strong"))
+    let receipt = try await ReceiptStore(database: db).load(SessionID(rawValue: session.id))
+    #expect(receipt.notes.contains("Press: Keep this"))
+  }
+
   @Test("Hevy English timestamps, quoted fields and canonical units")
   func hevy() throws {
     let text = "title,start_time,end_time,exercise_title,set_index,set_type,weight_kg,reps\nPush,\"1 Nov 2026, 10:00\",\"1 Nov 2026, 11:00\",\"Press, seated\",0,warmup,20,10\n"

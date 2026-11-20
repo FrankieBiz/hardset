@@ -324,7 +324,8 @@ public struct ProgressionChartView: View {
           Text(entry.name)
             .font(Tokens.Text.label)
             .foregroundStyle(Tokens.Color.chalk)
-            .lineLimit(2)
+            .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 2)
+            .fixedSize(horizontal: false, vertical: true)
           Spacer(minLength: Tokens.Spacing.snug)
           if let latest {
             HStack(alignment: .firstTextBaseline, spacing: Tokens.Spacing.tight) {

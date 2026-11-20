@@ -1,5 +1,7 @@
 #if canImport(UIKit)
   import Foundation
+  import GRDB
+  import HardsetStore
   import HardsetCore
   import HardsetUI
   import SwiftUI
@@ -51,9 +53,11 @@
     }
 
     private static func screen(_ board: ProgressBoard) -> some View {
-      NavigationStack {
+      let count = board.sections.reduce(0) { $0 + $1.rows.count }
+      let subtitle: String? = count == 0 ? nil : count == 1 ? "1 movement" : "\(count) movements"
+      return NavigationStack {
         ProgressBoardView(
-          board: board, title: "Progress", subtitle: "6 movements", onShowSettings: {},
+          board: board, title: "Progress", subtitle: subtitle, onShowSettings: {},
           onSelect: { _ in }
         )
         .hardsetTabRoot()
@@ -83,6 +87,125 @@
         "kit-progressboard-dark-ax3", size: CGSize(width: 402, height: 4000),
         typeSize: .accessibility3
       ) { Self.screen(Self.board) }
+    }
+
+    @Test func matchedImportedHistory() async throws {
+      let database = try DatabaseQueue()
+      try HardsetMigrations.migrator().migrate(database)
+      let movement = try CatalogSeeder(database: database).createCustomExercise(named: "Chest Press")
+      let csv = "Date,Workout Name,Duration,Exercise Name,Set Order,Weight,Reps\n"
+        + "2026-09-20 10:00:00,Push,1h,Chest Press,1,40,8\n"
+        + "2026-11-01 10:00:00,Push,1h,chest press,1,45,8\n"
+      let preview = try WorkoutCSVImport.preview(csv, strongUnit: .kilograms)
+      _ = try await DataTransferStore(database: database).importWorkouts(preview)
+      let board = try await ProgressBoardStore(database: database).loadBoard()
+      let history = try await ProgressionStore(database: database).loadHistory(for: movement.id)
+      for light in [false, true] {
+        let style: UIUserInterfaceStyle = light ? .light : .dark
+        let suffix = light ? "light" : "dark"
+        try await Snapshot.capture("kit-progressboard-imported-" + suffix, size: Self.tall, style: style) {
+          Self.screen(board)
+        }
+        try await Snapshot.capture("kit-progresschart-imported-" + suffix, size: Self.tall, style: style) {
+          NavigationStack {
+            ScrollView {
+              ProgressionChartView(series: history.series.map {
+                .init(label: history.label(for: $0.key), points: $0.points,
+                  recordSessionIDs: history.recordSessionIDs[$0.key] ?? [],
+                  bestAtWeight: history.bestAtWeight[$0.key] ?? [])
+              }, unit: .kilograms, onExplain: {})
+              .padding(Tokens.Spacing.loose)
+            }
+            .background(Tokens.Color.canvas)
+            .hardsetNavigationTitle("Chest Press")
+          }
+          .tint(Tokens.Color.plateBlue)
+        }
+      }
+      try await Snapshot.capture("kit-progresschart-imported-ax3", size: CGSize(width: 402, height: 3000),
+        typeSize: .accessibility3) {
+        NavigationStack {
+          ScrollView {
+            ProgressionChartView(series: history.series.map {
+              .init(label: history.label(for: $0.key), points: $0.points,
+                recordSessionIDs: history.recordSessionIDs[$0.key] ?? [],
+                bestAtWeight: history.bestAtWeight[$0.key] ?? [])
+            }, unit: .kilograms, onExplain: {})
+            .padding(Tokens.Spacing.loose)
+          }
+          .background(Tokens.Color.canvas)
+          .hardsetNavigationTitle("Chest Press")
+        }
+        .tint(Tokens.Color.plateBlue)
+      }
+    }
+
+    @Test func changeWithWeakerPriorEstimate() async throws {
+      let key = ProgressionKey(exerciseID: ExerciseID(), machineID: MachineID())
+      let samples = [
+        ProgressionSample(sessionID: SessionID(), machineID: key.machineID, weightKg: 40, reps: 12,
+          completedAt: Self.day.addingTimeInterval(-42 * 86_400)),
+        ProgressionSample(sessionID: SessionID(), machineID: key.machineID, weightKg: 60, reps: 5,
+          completedAt: Self.day),
+      ]
+      let trend = try #require(ProgressTrendAnalyzer.trend(key: key, samples: samples,
+        incrementKg: 2.5, estimatesOneRepMax: true))
+      let board = ProgressBoard.make([.init(row: .init(trend: trend, exerciseName: "Chest press",
+        machineName: "Hammer Strength"), bodyPart: .chest)])
+      try await Snapshot.capture("kit-progressboard-weaker-certainty-dark", size: Self.tall) { Self.screen(board) }
+      try await Snapshot.capture("kit-progressboard-weaker-certainty-light", size: Self.tall, style: .light) { Self.screen(board) }
+      try await Snapshot.capture("kit-progressboard-weaker-certainty-ax3", size: CGSize(width: 402, height: 2400),
+        typeSize: .accessibility3) { Self.screen(board) }
+    }
+
+    @Test func mixedMetricsNeverShareARanking() async throws {
+      let rows = [
+        Self.row("Chest press", machine: "Hammer Strength", metric: .estimatedMax, change: 0.08, certainty: .high),
+        Self.row("High-rep squat", machine: nil, metric: .heaviestLoad, change: 0.9),
+        Self.row("Pull-up", machine: nil, metric: .repsAtTopLoad, change: 0.99),
+      ]
+      let board = ProgressBoard.make(rows.map { .init(row: $0, bodyPart: .chest) })
+      try await Snapshot.capture("kit-progressboard-mixed-metrics-dark", size: Self.tall) { Self.screen(board) }
+      try await Snapshot.capture("kit-progressboard-mixed-metrics-light", size: Self.tall, style: .light) { Self.screen(board) }
+      try await Snapshot.capture("kit-progressboard-mixed-metrics-ax3", size: CGSize(width: 402, height: 3000),
+        typeSize: .accessibility3) { Self.screen(board) }
+    }
+
+    @Test func machineMovementWithoutMachineIdentity() async throws {
+      let database = try DatabaseQueue()
+      try HardsetMigrations.migrator().migrate(database)
+      let catalog = CatalogSeeder(database: database)
+      try catalog.seed(now: Self.day)
+      let lift = try #require(try catalog.selectableExercises().first { $0.modality == .machine })
+      let logger = LoggerStore(database: database)
+      let session = try logger.startSession(at: Self.day)
+      try logger.logSet(sessionID: session, exerciseID: lift.id,
+        draft: .init(weightKg: 40, reps: 8), at: Self.day)
+      try logger.finishSession(session, at: Self.day.addingTimeInterval(3600))
+      let board = try await ProgressBoardStore(database: database).loadBoard()
+      let history = try await ProgressionStore(database: database).loadHistory(for: lift.id)
+      try await Snapshot.capture("kit-progressboard-no-machine-dark", size: Self.phone) { Self.screen(board) }
+      try await Snapshot.capture("kit-progressboard-no-machine-light", size: Self.phone, style: .light) { Self.screen(board) }
+      try await Snapshot.capture("kit-progressboard-no-machine-ax3", size: CGSize(width: 402, height: 2400),
+        typeSize: .accessibility3) { Self.screen(board) }
+      for accessible in [false, true] {
+        let suffix = accessible ? "ax3" : "dark"
+        try await Snapshot.capture("kit-progresschart-no-machine-" + suffix,
+          size: CGSize(width: 402, height: accessible ? 2400 : 1400),
+          typeSize: accessible ? .accessibility3 : .large) {
+          NavigationStack {
+            ScrollView {
+              ProgressionChartView(series: history.series.map {
+                .init(label: history.label(for: $0.key), points: $0.points)
+              }, unit: .kilograms, onExplain: {})
+              .padding(Tokens.Spacing.loose)
+            }
+            .background(Tokens.Color.canvas)
+            .hardsetNavigationTitle(lift.name)
+          }
+          .tint(Tokens.Color.plateBlue)
+        }
+      }
     }
 
     // MARK: - Chart marks

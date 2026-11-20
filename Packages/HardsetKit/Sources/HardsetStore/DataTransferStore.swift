@@ -160,8 +160,12 @@ public nonisolated struct DataTransferStore: Sendable {
         try db.execute(sql: "DELETE FROM deviceImportBatches WHERE sourceDigest = ? AND byteCount = ?",
           arguments: [digest, byteCount])
       }
-      // Use separate movements for unverified imported equipment. An imported nil machine
-      // must never seed the native movement's free-weight or machine benchmark series.
+      // Match movement identity only. Session provenance keeps unknown imported equipment apart
+      // from native benchmarks and charts, even for a movement whose native machine is nil.
+      let candidates = try Exercise.where { !$0.isArchived }.order { $0.id }.fetchAll(db).sorted {
+        if $0.isCurated != $1.isCurated { return $0.isCurated }
+        return ($0.createdAt, $0.id.uuidString) < ($1.createdAt, $1.id.uuidString)
+      }
       var exercises: [String: UUID] = [:]
       var importedWorkouts = 0
       var importedSets = 0
@@ -180,29 +184,40 @@ public nonisolated struct DataTransferStore: Sendable {
             notes: "Imported from \(preview.source) • Unevaluated Machine. \(preview.interpretation)",
             startedAt: workout.startedAt, finishedAt: workout.finishedAt)
         }.execute(db)
-        var plans: [String: UUID] = [:]
+        var plans: [UUID: UUID] = [:]
         for (ordinal, set) in workout.sets.enumerated() {
           let exercise: UUID
           let importedName = "\(set.exercise) (Imported • \(preview.source))"
-          if let existing = exercises[set.exercise] { exercise = existing }
-          else if let earlier = try Self.importedExercise(named: importedName, in: db) {
+          let normalized = CatalogSeeder.normalized(set.exercise)
+            .folding(options: [.caseInsensitive, .diacriticInsensitive], locale: Locale(identifier: "en_US_POSIX"))
+          if let existing = exercises[normalized] { exercise = existing }
+          else if let matched = candidates.first(where: {
+            !$0.notes.hasPrefix(CatalogSeeder.importedNotesPrefix)
+              && CatalogSeeder.isSameName($0.name, normalized)
+          }) {
+            exercise = matched.id
+            exercises[normalized] = exercise
+          } else if let earlier = candidates.first(where: {
+            $0.notes.hasPrefix(CatalogSeeder.importedNotesPrefix)
+              && CatalogSeeder.isSameName($0.name, CatalogSeeder.normalized(importedName))
+          }) {
             // An earlier import's movement of the same name, so a later export's sets continue
             // that series instead of splitting it across two identically named movements.
-            exercise = earlier
-            exercises[set.exercise] = exercise
+            exercise = earlier.id
+            exercises[normalized] = exercise
           } else {
             exercise = UUID()
-            exercises[set.exercise] = exercise
+            exercises[normalized] = exercise
             try Exercise.insert {
               Exercise.Draft(id: exercise, name: importedName,
                 notes: "Imported • Unevaluated Machine. \(set.notes)", createdAt: workout.startedAt)
             }.execute(db)
           }
           let plan: UUID
-          if let existing = plans[set.exercise] { plan = existing }
+          if let existing = plans[exercise] { plan = existing }
           else {
             plan = UUID()
-            plans[set.exercise] = plan
+            plans[exercise] = plan
             try SessionExercise.insert {
               SessionExercise.Draft(id: plan, sessionID: session, exerciseID: exercise,
                 position: plans.count - 1)
@@ -217,8 +232,19 @@ public nonisolated struct DataTransferStore: Sendable {
               completedAt: workout.startedAt)
           }.execute(db)
         }
+        // Matching an existing movement must neither overwrite its notes nor discard the CSV's.
+        // Exports repeat an exercise note on every set, so retain each distinct note once per
+        // movement in this workout's own notes, inside the same atomic import transaction.
+        var seenNotes: [String: Set<String>] = [:]
+        let noteLines = workout.sets.compactMap { set -> String? in
+          guard !set.notes.isEmpty,
+            seenNotes[set.exercise, default: []].insert(set.notes).inserted else { return nil }
+          return "\(set.exercise): \(set.notes)"
+        }
+        let noteSuffix = ". Set timestamps are unavailable; grouped at workout start."
+          + (noteLines.isEmpty ? "" : "\n\n" + noteLines.joined(separator: "\n"))
         try db.execute(sql: "UPDATE sessions SET notes = notes || ? WHERE id = ?",
-          arguments: [". Set timestamps are unavailable; grouped at workout start.", session.uuidString.lowercased()])
+          arguments: [noteSuffix, session.uuidString.lowercased()])
       }
       if importedWorkouts > 0 {
         // A digest, not the file: re-exports repeat the whole history, so copies added up.
@@ -229,15 +255,6 @@ public nonisolated struct DataTransferStore: Sendable {
       return WorkoutImportResult(
         importedWorkouts: importedWorkouts, importedSets: importedSets, skippedWorkouts: skippedWorkouts)
     }
-  }
-
-  /// A live movement an earlier import created under this exact name, if any.
-  private static func importedExercise(named name: String, in db: Database) throws -> UUID? {
-    try Exercise
-      .where { $0.name.eq(name) && $0.notes.like("Imported • %") && !$0.isArchived }
-      .order { ($0.createdAt, $0.id) }
-      .fetchOne(db)?
-      .id
   }
 
   /// An imported session from the same app with the same start and title. Imported sessions are

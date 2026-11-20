@@ -24,8 +24,9 @@ public struct MovementTrend: Hashable, Sendable, Identifiable {
   /// those sessions are checked.
   public let stalledSessions: Int?
   public let latestDate: Date
-  /// How far to trust the latest estimate, from the reps behind it, so the figure and its badge can
-  /// sit together. Only an estimate has one: nil for a heaviest-load or bodyweight trend.
+  /// How far to trust the displayed estimate/change. A six-week ratio carries the weaker of
+  /// its two estimates, using the same combination rule as the scorecard. Without a comparison
+  /// window this is the latest estimate's certainty. Non-estimate metrics have none.
   public let certainty: Certainty?
 
   public var id: ProgressionKey { key }
@@ -77,9 +78,10 @@ public enum ProgressTrendAnalyzer {
       metric = .heaviestLoad
     }
 
-    let points: [(date: Date, value: Double, topLoad: Double)] = sessions.compactMap { session in
+    let points: [(date: Date, value: Double, topLoad: Double, certainty: Certainty?)] = sessions.compactMap { session in
       guard let value = value(of: metric, in: session.samples) else { return nil }
-      return (session.date, value, session.samples.map(\.weightKg).max() ?? 0)
+      return (session.date, value, session.samples.map(\.weightKg).max() ?? 0,
+        metric == .estimatedMax ? bestEstimateClaim(in: session.samples)?.certainty : nil)
     }
     guard let latest = points.last else { return nil }
 
@@ -95,10 +97,12 @@ public enum ProgressTrendAnalyzer {
         metric != .repsAtTopLoad
           || abs($0.topLoad - latest.topLoad) < PersonalRecordDetector.loadMatchingTolerance
       }
-      .map(\.value)
-      .max()
-    if let base, base > 0 {
-      change = latest.value / base - 1
+      .max {
+        if $0.value != $1.value { return $0.value < $1.value }
+        return ($0.certainty ?? .unevaluated) < ($1.certainty ?? .unevaluated)
+      }
+    if let base, base.value > 0 {
+      change = latest.value / base.value - 1
     } else {
       change = nil
     }
@@ -126,7 +130,9 @@ public enum ProgressTrendAnalyzer {
       sessionCount: sessions.count,
       stalledSessions: stalled,
       latestDate: latestSession.date,
-      certainty: metric == .estimatedMax ? bestEstimateClaim(in: latestSession.samples)?.certainty : nil
+      certainty: metric == .estimatedMax
+        ? Certainty.combine([latest.certainty, change == nil ? nil : base?.certainty].compactMap { $0 })
+        : nil
     )
   }
 
@@ -136,9 +142,9 @@ public enum ProgressTrendAnalyzer {
   /// like a run of records. `lastSessions` limits which sessions are tested, not what they are
   /// tested against.
   ///
-  /// Every tested set is compared with all earlier sets, so testing every session costs the square
-  /// of the set count. A screen that replays many movements passes `lastSessions`; the single
-  /// exercise screen, which needs every record mark, leaves it nil.
+  /// Incremental all-time landmarks preserve every comparison the detector needs, so every
+  /// record mark can be replayed without rescanning or re-estimating the whole history per set.
+  /// `lastSessions` still bounds the stall check's work without truncating its benchmarks.
   public static func recordSessionIDs(
     samples: [ProgressionSample],
     incrementKg: Double?,
@@ -149,39 +155,46 @@ public enum ProgressTrendAnalyzer {
     guard sessions.count > 1 else { return [] }
 
     var records = Set<SessionID>()
-    var history: [PriorSetRecord] = []
+    var history = RecordReplayIndex(samples: samples)
     let firstTested = max(1, sessions.count - (lastSessions ?? sessions.count))
 
     for (index, session) in sessions.enumerated() {
-      var sessionHistory = history
       for sample in session.samples.sorted(by: { $0.completedAt < $1.completedAt }) {
         if index >= firstTested {
           let found = PersonalRecordDetector.records(
             for: .init(weightKg: sample.weightKg, reps: sample.reps),
-            history: sessionHistory,
+            history: history.comparisons(for: sample),
             increment: incrementKg,
             estimatesOneRepMax: estimatesOneRepMax
           )
           if !found.isEmpty { records.insert(session.id) }
         }
-        sessionHistory.append(
-          PriorSetRecord(weightKg: sample.weightKg, reps: sample.reps, completedAt: sample.completedAt)
-        )
+        history.append(sample)
       }
-      history = sessionHistory
     }
     return records
   }
 
-  /// The three largest positive six-week gains, largest first.
+  /// The ranking is deliberately one metric: percentages of load and reps cannot be ordered
+  /// alongside percentages of estimated max. Other metrics remain visible in body-part sections.
+  public static let mostImprovedMetric: TrendMetric = .estimatedMax
+
+  /// The three largest positive six-week estimated-max gains, largest first.
   public static func mostImproved(_ trends: [MovementTrend], limit: Int = 3) -> [MovementTrend] {
     trends
-      .filter { ($0.sixWeekChange ?? 0) > 0 }
+      .filter { $0.metric == mostImprovedMetric && ($0.sixWeekChange ?? 0) > 0 }
       .sorted { lhs, rhs in
         let left = lhs.sixWeekChange ?? 0
         let right = rhs.sixWeekChange ?? 0
         if left != right { return left > right }
-        return lhs.latestDate > rhs.latestDate
+        if lhs.latestDate != rhs.latestDate { return lhs.latestDate > rhs.latestDate }
+        if lhs.key.exerciseID != rhs.key.exerciseID {
+          return lhs.key.exerciseID.rawValue.uuidString < rhs.key.exerciseID.rawValue.uuidString
+        }
+        if lhs.key.machineID != rhs.key.machineID {
+          return (lhs.key.machineID?.rawValue.uuidString ?? "") < (rhs.key.machineID?.rawValue.uuidString ?? "")
+        }
+        return !lhs.key.isImported && rhs.key.isImported
       }
       .prefix(limit)
       .map { $0 }
@@ -220,10 +233,9 @@ public enum ProgressTrendAnalyzer {
   /// The session's best estimate with its certainty, so the figure and the trust in it come from
   /// the same set.
   private static func bestEstimateClaim(in samples: [ProgressionSample]) -> Claim<Double>? {
-    samples
-      .map { StrengthMath.estimatedOneRepMax(weightKg: $0.weightKg, reps: $0.reps) }
-      .filter { $0.value != nil }
-      .max { ($0.value ?? 0) < ($1.value ?? 0) }
+    StrengthMath.bestSupportedEstimate(samples.map {
+      StrengthMath.estimatedOneRepMax(weightKg: $0.weightKg, reps: $0.reps)
+    })
   }
 
   private static func value(of metric: TrendMetric, in samples: [ProgressionSample]) -> Double? {
