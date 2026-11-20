@@ -234,6 +234,96 @@ final class AppScreensUITests: XCTestCase {
     writeAuditReport(named: "accessibility-audit-gym")
   }
 
+  /// Every sheet the live workout opens, one after another from the same screen: the gym picker
+  /// (with the gym added from inside it), the machine picker (with a machine added from inside it,
+  /// then its load step) and a movement's load history. They share one presentation, so each must
+  /// open, show its own content and close back to the workout, with the one before it gone.
+  @MainActor
+  func testSessionSheetsDark() throws {
+    continueAfterFailure = true
+    let app = XCUIApplication()
+    launch(app)
+
+    guard waitForStartScreen(app) else { return }
+    app.buttons["Start workout"].tap()
+    let addMovement = app.buttons["Add movement"]
+    XCTAssertTrue(addMovement.waitForExistence(timeout: 5))
+
+    // The workout's gym, from the header chip, with the add-gym sheet nested inside the picker.
+    let setGym = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Set gym'")).firstMatch
+    XCTAssertTrue(setGym.waitForExistence(timeout: 5), "A workout with no gym offers to set one")
+    setGym.tap()
+    let addGym = app.buttons["Add a gym"]
+    XCTAssertTrue(addGym.waitForExistence(timeout: 10), "The workout's gym picker opens")
+    capture(app, "80-session-gym-picker")
+    addGym.tap()
+    let gymName = app.textFields.firstMatch
+    XCTAssertTrue(gymName.waitForExistence(timeout: 5), "Add a gym opens its name sheet over the picker")
+    gymName.typeText("Journey Gym")
+    app.buttons["Add"].tap()
+    let gymChip = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Journey Gym'")).firstMatch
+    XCTAssertTrue(gymChip.waitForExistence(timeout: 10), "The new gym is set and both sheets close")
+    XCTAssertTrue(waitUntilGone(addGym), "The gym picker closed with the name sheet")
+
+    // The movement picker, then a movement with a gym set, so its card offers a machine.
+    addMovement.tap()
+    let bench = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Barbell Bench Press'"))
+      .firstMatch
+    XCTAssertTrue(bench.waitForExistence(timeout: 5))
+    bench.tap()
+
+    // The machine picker, with a machine named from inside it and chosen at once.
+    let chooseMachine = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Choose machine'"))
+      .firstMatch
+    XCTAssertTrue(chooseMachine.waitForExistence(timeout: 10), "With a gym set, the card offers a machine")
+    chooseMachine.tap()
+    let addMachine = app.buttons["Add a machine"]
+    XCTAssertTrue(addMachine.waitForExistence(timeout: 10), "The machine picker opens")
+    capture(app, "81-session-machine-picker")
+    addMachine.tap()
+    let machineName = app.textFields.firstMatch
+    XCTAssertTrue(machineName.waitForExistence(timeout: 5), "Add a machine opens its name sheet over the picker")
+    machineName.typeText("Hammer Strength")
+    app.buttons["Add"].tap()
+    // The card's chip, not a row of the picker still closing: only the chip says "Change machine".
+    let machineChip = app.buttons.matching(
+      NSPredicate(format: "label BEGINSWITH 'Hammer Strength' AND label ENDSWITH 'Change machine.'")
+    ).firstMatch
+    XCTAssertTrue(machineChip.waitForExistence(timeout: 10), "The new machine is chosen and the picker closes")
+    XCTAssertTrue(waitUntilGone(addMachine), "The machine picker closed with the name sheet")
+
+    // Its load step, from the picker's second nested sheet.
+    machineChip.tap()
+    let loadStep = app.buttons["Set this machine\u{2019}s load step"]
+    XCTAssertTrue(loadStep.waitForExistence(timeout: 10), "The chosen machine offers its load step")
+    loadStep.tap()
+    let saveStep = app.buttons["Save load step"]
+    XCTAssertTrue(saveStep.waitForExistence(timeout: 5), "The load-step editor opens over the machine picker")
+    capture(app, "82-session-load-step")
+    for key in ["1", "0"] { app.buttons[key].tap() }
+    saveStep.tap()
+    XCTAssertTrue(waitUntilGone(saveStep), "Saving the step closes the editor")
+    XCTAssertTrue(loadStep.waitForExistence(timeout: 5), "and returns to the machine picker")
+    app.buttons["Cancel"].tap()
+    let steppedChip = app.buttons.matching(
+      NSPredicate(format: "label BEGINSWITH 'Hammer Strength,' AND label CONTAINS 'steps'")
+    ).firstMatch
+    XCTAssertTrue(steppedChip.waitForExistence(timeout: 10), "The saved step shows on the card's machine chip")
+
+    // The movement's load history, from its name.
+    let history = app.buttons.matching(
+      NSPredicate(format: "label BEGINSWITH 'Barbell Bench Press. Show load history'")
+    ).firstMatch
+    XCTAssertTrue(history.waitForExistence(timeout: 5))
+    history.tap()
+    let done = app.buttons["Done"]
+    XCTAssertTrue(done.waitForExistence(timeout: 10), "The load history opens")
+    capture(app, "83-session-history")
+    done.tap()
+    XCTAssertTrue(waitUntilGone(done), "Done closes the load history")
+    XCTAssertTrue(addMovement.waitForExistence(timeout: 5), "and the workout is where it was left")
+  }
+
   /// The main screens again in light mode, over whatever the dark journey left behind.
   @MainActor
   func testScreensInLightMode() throws {
@@ -425,6 +515,15 @@ final class AppScreensUITests: XCTestCase {
         + "showing, the simulator build could not create the database or the sync engine."
     )
     return false
+  }
+
+  /// True once the element is no longer on screen: a sheet that has finished closing, rather than one
+  /// still sliding away, whose controls a query would otherwise find beside the next sheet's.
+  @MainActor
+  private func waitUntilGone(_ element: XCUIElement, timeout: TimeInterval = 5) -> Bool {
+    let gone = XCTNSPredicateExpectation(
+      predicate: NSPredicate(format: "exists == false"), object: element)
+    return XCTWaiter().wait(for: [gone], timeout: timeout) == .completed
   }
 
   @MainActor

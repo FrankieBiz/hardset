@@ -3,9 +3,35 @@ import HardsetStore
 import HardsetUI
 import SwiftUI
 
-/// Identifies which exercise's machine picker is open.
-private struct MachineTarget: Identifiable, Hashable {
-  let id: UUID
+/// The one sheet this screen presents at a time, so which of them is up is a single value rather
+/// than four flags that could each be true at once, and the screen carries one `sheet`
+/// presentation instead of four on the same view.
+///
+/// `nonisolated` so its computed `id` satisfies `Identifiable` without isolated-conformance
+/// inference, as `ReceiptSelection` does. The payloads are bare identifiers, so the enum is a plain
+/// value the sheet's content looks the live state up from.
+private nonisolated enum SessionSheet: Identifiable, Hashable {
+  /// The movement picker.
+  case addMovement
+  /// The machine picker for the exercise with this id.
+  case machine(UUID)
+  /// The load history for the exercise with this id.
+  case history(UUID)
+  /// The workout's gym picker.
+  case gym
+
+  var id: SessionSheet { self }
+}
+
+/// What the machine picker presents over itself. It is its own value because the picker is a sheet,
+/// and a sheet that presents another must do so from its own content, on one presentation.
+private nonisolated enum MachineSubsheet: Identifiable, Hashable {
+  /// The stack-step editor for this machine.
+  case loadStep(MachineID)
+  /// The name entry for a machine the gym does not have yet.
+  case addMachine
+
+  var id: MachineSubsheet { self }
 }
 
 /// The name typed for a movement the picker does not list, so `sheet(item:)` has something
@@ -24,12 +50,14 @@ private nonisolated struct NewMovementName: Identifiable {
 @MainActor
 public struct LiveSessionScreen: View {
   @State private var coordinator: SessionCoordinator
-  @State private var editingIncrement: MachineOption?
+  @State private var machineSubsheet: MachineSubsheet?
   @State private var restMetadata: RestMetadata?
   /// The exercise-state id the running rest follows, so the rest bar can offer that movement's
   /// next rest.
   @State private var restExerciseStateID: UUID?
-  @State private var isPickerPresented = false
+  /// The sheet that is up, or `nil`. The only presentation state this screen holds for its own
+  /// sheets; what each sheet reads and the errors it shows are the properties below.
+  @State private var presented: SessionSheet?
   /// Why finishing or discarding failed while the session is still open, so the user is told
   /// rather than silently returned to a start screen while their workout is stranded. Cleared by
   /// the next operation, so it can never stand in for a later, different failure.
@@ -48,19 +76,12 @@ public struct LiveSessionScreen: View {
   /// editor that asks which body part it trains, in place of adding it untagged on the spot.
   @State private var newMovement: NewMovementName?
   @State private var newMovementError: String?
-  /// The exercise whose machine is being chosen. Non-nil presents the picker.
-  ///
-  /// Wrapped rather than a bare `UUID` because `sheet(item:)` needs `Identifiable`, and retroactively
-  /// conforming a Foundation type to get it would leak that conformance to every importer.
-  @State private var machineTarget: MachineTarget?
   @State private var machineOptions: (recent: [MachineOption], others: [MachineOption]) = ([], [])
   @State private var machineError: String?
   /// The gym's machines could not be read, so adding one would risk a duplicate of a machine the
   /// lifter already has.
   @State private var machineLoadFailed = false
-  @State private var isAddingMachine = false
   @State private var machineNameError: String?
-  @State private var isChoosingGym = false
   @State private var isAddingGym = false
   @State private var gymOptions: [GymOption] = []
   @State private var gymError: String?
@@ -72,7 +93,6 @@ public struct LiveSessionScreen: View {
   @State private var rememberedRest: [ExerciseID: Duration] = [:]
   private let unit: WeightUnit
   private let hooks: RestTimerHooks
-  @State private var historyTarget: MachineTarget?
   private let catalog: CatalogSeeder?
   private let gyms: GymStore?
   private let progression: ProgressionStore?
@@ -151,13 +171,13 @@ public struct LiveSessionScreen: View {
       onAdjustRest: hooks.adjust,
       onPauseResumeRest: hooks.pauseOrResume,
       onSkipRest: endRest,
-      onAddExercise: catalog == nil ? nil : { isPickerPresented = true },
+      onAddExercise: catalog == nil ? nil : { presented = .addMovement },
       // Offered only when there is a gym to attach equipment to. Machines belong to a gym, so
       // without one there is nothing honest to put in the list.
-      onSelectMachine: canPickMachines ? { machineTarget = MachineTarget(id: $0) } : nil,
-      onShowHistory: progression == nil ? nil : { historyTarget = MachineTarget(id: $0) },
+      onSelectMachine: canPickMachines ? { presented = .machine($0) } : nil,
+      onShowHistory: progression == nil ? nil : { presented = .history($0) },
       onShowSettings: onShowSettings,
-      onChangeGym: gyms == nil ? nil : { isChoosingGym = true },
+      onChangeGym: gyms == nil ? nil : { presented = .gym },
       onUndoSet: { exerciseStateID, slot in
         begin(.undoSet)
         return noteOutcome(coordinator.undoSet(slotID: slot.id, inExercise: exerciseStateID))
@@ -186,97 +206,121 @@ public struct LiveSessionScreen: View {
     .onChange(of: staging.opensMachinePicker, initial: true) { _, opens in
       if opens {
         guard canPickMachines, let first = coordinator.exercises.first else { return }
-        machineTarget = MachineTarget(id: first.id)
-      } else {
-        machineTarget = nil
+        presented = .machine(first.id)
+      } else if case .machine = presented {
+        presented = nil
       }
     }
-    .sheet(isPresented: $isPickerPresented, onDismiss: {
-      // A swipe-down dismissal used to leave the last search behind for the next visit.
-      pickerQuery = ""
-      pickerError = nil
-      clearError(from: .addMovement)
-    }) {
-      NavigationStack {
-        ExercisePickerView(
-          query: $pickerQuery,
-          entries: pickerEntries,
-          recent: pickerRecent,
-          errorMessage: pickerError,
-          onCancel: { isPickerPresented = false },
-          onCreate: catalog == nil ? nil : { name in newMovement = NewMovementName(name: name) },
-          onSelect: { entry in addMovement(entry) }
-        )
-        .hardsetNavigationTitle("Add movement")
-        // Asks which body part the movement trains before saving it, so a movement the lifter makes
-        // mid-workout counts toward a muscle from its first set, and there is one way to make one.
-        .sheet(item: $newMovement, onDismiss: { newMovementError = nil }) { typed in
-          MovementEditorSheet(
-            title: "New movement",
-            confirmLabel: "Add to workout",
-            errorMessage: $newMovementError,
-            draft: MovementEditorDraft(name: typed.name),
-            onSave: { name, attribution in createMovement(named: name, attribution: attribution) },
-            onCancel: { newMovement = nil }
-          )
-          .hardsetSheet()
-        }
+    // One presentation for every sheet this screen opens. The four of them sat side by side on this
+    // view, each driven by its own flag; now which one is up is `presented`, so two can never be
+    // requested at once and SwiftUI is never asked to choose between sibling modifiers.
+    .stagedSheet(item: $presented, onDismiss: sheetDismissed) { sheet in
+      switch sheet {
+      case .addMovement: addMovementSheet
+      case .machine(let target): machineSheet(forExercise: target)
+      case .history(let target): historySheet(forExercise: target)
+      case .gym: gymSheet
       }
-      .hardsetSheet()
-      // Searching hits the database, so it happens here rather than inside the picker, which
-      // stays free of storage. The query is re-run on change instead of filtering in memory so a
-      // user-created movement shows up without reopening the sheet.
-      .task(id: pickerQuery) { refreshPicker() }
     }
-    .stagedSheet(item: $machineTarget, onDismiss: {
-      machineError = nil
-      machineLoadFailed = false
-      clearError(from: .changeMachine)
-    }) { wrapped in
-      let target = wrapped.id
-      NavigationStack {
-        MachinePickerView(
-          recent: machineOptions.recent,
-          others: machineOptions.others,
-          selected: coordinator.exercises.first { $0.id == target }?.machineID,
-          unit: unit,
-          errorMessage: machineError,
-          onSelect: { machineID in
-            // Closed only when the change was saved. On a failure the picker stays, saying why,
-            // and the lifter's next tap is the retry.
-            if selectMachine(machineID, forExercise: target) {
-              machineTarget = nil
-            }
-          },
-          // Not offered while the gym's machines cannot be read: a lifter who cannot see the
-          // machines they have would add a second one of each.
-          onAddMachine: machineLoadFailed ? nil : { isAddingMachine = true },
-          onEditIncrement: { id in
-            editingIncrement = (machineOptions.recent + machineOptions.others).first { $0.id == id }
-          },
-          onArchive: { id in archiveMachine(id, forExercise: target) },
-          onCancel: { machineTarget = nil }
+  }
+
+  /// Clears what the sheet that just closed left behind, so a failure belongs to the visit it
+  /// happened in and reopening starts clean. One callback serves every sheet, so each reset is safe
+  /// to run when another sheet closed: only one sheet is ever up, and each reset touches only state
+  /// that sheet reads.
+  private func sheetDismissed() {
+    // A swipe-down dismissal used to leave the last search behind for the next visit.
+    pickerQuery = ""
+    pickerError = nil
+    clearError(from: .addMovement)
+    machineError = nil
+    machineLoadFailed = false
+    clearError(from: .changeMachine)
+    gymError = nil
+    clearError(from: .setGym)
+  }
+
+  // MARK: - Sheets
+
+  private var addMovementSheet: some View {
+    NavigationStack {
+      ExercisePickerView(
+        query: $pickerQuery,
+        entries: pickerEntries,
+        recent: pickerRecent,
+        errorMessage: pickerError,
+        onCancel: { presented = nil },
+        onCreate: catalog == nil ? nil : { name in newMovement = NewMovementName(name: name) },
+        onSelect: { entry in addMovement(entry) }
+      )
+      .hardsetNavigationTitle("Add movement")
+      // Asks which body part the movement trains before saving it, so a movement the lifter makes
+      // mid-workout counts toward a muscle from its first set, and there is one way to make one.
+      .sheet(item: $newMovement, onDismiss: { newMovementError = nil }) { typed in
+        MovementEditorSheet(
+          title: "New movement",
+          confirmLabel: "Add to workout",
+          errorMessage: $newMovementError,
+          draft: MovementEditorDraft(name: typed.name),
+          onSave: { name, attribution in createMovement(named: name, attribution: attribution) },
+          onCancel: { newMovement = nil }
         )
-        .hardsetNavigationTitle("Machine")
-        .sheet(item: $editingIncrement) { machine in
-          LoadStepSheet(machineName: machine.displayName, incrementKg: machine.stackIncrementKg, unit: unit,
-            onSave: { increment in
-              guard let gyms, let gymID = coordinator.gymID else { return false }
-              do {
-                try gyms.setStackIncrement(increment, for: machine.id, at: gymID)
-                for index in coordinator.exercises.indices where coordinator.exercises[index].machineID == machine.id {
-                  coordinator.exercises[index].updateMachineIncrement(increment)
-                }
-                refreshMachines(forExercise: target)
-                editingIncrement = nil
-                return true
-              } catch { return false }
-            }, onCancel: { editingIncrement = nil })
-          .hardsetSheet()
-        }
-        // Named on the spot rather than in a setup flow, because the lifter is standing at the
-        // machine right now and will not be later.
-        .sheet(isPresented: $isAddingMachine, onDismiss: { machineNameError = nil }) {
+        .hardsetSheet()
+      }
+    }
+    .hardsetSheet()
+    // Searching hits the database, so it happens here rather than inside the picker, which
+    // stays free of storage. The query is re-run on change instead of filtering in memory so a
+    // user-created movement shows up without reopening the sheet.
+    .task(id: pickerQuery) { refreshPicker() }
+  }
+
+  private func machineSheet(forExercise target: UUID) -> some View {
+    NavigationStack {
+      MachinePickerView(
+        recent: machineOptions.recent,
+        others: machineOptions.others,
+        selected: coordinator.exercises.first { $0.id == target }?.machineID,
+        unit: unit,
+        errorMessage: machineError,
+        onSelect: { machineID in
+          // Closed only when the change was saved. On a failure the picker stays, saying why,
+          // and the lifter's next tap is the retry.
+          if selectMachine(machineID, forExercise: target) {
+            presented = nil
+          }
+        },
+        // Not offered while the gym's machines cannot be read: a lifter who cannot see the
+        // machines they have would add a second one of each.
+        onAddMachine: machineLoadFailed ? nil : { machineSubsheet = .addMachine },
+        onEditIncrement: { id in machineSubsheet = .loadStep(id) },
+        onArchive: { id in archiveMachine(id, forExercise: target) },
+        onCancel: { presented = nil }
+      )
+      .hardsetNavigationTitle("Machine")
+      // Inside the machine sheet, not beside it, and one presentation for both of its own sheets.
+      .sheet(item: $machineSubsheet, onDismiss: { machineNameError = nil }) { subsheet in
+        switch subsheet {
+        case .loadStep(let id):
+          if let machine = (machineOptions.recent + machineOptions.others).first(where: { $0.id == id }) {
+            LoadStepSheet(machineName: machine.displayName, incrementKg: machine.stackIncrementKg, unit: unit,
+              onSave: { increment in
+                guard let gyms, let gymID = coordinator.gymID else { return false }
+                do {
+                  try gyms.setStackIncrement(increment, for: machine.id, at: gymID)
+                  for index in coordinator.exercises.indices where coordinator.exercises[index].machineID == machine.id {
+                    coordinator.exercises[index].updateMachineIncrement(increment)
+                  }
+                  refreshMachines(forExercise: target)
+                  machineSubsheet = nil
+                  return true
+                } catch { return false }
+              }, onCancel: { machineSubsheet = nil })
+            .hardsetSheet()
+          }
+        case .addMachine:
+          // Named on the spot rather than in a setup flow, because the lifter is standing at the
+          // machine right now and will not be later.
           NameEntrySheet(
             title: "Add a machine",
             prompt: "Name or brand",
@@ -286,71 +330,70 @@ public struct LiveSessionScreen: View {
             onConfirm: { name in
               addMachine(named: name, forExercise: target)
             },
-            onCancel: { isAddingMachine = false }
+            onCancel: { machineSubsheet = nil }
           )
           .hardsetSheet()
         }
       }
-      .hardsetSheet()
-      // Reloaded per presentation: what the lifter used most recently changes as they log.
-      .task(id: wrapped) { refreshMachines(forExercise: target) }
     }
-    .sheet(item: $historyTarget) { wrapped in
-      if let progression, let exercise = coordinator.exercises.first(where: { $0.id == wrapped.id })
-      {
-        NavigationStack {
-          ExerciseProgressScreen(
-            store: progression,
-            exerciseID: exercise.exerciseID,
-            exerciseName: exercise.exerciseName,
-            unit: unit
-          )
-          .toolbar {
-            ToolbarItem(placement: .confirmationAction) {
-              Button("Done") { historyTarget = nil }
-            }
+    .hardsetSheet()
+    // Reloaded per presentation: what the lifter used most recently changes as they log.
+    .task(id: target) { refreshMachines(forExercise: target) }
+  }
+
+  @ViewBuilder
+  private func historySheet(forExercise target: UUID) -> some View {
+    if let progression, let exercise = coordinator.exercises.first(where: { $0.id == target }) {
+      NavigationStack {
+        ExerciseProgressScreen(
+          store: progression,
+          exerciseID: exercise.exerciseID,
+          exerciseName: exercise.exerciseName,
+          unit: unit
+        )
+        .toolbar {
+          ToolbarItem(placement: .confirmationAction) {
+            Button("Done") { presented = nil }
           }
         }
+      }
+      .hardsetSheet()
+    }
+  }
+
+  /// The workout's gym, settable after Start. Machines belong to a gym, so this is what turns
+  /// the machine chips on for a workout that began without one.
+  private var gymSheet: some View {
+    NavigationStack {
+      GymPickerView(
+        gyms: gymOptions,
+        selected: coordinator.gymID,
+        errorMessage: gymError,
+        onSelect: { id in chooseGym(id) },
+        onAddGym: { isAddingGym = true }
+      )
+      .hardsetNavigationTitle("Workout gym")
+      .toolbar {
+        ToolbarItem(placement: .cancellationAction) {
+          Button("Cancel") { presented = nil }
+        }
+      }
+      // Inside the gym sheet, not beside it: a sheet presented from the anchor that is already
+      // presenting one never appears.
+      .sheet(isPresented: $isAddingGym, onDismiss: { gymNameError = nil }) {
+        NameEntrySheet(
+          title: "Add a gym",
+          prompt: "Name",
+          footnote: "Machines are recorded per gym, so this is what groups them.",
+          errorMessage: gymNameError,
+          onConfirm: { name in addGym(named: name) },
+          onCancel: { isAddingGym = false }
+        )
         .hardsetSheet()
       }
     }
-    // The workout's gym, settable after Start. Machines belong to a gym, so this is what turns
-    // the machine chips on for a workout that began without one.
-    .sheet(isPresented: $isChoosingGym, onDismiss: {
-      gymError = nil
-      clearError(from: .setGym)
-    }) {
-      NavigationStack {
-        GymPickerView(
-          gyms: gymOptions,
-          selected: coordinator.gymID,
-          errorMessage: gymError,
-          onSelect: { id in chooseGym(id) },
-          onAddGym: { isAddingGym = true }
-        )
-        .hardsetNavigationTitle("Workout gym")
-        .toolbar {
-          ToolbarItem(placement: .cancellationAction) {
-            Button("Cancel") { isChoosingGym = false }
-          }
-        }
-        // Inside the gym sheet, not beside it: two sheets on one anchor and the second never
-        // presents.
-        .sheet(isPresented: $isAddingGym, onDismiss: { gymNameError = nil }) {
-          NameEntrySheet(
-            title: "Add a gym",
-            prompt: "Name",
-            footnote: "Machines are recorded per gym, so this is what groups them.",
-            errorMessage: gymNameError,
-            onConfirm: { name in addGym(named: name) },
-            onCancel: { isAddingGym = false }
-          )
-          .hardsetSheet()
-        }
-      }
-      .hardsetSheet()
-      .task { refreshGyms() }
-    }
+    .hardsetSheet()
+    .task { refreshGyms() }
   }
 
   private var canPickMachines: Bool { gyms != nil && coordinator.gymID != nil }
@@ -467,7 +510,7 @@ public struct LiveSessionScreen: View {
   private func addMovement(_ entry: CatalogEntry) {
     begin(.addMovement)
     if noteOutcome(coordinator.addExercise(entry)) {
-      isPickerPresented = false
+      presented = nil
     } else {
       // The picker stays open with the reason, rather than closing as if the movement had been
       // added and leaving the explanation somewhere behind it.
@@ -500,7 +543,7 @@ public struct LiveSessionScreen: View {
     }
     if noteOutcome(coordinator.addExercise(entry)) {
       newMovement = nil
-      isPickerPresented = false
+      presented = nil
     } else {
       newMovementError = failureMessage(for: .addMovement)
     }
@@ -595,7 +638,7 @@ public struct LiveSessionScreen: View {
       noteOutcome(false)
       return
     }
-    isAddingMachine = false
+    machineSubsheet = nil
     // Selected immediately: adding one and then having to find it in a list is a second decision
     // for no reason. The stack step is left unknown rather than guessed — an invented increment
     // would licence progression suggestions the equipment cannot honour.
@@ -603,7 +646,7 @@ public struct LiveSessionScreen: View {
     if selectMachine(machineID, forExercise: target, name: name) {
       // Dismissed, like choosing an existing machine does. Leaving the picker open after the
       // decision has been made asks the lifter to confirm something twice.
-      machineTarget = nil
+      presented = nil
     }
   }
 
@@ -630,13 +673,13 @@ public struct LiveSessionScreen: View {
 
   private func chooseGym(_ id: GymID?) {
     guard id != coordinator.gymID else {
-      isChoosingGym = false
+      presented = nil
       return
     }
     begin(.setGym)
     if noteOutcome(coordinator.setGym(id)) {
       gymError = nil
-      isChoosingGym = false
+      presented = nil
     } else {
       gymError = failureMessage(for: .setGym)
     }
