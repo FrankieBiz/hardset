@@ -237,7 +237,9 @@ public struct HistoryView: View {
       let displayed = unit.fromKilograms(volume.volumeKg)
       parts.append("\(Int(displayed.rounded())) \(unit.abbreviation) volume")
     }
-    if volume.warmupSets > 0 { parts.append("\(volume.warmupSets) warm-up") }
+    if volume.warmupSets > 0 {
+      parts.append(volume.warmupSets == 1 ? "1 warm-up" : "\(volume.warmupSets) warm-ups")
+    }
     return parts.joined(separator: " · ")
   }
 
@@ -247,7 +249,8 @@ public struct HistoryView: View {
     if row.hasImplausibleDuration {
       parts.append("length unknown, this session was left open")
     } else if let duration = row.duration {
-      parts.append(duration.clockString)
+      // Spoken as a length of time, not a clock face, which VoiceOver reads as a time of day.
+      parts.append(ExerciseSectionView.spoken(duration))
     }
     return parts.joined(separator: ", ")
   }
@@ -464,7 +467,7 @@ private struct HistoryRowButtonBody: View {
       }
       .overlay(shape.strokeBorder(Tokens.Color.hairline, lineWidth: Tokens.Stroke.hairline))
       .contentShape(shape)
-      .scaleEffect(configuration.isPressed && !reduceMotion ? 0.98 : 1)
+      .scaleEffect(configuration.isPressed && !reduceMotion ? 0.97 : 1)
       .animation(
         Tokens.Motion.adaptive(Tokens.Motion.press, reduceMotion: reduceMotion),
         value: configuration.isPressed

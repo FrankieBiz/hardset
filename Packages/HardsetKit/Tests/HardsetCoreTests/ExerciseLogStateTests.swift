@@ -205,6 +205,16 @@ struct ExerciseLogStateTests {
     #expect(state.loggedCount == 0)
   }
 
+  @Test("A negative set index asks for nothing rather than the final set")
+  func negativeIndexHasNoSuggestion() {
+    let key = ProgressionKey(exerciseID: exercise, machineID: machine)
+    let state = ExerciseLogState.build(
+      exerciseID: exercise, machineID: machine, exerciseName: "Leg Press",
+      snapshot: snapshot(key: key, sets: [(100, 10), (105, 8)])
+    )
+    #expect(state.suggestion(forSetIndex: -1) == nil)
+  }
+
   /// Within a session the honest suggestion is what you just did, not last week.
   @Test("A new row opens at what was just logged")
   func appendUsesThisSession() {
@@ -305,5 +315,191 @@ struct ExerciseLogStateTests {
     )
     #expect(a == a)
     #expect(a.progressionKey == ProgressionKey(exerciseID: exercise, machineID: nil))
+  }
+
+  // MARK: - Double-progression targets and beat-last-time marks
+
+  private let range = RepRange(lower: 8, upper: 12)!
+
+  private func state(
+    sets: [(Double, Int)], range: RepRange? = nil, onMachine: MachineID? = nil,
+    historyOn: MachineID? = nil, increment: Double? = nil, unit: WeightUnit = .kilograms,
+    addsLoad: Bool = true, plannedSets: Int? = nil
+  ) -> ExerciseLogState {
+    let current = onMachine ?? machine
+    return ExerciseLogState.build(
+      exerciseID: exercise,
+      machineID: current,
+      exerciseName: "Chest Press",
+      machineIncrementKg: increment,
+      snapshot: snapshot(key: ProgressionKey(exerciseID: exercise, machineID: historyOn ?? current), sets: sets),
+      plannedSets: plannedSets,
+      repRange: range,
+      weightUnit: unit,
+      addsLoad: addsLoad
+    )
+  }
+
+  @Test("A rep range with history on this machine prefills each row with its target")
+  func rangeWithHistoryPrefillsTargets() {
+    let built = state(sets: [(40, 10), (40, 9)], range: range, increment: 2.5)
+
+    #expect(built.slots.map { $0.draft.weightKg } == [40, 40])
+    #expect(built.slots.map { $0.draft.reps } == [11, 10])
+    #expect(built.slots.allSatisfy { $0.draft.target != nil })
+    #expect(built.slots.map { $0.draft.target?.rule } == [.addRep, .addRep])
+    // The history that produced the target is still there, as what last time actually was.
+    #expect(built.slots.map { $0.draft.suggestion?.reps } == [10, 9])
+    #expect(built.previousSet(forSlotID: built.slots[0].id)?.reps == 10)
+  }
+
+  @Test("History borrowed from another machine gives no target, because it is not this machine's")
+  func otherMachineHistoryGivesNoTargets() {
+    let built = ExerciseLogState.build(
+      exerciseID: exercise,
+      machineID: machine,
+      exerciseName: "Chest Press",
+      snapshot: snapshot(
+        key: ProgressionKey(exerciseID: exercise, machineID: otherMachine), sets: [(40, 10)]),
+      repRange: range
+    )
+
+    #expect(built.priorNote != nil)
+    #expect(built.slots[0].draft.target == nil)
+    // Prefilled exactly as it was before ranges existed.
+    #expect(built.slots[0].draft.weightKg == 40)
+    #expect(built.slots[0].draft.reps == 10)
+  }
+
+  @Test("Without a rep range the prefill is today's, with no target")
+  func noRangeKeepsTodaysPrefill() {
+    let built = state(sets: [(40, 10), (40, 9)])
+
+    #expect(built.slots.map { $0.draft.reps } == [10, 9])
+    #expect(built.slots.allSatisfy { $0.draft.target == nil })
+  }
+
+  @Test("A range with no history on the machine still has nothing to build a target on")
+  func rangeWithoutHistoryHasNoTarget() {
+    let built = ExerciseLogState.build(
+      exerciseID: exercise, machineID: machine, exerciseName: "Chest Press",
+      snapshot: .empty(capturedAt: now), repRange: range
+    )
+
+    #expect(built.slots.count == 1)
+    #expect(built.slots[0].draft.target == nil)
+    #expect(built.slots[0].draft.weightKg == nil)
+  }
+
+  @Test("Moving to a machine with history recomputes the open rows' targets")
+  func changeMachineRecomputesTargets() {
+    var built = state(sets: [], range: range, plannedSets: 2)
+    #expect(built.slots.allSatisfy { $0.draft.target == nil })
+    let newKey = ProgressionKey(exerciseID: exercise, machineID: otherMachine)
+    let newPrior = PriorPerformance(
+      key: newKey,
+      lastSets: [
+        PriorSetRecord(weightKg: 40, reps: 10, completedAt: now),
+        PriorSetRecord(weightKg: 40, reps: 9, completedAt: now),
+      ],
+      heaviestSet: nil
+    )
+
+    built.changeMachine(
+      to: otherMachine, machineName: "Other", machineIncrementKg: 2.5, prior: newPrior)
+
+    #expect(built.slots.map { $0.draft.reps } == [11, 10])
+    #expect(built.slots.allSatisfy { $0.draft.target != nil })
+
+    built.changeMachine(
+      to: machine, machineName: nil, machineIncrementKg: nil, prior: newPrior,
+      priorNote: "From another machine")
+    #expect(built.slots.allSatisfy { $0.draft.target == nil })
+    #expect(built.slots.map { $0.draft.reps } == [10, 9])
+  }
+
+  @Test("The assumed step is one plate in the lifter's own unit")
+  func assumedStepFollowsUnit() {
+    let kilograms = state(sets: [(40, 12), (40, 12)], range: range, unit: .kilograms)
+    let pounds = state(sets: [(40, 12), (40, 12)], range: range, unit: .pounds)
+
+    #expect(kilograms.slots[0].draft.weightKg == 42.5)
+    #expect(abs((pounds.slots[0].draft.weightKg ?? 0) - (40 + 2.26796185)) < 1e-6)
+    #expect(kilograms.slots[0].draft.reps == 8)
+    if case let .addLoad(_, assumed)? = pounds.slots[0].draft.target?.rule {
+      #expect(assumed)
+    } else {
+      Issue.record("expected an add-load target")
+    }
+  }
+
+  @Test("A bodyweight movement's target only ever adds reps")
+  func bodyweightTargetsAddRepsOnly() {
+    let built = state(sets: [(0, 12), (0, 12)], range: range, addsLoad: false)
+
+    #expect(built.slots.map { $0.draft.weightKg } == [0, 0])
+    #expect(built.slots.map { $0.draft.reps } == [13, 13])
+  }
+
+  @Test("A logged set that beats the same set last time is compared with it")
+  func comparisonAfterLogging() {
+    var built = state(sets: [(40, 10), (40, 9)], range: range)
+    let first = built.slots[0].id
+    built.markLogged(slotID: first, setID: SetID(), completedAt: now)
+
+    #expect(built.comparison(forSlotID: first) == .beat(addedKg: 0, addedReps: 1))
+    // A row that has not been logged says nothing.
+    #expect(built.comparison(forSlotID: built.slots[1].id) == nil)
+  }
+
+  @Test("A set that fell short, or matched, is compared honestly")
+  func comparisonMatchedAndShort() {
+    var built = state(sets: [(40, 10), (40, 10)], range: range)
+    built.slots[0].draft.reps = 10
+    built.slots[1].draft.reps = 9
+    built.markLogged(slotID: built.slots[0].id, setID: SetID(), completedAt: now)
+    built.markLogged(slotID: built.slots[1].id, setID: SetID(), completedAt: now)
+
+    #expect(built.comparison(forSlotID: built.slots[0].id) == .matched)
+    #expect(built.comparison(forSlotID: built.slots[1].id) == nil)
+  }
+
+  @Test("A warm-up is never compared with a working set")
+  func warmupHasNoComparison() {
+    var built = state(sets: [(40, 10)], range: range)
+    built.appendSlot(isWarmup: true)
+    let warmup = built.slots.first { $0.isWarmup }!
+    built.slots[built.slots.firstIndex { $0.id == warmup.id }!].draft = SetEntryDraft(weightKg: 40, reps: 12)
+    built.markLogged(slotID: warmup.id, setID: SetID(), completedAt: now)
+
+    #expect(built.comparison(forSlotID: warmup.id) == nil)
+  }
+
+  @Test("Nothing is compared against another machine's history")
+  func comparisonNeedsThisMachinesHistory() {
+    var built = ExerciseLogState.build(
+      exerciseID: exercise, machineID: machine, exerciseName: "Chest Press",
+      snapshot: snapshot(
+        key: ProgressionKey(exerciseID: exercise, machineID: otherMachine), sets: [(40, 10)]),
+      repRange: range
+    )
+    built.markLogged(slotID: built.slots[0].id, setID: SetID(), completedAt: now)
+
+    #expect(built.comparison(forSlotID: built.slots[0].id) == nil)
+  }
+
+  @Test("A set done on the previous machine is not compared with the new machine's history")
+  func comparisonIgnoresSetsFromBeforeAMachineChange() {
+    var built = state(sets: [(40, 10), (40, 10)], range: range)
+    built.markLogged(slotID: built.slots[0].id, setID: SetID(), completedAt: now)
+    let doneBefore = built.slots[0].id
+    let newPrior = PriorPerformance(
+      key: ProgressionKey(exerciseID: exercise, machineID: otherMachine),
+      lastSets: [PriorSetRecord(weightKg: 30, reps: 8, completedAt: now)], heaviestSet: nil)
+
+    built.changeMachine(
+      to: otherMachine, machineName: nil, machineIncrementKg: nil, prior: newPrior)
+
+    #expect(built.comparison(forSlotID: doneBefore) == nil)
   }
 }

@@ -127,6 +127,8 @@ public nonisolated enum HardsetDatabase {
       Session.self,
       SessionExercise.self,
       LoggedSet.self,
+      StoredTemplate.self,
+      StoredTemplateExercise.self,
       containerIdentifier: containerIdentifier,
       delegate: delegate
     )

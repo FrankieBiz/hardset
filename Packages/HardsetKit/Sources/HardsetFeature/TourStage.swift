@@ -162,7 +162,10 @@ struct TourStage: View {
       // A rest starts when a set is logged, as the tour's fourth step says it does. The daily app
       // does not start one on its own.
       restAfterSet: .seconds(90),
-      onShowTour: {}
+      // The staged app's settings must not offer a replay from inside the replay, and its roots
+      // must not touch the real scene's pending gym pick.
+      onShowTour: nil,
+      restoresSceneState: false
     )
     .environment(\.tourStaging, staging)
     .opacity(isShown ? 1 : 0)
@@ -252,7 +255,7 @@ struct TourStage: View {
     case .machines: "The machine in front of you is at the top. Each machine keeps its own history."
     case .volume: "Sets per muscle this week, counted from what you logged, scaled to your own week."
     case .history: "Every session is a receipt you can share."
-    case .settings: "Units, gyms, export, and the tour again, all here."
+    case .settings: "Units, gyms, and export, all here."
     }
   }
 }

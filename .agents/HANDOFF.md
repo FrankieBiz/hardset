@@ -907,3 +907,73 @@ configuration and physical-device validation remain documented separately.
 - Verified from CI (macOS runs): app and widget build in Debug and Release, macOS host build, package tests compile and the render suite passes with parallel testing off, every existing UI journey and the light pass pass, accessibility audit counts unchanged from the Phase 2 baseline. Linux `make check` exit 0. Reviewed from PNGs: every onboarding page, every tour step, Setup (fresh and existing), the rest chooser, Volume, Train start.
 - Traps found: a tab view inside the pager's page-style tab view jumps the pager (tour is drawn over the pager, R66); `accessibilityHidden` does not reach UIKit-hosted tab content, so VoiceOver can still reach the staged phone (a hosting controller per root was tried and reverted: wrong appearance); an even-odd `contentShape` left the spotlit check untappable, so touches are blocked by four views around the hole; the first staged captures drew loading lines (800 ms settle) and parallel Swift Testing starved time-sensitive `RestControllerTests`, so the render step runs with `-parallel-testing-enabled NO`; `@Entry`/GeometryReader targets, not preferences, cross the tab view; a DEBUG env var, not a launch argument, sets onboarding state for UI tests.
 - Final CI run 44298706264 on `6a0199c` is green end to end: Debug and Release builds, macOS host build, package tests, render suite, and every real-app journey including `testOnboardingJourneyDark` and `testTourReplayDark`. Onboarding audit notes (not fixed): the pitch progress segments report a small hit area, and the staged phone, which VoiceOver can reach, reports scaled text as clipped. Not built or decided: zoom receipts, "Repeat last workout" and the owner decisions in the device checklist.
+
+## Saved workouts, Progress tab and body-part library — 2026-11-18
+
+- Maintainer: FrankieBiz <frankabisignano@gmail.com>.
+- Worktree `/home/frankbiz/orca/workspaces/hardset/featherduster`, branch `FrankieBiz/review-workouts-progress-library` (fast-forwarded onto DeepSeek's `FrankieBiz/saved-workout-templates-2`, Tasks 1 to 8 plus the plan). Baseline `main` `9aa498b`. One commit per task, nothing pushed, nothing on `main`.
+- Plan `docs/superpowers/plans/2026-11-18-workouts-progress-library.md`; spec `docs/superpowers/specs/2026-11-18-workouts-progress-library-design.md`. Tasks 9 to 20 were done by one inline executor (Sonnet) after DeepSeek's Core wave.
+- Delivered: saved workouts (tables `workoutTemplates` and `templateExercises`, `TemplateStore`, one-tap start with the machine rule per gym, rest remembered, repeat last workout, up-next rotation, editor with split balance); double-progression targets and beat-last-time marks in the set row; the `loadAtReps` record; the Progress tab (trend board, Most improved, Stalled flag, record stars and best-at-each-weight on the movement chart); the body-part Library and movement editor (custom movements get a body part, one way to make one); the finish scorecard (opens on finish, shareable text) and Save as workout from a receipt.
+- Task 9 review of DeepSeek's wave: every plan rule is implemented; two real defects found and fixed. (1) `ProgressTrendAnalyzer.trend` replayed the detector over the whole history: 0.8 to 0.9 s for one movement of 2,000 sets in a debug build, so the stall check now replays only the last three sessions (about 18 ms) and the label is always "Stalled · 3 sessions". (2) The `loadAtReps` rule turned the Store lane red (`LoggerStoreTests` compact-record equivalence, 11 issues): `LoggerStore.recordComparisonSets` kept only the best load per rep count 1 to 12, so live logging missed records above 12 reps; fixed with one indexed query.
+- Verification (Linux): `make check` exit 0: orchestration tests 12, 245 Swift files parsed, Core 371 tests in 44 suites, Store 362 tests in 33 suites, query-plan gate, contrast 184 pairs across 23 swatches. **Not run on Linux, so not verified:** every SwiftUI file (`HardsetUI`, `HardsetFeature`: only syntax-parsed), the macOS snapshot suites (`LibrarySnapshotTests`, `WorkoutCardsSnapshotTests`, `ProgressBoardSnapshotTests`, the extended `SetRowCatalogSnapshotTests`, `ScreenSnapshotTests`, `TourFixturesTests`), `SchemaTests` and the `SyncEngine` registration in `Database.swift` (CloudKit), and anything on a device. UI is not visually verified until `make mac-test` or the macOS CI screenshot job runs.
+- Final reviews (two fresh read-only reviewers, run after Task 20): the logic review found four Criticals and one Important, all fixed with Linux tests (a typed load within tolerance is not a load jump; bodyweight six-week change only compares the same added load; typed-load labels; "Repeat last workout" never repeats an imported workout, with a `LoggerStore.hasRepeatableWorkout()` check and a `sessions_on_finishedAt` index, v12). The SwiftUI review read every new view as the compiler would and found no compile errors; it found two Important and seven Minor design-rule defects, seven fixed (the Progress certainty badge covering its sentence, an estimated scorecard gain with no certainty, an undimmed disabled chip, two primary buttons on Train, the beat mark's shape at accessibility sizes, button order on the receipt, spoken names of the editor steppers, saved-workout cards hidden by a failed optional read). None of the SwiftUI fixes could be compiled here.
+- Settled: the portable Store lane is `python3 Tools/hardset_check.py store` (what `make check` runs); the `hardset-check` on PATH is a different script that runs only five hard-coded Store files and silently skips every newer test file. `hardset-check parse` rewrites `Packages/HardsetKit/Package.resolved` (adds an `opencombine` pin): never stage it. A session copies its plan (rep range, template id) when it starts and never reads the template back, so editing or archiving a workout cannot rewrite history. Estimates, records, targets and marks exist only where the engine can justify them.
+- Failed approaches and traps: `#expect(try …)` and `#expect(await …)` do not compile in these tests (hoist to a local); a mutating call cannot sit inside `#expect`; async GRDB `read`/`write` need `await` in async tests; `ORDER BY … id DESC` tie-breaks forced a sort in the query gate (dropped for the last-done lookups, whose timestamps cannot tie); `SELECT *` in the gate's before-and-after comparison widens when a migration adds columns (name the columns). A mutation check (break the rule, watch the test fail) was run for the rules most likely to regress.
+- Open and owner decisions: delivery (a PR, or a push to `main` per AGENTS.md, which the global rules default to a PR); imported (Strong or Hevy) history never appears on the Progress tab, because the importer files it under separate "Unevaluated Machine" movements; rep ranges and set counts are 44 pt steppers, not keypad fields; equipment in the movement editor is chips, not a segmented control (five segments cannot hold "Bodyweight" at 402 pt); a hand-built workout cannot pin a machine (a start uses the machine last used at the gym); the single-exercise history still replays every session for record stars (about 0.8 s per 2,000 sets of one machine in a debug build); the tour has no Progress step. Deferred minors: renaming a new movement to an existing name in the picker or workout-editor sheet returns the existing movement and drops the tagging just typed (the Library refuses it); the Progress badge shows the latest estimate's certainty, not the weaker of the two estimates behind the six-week change (the scorecard does take the weaker); a machine movement with no machine has no series on the board; Most improved ranks percentages of different metrics together; the live set-row comparison and the receipt scorecard pick their earlier session by different rules.
+- Next concrete step: run `make mac-test` (or push the branch for the macOS CI) and read the new snapshot images, then choose the delivery.
+
+## Full-app review and defect fix wave — 2026-11-19
+
+- Maintainer: FrankieBiz <frankabisignano@gmail.com>.
+- Worktree `/home/frankbiz/orca/workspaces/hardset/flyingfish`; branch
+  `FrankieBiz/full-app-review-and`; baseline `9aa498b` (identical to `origin/main`, clean).
+- Objective: an independent review of the whole app, then correction of every confirmed defect and
+  inconsistency that does not require a device or a product decision.
+- Method: four read-only reviewers (Core, Store, UI, Feature/app shell) plus a coordinator pass over
+  docs, tooling, migrations and the generated project. Findings were re-checked against source
+  before any edit; documented product refusals were left alone.
+- Core fixes: a trailing decimal point no longer reads as a typed 0 kg (`NumericEntryBuffer.value`,
+  and adjusters no longer invent a value); a missing muscle `role` now counts as degraded instead of
+  silently halving credit; `LoadText` writes thousand-separator-free loads so receipt, chart and
+  logger agree; CSV preserves rows of empty cells; an inverted closed timeline is reported as
+  implausible instead of rendering a session with no length; a load above the plausibility ceiling
+  cannot become an unbeatable record; progression points, series and machine changes use total
+  orders (dictionary order no longer reorders equal timestamps); `MachineChange.id` is unique;
+  machine-change sentences use the locale's decimal separator; negative set indexes and a zero-row
+  resume are handled; the catalogue's citation path is corrected.
+- Store fixes: `recentMachines` scopes to the gym's machines before applying recency (the old code
+  could starve a quiet gym out of a global 10-machine window); `sets(in:)` returns performed order;
+  archived-gym fallback for the learned default; user-created movements sort newest-first as
+  documented; archive operations verify a row changed; session/plan reads have deterministic
+  tie-breaks; `logSet` refuses an untracked plan row; stale comments about bodyweight sync, the
+  unused rest table and CSV completeness are corrected.
+- UI fixes: the record certainty badge is reachable by VoiceOver again; rest durations are spoken as
+  durations; fractional sets use one locale-aware formatter; the next-rest chooser grids at
+  accessibility sizes instead of truncating; the session and rest bar use `hardsetArrival()` instead
+  of private copies; the muscle map draws a token gauge; volume gaps use `HardsetTag`; warm-ups are
+  pluralised; the keypad's rest countdown announces its time; tracked display/hero roles keep their
+  tracking; history cards press at 0.97; decorative symbols are hidden; dead `rowTitle`, methodology
+  helpers and prose were removed or corrected.
+- Feature/app fixes: the privacy manifest declares FileTimestamp (`C617.1`) for the export sweep;
+  the tour's staged roots no longer read or write the real pending-gym scene value and no longer
+  offer a dead replay row; the tour's Settings line matches what is shown; replay has a Close
+  control; app/widget plist versions come from build settings; `HealthBridge` no longer force-unwraps
+  a calendar date; the unused `RestTimerHooks.hasError` is removed; the light-mode UI test now
+  asserts its screens and the unused appearance parameter is gone.
+- Documentation corrected to the shipped state: `README.md`, `AGENTS.md` (counts, `Tokens.Text`,
+  `HardsetHealth`), root `HANDOFF.md` sections 2/7/8 and its status banner, and the two false claims
+  in `docs/MAC-VERIFICATION.md` about iCloud entitlements and a clean accessibility audit.
+- Verification: Linux `make check` exits 0 — 199 Swift files parsed, 240 Core tests in 29 suites,
+  304 Store tests in 30 suites, all eight query-plan gates, and 184 contrast pairs. The project
+  generator produces no diff. Native compilation and the UI/snapshot suites are for the macOS CI
+  lane; this entry does not claim them.
+- Settled: open-workout lookup keeps its index-serving `startedAt`-only order (the app never holds
+  two open sessions); CSV export stays a spreadsheet format and is documented as not a restore
+  format; `Tokens.Haptic.clank` stays as the named system fallback while `ClankPlayer` owns playback.
+- Known remaining, deliberately not changed: UI-test data is still shared between journeys (no store
+  reset); four `.sheet` modifiers on one anchor need device confirmation; the last-workout card still
+  disappears on a failed refresh by documented policy; `TourFixtures` builds on the main actor;
+  `HardsetEnvironment` is still constructed per root body evaluation; native CI for `9aa498b` on
+  `main` failed only because no macOS runner was acquired (the same SHA passed on the feature branch).
+- Next concrete step: push this branch and confirm the native CI run compiles the app and widget,
+  then finish the delivery protocol after it is green.

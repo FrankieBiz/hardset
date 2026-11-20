@@ -98,7 +98,13 @@ public struct MachineChange: Hashable, Sendable, Identifiable {
   /// higher, which is a fact about the machines and not about the lifter.
   public let heaviestLoadDeltaKg: Double
 
-  public var id: Date { date }
+  public var id: String {
+    // A date alone is not unique: two machine changes can share a session start, and duplicate
+    // identifiers make a `ForEach` draw one of them.
+    let from = fromMachineID?.rawValue.uuidString ?? "none"
+    let to = toMachineID?.rawValue.uuidString ?? "none"
+    return "\(date.timeIntervalSince1970)-\(from)-\(to)"
+  }
 
   public init(
     date: Date,
@@ -132,7 +138,7 @@ public struct MachineChange: Hashable, Sendable, Identifiable {
   }
 
   static func format(_ value: Double) -> String {
-    value == value.rounded() ? String(Int(value)) : String(format: "%.1f", value)
+    value.formatted(.number.precision(.fractionLength(0...1)).grouping(.never))
   }
 }
 
@@ -163,7 +169,10 @@ public enum ProgressionAnalyzer {
               estimatesOneRepMax: estimatesOneRepMax
             )
           }
-          .sorted { $0.date < $1.date }
+          .sorted {
+            if $0.date != $1.date { return $0.date < $1.date }
+            return $0.sessionID.rawValue.uuidString < $1.sessionID.rawValue.uuidString
+          }
         return ProgressionSeries(
           key: ProgressionKey(exerciseID: exerciseID, machineID: machineID),
           points: points
@@ -172,7 +181,11 @@ public enum ProgressionAnalyzer {
       // Most-trained machine first: that is the one the user means by "my leg press".
       .sorted { lhs, rhs in
         if lhs.points.count != rhs.points.count { return lhs.points.count > rhs.points.count }
-        return (lhs.points.last?.date ?? .distantPast) > (rhs.points.last?.date ?? .distantPast)
+        let left = lhs.points.last?.date ?? .distantPast
+        let right = rhs.points.last?.date ?? .distantPast
+        if left != right { return left > right }
+        return (lhs.key.machineID?.rawValue.uuidString ?? "")
+          < (rhs.key.machineID?.rawValue.uuidString ?? "")
       }
   }
 
@@ -211,7 +224,10 @@ public enum ProgressionAnalyzer {
   /// assumed upward.
   public static func estimateCertainty(latestOf series: [[ProgressionPoint]]) -> Certainty {
     let latest = series.compactMap { points in
-      points.filter { $0.bestEstimatedOneRepMaxKg != nil }.max { $0.date < $1.date }
+      points.filter { $0.bestEstimatedOneRepMaxKg != nil }.max {
+        if $0.date != $1.date { return $0.date < $1.date }
+        return $0.sessionID.rawValue.uuidString < $1.sessionID.rawValue.uuidString
+      }
     }
     guard !latest.isEmpty else { return .unevaluated }
     return Certainty.combine(latest.map { $0.bestEstimateCertainty ?? .low })
@@ -234,22 +250,35 @@ public enum ProgressionAnalyzer {
       let machineID: MachineID?
     }
 
-    // One entry per session-machine pair: which machine, and the heaviest load on that specific machine.
-    var perSessionMachine: [SessionMachineKey: (date: Date, machineID: MachineID?, heaviest: Double)] = [:]
+    // One entry per session-machine pair: which machine, and the heaviest load on that specific
+    // machine. The session id is kept so equal timestamps still order deterministically.
+    var perSessionMachine:
+      [SessionMachineKey: (sessionID: SessionID, date: Date, machineID: MachineID?, heaviest: Double)] = [:]
     for sample in samples {
       let key = SessionMachineKey(sessionID: sample.sessionID, machineID: sample.machineID)
       if let existing = perSessionMachine[key] {
         perSessionMachine[key] = (
+          sample.sessionID,
           min(existing.date, sample.completedAt),
           sample.machineID,
           max(existing.heaviest, sample.weightKg)
         )
       } else {
-        perSessionMachine[key] = (sample.completedAt, sample.machineID, sample.weightKg)
+        perSessionMachine[key] = (
+          sample.sessionID, sample.completedAt, sample.machineID, sample.weightKg
+        )
       }
     }
 
-    let ordered = perSessionMachine.values.sorted { $0.date < $1.date }
+    // A total order, not just by date: `values` comes from a dictionary, whose iteration order is
+    // randomized per process, so equal timestamps would otherwise reorder between launches.
+    let ordered = perSessionMachine.values.sorted {
+      if $0.date != $1.date { return $0.date < $1.date }
+      if $0.sessionID != $1.sessionID {
+        return $0.sessionID.rawValue.uuidString < $1.sessionID.rawValue.uuidString
+      }
+      return ($0.machineID?.rawValue.uuidString ?? "") < ($1.machineID?.rawValue.uuidString ?? "")
+    }
     guard ordered.count > 1 else { return [] }
 
     var changes: [MachineChange] = []

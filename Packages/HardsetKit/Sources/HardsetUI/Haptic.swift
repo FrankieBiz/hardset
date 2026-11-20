@@ -8,9 +8,10 @@ extension Tokens {
   /// failed command, `selection` answers the machine step and the rest controls, and `warning`
   /// marks a rest that ran out with no alarm to say so.
   public enum Haptic {
-    /// A heavy, full-strength impact for a weighty physical moment. The richer CoreHaptics
-    /// transient-plus-rumble pattern is deferred to the welcome bar, where a `HapticEngine`
-    /// wrapper will own `CHHapticEngine`; until then this is the system impact.
+    /// The heavy, full-strength system impact that stands in for the CoreHaptics `clank` when the
+    /// engine is unavailable. The product path plays the richer transient-plus-rumble pattern
+    /// directly through `ClankPlayer`; this value names the same moment for a view that triggers
+    /// feedback through `.sensoryFeedback`.
     public static let clank: SensoryFeedback = .impact(weight: .heavy, intensity: 1.0)
     /// A set was logged.
     public static let success: SensoryFeedback = .success

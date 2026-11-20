@@ -416,7 +416,9 @@ private enum MotionCatalog {
   ]
 
   static let haptics: [TokenFact] = [
-    TokenFact(name: "Haptic.clank", value: "impact, heavy, intensity 1.0"),
+    TokenFact(
+      name: "Haptic.clank",
+      value: "CoreHaptics transient + 40 ms rumble; heavy system impact fallback"),
     TokenFact(name: "Haptic.success", value: "success"),
     TokenFact(name: "Haptic.error", value: "error"),
     TokenFact(name: "Haptic.selection", value: "selection"),

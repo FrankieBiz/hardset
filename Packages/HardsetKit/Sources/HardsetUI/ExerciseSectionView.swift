@@ -111,6 +111,9 @@ public struct ExerciseSectionView: View {
             // The borrowed-history note is shown once in the header, not repeated on every
             // row — an honest caveat that appears five times reads as noise and gets ignored.
             priorNote: nil,
+            // Nil for a warm-up, an unlogged row, borrowed history and a set done on another
+            // machine, so a mark is only ever a claim about this machine's last session.
+            comparison: state.comparison(forSlotID: slot.id),
             editingField: isEditingRow ? editingField : nil,
             editingText: isEditingRow ? editingText : nil,
             onLog: { onLogSet(slot) },

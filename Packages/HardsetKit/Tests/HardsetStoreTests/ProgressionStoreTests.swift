@@ -283,4 +283,59 @@ struct ProgressionStoreTests {
     // Still named: archiving the machine does not un-perform the sets.
     #expect(history.label(for: history.series[0].key) == "Hammer Strength")
   }
+
+  /// The detail screen marks the sessions that set a record and tabulates the best reps at each
+  /// weight, per machine, using that machine's own step for the record margin.
+  @Test("History carries the sessions that set records and the best reps at each weight")
+  func historyCarriesRecordSessionsAndLedger() async throws {
+    let (database, store, progression, exercise, gym) = try fixture()
+    let hammer = MachineID()
+    try await database.write { db in
+      try Machine.insert {
+        Machine.Draft(id: hammer.rawValue, gymID: gym.rawValue, name: "Press", stackIncrementKg: 2.5)
+      }
+      .execute(db)
+    }
+    var sessions: [SessionID] = []
+    for (day, reps) in [(0, 10), (7, 11), (14, 11)] {
+      let date = now.addingTimeInterval(Double(day) * 86_400)
+      let id = try store.startSession(at: date)
+      _ = try store.logSet(
+        sessionID: id, exerciseID: exercise, machineID: hammer,
+        draft: SetEntryDraft(weightKg: 40, reps: reps), setOrdinal: 0, at: date)
+      try store.finishSession(id, at: date.addingTimeInterval(3600))
+      sessions.append(id)
+    }
+
+    let history = try await progression.loadHistory(for: exercise)
+
+    let key = ProgressionKey(exerciseID: exercise, machineID: hammer)
+    #expect(history.recordSessionIDs[key] == [sessions[1]])
+    #expect(history.bestAtWeight[key]
+      == [BestAtWeight(weightKg: 40, reps: 11, achievedAt: now.addingTimeInterval(7 * 86_400))])
+  }
+
+  @Test("Each machine's series has its own record marks and ledger")
+  func historyKeepsRecordsPerMachine() async throws {
+    let (database, store, progression, exercise, gym) = try fixture()
+    let a = try machine(database, gym, "A")
+    let b = try machine(database, gym, "B")
+    for (offset, machineID, reps) in [(0, a, 10), (7, a, 12), (1, b, 8), (8, b, 8)] {
+      let date = now.addingTimeInterval(Double(offset) * 86_400)
+      let id = try store.startSession(at: date)
+      _ = try store.logSet(
+        sessionID: id, exerciseID: exercise, machineID: machineID,
+        draft: SetEntryDraft(weightKg: 40, reps: reps), setOrdinal: 0, at: date)
+      try store.finishSession(id, at: date.addingTimeInterval(3600))
+    }
+
+    let history = try await progression.loadHistory(for: exercise)
+
+    let keyA = ProgressionKey(exerciseID: exercise, machineID: a)
+    let keyB = ProgressionKey(exerciseID: exercise, machineID: b)
+    #expect(history.recordSessionIDs[keyA]?.count == 1)
+    #expect(history.recordSessionIDs[keyB]?.isEmpty == true)
+    #expect(history.bestAtWeight[keyA]?.first?.reps == 12)
+    #expect(history.bestAtWeight[keyB]?.first?.reps == 8)
+  }
 }

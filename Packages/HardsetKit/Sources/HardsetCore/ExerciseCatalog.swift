@@ -105,7 +105,7 @@ public enum ExerciseCatalog {
         .init(.lowerBack, role: .stabilizer, certainty: .moderate, source: .anatomy),
         .init(.abs, role: .stabilizer, certainty: .moderate, source: .anatomy),
         .init(.quadriceps, role: .direct, certainty: .moderate, source: .anatomy),
-        .init(.glutes, role: .direct, certainty: .moderate, source: .convention, citation: "Hardset convention; see docs-MuscleTaxonomy-spec.md 5.7"),
+        .init(.glutes, role: .direct, certainty: .moderate, source: .convention, citation: "Hardset convention; see docs/MuscleTaxonomy-spec.md 5.7"),
         .init(.adductors, role: .indirect, certainty: .moderate, source: .trial, citation: "Kubo 2019, DOI 10.1007/s00421-019-04181-y"),
       ]
     ),
@@ -119,7 +119,7 @@ public enum ExerciseCatalog {
         .init(.upperBack, role: .stabilizer, certainty: .moderate, source: .anatomy),
         .init(.abs, role: .stabilizer, certainty: .moderate, source: .anatomy),
         .init(.quadriceps, role: .direct, certainty: .moderate, source: .anatomy),
-        .init(.glutes, role: .direct, certainty: .moderate, source: .convention, citation: "Hardset convention; see docs-MuscleTaxonomy-spec.md 5.7"),
+        .init(.glutes, role: .direct, certainty: .moderate, source: .convention, citation: "Hardset convention; see docs/MuscleTaxonomy-spec.md 5.7"),
         .init(.adductors, role: .indirect, certainty: .moderate, source: .trial, citation: "Kubo 2019, DOI 10.1007/s00421-019-04181-y"),
       ]
     ),
@@ -166,7 +166,7 @@ public enum ExerciseCatalog {
         .init(.lats, role: .stabilizer, certainty: .moderate, source: .anatomy),
         .init(.lowerBack, role: .indirect, certainty: .low, source: .anatomy),
         .init(.hamstrings, role: .direct, certainty: .moderate, source: .anatomy),
-        .init(.glutes, role: .direct, certainty: .moderate, source: .convention, citation: "Hardset convention; see docs-MuscleTaxonomy-spec.md 5.7"),
+        .init(.glutes, role: .direct, certainty: .moderate, source: .convention, citation: "Hardset convention; see docs/MuscleTaxonomy-spec.md 5.7"),
       ]
     ),
     CatalogExercise(
@@ -182,7 +182,7 @@ public enum ExerciseCatalog {
         .init(.forearms, role: .stabilizer, certainty: .moderate, source: .anatomy),
         .init(.quadriceps, role: .indirect, certainty: .moderate, source: .anatomy),
         .init(.hamstrings, role: .direct, certainty: .moderate, source: .anatomy),
-        .init(.glutes, role: .direct, certainty: .moderate, source: .convention, citation: "Hardset convention; see docs-MuscleTaxonomy-spec.md 5.7"),
+        .init(.glutes, role: .direct, certainty: .moderate, source: .convention, citation: "Hardset convention; see docs/MuscleTaxonomy-spec.md 5.7"),
       ]
     ),
     CatalogExercise(
@@ -227,7 +227,7 @@ public enum ExerciseCatalog {
       contributions: [
         .init(.quadriceps, role: .direct, certainty: .moderate, source: .pellandTable1, citation: "Pelland 2025 Table 1, DOI 10.1007/s40279-025-02344-w"),
         .init(.hamstrings, role: .indirect, certainty: .moderate, source: .anatomy),
-        .init(.glutes, role: .direct, certainty: .moderate, source: .convention, citation: "Hardset convention; see docs-MuscleTaxonomy-spec.md 5.7"),
+        .init(.glutes, role: .direct, certainty: .moderate, source: .convention, citation: "Hardset convention; see docs/MuscleTaxonomy-spec.md 5.7"),
         .init(.adductors, role: .indirect, certainty: .moderate, source: .trial, citation: "Kubo 2019, DOI 10.1007/s00421-019-04181-y"),
       ]
     ),

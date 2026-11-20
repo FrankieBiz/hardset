@@ -209,7 +209,7 @@ public struct SessionView: View {
           if showsStaleNotice {
             staleNotice
               .padding(.horizontal, Tokens.Spacing.regular)
-              .transition(arrival)
+              .hardsetArrival()
           }
 
           ForEach($exercises) { $exercise in
@@ -631,12 +631,12 @@ public struct SessionView: View {
           // so the user can retry rather than discovering the gap days later.
           HardsetBanner(.error, message: errorMessage, onDismiss: onDismissError)
             .padding(.horizontal, Tokens.Spacing.regular)
-            .transition(arrival)
+            .hardsetArrival()
         }
         if !records.isEmpty {
           recordsCard
             .padding(.horizontal, Tokens.Spacing.regular)
-            .transition(arrival)
+            .hardsetArrival()
         }
         RestBarView(
           state: restState,
@@ -669,17 +669,8 @@ public struct SessionView: View {
     return { duration in onChooseNextRest(restExerciseID, duration) }
   }
 
-  /// How a message arrives: it fades in where it lands, on `Motion.reveal`, while everything it
-  /// displaces moves at once, and it leaves at once. Layout never animates; an animation keyed on
-  /// the message used to slide the rest bar and every card along with the fade.
-  private var arrival: AnyTransition {
-    .asymmetric(
-      insertion: .opacity.animation(
-        Tokens.Motion.adaptive(Tokens.Motion.reveal, reduceMotion: reduceMotion)
-      ),
-      removal: .identity
-    )
-  }
+  /// How a message arrives is `hardsetArrival()`, the one insertion-only reveal in the kit, so the
+  /// session cannot drift from the pickers and the name sheet.
 
   /// The failure being shown, and which failure it is.
   private var errorSignal: ErrorSignal {
@@ -764,7 +755,8 @@ public struct SessionView: View {
           }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .accessibilityElement(children: .combine)
+        // Deliberately not combined: the certainty badge inside is a button that opens the
+        // methodology disclosure, and combining the row would make it unreachable by VoiceOver.
       }
     }
     .padding(Tokens.Spacing.regular)
@@ -798,6 +790,11 @@ public struct SessionView: View {
         return "\(record.reps) reps at \(weight), up from \(previousReps)"
       }
       return "\(record.reps) reps at \(weight)"
+    case .loadAtReps:
+      if let previous = record.previousWeightKg {
+        return "\(weight) for \(record.reps) reps, up from \(Self.trim(unit.fromKilograms(previous))) \(unit.abbreviation)"
+      }
+      return "\(weight) for \(record.reps) reps"
     case .estimatedOneRepMax:
       // States the new estimate as well as the old one, so the claim can be checked, and rounds
       // both as every other estimate in the app is rounded: to 0.5 kg or 1 lb, never to the
@@ -911,7 +908,7 @@ public struct SessionView: View {
           }
         }
       }
-      .transition(arrival)
+      .hardsetArrival()
     } else {
       Button {
         requestFinish()
@@ -919,7 +916,7 @@ public struct SessionView: View {
         Label("Finish workout", systemImage: "flag.checkered")
       }
       .buttonStyle(HardsetButtonStyle(.secondary, size: .logger))
-      .transition(arrival)
+      .hardsetArrival()
     }
   }
 
@@ -999,7 +996,9 @@ public struct SessionView: View {
     if volume.volumeKg > 0 {
       parts.append("\(Int(displayed.rounded())) \(unit.abbreviation) volume")
     }
-    if volume.warmupSets > 0 { parts.append("\(volume.warmupSets) warm-up") }
+    if volume.warmupSets > 0 {
+      parts.append(volume.warmupSets == 1 ? "1 warm-up" : "\(volume.warmupSets) warm-ups")
+    }
     return parts.joined(separator: ", ")
   }
 

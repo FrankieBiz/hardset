@@ -6,8 +6,35 @@ import SwiftUI
 import UIKit
 #endif
 
+/// What "Save as workout" needs: the saved-workout store, the movement catalogue for the picker and
+/// the volume store for the split balance, and what to do once a workout has been saved. Passed
+/// where a receipt can be opened, so the same action is offered from the Train tab and from History.
+public struct SaveAsWorkoutTools {
+  let templates: TemplateStore
+  let catalog: CatalogSeeder
+  let volume: VolumeStore
+  let onSaved: () -> Void
+
+  public init(
+    templates: TemplateStore, catalog: CatalogSeeder, volume: VolumeStore,
+    onSaved: @escaping () -> Void
+  ) {
+    self.templates = templates
+    self.catalog = catalog
+    self.volume = volume
+    self.onSaved = onSaved
+  }
+}
+
+/// A plan made from a finished workout, waiting to be edited, with the rest of the rotation.
+private nonisolated struct SavedWorkoutDraft: Identifiable {
+  let template: WorkoutTemplate
+  let others: [WorkoutTemplate]
+  var id: TemplateID { template.id }
+}
+
 /// A past workout's receipt, with the two corrections a lifter may need and a way into each
-/// movement's load history.
+/// movement's load history, and the way to keep it as a saved workout.
 ///
 /// Saved sets are never edited. A mis-logged set can be removed, and a workout started by mistake
 /// can be deleted, each behind a destructive confirmation that says what will change. The receipt
@@ -17,6 +44,8 @@ struct WorkoutReceiptScreen: View {
   private let store: ReceiptStore
   private let unit: WeightUnit
   private let progression: ProgressionStore?
+  /// Offers "Save as workout" when present.
+  private let saveAsWorkout: SaveAsWorkoutTools?
   /// Called after a set or the workout was deleted, so the caller can re-read what it shows.
   private let onChanged: () -> Void
 
@@ -27,6 +56,13 @@ struct WorkoutReceiptScreen: View {
   @State private var isConfirmingWorkoutDeletion = false
   @State private var isDeleting = false
   @State private var correctionError: String?
+  @State private var isNamingWorkout = false
+  @State private var nameError: String?
+  /// The plan waiting for the naming sheet to finish leaving, so the editor is presented after it:
+  /// a sheet started while another is still dismissing is dropped.
+  @State private var pendingEditor: SavedWorkoutDraft?
+  @State private var editor: SavedWorkoutDraft?
+  @State private var didSaveWorkout = false
   @Environment(\.displayScale) private var displayScale
   @Environment(\.dismiss) private var dismiss
   @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -35,12 +71,14 @@ struct WorkoutReceiptScreen: View {
 
   init(
     sessionID: SessionID, store: ReceiptStore, unit: WeightUnit,
-    progression: ProgressionStore? = nil, onChanged: @escaping () -> Void = {}
+    progression: ProgressionStore? = nil, saveAsWorkout: SaveAsWorkoutTools? = nil,
+    onChanged: @escaping () -> Void = {}
   ) {
     self.sessionID = sessionID
     self.store = store
     self.unit = unit
     self.progression = progression
+    self.saveAsWorkout = saveAsWorkout
     self.onChanged = onChanged
   }
 
@@ -73,6 +111,43 @@ struct WorkoutReceiptScreen: View {
         Button("OK", role: .cancel) {}
       } message: {
         Text(correctionError ?? "")
+      }
+      .sheet(
+        isPresented: $isNamingWorkout,
+        onDismiss: {
+          nameError = nil
+          if let pending = pendingEditor {
+            pendingEditor = nil
+            editor = pending
+          }
+        }
+      ) {
+        NameEntrySheet(
+          title: "Save as workout",
+          prompt: "Workout name",
+          footnote: "Starts a workout with these movements, in this order, in one tap.",
+          confirmLabel: "Continue",
+          errorMessage: nameError,
+          initialName: snapshot.value?.title.trimmingCharacters(in: .whitespacesAndNewlines) ?? "",
+          onConfirm: { name in Task { await prepareWorkout(named: name) } },
+          onCancel: { isNamingWorkout = false }
+        )
+        .hardsetSheet()
+      }
+    }
+    // On the stack, not the content: a second sheet on one anchor never presents.
+    .sheet(item: $editor) { draft in
+      if let tools = saveAsWorkout {
+        WorkoutEditorScreen(
+          templates: tools.templates, catalog: tools.catalog, volume: tools.volume,
+          template: draft.template, isDraft: true, others: draft.others,
+          onSaved: {
+            didSaveWorkout = true
+            tools.onSaved()
+          },
+          onClose: { editor = nil }
+        )
+        .hardsetSheet()
       }
     }
   }
@@ -116,6 +191,19 @@ struct WorkoutReceiptScreen: View {
                 Label("Share receipt image", systemImage: "photo")
               }.buttonStyle(HardsetButtonStyle())
             }
+            if saveAsWorkout != nil, canSaveAsWorkout(receipt) {
+              Button {
+                isNamingWorkout = true
+              } label: {
+                Label("Save as workout", systemImage: "square.and.arrow.down.on.square")
+              }
+              .buttonStyle(HardsetButtonStyle(.secondary))
+              .disabled(isDeleting)
+              if didSaveWorkout {
+                HardsetBanner(
+                  .info, message: "Saved as a workout. It is on the Train tab, ready to start in one tap.")
+              }
+            }
           }
           .padding(Tokens.Spacing.loose)
 
@@ -137,6 +225,32 @@ struct WorkoutReceiptScreen: View {
           .padding(.bottom, Tokens.Spacing.block)
         }
       }
+    }
+  }
+
+  // MARK: - Save as workout
+
+  /// Not offered for a workout with no sets, or one that was imported: an imported movement is kept
+  /// apart from the catalogue's own on purpose, and a saved workout started from it would log
+  /// against that copy.
+  private func canSaveAsWorkout(_ receipt: WorkoutReceipt) -> Bool {
+    !receipt.movements.isEmpty && !receipt.lines.contains { $0.isImported }
+  }
+
+  /// Makes the plan from this workout and hands it to the editor. A failure stays in the naming
+  /// sheet, with the name still typed, so trying again is one tap.
+  private func prepareWorkout(named name: String) async {
+    guard let tools = saveAsWorkout else { return }
+    do {
+      let plan = try await tools.templates.draft(fromSession: sessionID, name: name)
+      let others = try await tools.templates.loadTemplates()
+      nameError = nil
+      pendingEditor = SavedWorkoutDraft(template: plan, others: others)
+      isNamingWorkout = false
+    } catch TemplateStoreError.notFound {
+      nameError = "This workout could not be found. It may have been deleted."
+    } catch {
+      nameError = "A workout could not be made from this one. Try again."
     }
   }
 

@@ -28,6 +28,7 @@ public struct PriorPerformance: Hashable, Sendable, Codable {
 
   /// What to pre-fill the nth set row with, as a real value.
   public func suggestion(forSetIndex index: Int) -> PriorSetRecord? {
+    guard index >= 0 else { return nil }
     if lastSets.indices.contains(index) { return lastSets[index] }
     return lastSets.last
   }
@@ -103,18 +104,32 @@ public struct SetEntryDraft: Hashable, Sendable {
   public var reps: Int?
   /// What history suggested, retained so the UI can show "same as last time" affordances.
   public let suggestion: PriorSetRecord?
+  /// The double-progression target this row was prefilled with, when it was. Kept apart from
+  /// `suggestion`, which stays what last time actually was, so a target is never read as history.
+  public let target: SetTarget?
 
   /// Seeds the draft with the suggestion as an actual value, not a placeholder.
   public init(suggestion: PriorSetRecord?) {
     self.suggestion = suggestion
+    self.target = nil
     self.weightKg = suggestion?.weightKg
     self.reps = suggestion?.reps
+  }
+
+  /// Seeds the draft with a target as an actual value, so a lifter who hits it logs in one tap.
+  /// The suggestion still says what last time was.
+  public init(target: SetTarget, suggestion: PriorSetRecord?) {
+    self.suggestion = suggestion
+    self.target = target
+    self.weightKg = target.weightKg
+    self.reps = target.reps
   }
 
   public init(weightKg: Double?, reps: Int?, suggestion: PriorSetRecord? = nil) {
     self.weightKg = weightKg
     self.reps = reps
     self.suggestion = suggestion
+    self.target = nil
   }
 
   /// True only when both fields hold a real, usable value. Bind the log control's

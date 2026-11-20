@@ -117,6 +117,8 @@ public final class SessionCoordinator {
     gymID: GymID? = nil,
     title: String = "",
     plan: [PlannedExercise],
+    templateID: TemplateID? = nil,
+    weightUnit: WeightUnit = .kilograms,
     now: @escaping () -> Date = { Date() },
     restAfterSet: Duration? = nil,
     onStartRest: @escaping (Duration, RestMetadata) -> Void = { _, _ in }
@@ -128,6 +130,7 @@ public final class SessionCoordinator {
       for: plan.map(\.progressionKey),
       asOf: startedAt
     )
+    let modalities = try store.modalities(for: plan.map(\.exerciseID))
 
     var states: [ExerciseLogState] = []
     var rowIDs: [UUID: UUID] = [:]
@@ -135,7 +138,8 @@ public final class SessionCoordinator {
     // increment was passed in — and nothing in the app passed one — while `resume` read it from
     // storage, so the same set could be a record before a restart and not after.
     let increments = try store.machineIncrements(for: plan.compactMap(\.machineID))
-    let saved = try store.startSession(gymID: gymID, title: title, at: startedAt, plan: plan)
+    let saved = try store.startSession(
+      gymID: gymID, title: title, at: startedAt, plan: plan, templateID: templateID)
     for (position, planned) in plan.enumerated() {
       let state = ExerciseLogState.build(
         exerciseID: planned.exerciseID,
@@ -145,7 +149,10 @@ public final class SessionCoordinator {
         machineIncrementKg: planned.machineID.flatMap { increments[$0] }
           ?? planned.machineIncrementKg,
         snapshot: snapshot,
-        plannedSets: planned.plannedSets
+        plannedSets: planned.plannedSets,
+        repRange: planned.repRange,
+        weightUnit: weightUnit,
+        addsLoad: modalities[planned.exerciseID]?.estimatesOneRepMax ?? true
       )
       rowIDs[state.id] = saved.planRowIDs[position]
       states.append(state)
@@ -176,29 +183,36 @@ public final class SessionCoordinator {
   /// Returns `nil` when no session is open, which is the normal case.
   public static func resume(
     store: LoggerStore,
+    weightUnit: WeightUnit = .kilograms,
     now: @escaping () -> Date = { Date() },
     restAfterSet: Duration? = nil,
     onStartRest: @escaping (Duration, RestMetadata) -> Void = { _, _ in }
   ) throws -> SessionCoordinator? {
     guard let recovery = try store.recoverySnapshot(asOf: now()) else { return nil }
-    return restore(recovery, store: store, now: now, restAfterSet: restAfterSet, onStartRest: onStartRest)
+    return restore(
+      recovery, store: store, weightUnit: weightUnit, now: now, restAfterSet: restAfterSet,
+      onStartRest: onStartRest)
   }
 
   /// Asynchronously reads the complete recovery snapshot, then builds actor-owned state.
   public static func loadResume(
     store: LoggerStore,
+    weightUnit: WeightUnit = .kilograms,
     now: @escaping () -> Date = { Date() },
     restAfterSet: Duration? = nil,
     onStartRest: @escaping (Duration, RestMetadata) -> Void = { _, _ in }
   ) async throws -> SessionCoordinator? {
     guard let recovery = try await store.loadRecoverySnapshot(asOf: now()) else { return nil }
     try Task.checkCancellation()
-    return restore(recovery, store: store, now: now, restAfterSet: restAfterSet, onStartRest: onStartRest)
+    return restore(
+      recovery, store: store, weightUnit: weightUnit, now: now, restAfterSet: restAfterSet,
+      onStartRest: onStartRest)
   }
 
   private static func restore(
-    _ recovery: SessionRecoverySnapshot, store: LoggerStore, now: @escaping () -> Date,
-    restAfterSet: Duration?, onStartRest: @escaping (Duration, RestMetadata) -> Void
+    _ recovery: SessionRecoverySnapshot, store: LoggerStore, weightUnit: WeightUnit,
+    now: @escaping () -> Date, restAfterSet: Duration?,
+    onStartRest: @escaping (Duration, RestMetadata) -> Void
   ) -> SessionCoordinator {
     let session = recovery.session
     let planned = recovery.planned
@@ -258,7 +272,12 @@ public final class SessionCoordinator {
         machineIncrementKg: entry.machineIncrementKg,
         loggedSets: logged,
         snapshot: snapshot,
-        plannedSets: entry.plannedSets
+        plannedSets: entry.plannedSets,
+        // The rep range lives on the session's own row, so a restart gets the same targets back
+        // without the saved workout, which may have been edited or archived since.
+        repRange: entry.repRange,
+        weightUnit: weightUnit,
+        addsLoad: entry.modality?.estimatesOneRepMax ?? true
       )
       rowIDs[state.id] = entry.id
       return state
@@ -277,6 +296,13 @@ public final class SessionCoordinator {
     )
     coordinator.planRowIDs = rowIDs
     return coordinator
+  }
+
+  /// How a logged set compares with the same set last time on its machine, for the set row's
+  /// "+1 rep" mark. `nil` is the honest answer whenever there is nothing to compare; see
+  /// `ExerciseLogState.comparison(forSlotID:)`.
+  public func comparison(forSlotID slotID: UUID, inExercise exerciseStateID: UUID) -> SetComparison? {
+    exercises.first { $0.id == exerciseStateID }?.comparison(forSlotID: slotID)
   }
 
   /// Adds a movement to the workout in progress.
@@ -380,6 +406,11 @@ public final class SessionCoordinator {
     let exercise = exercises[exerciseIndex]
     let slot = exercise.slots[slotIndex]
     guard !slot.isLogged else { return true }
+    // A block with no plan row is the same inconsistency `changeMachine` and `removeExercise`
+    // refuse. Writing a set without one makes recovery attribute it to a different block.
+    guard let planRow = planRowIDs[exercise.id] else {
+      return fail(SessionCoordinatorError.untrackedExercise, .logSet)
+    }
 
     do {
       // The Store compares complete benchmarks before insertion, within the save
@@ -394,7 +425,7 @@ public final class SessionCoordinator {
         commandID: SetID(rawValue: slot.commandID),
         // Stamped so recovery can tell two blocks of the same movement apart. Without it,
         // grouping by exercise made both blocks claim the same sets and double-counted them.
-        sessionExerciseID: planRowIDs[exercise.id],
+        sessionExerciseID: planRow,
         draft: slot.draft,
         // Derived by the store from what is already written, NOT from the slot index. Recovered
         // slots are renumbered, so a slot-index ordinal reissues one that is already taken.
@@ -723,6 +754,9 @@ public nonisolated struct PlannedExercise: Hashable, Sendable {
   public let machineName: String?
   public let machineIncrementKg: Double?
   public let plannedSets: Int?
+  /// The reps this movement is planned for. Stored on the session's own row, so targets and the
+  /// finish scorecard never depend on the saved workout that supplied it.
+  public let repRange: RepRange?
 
   public init(
     exerciseID: ExerciseID,
@@ -730,7 +764,8 @@ public nonisolated struct PlannedExercise: Hashable, Sendable {
     exerciseName: String,
     machineName: String? = nil,
     machineIncrementKg: Double? = nil,
-    plannedSets: Int? = nil
+    plannedSets: Int? = nil,
+    repRange: RepRange? = nil
   ) {
     self.exerciseID = exerciseID
     self.machineID = machineID
@@ -738,6 +773,7 @@ public nonisolated struct PlannedExercise: Hashable, Sendable {
     self.machineName = machineName
     self.machineIncrementKg = machineIncrementKg
     self.plannedSets = plannedSets
+    self.repRange = repRange
   }
 
   public var progressionKey: ProgressionKey {

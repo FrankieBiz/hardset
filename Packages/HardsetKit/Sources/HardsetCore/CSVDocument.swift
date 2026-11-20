@@ -30,7 +30,9 @@ public enum CSVDocument {
         }
       } else if character == "\n" || character == "\r" || character == "\r\n" {
         row.append(field)
-        if row.contains(where: { !$0.isEmpty }) { rows.append(row) }
+        // A row with a separator or a quoted field is real even when every cell is empty; a
+        // blank line is not. Dropping the former made `encode`/`decode` lossy.
+        if row.count > 1 || !field.isEmpty || closed { rows.append(row) }
         row = []; field = ""; closed = false
         if character == "\r", characters.index(after: index) < characters.endIndex, characters[characters.index(after: index)] == "\n" { index = characters.index(after: index) }
       } else if character == "\"" {

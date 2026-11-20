@@ -5,6 +5,8 @@ import Observation
 public nonisolated enum WorkoutRootError: Error, Equatable {
   case notReady
   case workoutAlreadyOpen
+  /// "Repeat last workout" was asked before any workout had been finished.
+  case nothingToRepeat
 }
 
 /// Loads the root once and keeps new-workout creation behind successful recovery.
@@ -14,6 +16,10 @@ public final class WorkoutRootModel {
   public private(set) var coordinator: SessionCoordinator?
   public private(set) var gymOptions: [GymRecord] = []
   public var selectedGym: GymID?
+  /// The lifter's unit, which a recovered workout needs to rebuild its targets: with no machine
+  /// step saved, a target adds one plate, and a plate is 2.5 kg or 5 lb. The view keeps it in step
+  /// with the stored preference and sets it before `load()`.
+  @ObservationIgnored public var weightUnit: WeightUnit = .kilograms
   public private(set) var isReady = false
   public private(set) var isLoading = false
   public private(set) var lastError: (any Error)?
@@ -62,7 +68,8 @@ public final class WorkoutRootModel {
     do {
       try await catalog.loadCatalog(now: now())
       let recovered = try await SessionCoordinator.loadResume(
-        store: logger, now: now, restAfterSet: restAfterSet, onStartRest: onStartRest
+        store: logger, weightUnit: weightUnit, now: now, restAfterSet: restAfterSet,
+        onStartRest: onStartRest
       )
       let selection = try await gyms.loadSelection()
       try Task.checkCancellation()
@@ -80,6 +87,72 @@ public final class WorkoutRootModel {
     guard coordinator == nil else { throw WorkoutRootError.workoutAlreadyOpen }
     coordinator = try SessionCoordinator.start(
       store: logger, gymID: selectedGym, plan: [], now: now,
+      restAfterSet: restAfterSet, onStartRest: onStartRest
+    )
+  }
+
+  /// Starts a saved workout in one step: every movement, its machine and its set rows ready.
+  ///
+  /// Each movement opens on its saved machine only when that machine belongs to the gym the workout
+  /// starts at. Otherwise it opens on the machine last used for it here, or on none, so a plan made
+  /// at another gym never makes the start fail. The workout's title is the plan's name, and the
+  /// session remembers the plan and each rep range itself. A saved rest becomes the movement's
+  /// remembered rest, so the existing rest flow starts it after a working set. That happens only
+  /// once the workout exists, so a start that fails leaves the lifter's rests as they were.
+  public func startWorkout(
+    from template: WorkoutTemplate, unit: WeightUnit, rest: RestPreferences
+  ) throws {
+    guard isReady else { throw WorkoutRootError.notReady }
+    guard coordinator == nil else { throw WorkoutRootError.workoutAlreadyOpen }
+    let machines = try logger.resolvedMachines(
+      for: template.exercises.map { ($0.exerciseID, $0.machineID) }, at: selectedGym)
+    let plan = zip(template.exercises, machines).map { exercise, machine in
+      PlannedExercise(
+        exerciseID: exercise.exerciseID,
+        machineID: machine?.id,
+        exerciseName: exercise.exerciseName,
+        machineName: machine?.displayName,
+        machineIncrementKg: machine?.stackIncrementKg,
+        plannedSets: exercise.plannedSets,
+        repRange: exercise.repRange
+      )
+    }
+    coordinator = try SessionCoordinator.start(
+      store: logger, gymID: selectedGym, title: template.name, plan: plan,
+      templateID: template.id, weightUnit: unit, now: now,
+      restAfterSet: restAfterSet, onStartRest: onStartRest
+    )
+    for exercise in template.exercises {
+      if let seconds = exercise.restSeconds {
+        rest.remember(.seconds(seconds), for: exercise.exerciseID)
+      }
+    }
+  }
+
+  /// Starts the last finished workout again: its movements in order, with machines resolved as
+  /// `startWorkout(from:unit:rest:)` does, its rep ranges, its title and the saved workout it came
+  /// from. Each movement opens with as many sets as were logged, and none for a movement with no
+  /// working sets, which falls back to what its history says.
+  public func repeatLastWorkout(unit: WeightUnit) throws {
+    guard isReady else { throw WorkoutRootError.notReady }
+    guard coordinator == nil else { throw WorkoutRootError.workoutAlreadyOpen }
+    guard let last = try logger.lastFinishedPlan() else { throw WorkoutRootError.nothingToRepeat }
+    let machines = try logger.resolvedMachines(
+      for: last.movements.map { ($0.exerciseID, $0.savedMachineID) }, at: selectedGym)
+    let plan = zip(last.movements, machines).map { movement, machine in
+      PlannedExercise(
+        exerciseID: movement.exerciseID,
+        machineID: machine?.id,
+        exerciseName: movement.exerciseName,
+        machineName: machine?.displayName,
+        machineIncrementKg: machine?.stackIncrementKg,
+        plannedSets: movement.workingSets > 0 ? movement.workingSets : nil,
+        repRange: movement.repRange
+      )
+    }
+    coordinator = try SessionCoordinator.start(
+      store: logger, gymID: selectedGym, title: last.title, plan: plan,
+      templateID: last.templateID, weightUnit: unit, now: now,
       restAfterSet: restAfterSet, onStartRest: onStartRest
     )
   }

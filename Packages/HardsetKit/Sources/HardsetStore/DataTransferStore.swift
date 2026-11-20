@@ -17,8 +17,12 @@ public nonisolated struct WorkoutImportResult: Sendable, Equatable {
   }
 }
 
-/// Free, complete exports and atomic migration of a validated external workout file.
+/// Free exports and atomic migration of a validated external workout file.
 /// No live database connection or lazy row escapes a read snapshot.
+///
+/// JSON and SQLite are complete snapshots of every table, including device-local ones. CSV is a
+/// set-level export for spreadsheets and other tools: it names equipment and gyms but carries no
+/// standalone gym/machine/bodyweight rows, so it is not a restore format.
 public nonisolated struct DataTransferStore: Sendable {
   private let database: any DatabaseWriter
   public init(database: any DatabaseWriter) { self.database = database }

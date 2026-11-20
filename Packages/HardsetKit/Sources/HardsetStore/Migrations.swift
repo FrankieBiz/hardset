@@ -44,6 +44,8 @@ public nonisolated enum HardsetMigrations {
     "sessions",
     "sessionExercises",
     "loggedSets",
+    "workoutTemplates",
+    "templateExercises",
   ]
 
   /// Device-local tables, permanently excluded from synchronization.
@@ -236,9 +238,10 @@ public nonisolated enum HardsetMigrations {
 
       // MARK: Bodyweight
       //
-      // User-TYPED bodyweight only. This is the app's own data and may synchronize.
-      // Anything read out of HealthKit must go to "deviceHealthSamples" instead --
-      // see that table's note.
+      // User-TYPED bodyweight only. The table exists locally but is deliberately NOT registered
+      // with the SyncEngine (see `deferredSyncTableNames` and DECISIONS.md §5): a bodyweight tied
+      // to an identity is personal health information however it was entered. Anything read out
+      // of HealthKit goes to "deviceHealthSamples" instead -- see that table's note.
       try #sql(
         """
         CREATE TABLE "bodyweightEntries" (
@@ -473,6 +476,100 @@ public nonisolated enum HardsetMigrations {
           sql: "UPDATE deviceImportBatches SET sourceDigest = ?, byteCount = ?, sourceCSV = '' WHERE id = ?",
           arguments: [SHA256Digest.hex(of: bytes), bytes.count, row["id"] as String])
       }
+    }
+
+    // Saved workouts: a plan the lifter starts in one tap. Two new synchronized tables and three
+    // nullable columns, all additive. A session remembers which template started it, and each
+    // session movement remembers its rep range, so history, targets and the finish scorecard read
+    // session rows and never the template, which may since have been edited or archived.
+    //
+    // `templateExercises` has three foreign keys, and SQLiteData's own ON DELETE validation only
+    // inspects a table with exactly one, so it skips this one. Audited by hand instead: every
+    // action is CASCADE or SET NULL, every target is a synchronized table, and there is no cycle
+    // or self-reference. `SchemaTests` still checks every foreign key of every synchronized table.
+    //
+    // `sessions.templateID` is plain TEXT and deliberately not a foreign key, as
+    // `loggedSets.sessionExerciseID` is: a reference added to an already-synchronized table is
+    // avoided, and templates are archived rather than deleted, so nothing needs to cascade into
+    // history.
+    migrator.registerMigration("v11_savedWorkouts") { db in
+      try #sql(
+        """
+        CREATE TABLE "workoutTemplates" (
+          "id" TEXT PRIMARY KEY NOT NULL ON CONFLICT REPLACE DEFAULT (uuid()),
+          "name" TEXT NOT NULL ON CONFLICT REPLACE DEFAULT '',
+          "position" INTEGER NOT NULL ON CONFLICT REPLACE DEFAULT 0,
+          "isArchived" INTEGER NOT NULL ON CONFLICT REPLACE DEFAULT 0,
+          "createdAt" TEXT NOT NULL ON CONFLICT REPLACE DEFAULT (datetime('now', 'subsec'))
+        ) STRICT
+        """
+      )
+      .execute(db)
+      try #sql(
+        """
+        CREATE TABLE "templateExercises" (
+          "id" TEXT PRIMARY KEY NOT NULL ON CONFLICT REPLACE DEFAULT (uuid()),
+          "templateID" TEXT NOT NULL REFERENCES "workoutTemplates"("id") ON DELETE CASCADE,
+          "exerciseID" TEXT NOT NULL REFERENCES "exercises"("id") ON DELETE CASCADE,
+          "machineID" TEXT REFERENCES "machines"("id") ON DELETE SET NULL,
+          "position" INTEGER NOT NULL ON CONFLICT REPLACE DEFAULT 0,
+          "plannedSets" INTEGER,
+          "repRangeLower" INTEGER,
+          "repRangeUpper" INTEGER,
+          "restSeconds" INTEGER,
+          "createdAt" TEXT NOT NULL ON CONFLICT REPLACE DEFAULT (datetime('now', 'subsec'))
+        ) STRICT
+        """
+      )
+      .execute(db)
+      try #sql(
+        """
+        CREATE INDEX "templateExercises_on_template"
+          ON "templateExercises"("templateID", "position")
+        """
+      )
+      .execute(db)
+      try #sql(
+        """
+        ALTER TABLE "sessions" ADD COLUMN "templateID" TEXT
+        """
+      )
+      .execute(db)
+      try #sql(
+        """
+        CREATE INDEX "sessions_on_templateStartedAt"
+          ON "sessions"("templateID", "startedAt" DESC)
+          WHERE "templateID" IS NOT NULL
+        """
+      )
+      .execute(db)
+      try #sql(
+        """
+        ALTER TABLE "sessionExercises" ADD COLUMN "repRangeLower" INTEGER
+        """
+      )
+      .execute(db)
+      try #sql(
+        """
+        ALTER TABLE "sessionExercises" ADD COLUMN "repRangeUpper" INTEGER
+        """
+      )
+      .execute(db)
+    }
+
+    // "Repeat last workout" finds the workout finished most recently. The open-session index above
+    // holds open rows only, so finished history had no index on when it ended and the lookup would
+    // scan and sort every session. Local and non-unique, and it holds finished rows only. No
+    // synchronized shape changes.
+    migrator.registerMigration("v12_finishedWorkoutLookup") { db in
+      try #sql(
+        """
+        CREATE INDEX "sessions_on_finishedAt"
+          ON "sessions"("finishedAt" DESC)
+          WHERE "finishedAt" IS NOT NULL
+        """
+      )
+      .execute(db)
     }
 
     return migrator

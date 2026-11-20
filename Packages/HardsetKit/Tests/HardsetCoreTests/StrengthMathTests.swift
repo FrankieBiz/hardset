@@ -70,6 +70,7 @@ struct StrengthMathTests {
 
     let lb = StrengthMath.displayRounded(116.6666666, in: .pounds)
     #expect(lb == lb.rounded(), "lb must land on a whole number")
+    #expect(lb == 257, "116.6666666 kg is 257.2 lb and must display as 257")
   }
 
   @Test("Every estimate carries a methodology and a stated valid range for 1.4.1 disclosure")

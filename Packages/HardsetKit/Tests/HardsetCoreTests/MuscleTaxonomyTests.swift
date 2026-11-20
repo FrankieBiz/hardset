@@ -432,6 +432,17 @@ struct MuscleColumnTests {
     #expect(decoded.degradedFieldCount == 1)
   }
 
+  /// A missing role changes a muscle's credit from 1.0 to 0.5, so it is a degraded read, exactly
+  /// like a missing certainty. Reporting it is what makes the tolerant decoder safe.
+  @Test("A missing role degrades rather than silently half-crediting the muscle")
+  func missingRoleDegrades() {
+    let json = "[{\"muscle\":\"chest\",\"certainty\":\"moderate\",\"source\":\"anatomy\"}]"
+    let decoded = MuscleColumn.decodeContributions(json)
+    #expect(decoded.contributions[0].role == .indirect)
+    #expect(decoded.degradedFieldCount == 1)
+    #expect(!decoded.isClean)
+  }
+
   @Test("A junk element is counted unreadable while its siblings survive")
   func partialSalvage() {
     let json = "[{\"muscle\":\"chest\",\"role\":\"direct\",\"certainty\":\"moderate\",\"source\":\"anatomy\"},42,{\"role\":\"direct\"}]"

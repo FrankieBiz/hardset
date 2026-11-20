@@ -1,16 +1,19 @@
 import Foundation
 
-/// The three distinct things people mean by "PR", kept separate rather than merged into one
+/// The four distinct things people mean by "PR", kept separate rather than merged into one
 /// celebration.
 ///
 /// The reference app compared only estimated one-rep max and fired whenever the new value was
-/// `>=` the old, so a repeat of last week's set announced a record. Collapsing three different
+/// `>=` the old, so a repeat of last week's set announced a record. Collapsing different
 /// achievements into one number also means a genuine rep PR at a lighter load reads as nothing.
 public enum PersonalRecordKind: String, Sendable, Hashable, CaseIterable, Codable {
   /// The most weight ever moved for at least one rep.
   case heaviestLoad
   /// The most reps ever performed at this exact load.
   case repsAtLoad
+  /// The most weight ever moved for at least this many reps, the "more weight" half of a
+  /// double-progression step.
+  case loadAtReps
   /// The best estimated one-rep max. Only ever claimed when the estimate is evaluable.
   case estimatedOneRepMax
 
@@ -18,6 +21,7 @@ public enum PersonalRecordKind: String, Sendable, Hashable, CaseIterable, Codabl
     switch self {
     case .heaviestLoad: "Heaviest weight"
     case .repsAtLoad: "Most reps at this weight"
+    case .loadAtReps: "Most weight for this many reps"
     case .estimatedOneRepMax: "Best estimated 1RM"
     }
   }
@@ -66,6 +70,9 @@ public struct PersonalRecord: Sendable, Hashable, Identifiable {
 ///    whose logged load is added load only, has no evaluable estimate at all.
 /// 5. **Reps-at-load compares only the same load**, to the nearest 0.01 kg, so 100 × 9 beating
 ///    100 × 8 is a record and 97.5 × 12 is not compared against it.
+/// 6. **Load-at-reps compares only earlier sets with at least as many reps**, so a heavier set at
+///    the bottom of a rep range is a record at any rep count, and a heaviest-ever set is
+///    announced once rather than again as a load-at-reps record.
 public enum PersonalRecordDetector {
   /// Minimum relative improvement before a heavier load counts.
   public static let relativeThreshold = 0.025
@@ -111,6 +118,9 @@ public enum PersonalRecordDetector {
     estimatesOneRepMax: Bool = true
   ) -> [PersonalRecord] {
     guard !candidate.isWarmup, candidate.weightKg >= 0, candidate.reps > 0 else { return [] }
+    // A load `StrengthMath` calls a data-entry error is not a record, for the same reason its
+    // estimated maximum is `.unevaluated`.
+    guard candidate.weightKg <= StrengthMath.implausibleWeightKg else { return [] }
     // Rule 1: nothing to beat.
     guard !history.isEmpty else { return [] }
 
@@ -118,11 +128,13 @@ public enum PersonalRecordDetector {
     let step = increment ?? defaultIncrementKg
 
     // Heaviest load ever lifted for at least one rep.
+    var emittedHeaviestLoad = false
     if let heaviest = history.map(\.weightKg).max() {
       let margin = max(heaviest * relativeThreshold, step)
       // The tolerance lets a typed 165 lb equal 160 lb plus a 5 lb step, which differ in the
       // last floating-point bit, while sub-plate noise still falls far short.
       if candidate.weightKg + loadMatchingTolerance >= heaviest + margin {
+        emittedHeaviestLoad = true
         records.append(
           PersonalRecord(
             kind: .heaviestLoad,
@@ -146,6 +158,28 @@ public enum PersonalRecordDetector {
           previousReps: bestReps
         )
       )
+    }
+
+    // Most weight moved for at least this many reps: the "more weight" half of double
+    // progression. It is skipped when the set already announced a heaviest-ever record, so one
+    // set produces one announcement.
+    if !emittedHeaviestLoad,
+      let beaten = history.filter({ $0.reps >= candidate.reps }).max(by: {
+        $0.weightKg == $1.weightKg ? $0.reps < $1.reps : $0.weightKg < $1.weightKg
+      })
+    {
+      let margin = max(beaten.weightKg * relativeThreshold, step)
+      if candidate.weightKg + loadMatchingTolerance >= beaten.weightKg + margin {
+        records.append(
+          PersonalRecord(
+            kind: .loadAtReps,
+            weightKg: candidate.weightKg,
+            reps: candidate.reps,
+            previousWeightKg: beaten.weightKg,
+            previousReps: beaten.reps
+          )
+        )
+      }
     }
 
     // Best estimated one-rep max — only when both sides are evaluable.

@@ -10,6 +10,15 @@ struct CSVDocumentTests {
     #expect(try CSVDocument.decode("\u{FEFF}" + CSVDocument.encode(rows)) == rows)
     #expect(try CSVDocument.decode("a;b;c\r\n1;2;\r\n") == [["a", "b", "c"], ["1", "2", ""]])
   }
+
+  /// A row whose cells are all empty is still a row when it has separators; only a blank line is
+  /// not. Encoding and decoding must not silently drop it.
+  @Test("A row of empty cells survives a round trip")
+  func emptyCellRowIsPreserved() throws {
+    let rows = [["a", ""], ["", ""]]
+    #expect(try CSVDocument.decode(CSVDocument.encode(rows)) == rows)
+    #expect(try CSVDocument.decode("a,\r\n,\r\n") == [["a", ""], ["", ""]])
+  }
   @Test("Malformed quotes never silently alter cells", arguments: ["a\n\"unfinished", "a\nvalue\"", "a\n\"closed\"x"])
   func malformed(_ text: String) {
     #expect(throws: CSVError.self) { try CSVDocument.decode(text) }

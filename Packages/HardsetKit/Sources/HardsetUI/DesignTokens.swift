@@ -281,7 +281,6 @@ public enum Tokens {
 
     public static let label = Font.body
     public static let labelEmphasis = Font.body.weight(.semibold)
-    public static let rowTitle = Font.body
     /// Certainty, borrowed-history notes and corrections. Larger than a caption because these
     /// are the caveats the app exists to state, and they are read at arm's length.
     public static let provenance = Font.callout

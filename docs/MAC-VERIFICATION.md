@@ -29,9 +29,10 @@ has proven is ticked below; the rest still needs a Mac, a device, or both.
 
 ## 1a. The real app, driven on the simulator
 
-`HardsetUITests` launches the real app in CI (signed to run locally, so the iCloud entitlements
-are embedded), walks a lifter's journey and saves system-composited screenshots, Liquid Glass
-included. It also runs Apple's `performAccessibilityAudit` on each screen. Verified there:
+`HardsetUITests` launches the real app in CI (ad-hoc signed so it can run; the build carries no
+iCloud container and opens local-only), walks a lifter's journey and saves system-composited
+screenshots, Liquid Glass included. It also runs Apple's `performAccessibilityAudit` on each
+screen and records what it reports; the audit is evidence, not a passing gate:
 
 - [x] The tab bar, the workout accessory, and sheet toolbars render as system glass with the
       readout-cyan tint in both appearances, not stock blue.
@@ -41,10 +42,11 @@ included. It also runs Apple's `performAccessibilityAudit` on each screen. Verif
 - [x] A crash found there is fixed: design-token colour providers inherited `MainActor`
       isolation and trapped (SIGTRAP) when UIKit resolved a colour off the main thread, which
       happened as the gym picker presented and as a workout's first exercise appeared.
-- [x] Apple's audit reports no contrast, hit-region, element-description or trait issues on any
-      audited screen. What it still reports is Dynamic Type scaling of navigation-bar titles and
-      the system Done buttons (bars cap their text; titles carry the Large Content Viewer), the
-      single-line search field, and the deliberately hidden set-row column header.
+- [x] The audit's reports are collected on every run. The latest still includes Dynamic Type
+      scaling of navigation-bar titles and system Done buttons, the single-line search field, a
+      deliberately hidden set-row column header, and scroll-position-dependent clipped-text or
+      picker reports. The audit helper returns true for every issue by design, so CI does not
+      fail on them; do not read a green run as a clean accessibility audit.
 
 The package snapshot suite draws through Core Animation without an app host and cannot render
 glass; use the real-app screenshots above for chrome.

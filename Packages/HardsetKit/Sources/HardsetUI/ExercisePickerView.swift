@@ -38,7 +38,9 @@ public struct ExercisePickerView: View {
   ///     content at accessibility sizes; while it is set, an empty list is not described as empty.
   ///   - onCancel: Closes the picker without choosing. When set, the picker draws "Cancel" in the
   ///     toolbar's cancellation position, so the caller should not draw its own.
-  ///   - onCreate: Adds a movement with the typed, trimmed name. When `nil`, no add is offered.
+  ///   - onCreate: Starts adding a movement with the typed, trimmed name. The caller asks which body
+  ///     part it trains (`MovementEditorSheet`) before saving, so there is one way to make one.
+  ///     When `nil`, no add is offered.
   ///   - initialCategory: The region filter the picker opens with. It only seeds the filter, which
   ///     the lifter then changes freely; `nil` opens on "All", as the picker always has.
   public init(

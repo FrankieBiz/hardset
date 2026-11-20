@@ -94,6 +94,25 @@ struct RecordDetectionTests {
     #expect(live.lastRecords.isEmpty)
   }
 
+  /// The estimate stops at twelve reps, but "more weight for the same reps" does not: 32.5 kg for
+  /// 15 after 30 kg for 15 is a record at any rep count. An earlier heavier set keeps it from also
+  /// being the heaviest ever, which is announced on its own.
+  @Test("More weight for the same reps is a record above twelve reps")
+  func liveLoadAtRepsRecordAboveTwelveReps() throws {
+    let database = try migratedDatabase()
+    let store = LoggerStore(database: database)
+    let exercise = try seedExercise(database)
+    try seedHistory(
+      store, exercise: exercise, sets: [(50, 5), (30, 15)], at: start.addingTimeInterval(-86_400)
+    )
+
+    let live = try coordinator(store, exercise: exercise, increment: 2.5)
+    #expect(log(live, slot: 0, 32.5, 15))
+    #expect(live.lastRecords.map(\.kind) == [.loadAtReps])
+    #expect(live.lastRecords.first?.previousWeightKg == 30)
+    #expect(live.lastRecords.first?.previousReps == 15)
+  }
+
   @Test("The very first set of a brand new lift is not a record")
   func firstEverSetIsNotARecord() throws {
     let database = try migratedDatabase()
