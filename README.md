@@ -10,7 +10,7 @@ history, the rest bar, recovery of an interrupted workout, personal records, a 5
 catalogue and a picker; plus the permanent muscle vocabulary, fractional sets-per-muscle-per-week
 with coverage, per-machine load history, session history, onboarding and the guided tour. CI builds
 the app and widget (Debug and Release) on a macOS runner, renders every screen, and drives the real
-app in the Simulator through six lifter journeys in both appearances.
+app in the Simulator through six lifter journeys and a light-mode pass.
 
 **Still device-bound:** nothing has run on a physical iPhone, and no signed build has exercised
 CloudKit sync, AlarmKit alarms, HealthKit, or a real StoreKit purchase. Those remain the gates in
