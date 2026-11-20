@@ -20,6 +20,13 @@ struct MovementEditorDraftTests {
       contributions: contributions)
   }
 
+  @Test("Every surface that refuses a taken name says it in the same words, with the typed name")
+  func takenNameIsRefusedInOneVoice() {
+    #expect(
+      MovementEditorDraft.nameTakenMessage("Pendulum Squat")
+        == "A movement called “Pendulum Squat” already exists. Choose another name.")
+  }
+
   @Test("A body part with one muscle is that muscle, with nothing more to ask")
   func singleMemberBodyPartSelectsItsMuscle() {
     var draft = MovementEditorDraft(name: "Pec fly")

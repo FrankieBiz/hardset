@@ -128,8 +128,30 @@ public nonisolated struct CatalogSeeder: Sendable {
   /// A live movement of the same name is returned unchanged, whatever `attribution` says: choosing
   /// an existing movement must never rewrite what the lifter already told it. Retagging one is
   /// `updateCustomExercise`. With no attribution this is the unattributed movement it always was.
+  /// An editor the lifter has just filled in uses `createNewCustomExercise`, which refuses a taken
+  /// name rather than discarding what they typed.
   public func createCustomExercise(
     named name: String, attribution: CustomAttribution?, now: Date = Date()
+  ) throws -> CatalogEntry {
+    try insertCustomExercise(named: name, attribution: attribution, refusesTakenName: false, now: now)
+  }
+
+  /// Saves a movement the lifter has just named and tagged, refusing a name that is taken.
+  ///
+  /// `createCustomExercise` returns the existing movement for a taken name, which is right for a
+  /// retap but wrong for an editor the lifter has just filled in: they would be handed a movement
+  /// carrying none of the muscles they chose, with no sign their choice was discarded. This throws
+  /// `CatalogSeederError.duplicateName` instead, the same refusal `updateCustomExercise` gives, and
+  /// writes nothing, so the existing movement is never touched. Matching is the same: a live,
+  /// non-imported movement whose name is equal ignoring case, diacritics and spacing.
+  public func createNewCustomExercise(
+    named name: String, attribution: CustomAttribution?, now: Date = Date()
+  ) throws -> CatalogEntry {
+    try insertCustomExercise(named: name, attribution: attribution, refusesTakenName: true, now: now)
+  }
+
+  private func insertCustomExercise(
+    named name: String, attribution: CustomAttribution?, refusesTakenName: Bool, now: Date
   ) throws -> CatalogEntry {
     let cleaned = Self.normalized(name)
     guard !cleaned.isEmpty else { throw CatalogSeederError.blankName }
@@ -139,7 +161,10 @@ public nonisolated struct CatalogSeeder: Sendable {
         .order { ($0.isCurated.desc(), $0.createdAt, $0.id) }
         .fetchAll(db)
         .first { !Self.isImported($0) && Self.isSameName($0.name, cleaned) }
-      if let existing { return CatalogEntry(row: existing) }
+      if let existing {
+        if refusesTakenName { throw CatalogSeederError.duplicateName }
+        return CatalogEntry(row: existing)
+      }
 
       let id = UUID()
       try Exercise.insert {

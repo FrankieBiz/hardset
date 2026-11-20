@@ -28,6 +28,15 @@ struct HardsetApp: App {
         let descriptor = open(path, O_WRONLY | O_CREAT | O_APPEND, 0o644)
         if descriptor >= 0 { dup2(descriptor, STDERR_FILENO) }
       }
+      // For the UI tests only: every journey must start from the same empty store, or the order the
+      // journeys run in decides what each one finds. "reset" removes the database files and the
+      // app's preferences before anything opens them; anything else keeps what is there, which the
+      // one journey that relaunches mid-test needs. Done before the onboarding marker below, which is
+      // one of the preferences it clears. Absent in release builds, so nothing can erase a lifter's
+      // data through it.
+      if ProcessInfo.processInfo.environment["HARDSET_STORE"] == "reset" {
+        Self.resetStoreForUITests()
+      }
       // For the UI tests only: the first-launch sequence is stored state, and a launch argument
       // cannot stand in for it, because an argument shadows the stored value and the app's own
       // write on finishing would never be read back. "skip" marks it seen; "reset" clears it so a
@@ -48,6 +57,27 @@ struct HardsetApp: App {
       StartupView(startup: startup, restTimer: restTimer)
     }
   }
+
+  #if DEBUG
+    /// Deletes the database SQLiteData opens by default (`SQLiteData.db` and its write-ahead log
+    /// files, in Application Support) and the app's preferences, so the next launch is a fresh
+    /// install of the store. The path is the library's own default, which `HardsetDatabase.open`
+    /// does not override; the journeys check for the empty start screen, so a path that ever
+    /// drifted would fail them rather than isolate nothing.
+    private static func resetStoreForUITests() {
+      let files = FileManager.default
+      if let support = try? files.url(
+        for: .applicationSupportDirectory, in: .userDomainMask, appropriateFor: nil, create: false)
+      {
+        for name in ["SQLiteData.db", "SQLiteData.db-wal", "SQLiteData.db-shm"] {
+          try? files.removeItem(at: support.appendingPathComponent(name))
+        }
+      }
+      if let domain = Bundle.main.bundleIdentifier {
+        UserDefaults.standard.removePersistentDomain(forName: domain)
+      }
+    }
+  #endif
 }
 
 @MainActor

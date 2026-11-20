@@ -50,6 +50,13 @@ public struct MovementEditorDraft: Hashable, Sendable {
 
   public var trimmedName: String { name.trimmingCharacters(in: .whitespacesAndNewlines) }
 
+  /// What every surface that saves a movement says when its name belongs to another movement, so
+  /// the Library, the live workout's picker and the workout editor refuse in the same words. The
+  /// name is the one the lifter typed, so it reads back as what they entered.
+  public static func nameTakenMessage(_ name: String) -> String {
+    "A movement called “\(name)” already exists. Choose another name."
+  }
+
   /// The muscles the chosen body part offers, in anatomical order.
   public var specificMuscles: [Muscle] { bodyPart?.members ?? [] }
 
