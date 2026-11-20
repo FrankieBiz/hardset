@@ -149,17 +149,23 @@ jobs:
             -skipMacroValidation -skipPackagePluginValidation \
             CODE_SIGN_IDENTITY=- CODE_SIGN_STYLE=Manual DEVELOPMENT_TEAM="
           xcodebuild build-for-testing $COMMON 2>&1 | tee ui-build.log | grep -E "error:|BUILD|TEST BUILD" || true
+          # A launch can be denied with "Busy" while the simulator is still finishing the app's
+          # install (run 44648846716: the first test of the dark pass, the same tree passed in
+          # 44618696304). Only a failing test is run once more, so a test that fails twice still
+          # fails the job and both attempts stay in the result bundle.
           # Appearance is set on the device itself, around two passes: XCUIDevice.appearance did not
           # reach the system on this runner.
           xcrun simctl ui "$UDID" appearance dark
           xcodebuild test-without-building $COMMON \
             -only-testing:HardsetUITests \
             -skip-testing:HardsetUITests/AppScreensUITests/testScreensInLightMode \
+            -retry-tests-on-failure -test-iterations 2 \
             -resultBundlePath app-screens/ui-dark.xcresult \
             2>&1 | tee ui-test.log | grep -E "error:|Test [Cc]ase|TEST (SUCCEEDED|FAILED)|Executed" || true
           xcrun simctl ui "$UDID" appearance light
           xcodebuild test-without-building $COMMON \
             -only-testing:HardsetUITests/AppScreensUITests/testScreensInLightMode \
+            -retry-tests-on-failure -test-iterations 2 \
             -resultBundlePath app-screens/ui-light.xcresult \
             2>&1 | tee ui-test-light.log | grep -E "error:|Test [Cc]ase|TEST (SUCCEEDED|FAILED)|Executed" || true
           kill "$LOG_PID" || true

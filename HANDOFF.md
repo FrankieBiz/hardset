@@ -174,6 +174,9 @@ The 0.5 indirect-set credit is an adopted convention, not an inherited finding, 
   errors surface only there.
 - **The workflow cancels in-progress runs per ref.** A second push to the same branch cancels the
   first run; a cancelled run is not a green run.
+- **The UI pass can fail on a "Busy" launch.** The simulator sometimes refuses the first launch while
+  the app's install is finishing (run 44648846716). The workflow retries a failing UI test once
+  (`-retry-tests-on-failure`); a test that fails both attempts is real.
 - **SourceKit reports "No such module" constantly.** It is noise; trust the build.
 
 ## 10. How to work
