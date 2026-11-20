@@ -330,8 +330,12 @@ Selection rows, the unit switch and pickers stay silent.
 - **Staged phone** (`ScaledPhoneFrame`): a real screen laid out at phone size (402 by 874 pt) and
   scaled down onto a `steel` plate with a hairline `edgeLight` rim; the first-launch tour stages
   the app's own screens in it, built from `TourFixtures`. The tour gives it 78% of the screen's
-  width. A frame that is not interactive is inert to touch and hidden from VoiceOver; an interactive
-  one, for the steps that ask the lifter to tap, is neither. It adds no token and no motion.
+  width. A frame that is not interactive is inert to touch and marked hidden from VoiceOver; an
+  interactive one, for the steps that ask the lifter to tap, is neither. The marking does not reach the
+  staged roots' UIKit-hosted tab bars: XCUITest still lists two of them at every inert tour step (open
+  finding, CI run 44738794794; a hosting controller changed the roots' appearance and a single hidden
+  leaf changed nothing), so how VoiceOver reads the tour is for a device. It adds no token and no
+  motion.
 - **Pitch pages** (`PitchPage`, `PitchSetRowPage`, `PitchEstimatePage`, `PitchRestPage`): three
   pages with one anatomy, a `title` headline, two lines in `label` and one live element that is the
   real component, never a picture. "One tap per set" is a real set row prefilled from last time; its

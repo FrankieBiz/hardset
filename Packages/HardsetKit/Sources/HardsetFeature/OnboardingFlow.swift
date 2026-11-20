@@ -198,20 +198,11 @@ private struct PitchProgress: View {
               .matchedGeometryEffect(id: "pitchProgress", in: namespace)
           }
         }
-        .frame(width: 28, height: Self.segmentHeight)
+        .frame(width: 28, height: 4)
       }
     }
     .animation(Tokens.Motion.adaptive(Tokens.Motion.state, reduceMotion: reduceMotion), value: index)
-    // The segments are a 4 pt gauge, but what the audit and an assistive technology find is the
-    // row's frame, and a 4 pt element reads as an undersized target. The frame is raised to the
-    // 44 pt minimum above the segments (bottom-aligned, so they do not move) and the extra height is
-    // taken back from the layout, so the page, the footer and the drawn segments are exactly as they
-    // were. The extra area is empty, so it takes no touch from the page above.
-    .frame(minHeight: Tokens.minimumTapTarget, alignment: .bottom)
     .accessibilityElement(children: .ignore)
     .accessibilityLabel("Page \(index + 1) of \(count)")
-    .padding(.top, -(Tokens.minimumTapTarget - Self.segmentHeight))
   }
-
-  private static let segmentHeight: CGFloat = 4
 }
