@@ -11,7 +11,8 @@ import SwiftUI
 /// A frame that is not interactive is inert: its content takes no touches and is hidden from
 /// VoiceOver, so a lifter cannot wander into the staged screen and a screen reader does not read a
 /// preview as if it were the app. An interactive frame, used for the tour steps that ask the lifter
-/// to tap something, leaves both alone. The frame takes no animation of its own.
+/// to tap something, leaves both alone, apart from naming itself as a container so a screen reader
+/// says what it has entered. The frame takes no animation of its own.
 public struct ScaledPhoneFrame<Content: View>: View {
   /// The logical phone the content is laid out at: the iPhone 17 screen, 402 by 874 points.
   public static var phoneSize: CGSize { CGSize(width: 402, height: 874) }
@@ -41,6 +42,13 @@ public struct ScaledPhoneFrame<Content: View>: View {
     }
     .aspectRatio(Self.phoneSize.width / Self.phoneSize.height, contentMode: .fit)
     .allowsHitTesting(isInteractive)
+    // `accessibilityHidden` alone did not reach the staged roots' UIKit-hosted tab content, which an
+    // audit and VoiceOver still listed. An inert frame is first made one leaf, so nothing under it
+    // is a node of its own, and that leaf is hidden. The behaviour is a value, not a branch, so the
+    // frame keeps one identity as it turns inert and the staged apps inside it keep their state;
+    // an interactive frame is a labelled container and its content is as reachable as ever.
+    .accessibilityElement(children: isInteractive ? .contain : .ignore)
+    .accessibilityLabel("Staged preview of the app")
     .accessibilityHidden(!isInteractive)
     .padding(Tokens.Spacing.snug)
     .background(Tokens.Color.steel, in: RoundedRectangle(cornerRadius: Tokens.Radius.card))

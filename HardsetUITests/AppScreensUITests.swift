@@ -426,6 +426,7 @@ final class AppScreensUITests: XCTestCase {
     // The tour. Its first step waits while two staged apps are built.
     XCTAssertTrue(app.staticTexts["Step 1 of 8"].waitForExistence(timeout: 90))
     capture(app, "47-onboarding-tour-1")
+    assertStagedPhoneIsHidden(app, at: "tour step 1")
     app.buttons["tour-next"].tap()
 
     // Step 2 is the interactive one: no "Next" until the staged check is tapped.
@@ -433,6 +434,12 @@ final class AppScreensUITests: XCTestCase {
     XCTAssertFalse(app.buttons["tour-next"].exists, "Next waits for the check to be tapped")
     capture(app, "48-onboarding-tour-2")
     audit(app, screen: "onboarding tour 2")
+    // The control for the hidden checks around it: while the staged phone is the thing to tap it is
+    // reachable, so a count of zero elsewhere is the phone being hidden and not the query finding
+    // nothing. Recorded rather than asserted, since it describes the interactive step.
+    auditReport.append(
+      "[onboarding tour 2] control: \(app.tabBars.count) tab bar(s) reachable while the staged phone is interactive"
+    )
     // Tapped where the spotlight is. The staged row is one accessibility element with named actions,
     // so there is no separate "Log set" button to query; a touch at the check's place is also the
     // honest test that the hole lets a touch through while the scrim stops every other one. The
@@ -441,11 +448,13 @@ final class AppScreensUITests: XCTestCase {
     app.coordinate(withNormalizedOffset: CGVector(dx: 0.767, dy: 0.609)).tap()
     XCTAssertTrue(app.buttons["tour-next"].waitForExistence(timeout: 10), "logging the staged set unlocks Next")
     capture(app, "49-onboarding-tour-2-logged")
+    assertStagedPhoneIsHidden(app, at: "tour step 2 after the check")
 
     for step in 3...8 {
       app.buttons["tour-next"].tap()
       XCTAssertTrue(app.staticTexts["Step \(step) of 8"].waitForExistence(timeout: 10))
       capture(app, "5\(step - 3)-onboarding-tour-\(step)")
+      assertStagedPhoneIsHidden(app, at: "tour step \(step)")
     }
     app.buttons["tour-next"].tap()
 
@@ -461,6 +470,42 @@ final class AppScreensUITests: XCTestCase {
     capture(app, "61-onboarding-done")
 
     writeAuditReport(named: "accessibility-audit-onboarding")
+  }
+
+  /// The first-launch pages at an accessibility text size. The audit's "text may be clipped at larger
+  /// sizes" reports are a prediction; this draws the pages at one of those sizes, keeps the pictures
+  /// to look at, and checks that the welcome line, the report's first example, is wholly on screen.
+  @MainActor
+  func testOnboardingAccessibilitySizeDark() throws {
+    continueAfterFailure = true
+    let app = XCUIApplication()
+    launch(app, showsOnboarding: true, contentSize: "UICTContentSizeCategoryAccessibilityXL")
+
+    let tagline = app.staticTexts["A calibrated log for the lifts you actually do."]
+    XCTAssertTrue(tagline.waitForExistence(timeout: 30))
+    capture(app, "90-onboarding-ax-welcome")
+    let window = app.windows.firstMatch.frame
+    XCTAssertTrue(
+      window.contains(tagline.frame),
+      "The welcome line runs off the screen at an accessibility size: \(tagline.frame) in \(window)")
+    audit(app, screen: "onboarding welcome (accessibility size)")
+    app.buttons["Start"].tap()
+
+    XCTAssertTrue(app.staticTexts["One tap per set."].waitForExistence(timeout: 5))
+    capture(app, "91-onboarding-ax-pitch-1")
+    audit(app, screen: "onboarding pitch 1 (accessibility size)")
+    app.buttons["Next"].tap()
+
+    XCTAssertTrue(app.staticTexts["Honest numbers."].waitForExistence(timeout: 5))
+    capture(app, "92-onboarding-ax-pitch-2")
+    audit(app, screen: "onboarding pitch 2 (accessibility size)")
+    app.buttons["Next"].tap()
+
+    XCTAssertTrue(app.staticTexts["Rest that keeps time."].waitForExistence(timeout: 5))
+    capture(app, "93-onboarding-ax-pitch-3")
+    audit(app, screen: "onboarding pitch 3 (accessibility size)")
+
+    writeAuditReport(named: "accessibility-audit-onboarding-ax")
   }
 
   /// The tour again, from Settings: the sheet closes, the same sequence plays in a full-screen cover
@@ -504,9 +549,12 @@ final class AppScreensUITests: XCTestCase {
   ///
   /// - Parameter keepsStore: Leaves the database as the last launch left it. Only a journey that
   ///   relaunches to prove recovery passes it; every first launch starts from an empty store.
+  /// - Parameter contentSize: A `UICTContentSizeCategory` name to launch at, for the journeys that
+  ///   look at an accessibility text size. `nil` leaves the device's size alone.
   @MainActor
   private func launch(
-    _ app: XCUIApplication, showsOnboarding: Bool = false, keepsStore: Bool = false
+    _ app: XCUIApplication, showsOnboarding: Bool = false, keepsStore: Bool = false,
+    contentSize: String? = nil
   ) {
     // Keeps the app's stderr, so a runtime trap's message survives for CI to collect.
     app.launchEnvironment["HARDSET_CAPTURE_STDERR"] = "1"
@@ -516,6 +564,9 @@ final class AppScreensUITests: XCTestCase {
     // The store, and the preferences beside it, are emptied before the app opens them unless the
     // journey is picking up after a relaunch of its own.
     app.launchEnvironment["HARDSET_STORE"] = keepsStore ? "keep" : "reset"
+    if let contentSize {
+      app.launchArguments += ["-UIPreferredContentSizeCategoryName", contentSize]
+    }
     app.launch()
   }
 
@@ -573,6 +624,20 @@ final class AppScreensUITests: XCTestCase {
     XCTAssertTrue(app.buttons["Finish"].waitForExistence(timeout: 5))
     app.buttons["Finish"].tap()
     XCTAssertTrue(app.buttons["Start workout"].waitForExistence(timeout: 5))
+  }
+
+  /// The staged phone is a picture of the app, so while it is not what the lifter is asked to tap,
+  /// none of it may be reachable by an assistive technology: not its buttons, and not the tab bar of
+  /// the root view inside it, which is UIKit-hosted and was still listed when the phone was only
+  /// hidden with `accessibilityHidden`. This is what an assistive technology is offered, as XCUITest
+  /// sees it; how VoiceOver reads the tour is for a device.
+  @MainActor
+  private func assertStagedPhoneIsHidden(_ app: XCUIApplication, at step: String) {
+    XCTAssertEqual(
+      app.tabBars.count, 0, "\(step): the staged phone's tab bar is reachable by accessibility")
+    XCTAssertFalse(
+      app.buttons["Start workout"].exists,
+      "\(step): the staged start screen's button is reachable by accessibility")
   }
 
   /// True once the element is no longer on screen: a sheet that has finished closing, rather than one
