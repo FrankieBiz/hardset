@@ -37,7 +37,8 @@ physical iPhone, in the gym lighting where it matters.
       down closes them, choosing one changes the next rest and not the running one.
 - [ ] **Keypad** retargets in place between weight and reps, and its keys sink on touch-down.
 - [ ] **Press feel** on the header icon menu (a `Menu` never reports a press, so it is device-only)
-      and on the machined faces.
+      and on the flat control faces, which now step off their surface by fill and carry no outline
+      unless Increase Contrast or Button Shapes is on: confirm each reads as a control in daylight.
 - [ ] **Glare and sweat.** Plate blue, the caption text and the certainty capsules stay legible at
       arm's length in daylight; the log control can be hit one-handed with a chalky thumb.
 - [ ] **Volume.** Each muscle carries its own certainty; none speaks for the whole report.
