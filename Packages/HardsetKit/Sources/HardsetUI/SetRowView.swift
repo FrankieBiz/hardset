@@ -29,8 +29,12 @@ public enum SetRowField: Hashable, Sendable {
 /// field it is editing; the row reports taps with `onBeginEditing`.
 ///
 /// Two layouts, chosen from Dynamic Type rather than by shrinking text: a single line of columns
-/// at ordinary sizes, and a stacked card at accessibility sizes, where the values take the full
-/// width and carry their own labels.
+/// at ordinary sizes, and a stack at accessibility sizes, where the values take the full width and
+/// carry their own labels.
+///
+/// The figures are the content. Weight and reps are the largest text on the card, set against a
+/// quiet multiply sign; the ordinal and last time are small and dim; nothing is boxed, tinted or
+/// outlined, and a hairline exists only between rows.
 public struct SetRowView: View {
   @Binding private var draft: SetEntryDraft
   @State private var adjustmentFeedback = 0
@@ -42,6 +46,7 @@ public struct SetRowView: View {
   private let isWarmup: Bool
   private let isLogged: Bool
   private let isNext: Bool
+  private let isSeparated: Bool
   private let showsInlineLabels: Bool
   private let unit: WeightUnit
   private let machineIncrementKg: Double?
@@ -58,6 +63,9 @@ public struct SetRowView: View {
 
   /// - Parameter isNext: The first unlogged set of its exercise. Its log control is filled rather
   ///   than outlined, so the eye lands on the one tap that matters between sets.
+  /// - Parameter isSeparated: Draws a hairline across the top of the row, inset from the leading
+  ///   edge, because it meets another row there. The first row of a movement passes `false`, so a
+  ///   hairline exists only where two rows meet.
   /// - Parameter showsInlineLabels: Draws "Last time" and the unit inside the row. A caller that
   ///   draws a column header above its rows passes `false`; accessibility sizes always show them,
   ///   because the stacked layout has no columns for a header to label.
@@ -82,6 +90,7 @@ public struct SetRowView: View {
     isWarmup: Bool = false,
     isLogged: Bool = false,
     isNext: Bool = false,
+    isSeparated: Bool = false,
     showsInlineLabels: Bool = true,
     unit: WeightUnit,
     machineIncrementKg: Double? = nil,
@@ -101,6 +110,7 @@ public struct SetRowView: View {
     self.isWarmup = isWarmup
     self.isLogged = isLogged
     self.isNext = isNext
+    self.isSeparated = isSeparated
     self.showsInlineLabels = showsInlineLabels
     self.unit = unit
     self.machineIncrementKg = machineIncrementKg
@@ -120,7 +130,6 @@ public struct SetRowView: View {
   private var isStacked: Bool { dynamicTypeSize.isAccessibilitySize }
 
   public var body: some View {
-    let shape = RoundedRectangle(cornerRadius: Tokens.Radius.control)
     Group {
       if isStacked {
         VStack(spacing: Tokens.Spacing.snug) {
@@ -136,32 +145,28 @@ public struct SetRowView: View {
         }
       }
     }
-    .padding(.horizontal, Tokens.Spacing.tight)
     .padding(.vertical, Tokens.Spacing.tight)
-    // Opaque. Dense numeric rows are the one surface glass is actively wrong for. A logged row
-    // takes the logged tint, so a glance down the card shows what is done without reading.
-    //
-    // The tint is a layer that fades in place; only its opacity is animated. An animation on the
-    // whole row also animated its height when the step buttons left it, so the shrinking tint
-    // and the fading buttons were drawn over the next row, which had already moved up.
-    .background {
-      ZStack {
-        shape.fill(Tokens.Color.steel)
-        shape.fill(Tokens.Color.plateGreenSurface)
-          .opacity(isLogged ? 1 : 0)
+    // No fill and no tint: a row is its figures. Logging used to wash the whole row green so a
+    // glance down the card showed what was done; now the saved figures go to full chalk and the
+    // check fills, which says the same thing without turning the list into a spreadsheet with
+    // conditional formatting. Only the hairline above a row, where it meets the row before, draws.
+    .overlay(alignment: .top) {
+      if isSeparated {
+        Rectangle()
+          .fill(Tokens.Color.hairline)
+          .frame(height: Tokens.Stroke.hairline)
+          .padding(.leading, SetRowMetrics.ordinalWidth + Tokens.Spacing.snug)
+          .accessibilityHidden(true)
       }
-      .animation(
-        Tokens.Motion.adaptive(Tokens.Motion.state, reduceMotion: reduceMotion), value: isLogged
-      )
     }
-    // The row paints its own `steel`, so its fields take the fill for a control on steel wherever
-    // the row is drawn, in a card or not.
-    .hardsetControlSurface(.steel)
+    // With nothing painted behind it the row would be hit-testable only where it draws, so a long
+    // press in a gap between columns would find no menu. The whole row is the interaction shape.
+    .contentShape(.interaction, Rectangle())
     // Corrections live behind a long press, the iOS convention for acting on one item in place:
     // deliberate enough that a hurried tap on the check can never undo or remove a set.
     // The preview shape is iOS-only; the macOS host build (tests only) uses the default.
     #if os(iOS)
-      .contentShape(.contextMenuPreview, shape)
+      .contentShape(.contextMenuPreview, Tokens.Shape.control)
     #endif
     .contextMenu { corrections }
     .sensoryFeedback(Tokens.Haptic.selection, trigger: adjustmentFeedback)
@@ -231,23 +236,58 @@ public struct SetRowView: View {
 
   // MARK: - Layouts
 
-  /// Ordinary sizes: ordinal, last time, weight, reps, log — one line, aligned to the column
+  /// Ordinary sizes: ordinal, last time, weight and reps, log, on one line aligned to the column
   /// header `ExerciseSectionView` draws above.
+  ///
+  /// The figures are the content. Weight ends at the multiply sign and reps begin after it, so the
+  /// sign is one vertical axis down the list and the figures read as a pair. The ordinal and last
+  /// time are small and dim in fixed columns; tapping them opens the weight, so no part of the row
+  /// between its two edges is dead.
   private var rowLayout: some View {
     HStack(spacing: Tokens.Spacing.snug) {
-      ordinalBadge
-        .frame(width: SetRowMetrics.ordinalWidth)
+      leadingColumns
 
-      previousColumn
-        .frame(width: SetRowMetrics.previousWidth, alignment: .leading)
-
-      valueField(.weight, suffix: showsInlineLabels ? unit.abbreviation : nil)
-        .frame(minWidth: SetRowMetrics.weightMinWidth)
-      valueField(.reps, suffix: showsInlineLabels ? "reps" : nil)
-        .frame(minWidth: SetRowMetrics.repsMinWidth)
+      HStack(alignment: .firstTextBaseline, spacing: 0) {
+        valueField(.weight, suffix: showsInlineLabels ? unit.abbreviation : nil, alignment: .trailing)
+        multiplySign
+        valueField(.reps, suffix: showsInlineLabels ? "reps" : nil, alignment: .leading)
+      }
 
       logButton
     }
+  }
+
+  /// The ordinal and last time. A button into the weight whenever the weight can be edited, so the
+  /// 56 pt row answers a tap anywhere left of the check; plain text otherwise, for a saved row.
+  @ViewBuilder private var leadingColumns: some View {
+    let columns = HStack(spacing: Tokens.Spacing.snug) {
+      ordinalLabel
+        .frame(width: SetRowMetrics.ordinalWidth, alignment: .leading)
+      previousColumn
+        .frame(width: SetRowMetrics.previousWidth, alignment: .leading)
+    }
+    .frame(minHeight: Tokens.loggerTapTarget)
+    .contentShape(Rectangle())
+    if isLogged || onBeginEditing == nil {
+      columns
+    } else {
+      Button {
+        onBeginEditing?(.weight)
+      } label: {
+        columns
+      }
+      .buttonStyle(HardsetPressStyle())
+    }
+  }
+
+  /// The multiply sign between weight and reps: quieter than the figures it joins, in size and in
+  /// weight, but still `chalkDim`, which clears 7:1. Decoration, so VoiceOver does not read it.
+  private var multiplySign: some View {
+    Text("×")
+      .hardsetText(.provenance)
+      .foregroundStyle(Tokens.Color.chalkDim)
+      .frame(width: SetRowMetrics.multiplyWidth)
+      .accessibilityHidden(true)
   }
 
   /// Accessibility sizes: a header line with the ordinal and last time, then the two values at
@@ -255,14 +295,20 @@ public struct SetRowView: View {
   private var stackedLayout: some View {
     VStack(alignment: .leading, spacing: Tokens.Spacing.snug) {
       HStack(alignment: .firstTextBaseline, spacing: Tokens.Spacing.regular) {
-        ordinalBadge
+        ordinalLabel
         previousColumn
       }
-      valueField(.weight, suffix: unit.abbreviation)
-      valueField(.reps, suffix: "reps")
+      valueField(.weight, suffix: unit.abbreviation, alignment: .leading)
+      valueField(.reps, suffix: "reps", alignment: .leading)
       logButton
     }
     .padding(.vertical, Tokens.Spacing.tight)
+  }
+
+  /// Where the line under the columns starts: under the last-time column at ordinary sizes, since
+  /// both speak about last time, and at the edge when the layout is stacked.
+  private var markInset: CGFloat {
+    isStacked ? 0 : SetRowMetrics.ordinalWidth + Tokens.Spacing.snug
   }
 
   /// Under the columns, one of two lines and never both. An unlogged row prefilled from a rep range
@@ -275,11 +321,11 @@ public struct SetRowView: View {
         .foregroundStyle(Tokens.Color.chalkDim)
         .fixedSize(horizontal: false, vertical: true)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.horizontal, Tokens.Spacing.snug)
+        .padding(.leading, markInset)
     } else if isLogged, let comparison {
       beatMark(comparison)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.horizontal, Tokens.Spacing.snug)
+        .padding(.leading, markInset)
     }
   }
 
@@ -367,23 +413,15 @@ public struct SetRowView: View {
 
   // MARK: - Pieces
 
-  /// Working sets are numbered; a warm-up reads "W" inside a dashed outline, the app's mark for
-  /// something that is present but not counted.
-  private var ordinalBadge: some View {
-    let shape = RoundedRectangle(cornerRadius: Tokens.Radius.control - Tokens.Spacing.tight)
-    return Text(isWarmup ? "W" : String(ordinal + 1))
-      .font(Tokens.Text.figure)
-      .foregroundStyle(isWarmup ? Tokens.Color.chalkDim : Tokens.Color.chalk)
-      .frame(minWidth: SetRowMetrics.ordinalWidth, minHeight: SetRowMetrics.ordinalWidth)
-      .background(isWarmup ? Color.clear : Tokens.Color.steelRaised, in: shape)
-      .overlay {
-        if isWarmup {
-          shape.strokeBorder(
-            Tokens.Color.controlEdge,
-            style: StrokeStyle(lineWidth: Tokens.Stroke.hairline, dash: [3, 2])
-          )
-        }
-      }
+  /// Working sets are numbered; a warm-up reads "W". Small and dim, a label for the row and not a
+  /// figure in it, with no tile behind it: the letter alone says a warm-up is not counted. At
+  /// accessibility sizes it is spelled out, "Set 2", which is also what Voice Control is told.
+  private var ordinalLabel: some View {
+    let word = isWarmup ? "W" : String(ordinal + 1)
+    return Text(isStacked ? (isWarmup ? "Warm-up" : "Set \(ordinal + 1)") : word)
+      .hardsetText(.caption, weight: .medium)
+      .monospacedDigit()
+      .foregroundStyle(Tokens.Color.chalkDim)
   }
 
   /// Last time's set as a logbook would write it: the load, and the reps beneath it. Two short
@@ -399,7 +437,8 @@ public struct SetRowView: View {
       }
       if let previous {
         Text(LoadFigure.text(unit.fromKilograms(previous.weightKg)))
-          .font(Tokens.Text.figure)
+          .font(Tokens.Text.unit)
+          .monospacedDigit()
           .foregroundStyle(Tokens.Color.chalkDim)
           .lineLimit(1)
           // The one value allowed to give a little: it is a hint, read second, and a long pound
@@ -412,7 +451,7 @@ public struct SetRowView: View {
           .lineLimit(1)
       } else {
         Text("—")
-          .font(Tokens.Text.figure)
+          .font(Tokens.Text.unit)
           .foregroundStyle(Tokens.Color.chalkDim)
       }
       if let priorNote {
@@ -439,14 +478,18 @@ public struct SetRowView: View {
   /// A value is plain text, with no box around it: dimmed until the set is logged, full chalk once
   /// it is saved, and carrying a caret and an underline while the keypad is typing into it. The
   /// whole field stays a 56 pt target, so removing the box removed nothing to tap.
-  private func valueField(_ field: SetRowField, suffix: String?) -> some View {
+  private func valueField(
+    _ field: SetRowField, suffix: String?, alignment: Alignment = .center
+  ) -> some View {
     let isEditing = editingField == field
     let isReadOnly = isLogged || onBeginEditing == nil
     let shown: SetRowFieldState = isEditing ? .editing : (isReadOnly ? .readOnly : .rest)
     return Button {
       onBeginEditing?(field)
     } label: {
-      SetRowFieldValue(text: displayText(field), suffix: suffix, state: shown, isLogged: isLogged)
+      SetRowFieldValue(
+        text: displayText(field), suffix: suffix, state: shown, isLogged: isLogged,
+        alignment: alignment)
     }
     // Presses dim and sink through the field's own style: with no face to darken, the figure
     // itself takes the press, as every control that draws no fill of its own does.
@@ -618,6 +661,9 @@ struct SetRowFieldValue: View {
   /// A logged set is saved, so its figures read in full chalk; before that they are only
   /// proposed, and read dimmed.
   let isLogged: Bool
+  /// Where the figure sits in its column. A row sets weight against the multiply sign from the
+  /// left and reps from the right, so the sign is one axis down the card; the catalogue centres.
+  var alignment: Alignment = .center
 
   private var isEditing: Bool { state == .editing }
 
@@ -636,8 +682,10 @@ struct SetRowFieldValue: View {
   var body: some View {
     HStack(alignment: .firstTextBaseline, spacing: Tokens.Spacing.tight) {
       HStack(alignment: .firstTextBaseline, spacing: 0) {
+        // The largest thing on the card: the readout role, set tight and tabular, so a column of
+        // weights lines up digit under digit.
         Text(shown)
-          .font(Tokens.Text.setEntry)
+          .hardsetText(.readout)
           .foregroundStyle(figureColor)
           // Condensed tabular figures fit a pound value such as "132.28" at full size on a 375 pt
           // phone. The mild floor below exists only so an extreme value shrinks a little rather
@@ -648,7 +696,7 @@ struct SetRowFieldValue: View {
           // The caret is the vertical bar glyph at the figure's own size, so it is as tall as the
           // digits at every Dynamic Type size without a measured frame.
           Text("|")
-            .font(Tokens.Text.setEntry.weight(.light))
+            .hardsetText(.readout, weight: .light)
             .foregroundStyle(Tokens.Color.chalk)
             .accessibilityHidden(true)
         }
@@ -669,8 +717,7 @@ struct SetRowFieldValue: View {
           .foregroundStyle(Tokens.Color.chalkDim)
       }
     }
-    .padding(.horizontal, Tokens.Spacing.tight)
-    .frame(maxWidth: .infinity, minHeight: Tokens.loggerTapTarget)
+    .frame(maxWidth: .infinity, minHeight: Tokens.loggerTapTarget, alignment: alignment)
   }
 
   /// A rule under an empty field would be as wide as its caret; this keeps it a visible line.

@@ -430,15 +430,23 @@ Selection rows, the unit switch and pickers stay silent.
 - **Text entry** (`entryFieldChrome`): raised fill, control border, and a 2 pt plate blue ring that
   fades in on focus. Used by the search field and the name entry sheet. An input keeps its outline,
   because it is identified by its box.
-- **Set row**: the ordinal is a plain numeral in a fixed-width column; a warm-up's is the dashed "W".
-  Weight and reps are plain figures with no box around them, because the keypad is the input surface
-  and the row is never a form. A figure still to be logged is dimmed to `chalkDim`, which clears 7:1
-  on every surface; once the set is logged it reads in full `chalk`. While the keypad types into a
-  field its figure is `chalk` with a still caret after it and a 2 pt `chalk` underline, and nothing
-  else changes; the caret does not blink. Each field's hit region is still the logger's 56 pt tall
-  and the whole field wide. Increase Contrast and Button Shapes bring the `controlEdge` outline back
-  around an editable field, so a boundary appears exactly where it was asked for; a saved figure is
-  never outlined, because it is a fact and not a control.
+- **Set row**: the figures are the content. Weight and reps are the `readout` role, the largest text
+  on the card, tabular and set tight, with a quiet multiply sign between them in `provenance` and
+  `chalkDim`: weight ends at the sign and reps begin after it, so the sign is one axis down the list
+  and the column header's unit and "Reps" sit over their figures. The ordinal is small and dim
+  (`caption`, `chalkDim`) in a fixed column with no tile behind it; a warm-up's is a plain "W", and
+  at accessibility sizes it is spelled "Set 2" or "Warm-up". Last time is a small dim pair in its own
+  fixed column. Nothing is boxed, tinted or outlined: there is no wash on a logged row, and a
+  hairline exists only between two rows, inset past the ordinal column.
+  Weight and reps have no box because the keypad is the input surface and the row is never a form.
+  A figure still to be logged is dimmed to `chalkDim`, which clears 7:1 on every surface; once the
+  set is logged it reads in full `chalk`. While the keypad types into a field its figure is `chalk`
+  with a still caret after it and a 2 pt `chalk` underline, and nothing else changes; the caret does
+  not blink. Each field's hit region is the logger's 56 pt tall and its whole half of the row wide,
+  and the ordinal and last time are a button into the weight, so no part of the row left of the
+  check is dead. Increase Contrast and Button Shapes bring the `controlEdge` outline back around an
+  editable field, so a boundary appears exactly where it was asked for; a saved figure is never
+  outlined, because it is a fact and not a control.
 - **Set log control**: four states, never confused: incomplete (dashed, disabled), ready (plate blue
   outline), next up (plate blue fill), logged (the stamp). The first three are square key faces with
   a check; a logged set loses its key face and wears a round `plateGreen` seal

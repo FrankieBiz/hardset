@@ -28,12 +28,14 @@ enum LoadFigure {
 /// Column widths shared by `SetRowView` and the column header `ExerciseSectionView` draws above
 /// the rows, so the header's labels sit exactly over the values they name.
 ///
-/// Sized for the narrowest supported phone. With the 56 pt log control and four 8 pt gaps the row
-/// needs 292 pt; a 375 pt screen leaves it 319 pt inside the session's margins, the card's padding
-/// and the row's inset, and the slack goes to the two entry fields.
+/// Sized for the narrowest supported phone. The row's fixed parts are the 28 pt ordinal, the 60 pt
+/// last-time column, the 56 pt log control and three 8 pt gaps, 168 pt; a 375 pt screen leaves it
+/// 343 pt inside the session's page margins, and the remaining 175 pt is the weight, the multiply
+/// sign and the reps, which share it, the sign taking its own width and each figure half the rest.
 enum SetRowMetrics {
   static let ordinalWidth: CGFloat = 28
   static let previousWidth: CGFloat = 60
-  static let weightMinWidth: CGFloat = 64
-  static let repsMinWidth: CGFloat = 52
+  /// The multiply sign's column, and the gap the column header leaves between the unit and "Reps"
+  /// so each label sits over its figures.
+  static let multiplyWidth: CGFloat = 24
 }

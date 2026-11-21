@@ -87,7 +87,7 @@ public struct ExerciseSectionView: View {
     VStack(alignment: .leading, spacing: Tokens.Spacing.regular) {
       header
 
-      VStack(spacing: Tokens.Spacing.tight) {
+      VStack(spacing: 0) {
         // Labelled once, above the columns, rather than inside every row: "Last time" and "kg"
         // repeated down a five-set card is noise the eye learns to skip. At accessibility sizes
         // the rows stack and label themselves, so there are no columns to head.
@@ -103,6 +103,8 @@ public struct ExerciseSectionView: View {
             isWarmup: slot.isWarmup,
             isLogged: slot.isLogged,
             isNext: slot.id == state.nextUnloggedSlotID,
+            // A hairline only where two rows meet, never above the first.
+            isSeparated: slot.id != state.slots.first?.id,
             showsInlineLabels: false,
             unit: unit,
             machineIncrementKg: state.machineIncrementKg,
@@ -288,26 +290,31 @@ public struct ExerciseSectionView: View {
   }
 
   /// Labels for the set rows' columns, using the same widths so each label sits over its values.
+  /// The weight's unit ends where the weight does and "Reps" begins where the reps do, either side
+  /// of the multiply sign's column, so each name sits over the figures it labels.
   private var columnHeader: some View {
     HStack(spacing: Tokens.Spacing.snug) {
       Text("Set")
-        .frame(width: SetRowMetrics.ordinalWidth)
+        .frame(width: SetRowMetrics.ordinalWidth, alignment: .leading)
       Text("Last time")
         // A label, not a value, so it may tighten to share the narrow column's width.
         .minimumScaleFactor(0.8)
         .frame(width: SetRowMetrics.previousWidth, alignment: .leading)
-      Text(unit.abbreviation)
-        .frame(minWidth: SetRowMetrics.weightMinWidth, maxWidth: .infinity)
-      Text("Reps")
-        .frame(minWidth: SetRowMetrics.repsMinWidth, maxWidth: .infinity)
+      HStack(spacing: 0) {
+        Text(unit.abbreviation)
+          .frame(maxWidth: .infinity, alignment: .trailing)
+        Color.clear
+          .frame(width: SetRowMetrics.multiplyWidth, height: 1)
+        Text("Reps")
+          .frame(maxWidth: .infinity, alignment: .leading)
+      }
       Color.clear
         .frame(width: Tokens.loggerTapTarget, height: 1)
     }
     .hardsetText(.caption, weight: .medium)
     .foregroundStyle(Tokens.Color.chalkDim)
     .lineLimit(1)
-    // The same inset as each row, so every label sits over its column.
-    .padding(.horizontal, Tokens.Spacing.tight)
+    .padding(.bottom, Tokens.Spacing.tight)
     // The rows carry the same information in their spoken labels; reading the header as well
     // would only add a stop before every set.
     .accessibilityHidden(true)
