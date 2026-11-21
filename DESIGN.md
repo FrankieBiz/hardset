@@ -349,9 +349,12 @@ Selection rows, the unit switch and pickers stay silent.
   Its one `primary` 56 pt button reads "Start" and the name; starting is a single tap with no
   confirmation, because the lifter is standing at a machine. It is the screen's one primary button:
   while a saved workout is shown, the empty "Start workout" below it steps down to `secondary`. The
-  other workouts are control-radius cards with a `secondary` Start and a `quiet` Edit, and "New workout"
-  and "Repeat last workout" are `secondary` buttons below them, the second only when a finished workout
-  of the lifter's own exists (an imported one does not count). Nothing is claimed that was not measured:
+  other workouts are control-radius cards with a `secondary` Start and a `quiet` Edit. The empty "Start
+  workout" follows the cards, and under it are `secondary` "Repeat last workout", only when a finished
+  workout of the lifter's own exists (an imported one does not count), and "New saved workout", which
+  opens the plan editor and starts nothing. They sit below the start and never above it, and the editor's
+  button says it makes a saved workout, so a lifter in a hurry cannot take it for starting one
+  (`WorkoutCardActions`). Nothing is claimed that was not measured:
   "beat 4 of 6" appears only when something was compared, and only on the workout it belongs to. The
   order is the rotation, never a schedule or a streak. A workout counts as done, for the rotation, the
   last-done day, "last time" and "Repeat last workout", and for Apple Health alike, only when it

@@ -249,7 +249,7 @@ struct TourStage: View {
   /// action, "Start workout", and no repeat of the last workout, so it says what is there.
   static func message(for step: OnboardingModel.TourStep) -> String {
     switch step {
-    case .train: "One tap starts a workout. Your last one is right below it."
+    case .train: "One tap starts a workout. Your last one is further down."
     case .logSet: "Weight, reps, log. The check is the only thing you need to hit."
     case .keypad: "Tap a figure to change it. The keypad never hides the row."
     case .rest: "Choose a rest length for each movement and it runs as an alarm. Here one is started for you to nudge."
