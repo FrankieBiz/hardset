@@ -737,7 +737,8 @@ public struct SessionView: View {
             CertaintyBadge(
               level: Self.estimateCertainty(record),
               methodology: ProgressionAnalyzer.source.methodology,
-              citation: ProgressionAnalyzer.source.validRange
+              citation: ProgressionAnalyzer.source.validRange,
+              style: .language
             )
           }
         }

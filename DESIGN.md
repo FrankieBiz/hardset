@@ -128,7 +128,10 @@ fill step is gone and every control wears its `controlEdge`. Resolution happens 
 collection, in code, with no asset catalogue.
 
 Certainty maps high → `plateGreen`, moderate → `plateYellow`, low → `warning`, unevaluated →
-`chalkDim`, always with its word and symbol so colour is never the only carrier.
+`chalkDim`, always with its word and symbol so colour is never the only carrier. On the live
+session certainty is language instead: a phrase in `provenance` and `chalkDim`, "Moderate
+confidence", with what it is about before it ("From another machine · Low confidence") and a small
+info glyph that says it opens. The words carry the level and no hue does; see `CertaintyBadge`.
 
 Chart series (one line per machine, never merged) use `plateBlue`, chalk `#E7E7EC`/`#3A3A42`,
 lilac `#B9A8FF`/`#5236B8` and rose `#FF9DD6`/`#9A1F66`, each paired with a distinct point symbol.
@@ -288,7 +291,10 @@ Selection rows, the unit switch and pickers stay silent.
   uses it. A banner and a non-interactive
   `CertaintyCapsule` carry no stroke: the words, the symbol and the tinted surface identify the
   kind or level. An interactive `CertaintyBadge` is identified by its symbol and word, and wears
-  an outline only under Increase Contrast or Button Shapes. A message-only banner speaks only its message to
+  an outline only under Increase Contrast or Button Shapes. Its `.language` style, which the live
+  session uses, is the same control as a phrase with an info glyph and no tint, and the disclosure it
+  opens restates the level as a chalk heading instead of a capsule; the other screens keep the
+  capsule until they are rebuilt. A message-only banner speaks only its message to
   VoiceOver, as it does today; speaking the kind is recorded for the accessibility pass. A
   picker's error banner (gym, machine and exercise pickers) is pinned above the list at ordinary
   sizes and moves into the scrolling content at accessibility sizes, so a tall banner can never

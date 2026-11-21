@@ -175,10 +175,15 @@ public struct ExerciseSectionView: View {
         machineChip(action: onSelectMachine)
       }
       if let note = state.priorNote {
+        // Said in words: "From another machine · Low confidence". The borrowed loads are the
+        // caveat, so they are the one thing on the card allowed to speak up, and they do it as a
+        // sentence and not as a tinted capsule.
         CertaintyBadge(
           level: .low,
           methodology: "Suggested loads are borrowed from another machine (\(note)). Movement mechanics and leverage differ between equipment.",
-          citation: "Epistemic honesty: equipment cannot be merged"
+          citation: "Epistemic honesty: equipment cannot be merged",
+          context: note,
+          style: .language
         )
       }
     }
