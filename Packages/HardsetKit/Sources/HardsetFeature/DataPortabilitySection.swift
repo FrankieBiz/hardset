@@ -333,7 +333,7 @@ struct DataPortabilitySection: View {
   /// Hardset's own CSV is about a kilobyte a set, because each row carries its workout, movement,
   /// gym, machine and plan row, so a long history is tens of megabytes where a Strong export of
   /// the same history is a few. 64 MB is some 60,000 sets, and still bounded.
-  private static let largestFile = 64_000_000
+  private nonisolated static let largestFile = 64_000_000
 
   @concurrent private static func readPreview(_ url: URL, unit: WeightUnit) async throws -> WorkoutImportPreview {
     let scoped = url.startAccessingSecurityScopedResource()
