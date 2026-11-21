@@ -32,12 +32,23 @@
       ]
     }
 
+    /// The column as the Train tab draws it: the cards, the empty "Start workout", then the buttons
+    /// that follow it. The start is drawn here as the screen draws it, primary with nothing saved and
+    /// secondary under a card, so the render shows the order a lifter meets the buttons in.
     private static func cards(_ cards: [WorkoutCard], canRepeatLast: Bool = true) -> some View {
       ScrollView {
-        WorkoutCardsView(
-          cards: cards, canRepeatLast: canRepeatLast, onStart: { _ in }, onEdit: { _ in },
-          onNew: {}, onRepeatLast: {}
-        )
+        VStack(alignment: .leading, spacing: Tokens.Spacing.loose) {
+          if !cards.isEmpty {
+            WorkoutCardsView(cards: cards, onStart: { _ in }, onEdit: { _ in })
+          }
+          Button {
+          } label: {
+            Label("Start workout", systemImage: "play.fill")
+              .labelStyle(.titleAndIcon)
+          }
+          .buttonStyle(HardsetButtonStyle(cards.isEmpty ? .primary : .secondary, size: .logger))
+          WorkoutCardActions(canRepeatLast: canRepeatLast, onRepeatLast: {}, onNew: {})
+        }
         .padding(Tokens.Spacing.loose)
       }
       .background(Tokens.Color.canvas.ignoresSafeArea())
@@ -55,7 +66,7 @@
       ) { Self.cards(Self.rotation) }
     }
 
-    /// With nothing saved there are no cards, only the two ways to make a workout.
+    /// With nothing saved there are no cards: the empty start, then the ways to make a workout.
     @Test func noWorkoutsAndNothingToRepeat() async throws {
       try await Snapshot.capture("kit-workoutcards-empty-dark", size: Self.phone) {
         Self.cards([], canRepeatLast: false)
@@ -97,7 +108,7 @@
           draft: .constant(draft), balance: balance, onAddMovement: {}, onSave: {},
           onDelete: draft.isNew ? nil : {}
         )
-        .hardsetNavigationTitle(draft.isNew ? "New workout" : "Edit workout")
+        .hardsetNavigationTitle(draft.isNew ? "New saved workout" : "Edit saved workout")
       }
       .tint(Tokens.Color.plateBlue)
       .background(Tokens.Color.canvas.ignoresSafeArea())

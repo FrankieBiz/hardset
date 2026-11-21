@@ -285,7 +285,10 @@ Selection rows, the unit switch and pickers stay silent.
   line, "Add set", "Warm-up", rest, "Add movement", load-step and rest-bar controls are inline
   controls, and `HeaderIconStyle.bare` is the same idea for the header's glyphs. An unset gym or
   machine ("Set gym", "Choose machine") reads in full `chalk`, an invitation; a set one reads in
-  `chalkDim` with a chevron.
+  `chalkDim` with a chevron. With no gym there are no machines to list, but the card's machine line
+  is still drawn: "Choose machine" with "Set a gym first" in `chalkDim` beside it, spoken as "No
+  machine recorded", and a tap opens the choice of gym. Hiding it would leave a lifter who left the
+  gym blank at setup never meeting per-machine history until the receipt says none was recorded.
 - **Tags** (`HardsetTag`): the public name of the non-interactive label on a row (modality,
   "Recent", "Custom"). Flat `steelRaised`, no outline, no edge light. It stays on one line at
   ordinary sizes and wraps at accessibility sizes, never truncating the word it carries.
@@ -349,9 +352,12 @@ Selection rows, the unit switch and pickers stay silent.
   Its one `primary` 56 pt button reads "Start" and the name; starting is a single tap with no
   confirmation, because the lifter is standing at a machine. It is the screen's one primary button:
   while a saved workout is shown, the empty "Start workout" below it steps down to `secondary`. The
-  other workouts are control-radius cards with a `secondary` Start and a `quiet` Edit, and "New workout"
-  and "Repeat last workout" are `secondary` buttons below them, the second only when a finished workout
-  of the lifter's own exists (an imported one does not count). Nothing is claimed that was not measured:
+  other workouts are control-radius cards with a `secondary` Start and a `quiet` Edit. The empty "Start
+  workout" follows the cards, and under it are `secondary` "Repeat last workout", only when a finished
+  workout of the lifter's own exists (an imported one does not count), and "New saved workout", which
+  opens the plan editor and starts nothing. They sit below the start and never above it, and the editor's
+  button says it makes a saved workout, so a lifter in a hurry cannot take it for starting one
+  (`WorkoutCardActions`). Nothing is claimed that was not measured:
   "beat 4 of 6" appears only when something was compared, and only on the workout it belongs to. The
   order is the rotation, never a schedule or a streak. A workout counts as done, for the rotation, the
   last-done day, "last time" and "Repeat last workout", and for Apple Health alike, only when it
@@ -632,7 +638,10 @@ components rather than native spinners.
 - History opens a static receipt of committed sets. It states equipment provenance,
   caveats and same-machine record definitions. Native share sheets handle text and a
   deliberately dark image; long sessions retain text sharing rather than render an
-  unbounded image. It adds no animation and responds to Dynamic Type.
+  unbounded image. It adds no animation and responds to Dynamic Type. Where it offers "Correct this
+  workout" it says in one sentence that corrections are removals only and why: a finished workout
+  feeds History, volume and record baselines, so its sets are never edited or added, and the
+  removal banner adds that a removed set cannot be added back.
 - The optional deep muscle map uses the existing palette and fractional-set method,
   with labelled values and comparative tracks, never target bands. It uses two
   columns at ordinary sizes and one at accessibility sizes. Unknown attribution

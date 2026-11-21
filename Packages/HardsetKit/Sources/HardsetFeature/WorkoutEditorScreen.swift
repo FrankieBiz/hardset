@@ -76,7 +76,7 @@ public struct WorkoutEditorScreen: View {
         onSave: save,
         onDelete: draft.isNew ? nil : { isConfirmingDelete = true }
       )
-      .hardsetNavigationTitle(draft.isNew ? "New workout" : "Edit workout")
+      .hardsetNavigationTitle(draft.isNew ? "New saved workout" : "Edit saved workout")
       .toolbar {
         ToolbarItem(placement: .cancellationAction) {
           Button("Cancel", action: onClose)

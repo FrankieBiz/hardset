@@ -511,6 +511,8 @@ public struct HardsetRootView: View {
             .foregroundStyle(Tokens.Color.chalkDim)
             .fixedSize(horizontal: false, vertical: true)
           }
+
+          savedWorkoutActions
         }
         .padding(.horizontal, Tokens.Spacing.loose)
         .animation(
@@ -548,29 +550,44 @@ public struct HardsetRootView: View {
   /// The saved workouts, as cards above the empty start, once they have been read.
   ///
   /// Starting one is one tap on its card, with no confirmation: the workout opens with every
-  /// movement, machine and set row ready. The editor is its own sheet, attached here and not on the
-  /// start screen, which already carries the gym sheet: a second sheet on one anchor never presents.
-  /// The empty "Start workout" is the screen's one primary button until a saved workout is shown:
-  /// its up-next card then carries the primary "Start" and this one steps down to secondary, so the
-  /// screen never has two accent fills competing for the same tap.
+  /// movement, machine and set row ready. The empty "Start workout" is the screen's one primary
+  /// button until a saved workout is shown: its up-next card then carries the primary "Start" and
+  /// this one steps down to secondary, so the screen never has two accent fills competing for the
+  /// same tap.
   private var startRole: HardsetButtonStyle.Role {
     savedWorkouts.value?.templates.isEmpty == false ? .secondary : .primary
   }
 
+  /// Drawn only when there are cards: with none the view would be an empty stack that still takes
+  /// its share of the column's spacing.
   @ViewBuilder private var savedWorkoutCards: some View {
-    if let saved = savedWorkouts.value {
+    if let saved = savedWorkouts.value, !saved.templates.isEmpty {
       WorkoutCardsView(
         cards: WorkoutCard.cards(
           templates: saved.templates, now: today, lastResult: saved.lastResult),
-        canRepeatLast: saved.canRepeatLast,
         onStart: { startSavedWorkout($0) },
         onEdit: { id in
           guard let template = saved.templates.first(where: { $0.id == id }) else { return }
           workoutEditor = WorkoutEditorTarget(
             template: template, others: saved.templates.filter { $0.id != id })
-        },
-        onNew: { workoutEditor = WorkoutEditorTarget(template: nil, others: saved.templates) },
-        onRepeatLast: { repeatLastWorkout() }
+        }
+      )
+    }
+  }
+
+  /// "Repeat last workout" and "New saved workout", below the empty start so the buttons that start
+  /// a workout come before the one that opens an editor.
+  ///
+  /// The editor is its own sheet, attached here: the buttons are always drawn once the saved
+  /// workouts have been read, so the sheet has an anchor even when there are no cards, and the gym
+  /// sheet stays alone on the start screen's own anchor, because a second sheet on one anchor never
+  /// presents. Editing a card sets the same `workoutEditor`, so the sheet answers to both.
+  @ViewBuilder private var savedWorkoutActions: some View {
+    if let saved = savedWorkouts.value {
+      WorkoutCardActions(
+        canRepeatLast: saved.canRepeatLast,
+        onRepeatLast: { repeatLastWorkout() },
+        onNew: { workoutEditor = WorkoutEditorTarget(template: nil, others: saved.templates) }
       )
       .sheet(item: $workoutEditor) { target in
         WorkoutEditorScreen(

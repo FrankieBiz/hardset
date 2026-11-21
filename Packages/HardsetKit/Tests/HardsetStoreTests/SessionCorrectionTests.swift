@@ -550,6 +550,69 @@ struct SessionCorrectionTests {
     #expect(coordinator.lastError == nil)
   }
 
+  @Test("A refusal caused only by a movement's machine is lifted by setting it to Not recorded")
+  func setGymConflictFromMovementsIsLiftedByClearingThem() throws {
+    let database = try migratedDatabase()
+    let store = LoggerStore(database: database)
+    let gyms = GymStore(database: database)
+    let clock = Clock(start)
+    let home = try gyms.createGym(name: "Home")
+    let away = try gyms.createGym(name: "Away")
+    let machine = try gyms.createMachine(at: home, name: "Press")
+    let press = try seedExercise(database)
+    let coordinator = try live(
+      database, clock: clock, gymID: home, plan: [.init(exerciseID: press, exerciseName: "Press")]
+    )
+    let card = coordinator.exercises[0].id
+    // A set saved before any machine was chosen carries none, so only the movement holds one.
+    #expect(log(coordinator, slot: 0, weight: 60))
+    #expect(coordinator.changeMachine(to: machine, machineName: "Press", inExercise: card))
+
+    #expect(!coordinator.setGym(away))
+    #expect(coordinator.lastError as? SessionCoordinatorError == .gymChangeConflictsWithMachines)
+
+    // The remedy the refusal names: it works here, because nothing saved holds the machine.
+    #expect(coordinator.changeMachine(to: nil, machineName: nil, inExercise: card))
+    #expect(coordinator.setGym(away))
+    #expect(coordinator.gymID == away)
+    #expect(try store.openSession()?.gymID == away)
+  }
+
+  @Test("A saved set on a machine pins the gym, and setting the movement to Not recorded cannot lift it")
+  func setGymConflictFromSavedSetsIsNotLiftedByClearingMovements() throws {
+    let database = try migratedDatabase()
+    let store = LoggerStore(database: database)
+    let gyms = GymStore(database: database)
+    let clock = Clock(start)
+    let home = try gyms.createGym(name: "Home")
+    let away = try gyms.createGym(name: "Away")
+    let machine = try gyms.createMachine(at: home, name: "Press")
+    let press = try seedExercise(database)
+    let coordinator = try live(
+      database, clock: clock, gymID: home, plan: [.init(exerciseID: press, exerciseName: "Press")]
+    )
+    let card = coordinator.exercises[0].id
+    #expect(coordinator.changeMachine(to: machine, machineName: "Press", inExercise: card))
+    #expect(log(coordinator, slot: 0, weight: 60))
+
+    #expect(!coordinator.setGym(away))
+    #expect(coordinator.lastError as? SessionCoordinatorError == .gymChangeConflictsWithSavedSets)
+
+    // The remedy the earlier message named. The set keeps the machine it was done on, so the
+    // refusal stands and says the same thing, which is why the message must not offer it.
+    #expect(coordinator.changeMachine(to: nil, machineName: nil, inExercise: card))
+    #expect(!coordinator.setGym(away))
+    #expect(coordinator.lastError as? SessionCoordinatorError == .gymChangeConflictsWithSavedSets)
+    #expect(coordinator.gymID == home)
+    #expect(try store.openSession()?.gymID == home)
+
+    // Taking the set back is what frees it, along with the movement's machine.
+    let slot = coordinator.exercises[0].slots[0].id
+    #expect(coordinator.undoSet(slotID: slot, inExercise: card))
+    #expect(coordinator.setGym(away))
+    #expect(coordinator.gymID == away)
+  }
+
   // MARK: - Machine preselection
 
   @Test("A movement added at a gym opens on the machine it was last done on there")

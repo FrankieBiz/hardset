@@ -659,9 +659,15 @@ public final class SessionCoordinator {
   /// Records or changes this workout's gym, so a lifter who started without one, or at the
   /// wrong one, can still record machines. Persisted before `gymID` changes.
   ///
-  /// Fails with `.gymChangeConflictsWithMachines` once any movement or saved set carries a
-  /// machine from another gym, and with `LoggerStoreError.gymNotFound` for an unknown or archived
-  /// gym. Naming the gym the workout already has succeeds without a write.
+  /// Fails once any movement or saved set carries a machine from another gym, and with
+  /// `LoggerStoreError.gymNotFound` for an unknown or archived gym. Naming the gym the workout
+  /// already has succeeds without a write.
+  ///
+  /// The refusal says what holds the machine, because the way out differs. A saved set keeps the
+  /// machine it was done on, so while one carries a machine, setting the movements to "Not
+  /// recorded" changes nothing about this refusal: that is `.gymChangeConflictsWithSavedSets`, and
+  /// only finishing or discarding the workout ends it. With no saved set holding a machine, only
+  /// movements do, and clearing them is a remedy that works: `.gymChangeConflictsWithMachines`.
   @discardableResult
   public func setGym(_ gymID: GymID?) -> Bool {
     guard gymID != self.gymID else {
@@ -674,7 +680,14 @@ public final class SessionCoordinator {
       clearError()
       return true
     } catch LoggerStoreError.machineGymMismatch {
-      return fail(SessionCoordinatorError.gymChangeConflictsWithMachines, .setGym)
+      let savedSetsCarryMachines = exercises.contains { exercise in
+        exercise.slots.contains { $0.isLogged && $0.loggedMachineID != nil }
+      }
+      return fail(
+        savedSetsCarryMachines
+          ? SessionCoordinatorError.gymChangeConflictsWithSavedSets
+          : SessionCoordinatorError.gymChangeConflictsWithMachines,
+        .setGym)
     } catch {
       return fail(error, .setGym)
     }
@@ -988,9 +1001,14 @@ public enum SessionCoordinatorError: Error, Equatable, Sendable {
   /// `correctSet` was asked to correct a row that is not saved. An unsaved row's figures are its
   /// draft, which the keypad writes; there is no saved set to correct.
   case slotIsNotLogged
-  /// `setGym` was refused because a movement or saved set already carries a machine from another
-  /// gym. Machines belong to a gym, so moving the workout would contradict recorded equipment.
+  /// `setGym` was refused because a movement already carries a machine from another gym and no
+  /// saved set does. Machines belong to a gym, so moving the workout would contradict recorded
+  /// equipment; setting those movements to "Not recorded" lifts the refusal.
   case gymChangeConflictsWithMachines
+  /// `setGym` was refused because a saved set was done on a machine from another gym. A saved set
+  /// keeps its machine, so setting the movements to "Not recorded" does not lift this; finishing or
+  /// discarding the workout does.
+  case gymChangeConflictsWithSavedSets
   /// `finish(at:)` was given an instant before the start or the newest saved set, or in the
   /// future. Nothing was written and the workout is still open.
   case invalidFinishTime

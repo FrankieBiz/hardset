@@ -95,8 +95,9 @@ public struct SessionView: View {
 
   /// - Parameter title: Draws a screen header when present. The live session passes "Workout";
   ///   previews and embedded uses can leave it out.
-  /// - Parameter gymName: The gym the workout is at. `nil` says no gym is recorded, which is also
-  ///   why the machine chips are absent.
+  /// - Parameter gymName: The gym the workout is at. `nil` says no gym is recorded. With no machine
+  ///   picker to offer and a way to set the gym (`onChangeGym`), each card's machine chip stays,
+  ///   says no machine is recorded and that a gym comes first, and leads to choosing one.
   /// - Parameter startedAt: When the workout began, shown in the header, with the day when it was
   ///   not today: a workout reopened from days ago says so.
   /// - Parameter lastLoggedAt: When the newest logged set was completed; the honest end of a
@@ -527,6 +528,24 @@ public struct SessionView: View {
 
   // MARK: - Cards
 
+  /// The workout has no gym, no machine picker is on offer, and a gym can be set from here. Then a
+  /// card's machine chip has a real next step, choosing a gym, and no gym is the reason it says so.
+  private var machineChipNeedsGym: Bool {
+    onSelectMachine == nil && gymName == nil && onChangeGym != nil
+  }
+
+  /// What a card's machine chip does: open the machine picker, or with no gym, the choice of one.
+  /// `nil` when neither is possible, which hides the chip.
+  private func machineChipAction(for id: UUID) -> (() -> Void)? {
+    if let select = onSelectMachine {
+      return { closeKeypad { select(id) } }
+    }
+    if machineChipNeedsGym, let changeGym = onChangeGym {
+      return { closeKeypad(then: changeGym) }
+    }
+    return nil
+  }
+
   private func card(for exercise: Binding<ExerciseLogState>) -> some View {
     let id = exercise.wrappedValue.id
     let index = exercises.firstIndex { $0.id == id }
@@ -538,9 +557,8 @@ public struct SessionView: View {
       unit: unit,
       onLogSet: { slot in onLogSet(id, slot) },
       onStartRest: onStartRest.map { start in { duration in start(id, duration) } },
-      onSelectMachine: onSelectMachine.map { select in
-        { closeKeypad { select(id) } }
-      },
+      onSelectMachine: machineChipAction(for: id),
+      machineNeedsGym: machineChipNeedsGym,
       onShowHistory: onShowHistory.map { show in
         { closeKeypad { show(id) } }
       },

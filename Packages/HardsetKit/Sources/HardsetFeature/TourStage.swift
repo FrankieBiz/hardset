@@ -159,8 +159,9 @@ struct TourStage: View {
   private func root(_ staged: TourFixtures.Staged, staging: TourStaging, isShown: Bool) -> some View {
     HardsetRootView(
       environment: staged.environment, unit: unit, hooks: hooks,
-      // A rest starts when a set is logged, as the tour's fourth step says it does. The daily app
-      // does not start one on its own.
+      // The staged app starts a rest when its set is logged: that is how the tour learns the lifter
+      // tapped the check, and it gives step four a rest to show. The daily app starts none until the
+      // lifter has chosen a length for that movement, and step four's callout says so.
       restAfterSet: .seconds(90),
       // The staged app's settings must not offer a replay from inside the replay, and its roots
       // must not touch the real scene's pending gym pick.
@@ -248,10 +249,10 @@ struct TourStage: View {
   /// action, "Start workout", and no repeat of the last workout, so it says what is there.
   static func message(for step: OnboardingModel.TourStep) -> String {
     switch step {
-    case .train: "One tap starts a workout. Your last one is right below it."
+    case .train: "One tap starts a workout. Your last one is further down."
     case .logSet: "Weight, reps, log. The check is the only thing you need to hit."
     case .keypad: "Tap a figure to change it. The keypad never hides the row."
-    case .rest: "Rest starts when you log a set, and you can nudge it."
+    case .rest: "Choose a rest length for each movement and it runs as an alarm. Here one is started for you to nudge."
     case .machines: "The machine in front of you is at the top. Each machine keeps its own history."
     case .volume: "Sets per muscle this week, counted from what you logged, scaled to your own week."
     case .history: "Every session is a receipt you can share."
