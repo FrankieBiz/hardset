@@ -9,11 +9,40 @@ public nonisolated struct WorkoutImportResult: Sendable, Equatable {
   public let importedSets: Int
   /// Workouts in the file already imported from the same app's earlier export.
   public let skippedWorkouts: Int
+  /// Saved workouts a restore from Hardset's own JSON added. Zero for every other import.
+  public let restoredSavedWorkouts: Int
+  /// Body mass entries a restore from Hardset's own JSON added. Zero for every other import.
+  public let restoredBodyweightEntries: Int
+  /// Workouts in a Hardset export with no finish time, which a restore leaves out.
+  public let leftOutUnfinishedWorkouts: Int
+  /// Gyms, machines and movements a restore had to create because this phone did not have them.
+  public let restoredGyms: Int
+  public let restoredMachines: Int
+  public let restoredMovements: Int
 
-  public init(importedWorkouts: Int, importedSets: Int, skippedWorkouts: Int) {
+  public init(
+    importedWorkouts: Int, importedSets: Int, skippedWorkouts: Int,
+    restoredSavedWorkouts: Int = 0, restoredBodyweightEntries: Int = 0,
+    leftOutUnfinishedWorkouts: Int = 0, restoredGyms: Int = 0, restoredMachines: Int = 0,
+    restoredMovements: Int = 0
+  ) {
     self.importedWorkouts = importedWorkouts
     self.importedSets = importedSets
     self.skippedWorkouts = skippedWorkouts
+    self.restoredSavedWorkouts = restoredSavedWorkouts
+    self.restoredBodyweightEntries = restoredBodyweightEntries
+    self.leftOutUnfinishedWorkouts = leftOutUnfinishedWorkouts
+    self.restoredGyms = restoredGyms
+    self.restoredMachines = restoredMachines
+    self.restoredMovements = restoredMovements
+  }
+
+  /// Whether anything at all was added: a restore of a file whose every row is already here is
+  /// "nothing new", whatever it held.
+  public var addedAnything: Bool {
+    importedSets > 0 || importedWorkouts > 0 || restoredSavedWorkouts > 0
+      || restoredBodyweightEntries > 0 || restoredGyms > 0 || restoredMachines > 0
+      || restoredMovements > 0
   }
 }
 
@@ -48,14 +77,17 @@ public nonisolated enum WorkoutImportUndoError: Error, LocalizedError, Equatable
 /// Free exports and atomic migration of a validated external workout file.
 /// No live database connection or lazy row escapes a read snapshot.
 ///
-/// JSON and SQLite are complete snapshots of every table, including device-local ones. CSV is a
-/// set-level export for spreadsheets and other tools: it names equipment and gyms but carries no
-/// standalone gym/machine/bodyweight rows, so it is not a restore format.
+/// JSON and SQLite are complete snapshots of every table, including device-local ones. CSV is one
+/// row per logged set with the set's workout, movement, gym, machine and plan row written beside
+/// it; see `RestoreCSV` for exactly what it carries. The CSV and the JSON can be read back by
+/// `commit` (see `DataTransferStore+Restore.swift`); the SQLite copy cannot. A SQLite file is the
+/// database itself: opening an arbitrary one as a source would trust its schema and triggers, and
+/// the JSON holds the same rows in a form that is checked column by column before it is read.
 public nonisolated struct DataTransferStore: Sendable {
-  private let database: any DatabaseWriter
+  let database: any DatabaseWriter
   public init(database: any DatabaseWriter) { self.database = database }
 
-  private struct ImportRows: Codable {
+  struct ImportRows: Codable {
     var sessions: [UUID] = []
     var plans: [UUID] = []
     var sets: [UUID] = []
@@ -96,6 +128,17 @@ public nonisolated struct DataTransferStore: Sendable {
         arguments: [try jsonIDs(ids)]) == true { return true }
     }
     return false
+  }
+
+  /// A digest, not the file: re-exports repeat the whole history, so copies added up.
+  static func recordImport(digest: String, byteCount: Int, undo: ImportRows, in db: Database) throws {
+    try db.execute(
+      sql: """
+        INSERT INTO deviceImportBatches(id, sourceCSV, sourceDigest, byteCount, undoRows, undoOrder)
+        VALUES (?, '', ?, ?, ?, (SELECT coalesce(max(undoOrder), 0) + 1 FROM deviceImportBatches))
+        """,
+      arguments: [UUID().uuidString.lowercased(), digest, byteCount,
+        String(decoding: try JSONEncoder().encode(undo), as: UTF8.self)])
   }
 
   private static func undoPreview(in db: Database) throws -> (preview: WorkoutImportUndo, rows: ImportRows)? {
@@ -146,6 +189,42 @@ public nonisolated struct DataTransferStore: Sendable {
       case .json: "JSON"
       case .sqlite: "SQLite"
       }
+    }
+
+    /// Whether Hardset can read a file of this format back in. Every line of copy that says what a
+    /// format is for is written from this, and `ExportFormatPurposeTests` proves it against the
+    /// importer, so the app cannot promise a restore it cannot do.
+    public var restoresIntoHardset: Bool {
+      switch self {
+      case .csv, .json: true
+      case .sqlite: false
+      }
+    }
+
+    /// What the format is for, said beside its export button.
+    public var purpose: String {
+      switch self {
+      case .csv:
+        "Every finished workout, set by set, with the movements, gyms and machines it used. "
+          + "Hardset can read this file back in, and a spreadsheet can open it. It leaves out "
+          + "saved workouts and body mass, and a workout still open when you export."
+      case .json:
+        "Everything Hardset can restore: workouts, movements, gyms and machines, saved workouts "
+          + "and body mass. Hardset can read this file back in. A workout still open when you "
+          + "export is not restored. It also holds any Apple Health data you chose to copy, "
+          + "which Hardset does not restore."
+      case .sqlite:
+        "The database itself, for inspecting your data or keeping a full copy. Hardset can't read it back in."
+      }
+    }
+
+    /// What to say once the file is made.
+    public func readyMessage(fileName: String) -> String {
+      restoresIntoHardset
+        ? "\(fileName) is ready. Save it somewhere off this iPhone. To restore, choose it under "
+          + "Restore or bring in workouts."
+        : "\(fileName) is ready. It is a copy to keep and inspect; Hardset can't restore from it. "
+          + "Export JSON or CSV to keep a copy you can restore."
     }
   }
 
@@ -228,6 +307,7 @@ public nonisolated struct DataTransferStore: Sendable {
   /// same app's export, and would be skipped. Read before committing, so the preview can say so.
   public func alreadyImportedWorkoutCount(in preview: WorkoutImportPreview) async throws -> Int {
     try Task.checkCancellation()
+    if let restore = preview.restore { return try await alreadyRestoredWorkoutCount(in: restore) }
     return try await database.read { db in
       var count = 0
       var zones = EarlierZones()
@@ -251,6 +331,8 @@ public nonisolated struct DataTransferStore: Sendable {
     try Task.checkCancellation()
     // The file is recognised by its SHA-256 digest and length; only those are kept.
     let file = Data(preview.originalCSV.utf8)
+    // Hardset's own export is put back by id, not converted, so it never takes the path below.
+    if let restore = preview.restore { return try await commitRestore(restore, file: file) }
     let digest = SHA256Digest.hex(of: file)
     let byteCount = file.count
     return try await database.write { db in
@@ -370,14 +452,7 @@ public nonisolated struct DataTransferStore: Sendable {
           arguments: [noteSuffix, session.uuidString.lowercased()])
       }
       if importedWorkouts > 0 {
-        // A digest, not the file: re-exports repeat the whole history, so copies added up.
-        try db.execute(
-          sql: """
-            INSERT INTO deviceImportBatches(id, sourceCSV, sourceDigest, byteCount, undoRows, undoOrder)
-            VALUES (?, '', ?, ?, ?, (SELECT coalesce(max(undoOrder), 0) + 1 FROM deviceImportBatches))
-            """,
-          arguments: [UUID().uuidString.lowercased(), digest, byteCount,
-            String(decoding: try JSONEncoder().encode(undoRows), as: UTF8.self)])
+        try Self.recordImport(digest: digest, byteCount: byteCount, undo: undoRows, in: db)
       }
       return WorkoutImportResult(
         importedWorkouts: importedWorkouts, importedSets: importedSets, skippedWorkouts: skippedWorkouts)
@@ -425,22 +500,10 @@ public nonisolated struct DataTransferStore: Sendable {
   }
 
   private static func csv(in db: Database) throws -> Data {
-    let rows = try Row.fetchAll(db, sql: """
-      SELECT l.*, e.name AS exerciseName, s.title AS workoutTitle,
-        s.startedAt AS workoutStart, s.finishedAt AS workoutEnd, s.notes AS workoutNotes,
-        m.name AS machineName, m.brand AS machineBrand, g.name AS gymName
-      FROM loggedSets l
-      LEFT JOIN exercises e ON e.id = l.exerciseID
-      LEFT JOIN sessions s ON s.id = l.sessionID
-      LEFT JOIN machines m ON m.id = l.machineID
-      LEFT JOIN gyms g ON g.id = s.gymID
-      ORDER BY s.startedAt, s.id, l.completedAt, l.setOrdinal, l.id
-      """)
-    let columns = ["id", "sessionID", "exerciseID", "machineID", "sessionExerciseID",
-      "setOrdinal", "weightKg", "reps", "rpe", "isWarmup", "completedAt", "exerciseName",
-      "workoutTitle", "workoutStart", "workoutEnd", "workoutNotes", "machineName", "machineBrand", "gymName"]
-    let fields = rows.map { row in columns.map { string(row[$0] as DatabaseValue) } }
-    return Data(CSVDocument.encode([columns] + fields).utf8)
+    let rows = try Row.fetchAll(db, sql: RestoreCSV.query)
+    let names = RestoreCSV.columns.map(\.name)
+    let fields = rows.map { row in names.map { string(row[$0] as DatabaseValue) } }
+    return Data(CSVDocument.encode([names] + fields).utf8)
   }
 
   private static func json(in db: Database) throws -> Data {
