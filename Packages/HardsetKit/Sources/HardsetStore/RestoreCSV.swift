@@ -189,6 +189,18 @@ nonisolated enum RestoreCSV {
     var instants: [String: Date] = [:]
     // An earlier file does not say when a movement or machine was made; its first workout does.
     var firstUsed: [String: String] = [:]
+    // An earlier file does not say which machine a block is on now. Its sets do: the latest one's,
+    // since a block that moved machines keeps the machine it moved to. Decided up front so every
+    // row of the block describes it the same way.
+    var latestMachineOfBlock: [String: String] = [:]
+    if earlier, let planColumn = position["sessionExerciseID"], let machineColumn = position["machineID"] {
+      for cells in rows.dropFirst() where cells.count == headers.count {
+        let block = cells[planColumn].trimmingCharacters(in: .whitespaces)
+        guard !block.isEmpty, let uuid = UUID(uuidString: block) else { continue }
+        let machine = cells[machineColumn].trimmingCharacters(in: .whitespaces)
+        latestMachineOfBlock[uuid.uuidString.lowercased()] = UUID(uuidString: machine)?.uuidString.lowercased()
+      }
+    }
 
     func gym(named name: String, since createdAt: String) -> String {
       if let known = gymsByName[name] { return known }
@@ -303,7 +315,7 @@ nonisolated enum RestoreCSV {
             plansInSession[sessionID, default: 0] += 1
           }
           planRow["position"] = planPosition[id]?.databaseValue
-          planRow["machineID"] = machineID?.databaseValue ?? .null
+          planRow["machineID"] = latestMachineOfBlock[id]?.databaseValue ?? .null
         }
         try add(planRow, as: planEntity)
       }

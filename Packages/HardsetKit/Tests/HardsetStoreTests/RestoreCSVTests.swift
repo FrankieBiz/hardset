@@ -358,6 +358,50 @@ struct RestoreCSVTests {
     #expect(try await count(destination, "gyms") == 1)
   }
 
+  @Test("An earlier export where a block moved machine mid-way reads, with the block on its latest machine")
+  func earlierExportWithAMachineChange() async throws {
+    let bench = try #require(ExerciseCatalog.v1[0].uuid).uuidString.lowercased()
+    let first = UUID().uuidString.lowercased(), second = UUID().uuidString.lowercased()
+    let session = UUID().uuidString.lowercased(), plan = UUID().uuidString.lowercased()
+    let start = "2026-10-01 09:00:00.000", end = "2026-10-01 10:00:00.000"
+    func row(_ machine: String, _ name: String, _ ordinal: Int, _ minute: Int) -> String {
+      "\(UUID().uuidString.lowercased()),\(session),\(bench),\(machine),\(plan),\(ordinal),50.0,10,,0,2026-10-01 09:\(10 + minute):00.000,Bench Press,Push,\(start),\(end),,\(name),,Home"
+    }
+    let text = [Self.earlierHeader, row(first, "Press A", 0, 0), row(second, "Press B", 1, 5)]
+      .joined(separator: "\r\n") + "\r\n"
+    let destination = try freshInstall()
+    let result = try await restore(text, into: destination)
+    #expect(result.importedSets == 2)
+    #expect(try await snapshot(destination, "SELECT machineID FROM sessionExercises") == [["machineID": second.databaseValue]])
+    let sets = try await snapshot(destination, "SELECT machineID FROM loggedSets ORDER BY setOrdinal")
+    #expect(sets == [["machineID": first.databaseValue], ["machineID": second.databaseValue]])
+  }
+
+  @Test("A file row whose id collides with a different row aborts the restore and replaces nothing")
+  func collidingIDsAreNeverReplaced() async throws {
+    let (source, fixture) = try await populated()
+    let text = try await exportCSV(source)
+    let destination = try freshInstall()
+    // A set of the destination's own, in a workout the file does not have, with an id the file uses.
+    let collidingID = try #require(try await snapshot(source, "SELECT id FROM loggedSets WHERE sessionID = '\(fixture.sessions[0].uuidString.lowercased())' ORDER BY id LIMIT 1").first?["id"])
+    let mine = UUID()
+    let bench = try #require(ExerciseCatalog.v1[0].uuid)
+    try await destination.write { db in
+      try Session.insert {
+        Session.Draft(id: mine, title: "Mine", startedAt: Date(timeIntervalSince1970: 1_731_000_000),
+          finishedAt: Date(timeIntervalSince1970: 1_731_003_600))
+      }.execute(db)
+      try db.execute(sql: "INSERT INTO loggedSets(id, sessionID, exerciseID, weightKg, reps) VALUES (?, ?, ?, 77, 7)",
+        arguments: [collidingID, mine.uuidString.lowercased(), bench.uuidString.lowercased()])
+    }
+    let before = try await snapshot(destination, "SELECT * FROM loggedSets")
+    await #expect(throws: WorkoutImportError.self) { try await restore(text, into: destination) }
+    // The destination's set is exactly as it was, and nothing from the file was kept.
+    #expect(try await snapshot(destination, "SELECT * FROM loggedSets") == before)
+    #expect(try await count(destination, "sessions") == 1)
+    #expect(try await count(destination, "deviceImportBatches") == 0)
+  }
+
   @Test("An earlier export names a gym the phone does not have: it is created once")
   func earlierExportCreatesAMissingGymOnce() async throws {
     let bench = try #require(ExerciseCatalog.v1[0].uuid).uuidString.lowercased()

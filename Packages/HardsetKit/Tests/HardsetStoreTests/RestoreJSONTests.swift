@@ -278,9 +278,14 @@ struct RestoreJSONTests {
 
   @Test("A row that points at something the file does not hold stops the restore and writes nothing")
   func danglingReferenceWritesNothing() async throws {
-    let (source, _) = try await RestoreFixture.populated()
-    let text = try edited(try await RestoreFixture.exportJSON(source)) {
-      try edit(&$0, table: "loggedSets") { $0["machineID"] = UUID().uuidString.lowercased() }
+    let (source, fixture) = try await RestoreFixture.populated()
+    // A set of a finished workout: the table is ordered by random ids, and a set of the open
+    // workout is skipped by a restore, so it would never meet the missing machine.
+    let finished = fixture.sessions[0].uuidString.lowercased()
+    let text = try edited(try await RestoreFixture.exportJSON(source)) { object in
+      let tables = try #require(object["tables"] as? [String: [[String: Any]]])
+      let row = try #require(tables["loggedSets"]?.firstIndex { $0["sessionID"] as? String == finished })
+      try edit(&object, table: "loggedSets", row: row) { $0["machineID"] = UUID().uuidString.lowercased() }
     }
     let destination = try RestoreFixture.freshInstall()
     let preview = try WorkoutCSVImport.preview(text, strongUnit: .kilograms)

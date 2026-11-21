@@ -5,9 +5,11 @@ import HardsetCore
 nonisolated extension DataTransferStore {
   /// Puts a Hardset export back, in one transaction, adding only what is missing.
   ///
-  /// - A row whose id is already here is left exactly as it is. Nothing is replaced: the tables'
-  ///   primary keys say `ON CONFLICT REPLACE`, so every insert here says `OR ABORT` instead, and a
-  ///   row that collides with a different one stops the whole restore.
+  /// - A row whose id is already here is left exactly as it is. Nothing is replaced: every insert
+  ///   says `OR ABORT`, so a row that collides with a different one stops the whole restore.
+  ///   (The tables' `ON CONFLICT REPLACE` is on the id's NOT NULL, which only fills a missing id;
+  ///   a primary key collision already fails. The explicit clause keeps it so, whatever the
+  ///   schema later says.)
   /// - A workout already here is skipped with its sets and plan rows, so a set the lifter has since
   ///   corrected away cannot be put back by an older file. Saved workouts are treated the same way.
   /// - The workouts it adds are recorded in the import ledger, so "Undo last import" removes

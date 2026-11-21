@@ -330,13 +330,18 @@ struct DataPortabilitySection: View {
     alreadyImported = nil
   }
 
+  /// Hardset's own CSV is about a kilobyte a set, because each row carries its workout, movement,
+  /// gym, machine and plan row, so a long history is tens of megabytes where a Strong export of
+  /// the same history is a few. 64 MB is some 60,000 sets, and still bounded.
+  private static let largestFile = 64_000_000
+
   @concurrent private static func readPreview(_ url: URL, unit: WeightUnit) async throws -> WorkoutImportPreview {
     let scoped = url.startAccessingSecurityScopedResource()
     defer { if scoped { url.stopAccessingSecurityScopedResource() } }
     let size = try url.resourceValues(forKeys: [.fileSizeKey]).fileSize ?? 0
-    guard size <= 20_000_000 else { throw DataFileError.tooLarge }
+    guard size <= Self.largestFile else { throw DataFileError.tooLarge }
     let data = try Data(contentsOf: url, options: .mappedIfSafe)
-    guard data.count <= 20_000_000, let text = String(data: data, encoding: .utf8) else {
+    guard data.count <= Self.largestFile, let text = String(data: data, encoding: .utf8) else {
       throw DataFileError.encoding
     }
     return try WorkoutCSVImport.preview(text, strongUnit: unit, skippingUnsupportedRows: true)
@@ -474,8 +479,8 @@ private nonisolated enum DataFileError: LocalizedError {
   case tooLarge, encoding
   var errorDescription: String? {
     switch self {
-    case .tooLarge: "Choose a file smaller than 20 MB."
-    case .encoding: "Choose a UTF-8 CSV or JSON file smaller than 20 MB."
+    case .tooLarge: "Choose a file smaller than 64 MB."
+    case .encoding: "Choose a UTF-8 CSV or JSON file smaller than 64 MB."
     }
   }
 }
