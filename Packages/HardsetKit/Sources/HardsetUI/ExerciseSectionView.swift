@@ -442,17 +442,20 @@ public struct ExerciseSectionView: View {
   }
 
   /// Adding a row: "Add set" and "Add warm-up", as two lines of type side by side, or one above the
-  /// other where they would not fit. Each is a 56 pt region with no face; the plus says what it is.
-  private var addSetButtons: some View {
-    ViewThatFits(in: .horizontal) {
+  /// other at accessibility sizes, where they would not fit. Each is a 56 pt region with no face;
+  /// the plus says what it is. The layout follows Dynamic Type directly, as the rest of the card
+  /// does, rather than being measured, so the text is laid out at the size it will be read at.
+  @ViewBuilder private var addSetButtons: some View {
+    if dynamicTypeSize.isAccessibilitySize {
+      VStack(alignment: .leading, spacing: 0) {
+        addSetButton
+        addWarmupButton
+      }
+    } else {
       HStack(spacing: Tokens.Spacing.loose) {
         addSetButton
         addWarmupButton
         Spacer(minLength: 0)
-      }
-      VStack(alignment: .leading, spacing: 0) {
-        addSetButton
-        addWarmupButton
       }
     }
   }

@@ -92,6 +92,9 @@ public struct RestBarView: View {
           chooser
         }
       }
+      // The panel spans the width whatever it holds. Without a key face to expand, its content
+      // alone set the width and the bar shrank to hug the countdown, centred, over the list.
+      .frame(maxWidth: .infinity, alignment: .leading)
       .padding(Tokens.Spacing.regular)
       .hardsetPanel()
       .padding(.horizontal, Tokens.Spacing.regular)
@@ -304,7 +307,11 @@ public struct RestBarView: View {
       .foregroundStyle(Tokens.Color.chalk)
       .frame(minWidth: Tokens.loggerTapTarget)
     }
-    .buttonStyle(InlineControlStyle(minHeight: Tokens.loggerTapTarget, alignment: .center))
+    // Equal columns across the bar, as the key faces were: a control with no face still owns its
+    // share of the width, so the four of them spread instead of bunching under the countdown.
+    .buttonStyle(
+      InlineControlStyle(minHeight: Tokens.loggerTapTarget, alignment: .center, fullWidth: true)
+    )
     .accessibilityLabel(accessibilityLabel)
     .accessibilityInputLabels(inputLabels.isEmpty ? [accessibilityLabel] : inputLabels)
   }
