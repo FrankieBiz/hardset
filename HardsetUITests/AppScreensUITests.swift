@@ -193,6 +193,25 @@ final class AppScreensUITests: XCTestCase {
     row.coordinate(withNormalizedOffset: CGVector(dx: 0.93, dy: 0.5)).tap()
     capture(app, "40-correction-logged")
 
+    // A saved figure is corrected where it is: the weight opens the keypad on the saved set, the
+    // first digit replaces it, and the correction is written when the keypad moves on. The set
+    // stays logged throughout, with the same reps.
+    row.coordinate(withNormalizedOffset: CGVector(dx: 0.44, dy: 0.5)).tap()
+    XCTAssertTrue(
+      app.buttons["Next field"].waitForExistence(timeout: 5),
+      "A saved weight must open the keypad so it can be corrected.")
+    for key in ["7", "0"] { app.buttons[key].tap() }
+    capture(app, "40a-correcting-saved-weight")
+    app.buttons["Next field"].tap()
+    app.buttons["Done"].tap()
+    let corrected = app.descendants(matching: .any)
+      .matching(NSPredicate(format: "label BEGINSWITH 'Set 1,' AND label CONTAINS ', logged'"))
+      .firstMatch
+    XCTAssertTrue(corrected.waitForExistence(timeout: 5), "A corrected set must stay logged.")
+    XCTAssertTrue(corrected.label.contains("70 "), "The correction must be what is shown.")
+    XCTAssertTrue(corrected.label.contains(", 5 reps"), "Correcting the weight must keep the reps.")
+    capture(app, "40b-correction-saved")
+
     // Undo it from the row's long-press menu.
     row.coordinate(withNormalizedOffset: CGVector(dx: 0.08, dy: 0.5)).press(forDuration: 1.2)
     let undo = app.buttons["Undo log"]
