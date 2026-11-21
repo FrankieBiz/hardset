@@ -6,11 +6,13 @@ import SwiftUI
 public enum ProgressionMetric: String, Sendable, CaseIterable, Hashable {
   case heaviestLoad
   case estimatedOneRepMax
+  case repsAtTopLoad
 
   public var label: String {
     switch self {
     case .heaviestLoad: "Heaviest load"
     case .estimatedOneRepMax: "Est. 1RM"
+    case .repsAtTopLoad: "Reps at top weight"
     }
   }
 }
@@ -36,6 +38,7 @@ public struct ProgressionChartView: View {
   /// `false` for movements whose logged load is not the load moved (bodyweight work), where no
   /// one-rep max is ever estimated. Says so instead of blaming the rep count.
   private let estimatesOneRepMax: Bool
+  private let assumesAddedLoad: Bool
   @State private var metric: ProgressionMetric
   @Environment(\.dynamicTypeSize) private var dynamicTypeSize
   /// Grows with the axis labels, so larger text does not squeeze the plot itself.
@@ -67,15 +70,19 @@ public struct ProgressionChartView: View {
     machineChanges: [MachineChange] = [],
     unit: WeightUnit,
     estimatesOneRepMax: Bool = true,
+    assumesAddedLoad: Bool = false,
     onExplain: (() -> Void)? = nil
   ) {
-    self.estimatesOneRepMax = estimatesOneRepMax
+    self.estimatesOneRepMax = estimatesOneRepMax && !assumesAddedLoad
+    self.assumesAddedLoad = assumesAddedLoad
     self.series = series
     self.machineChanges = machineChanges
     self.unit = unit
     self.onExplain = onExplain
     self._metric = State(
-      initialValue: Self.opensOn(series: series, estimatesOneRepMax: estimatesOneRepMax))
+      initialValue: assumesAddedLoad
+        ? (ProgressionAnalyzer.hasNoAddedLoad(series.map(\.points)) ? .repsAtTopLoad : .heaviestLoad)
+        : Self.opensOn(series: series, estimatesOneRepMax: estimatesOneRepMax))
   }
 
   /// The graph opens on the estimated max, because that is the line that rises when the lifter does
@@ -100,9 +107,15 @@ public struct ProgressionChartView: View {
       } else {
         HardsetSegmentedControl(
           selection: $metric,
-          segments: Self.metricOrder.map { HardsetSegment($0.label, value: $0) }
+          segments: metricOrder.map { HardsetSegment(metricLabel($0), value: $0) }
         )
 
+        if assumesAddedLoad {
+          Text(ExerciseModality.unknownLoadAssumption)
+            .font(Tokens.Text.provenance)
+            .foregroundStyle(Tokens.Color.chalkDim)
+            .fixedSize(horizontal: false, vertical: true)
+        }
         VStack(alignment: .leading, spacing: Tokens.Spacing.loose) {
           metricHeader
           if isUnevaluated {
@@ -146,7 +159,15 @@ public struct ProgressionChartView: View {
   }
 
   /// Estimated max leads, because it is where the graph opens; the heaviest load is the toggle.
-  private static let metricOrder: [ProgressionMetric] = [.estimatedOneRepMax, .heaviestLoad]
+  private var metricOrder: [ProgressionMetric] {
+    assumesAddedLoad ? [.heaviestLoad, .repsAtTopLoad] : [.estimatedOneRepMax, .heaviestLoad]
+  }
+
+  private func metricLabel(_ metric: ProgressionMetric) -> String {
+    metric == .heaviestLoad && assumesAddedLoad ? "Added load" : metric.label
+  }
+
+  private var metricUnit: String { metric == .repsAtTopLoad ? "reps" : unit.abbreviation }
 
   // MARK: - Metric header
 
@@ -163,7 +184,7 @@ public struct ProgressionChartView: View {
           .font(Tokens.Text.headline)
           .foregroundStyle(Tokens.Color.chalk)
           .fixedSize(horizontal: false, vertical: true)
-        Text("Best per session, in \(unit.abbreviation). One line per machine.")
+        Text("Best per session, in \(metricUnit). One line per machine.")
           .font(Tokens.Text.caption)
           .foregroundStyle(Tokens.Color.chalkDim)
           .fixedSize(horizontal: false, vertical: true)
@@ -175,34 +196,41 @@ public struct ProgressionChartView: View {
 
   private var metricTitle: String {
     switch metric {
-    case .heaviestLoad: "Heaviest load"
+    case .heaviestLoad: assumesAddedLoad ? "Added load" : "Heaviest load"
     case .estimatedOneRepMax: "Estimated one-rep max"
+    case .repsAtTopLoad: "Reps at the top weight"
     }
   }
 
   @ViewBuilder private var certaintyBadge: some View {
-    switch metric {
-    case .heaviestLoad:
-      // High only for the arithmetic of taking a maximum of what was entered. The load itself is
-      // user-entered and not independently verified, which is what the receipt says too.
-      CertaintyBadge(
-        level: hasNoAddedLoad ? .unevaluated : .high,
-        methodology: hasNoAddedLoad
-          ? "No added load was recorded for these sets, so there is no load to chart."
-          : "The heaviest load you entered in each session. Each machine is its own line; sets "
-            + "with no machine recorded form a separate line.",
-        citation: "User-entered load"
-      )
-    case .estimatedOneRepMax:
-      // The weakest certainty among each line's latest estimate, from the reps behind it. With no
-      // estimate there is nothing to be sure of, and the badge says so rather than vouching for an
-      // empty chart.
-      CertaintyBadge(
-        level: MethodologySheet.level(
-          for: ProgressionAnalyzer.estimateCertainty(latestOf: series.map(\.points))),
-        methodology: ProgressionAnalyzer.source.methodology,
-        citation: ProgressionAnalyzer.source.validRange
-      )
+    if assumesAddedLoad {
+      CertaintyBadge(level: .low, methodology: ExerciseModality.unknownLoadAssumption)
+    } else {
+      switch metric {
+      case .repsAtTopLoad:
+        CertaintyBadge(level: .high, methodology: "The most reps logged at each session's top weight.")
+      case .heaviestLoad:
+        // High only for the arithmetic of taking a maximum of what was entered. The load itself is
+        // user-entered and not independently verified, which is what the receipt says too.
+        CertaintyBadge(
+          level: hasNoAddedLoad ? .unevaluated : .high,
+          methodology: hasNoAddedLoad
+            ? "No added load was recorded for these sets, so there is no load to chart."
+            : "The heaviest load you entered in each session. Each machine is its own line; sets "
+              + "with no machine recorded form a separate line.",
+          citation: "User-entered load"
+        )
+      case .estimatedOneRepMax:
+        // The weakest certainty among each line's latest estimate, from the reps behind it. With no
+        // estimate there is nothing to be sure of, and the badge says so rather than vouching for an
+        // empty chart.
+        CertaintyBadge(
+          level: MethodologySheet.level(
+            for: ProgressionAnalyzer.estimateCertainty(latestOf: series.map(\.points))),
+          methodology: ProgressionAnalyzer.source.methodology,
+          citation: ProgressionAnalyzer.source.validRange
+        )
+      }
     }
   }
 
@@ -227,7 +255,7 @@ public struct ProgressionChartView: View {
         ForEach(plottable(entry.points)) { point in
           LineMark(
             x: .value("Date", point.date),
-            y: .value(metric.label, value(point)),
+            y: .value(metricLabel(metric), value(point)),
             series: .value("Machine", entry.name)
           )
           .foregroundStyle(by: .value("Machine", entry.name))
@@ -239,7 +267,7 @@ public struct ProgressionChartView: View {
           .accessibilityValue(pointValue(point, isRecord: entry.recordSessionIDs.contains(point.sessionID)))
           PointMark(
             x: .value("Date", point.date),
-            y: .value(metric.label, value(point))
+            y: .value(metricLabel(metric), value(point))
           )
           .foregroundStyle(by: .value("Machine", entry.name))
           .symbol(by: .value("Machine", entry.name))
@@ -251,7 +279,7 @@ public struct ProgressionChartView: View {
           if entry.recordSessionIDs.contains(point.sessionID) {
             PointMark(
               x: .value("Date", point.date),
-              y: .value(metric.label, value(point))
+              y: .value(metricLabel(metric), value(point))
             )
             .symbol {
               Image(systemName: "star.fill")
@@ -332,7 +360,7 @@ public struct ProgressionChartView: View {
               Text(valueText(latest))
                 .font(Tokens.Text.figure)
                 .foregroundStyle(Tokens.Color.chalk)
-              Text(unit.abbreviation)
+              Text(metricUnit)
                 .font(Tokens.Text.unit)
                 .foregroundStyle(Tokens.Color.chalkDim)
             }
@@ -382,6 +410,7 @@ public struct ProgressionChartView: View {
     switch metric {
     case .heaviestLoad: hasNoAddedLoad ? "No added load" : "No sessions"
     case .estimatedOneRepMax: "No estimate"
+    case .repsAtTopLoad: "No sessions"
     }
   }
 
@@ -394,7 +423,7 @@ public struct ProgressionChartView: View {
     // Spoken as an estimate when it is one, so the word travels with the number.
     let kind = metric == .estimatedOneRepMax ? "latest estimate" : "latest"
     return "\(entry.name), \(shape) points, \(kind) \(valueText(latest)) "
-      + "\(unit.abbreviation) on \(date)"
+      + "\(metricUnit) on \(date)"
   }
 
   private func pointLabel(_ entry: PlottedSeries, _ point: ProgressionPoint) -> String {
@@ -402,7 +431,7 @@ public struct ProgressionChartView: View {
   }
 
   private func pointValue(_ point: ProgressionPoint, isRecord: Bool) -> String {
-    let figure = "\(valueText(point)) \(unit.abbreviation)"
+    let figure = "\(valueText(point)) \(metricUnit)"
     let record = isRecord ? "record set" : nil
     guard metric == .estimatedOneRepMax else { return [figure, record].compactMap { $0 }.joined(separator: ", ") }
     let confidence = point.bestEstimateCertainty.map { MethodologySheet.level(for: $0).label }
@@ -532,7 +561,7 @@ public struct ProgressionChartView: View {
   /// from the estimate chart rather than plotted at zero.
   private func plottable(_ points: [ProgressionPoint]) -> [ProgressionPoint] {
     switch metric {
-    case .heaviestLoad: points
+    case .heaviestLoad, .repsAtTopLoad: points
     case .estimatedOneRepMax: points.filter { $0.bestEstimatedOneRepMaxKg != nil }
     }
   }
@@ -550,6 +579,7 @@ public struct ProgressionChartView: View {
   private func value(_ point: ProgressionPoint) -> Double {
     switch metric {
     case .heaviestLoad: unit.fromKilograms(point.heaviestLoadKg)
+    case .repsAtTopLoad: Double(point.repsAtTopLoad)
     case .estimatedOneRepMax: unit.fromKilograms(point.bestEstimatedOneRepMaxKg ?? 0)
     }
   }
@@ -569,6 +599,7 @@ public struct ProgressionChartView: View {
   /// True when the selected metric has nothing to plot for any machine.
   private var isUnevaluated: Bool {
     switch metric {
+    case .repsAtTopLoad: series.allSatisfy { $0.points.isEmpty }
     case .heaviestLoad: hasNoAddedLoad
     case .estimatedOneRepMax: hasNoEstimates
     }
@@ -595,6 +626,7 @@ public struct ProgressionChartView: View {
   private func valueText(_ point: ProgressionPoint) -> String {
     switch metric {
     case .heaviestLoad: LoadText.entered(point.heaviestLoadKg, in: unit)
+    case .repsAtTopLoad: "\(point.repsAtTopLoad)"
     case .estimatedOneRepMax: LoadText.estimate(point.bestEstimatedOneRepMaxKg ?? 0, in: unit)
     }
   }

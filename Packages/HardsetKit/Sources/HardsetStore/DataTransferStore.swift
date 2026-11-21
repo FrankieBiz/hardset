@@ -17,6 +17,34 @@ public nonisolated struct WorkoutImportResult: Sendable, Equatable {
   }
 }
 
+/// The exact surviving rows the next undo would remove, captured for confirmation.
+public nonisolated struct WorkoutImportUndo: Sendable, Equatable, Identifiable {
+  public let id: UUID
+  public let sessionCount: Int
+  public let setCount: Int
+
+  public var confirmationMessage: String {
+    "Delete \(sessionCount) \(sessionCount == 1 ? "session" : "sessions") and "
+      + "\(setCount) \(setCount == 1 ? "set" : "sets") from the last import? "
+      + "Imported movements stay in Library. This cannot be undone."
+  }
+}
+
+public nonisolated enum WorkoutImportUndoError: Error, LocalizedError, Equatable {
+  case changed, containsLaterChanges, unidentified
+
+  public var errorDescription: String? {
+    switch self {
+    case .changed:
+      "The last import changed. Review the current session and set counts before undoing."
+    case .containsLaterChanges:
+      "Undo is unavailable because these imported workouts contain later additions or moved rows. No training data was removed."
+    case .unidentified:
+      "This import cannot be undone because its exact rows are unavailable. No training data was removed."
+    }
+  }
+}
+
 /// Free exports and atomic migration of a validated external workout file.
 /// No live database connection or lazy row escapes a read snapshot.
 ///
@@ -26,6 +54,87 @@ public nonisolated struct WorkoutImportResult: Sendable, Equatable {
 public nonisolated struct DataTransferStore: Sendable {
   private let database: any DatabaseWriter
   public init(database: any DatabaseWriter) { self.database = database }
+
+  private struct ImportRows: Codable {
+    var sessions: [UUID] = []
+    var plans: [UUID] = []
+    var sets: [UUID] = []
+  }
+
+  /// Nil for a database containing only imports made before the precise ledger shipped.
+  public func lastImportUndo() async throws -> WorkoutImportUndo? {
+    try await database.read { db in try Self.undoPreview(in: db)?.preview }
+  }
+
+  /// Revalidates both the confirmed counts and every owned identity in the delete transaction.
+  /// A later import or a later addition to its workouts requires a fresh decision, never a cascade
+  /// that silently removes work the import did not create.
+  public func undoLastImport(_ confirmed: WorkoutImportUndo) async throws {
+    try Task.checkCancellation()
+    try await database.write { db in
+      guard let current = try Self.undoPreview(in: db), current.preview == confirmed else {
+        throw WorkoutImportUndoError.changed
+      }
+      let sessionIDs = try Self.jsonIDs(current.rows.sessions)
+      try db.execute(sql: "DELETE FROM sessions WHERE id IN (SELECT value FROM json_each(?))",
+        arguments: [sessionIDs])
+      guard db.changesCount == confirmed.sessionCount else { throw WorkoutImportUndoError.changed }
+      try db.execute(sql: "DELETE FROM deviceImportBatches WHERE id = ?",
+        arguments: [confirmed.id.uuidString.lowercased()])
+      guard db.changesCount == 1 else { throw WorkoutImportUndoError.changed }
+    }
+  }
+
+  private static func jsonIDs(_ ids: [UUID]) throws -> String {
+    String(decoding: try JSONEncoder().encode(ids.map { $0.uuidString.lowercased() }), as: UTF8.self)
+  }
+
+  private static func hasSurvivingRows(_ rows: ImportRows, in db: Database) throws -> Bool {
+    for (table, ids) in [("sessions", rows.sessions), ("sessionExercises", rows.plans), ("loggedSets", rows.sets)] {
+      if try Bool.fetchOne(db,
+        sql: "SELECT EXISTS (SELECT 1 FROM \(table) WHERE id IN (SELECT value FROM json_each(?)))",
+        arguments: [try jsonIDs(ids)]) == true { return true }
+    }
+    return false
+  }
+
+  private static func undoPreview(in db: Database) throws -> (preview: WorkoutImportUndo, rows: ImportRows)? {
+    guard let batch = try Row.fetchOne(db, sql: """
+      SELECT id, undoRows FROM deviceImportBatches
+      WHERE undoOrder IS NOT NULL ORDER BY undoOrder DESC LIMIT 1
+      """) else { return nil }
+    guard let id = UUID(uuidString: batch["id"]), let json: String = batch["undoRows"],
+      let rows = try? JSONDecoder().decode(ImportRows.self, from: Data(json.utf8)),
+      !rows.sessions.isEmpty, !rows.sets.isEmpty,
+      Set(rows.sessions).count == rows.sessions.count,
+      Set(rows.plans).count == rows.plans.count, Set(rows.sets).count == rows.sets.count
+    else { throw WorkoutImportUndoError.unidentified }
+    let sessionIDs = try jsonIDs(rows.sessions)
+    let setIDs = try jsonIDs(rows.sets)
+    let planIDs = try jsonIDs(rows.plans)
+    let sessions = try String.fetchAll(db,
+      sql: "SELECT id FROM sessions WHERE id IN (SELECT value FROM json_each(?))", arguments: [sessionIDs])
+    let sets = try Row.fetchAll(db, sql: """
+      SELECT id, sessionID FROM loggedSets WHERE id IN (SELECT value FROM json_each(?))
+      """, arguments: [setIDs])
+    let plans = try Row.fetchAll(db, sql: """
+      SELECT id, sessionID FROM sessionExercises WHERE id IN (SELECT value FROM json_each(?))
+      """, arguments: [planIDs])
+    let ownedSessions = Set(rows.sessions.map { $0.uuidString.lowercased() })
+    let ownedSets = Set(rows.sets.map { $0.uuidString.lowercased() })
+    let ownedPlans = Set(rows.plans.map { $0.uuidString.lowercased() })
+    let sessionSets = try String.fetchAll(db, sql: """
+      SELECT id FROM loggedSets WHERE sessionID IN (SELECT value FROM json_each(?))
+      """, arguments: [sessionIDs])
+    let sessionPlans = try String.fetchAll(db, sql: """
+      SELECT id FROM sessionExercises WHERE sessionID IN (SELECT value FROM json_each(?))
+      """, arguments: [sessionIDs])
+    guard sets.allSatisfy({ ownedSessions.contains($0["sessionID"] as String) }),
+      plans.allSatisfy({ ownedSessions.contains($0["sessionID"] as String) }),
+      Set(sessionSets).isSubset(of: ownedSets), Set(sessionPlans).isSubset(of: ownedPlans)
+    else { throw WorkoutImportUndoError.containsLaterChanges }
+    return (WorkoutImportUndo(id: id, sessionCount: sessions.count, setCount: sets.count), rows)
+  }
 
   public enum Format: String, CaseIterable, Sendable {
     case csv, json, sqlite
@@ -148,17 +257,26 @@ public nonisolated struct DataTransferStore: Sendable {
       // The exact file was imported before. Refuse only while its workouts are all still here:
       // after the lifter deletes them in History to correct an import, the same file must be
       // importable again, so the stale record of that import is dropped instead.
-      if try Row.fetchOne(db, sql: "SELECT id FROM deviceImportBatches WHERE sourceDigest = ? AND byteCount = ?",
-        arguments: [digest, byteCount]) != nil
-      {
+      let earlierBatches = try Row.fetchAll(db,
+        sql: "SELECT id, undoRows FROM deviceImportBatches WHERE sourceDigest = ? AND byteCount = ?",
+        arguments: [digest, byteCount])
+      if !earlierBatches.isEmpty {
         var zones = EarlierZones()
         if try preview.sessions.allSatisfy({
           try Self.isAlreadyImported($0, from: preview.source, zones: &zones, in: db)
         }) {
           throw WorkoutImportError.alreadyImported
         }
-        try db.execute(sql: "DELETE FROM deviceImportBatches WHERE sourceDigest = ? AND byteCount = ?",
-          arguments: [digest, byteCount])
+        for batch in earlierBatches {
+          if let json: String = batch["undoRows"] {
+            // A partial reimport must retain the earlier batch's surviving row identities.
+            // A damaged precise ledger is retained too; guessing that it is empty loses evidence.
+            guard let rows = try? JSONDecoder().decode(ImportRows.self, from: Data(json.utf8)) else { continue }
+            if try Self.hasSurvivingRows(rows, in: db) { continue }
+          }
+          try db.execute(sql: "DELETE FROM deviceImportBatches WHERE id = ?",
+            arguments: [batch["id"] as String])
+        }
       }
       // Match movement identity only. Session provenance keeps unknown imported equipment apart
       // from native benchmarks and charts, even for a movement whose native machine is nil.
@@ -169,6 +287,7 @@ public nonisolated struct DataTransferStore: Sendable {
       var exercises: [String: UUID] = [:]
       var importedWorkouts = 0
       var importedSets = 0
+      var undoRows = ImportRows()
       var skippedWorkouts = 0
       var zones = EarlierZones()
       for workout in preview.sessions {
@@ -184,6 +303,7 @@ public nonisolated struct DataTransferStore: Sendable {
             notes: "Imported from \(preview.source) • Unevaluated Machine. \(preview.interpretation)",
             startedAt: workout.startedAt, finishedAt: workout.finishedAt)
         }.execute(db)
+        undoRows.sessions.append(session)
         var plans: [UUID: UUID] = [:]
         for (ordinal, set) in workout.sets.enumerated() {
           let exercise: UUID
@@ -222,15 +342,18 @@ public nonisolated struct DataTransferStore: Sendable {
               SessionExercise.Draft(id: plan, sessionID: session, exerciseID: exercise,
                 position: plans.count - 1)
             }.execute(db)
+            undoRows.plans.append(plan)
           }
+          let setID = UUID()
           try LoggedSet.insert {
-            LoggedSet.Draft(id: UUID(), sessionID: session, exerciseID: exercise,
+            LoggedSet.Draft(id: setID, sessionID: session, exerciseID: exercise,
               sessionExerciseID: plan, setOrdinal: ordinal, weightKg: set.weightKg,
               reps: set.reps, rpe: set.rpe, isWarmup: set.isWarmup,
               // The CSV does not record set completion instants. Preserve the workout start
               // as a grouping timestamp and disclose that limitation in the session's notes.
               completedAt: workout.startedAt)
           }.execute(db)
+          undoRows.sets.append(setID)
         }
         // Matching an existing movement must neither overwrite its notes nor discard the CSV's.
         // Exports repeat an exercise note on every set, so retain each distinct note once per
@@ -249,8 +372,12 @@ public nonisolated struct DataTransferStore: Sendable {
       if importedWorkouts > 0 {
         // A digest, not the file: re-exports repeat the whole history, so copies added up.
         try db.execute(
-          sql: "INSERT INTO deviceImportBatches(id, sourceCSV, sourceDigest, byteCount) VALUES (?, '', ?, ?)",
-          arguments: [UUID().uuidString.lowercased(), digest, byteCount])
+          sql: """
+            INSERT INTO deviceImportBatches(id, sourceCSV, sourceDigest, byteCount, undoRows, undoOrder)
+            VALUES (?, '', ?, ?, ?, (SELECT coalesce(max(undoOrder), 0) + 1 FROM deviceImportBatches))
+            """,
+          arguments: [UUID().uuidString.lowercased(), digest, byteCount,
+            String(decoding: try JSONEncoder().encode(undoRows), as: UTF8.self)])
       }
       return WorkoutImportResult(
         importedWorkouts: importedWorkouts, importedSets: importedSets, skippedWorkouts: skippedWorkouts)

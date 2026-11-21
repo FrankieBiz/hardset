@@ -40,6 +40,27 @@ struct SessionCoordinatorTests {
 
   // MARK: - Starting
 
+  @Test("Unknown modality keeps the load basis conservative on start and recovery")
+  func unknownModalityDoesNotAssumeALoadStep() throws {
+    let database = try migratedDatabase()
+    let exercise = try seedExercise(database, name: "Imported dip")
+    let store = LoggerStore(database: database)
+    let previous = try store.startSession(at: start)
+    _ = try store.logSet(sessionID: previous, exerciseID: exercise,
+      draft: SetEntryDraft(weightKg: 20, reps: 12), at: start)
+    try store.finishSession(previous, at: start.addingTimeInterval(60))
+    let current = try SessionCoordinator.start(store: store,
+      plan: [.init(exerciseID: exercise, exerciseName: "Imported dip", plannedSets: 1,
+        repRange: RepRange(lower: 8, upper: 12))],
+      now: { self.start.addingTimeInterval(3600) })
+    let draft = try #require(current.exercises.first?.slots.first?.draft)
+    #expect(draft.target?.rule == .addRep)
+    #expect(draft.target?.weightKg == 20)
+    let resumed = try #require(try SessionCoordinator.resume(store: store))
+    #expect(resumed.exercises.first?.slots.first?.draft.target?.rule == .addRep)
+    #expect(resumed.exercises.first?.slots.first?.draft.target?.weightKg == 20)
+  }
+
   @Test("A failed or ignored plan insert leaves no partial workout or exercise rows",
         arguments: ["ABORT", "IGNORE"])
   func failedStartRollsBackPlan(failure: String) throws {

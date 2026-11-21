@@ -53,14 +53,15 @@ public nonisolated struct ReceiptStore: Sendable {
         let records = imported || unknownMachine || !establishedKeys.contains(key) ? [] : PersonalRecordDetector.records(
           for: .init(weightKg: set.weightKg, reps: set.reps, isWarmup: set.isWarmup),
           history: history[key] ?? [], increment: machine?.stackIncrementKg,
-          estimatesOneRepMax: (modalities[set.exerciseID] ?? nil)?.estimatesOneRepMax ?? true)
+          estimatesOneRepMax: (modalities[set.exerciseID] ?? nil)?.estimatesOneRepMax ?? false)
         let machineName = machine.map { [$0.brand, $0.name].filter { !$0.isEmpty }.joined(separator: " ") }
         lines.append(.init(id: SetID(rawValue: set.id), exerciseID: ExerciseID(rawValue: set.exerciseID),
           exerciseName: names[set.exerciseID] ?? "Unknown movement",
           equipment: unknownMachine
             ? .unrecorded
             : WorkoutReceipt.Equipment(machineName: machineName, modality: modalities[set.exerciseID] ?? nil),
-          weightKg: set.weightKg, reps: set.reps, isWarmup: set.isWarmup, records: records, isImported: imported))
+          weightKg: set.weightKg, reps: set.reps, isWarmup: set.isWarmup, records: records, isImported: imported,
+          loadAssumption: (modalities[set.exerciseID] ?? nil) == nil ? ExerciseModality.unknownLoadAssumption : nil))
         if !set.isWarmup {
           history[key, default: []].append(.init(weightKg: set.weightKg, reps: set.reps, completedAt: set.completedAt))
         }
@@ -102,13 +103,13 @@ public nonisolated struct ReceiptStore: Sendable {
 
     var order: [ProgressionKey] = []
     var current: [ProgressionKey: [PriorSetRecord]] = [:]
-    var recorded = Set<ProgressionKey>()
+    var recorded: [ProgressionKey: Set<PersonalRecordKind>] = [:]
     // `lines` were built one per set, in the same order.
     for (set, line) in zip(sets, lines) {
       let setKey = key(set)
       if !order.contains(setKey) { order.append(setKey) }
       if !set.isWarmup { current[setKey, default: []].append(record(set)) }
-      if !line.records.isEmpty { recorded.insert(setKey) }
+      recorded[setKey, default: []].formUnion(line.records.map(\.kind))
     }
 
     let earlier = Dictionary(grouping: prior, by: key)
@@ -129,8 +130,9 @@ public nonisolated struct ReceiptStore: Sendable {
         repRange: planRow.flatMap { row in
           row.repRangeLower.flatMap { lower in row.repRangeUpper.flatMap { RepRange(lower: lower, upper: $0) } }
         },
-        setRecord: recorded.contains(movement),
-        estimatesOneRepMax: (modalities[movement.exerciseID.rawValue] ?? nil)?.estimatesOneRepMax ?? true
+        estimatesOneRepMax: (modalities[movement.exerciseID.rawValue] ?? nil)?.estimatesOneRepMax ?? false,
+        assumesAddedLoad: (modalities[movement.exerciseID.rawValue] ?? nil) == nil,
+        recordKinds: recorded[movement] ?? []
       )
     }
     let card = WorkoutScorecard.make(inputs)

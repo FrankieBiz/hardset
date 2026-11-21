@@ -9,7 +9,10 @@ import Foundation
 public struct ProgressBoard: Hashable, Sendable {
   public let sections: [Section]
   /// The largest six-week estimated-max gains across movements, whichever section each is in.
+  /// Added-load changes have their own list and never compete with these percentages.
   public let mostImproved: [Row]
+  /// Added-load percentages are ranked only within this separate list.
+  public let mostImprovedAddedLoad: [Row]
 
   public struct Row: Hashable, Sendable, Identifiable {
     public let trend: MovementTrend
@@ -51,9 +54,10 @@ public struct ProgressBoard: Hashable, Sendable {
 
   public static let empty = ProgressBoard(sections: [], mostImproved: [])
 
-  public init(sections: [Section], mostImproved: [Row]) {
+  public init(sections: [Section], mostImproved: [Row], mostImprovedAddedLoad: [Row] = []) {
     self.sections = sections
-    self.mostImproved = mostImproved.filter { $0.trend.metric == ProgressTrendAnalyzer.mostImprovedMetric }
+    self.mostImproved = mostImproved.filter { $0.trend.metric == .estimatedMax }
+    self.mostImprovedAddedLoad = mostImprovedAddedLoad.filter { $0.trend.metric == .addedLoad }
   }
 
   /// Groups entries in body-part order with the untagged last, newest-trained movement first in
@@ -70,7 +74,9 @@ public struct ProgressBoard: Hashable, Sendable {
       entries.map { ($0.row.id, $0.row) }, uniquingKeysWith: { first, _ in first })
     let improved = ProgressTrendAnalyzer.mostImproved(entries.map(\.row.trend))
       .compactMap { rowsByKey[$0.key] }
-    return ProgressBoard(sections: sections, mostImproved: improved)
+    let addedLoad = ProgressTrendAnalyzer.mostImproved(entries.map(\.row.trend), metric: .addedLoad)
+      .compactMap { rowsByKey[$0.key] }
+    return ProgressBoard(sections: sections, mostImproved: improved, mostImprovedAddedLoad: addedLoad)
   }
 
   /// Newest-trained first. Ties are broken by name, then machine, then identity, so the order never

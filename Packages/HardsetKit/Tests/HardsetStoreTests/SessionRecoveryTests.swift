@@ -23,11 +23,11 @@ struct SessionRecoveryTests {
   }
 
   private func seedExercise(
-    _ database: any DatabaseWriter, _ name: String
+    _ database: any DatabaseWriter, _ name: String, modality: String = "unknown"
   ) throws -> ExerciseID {
     let id = ExerciseID()
     try database.write { db in
-      try Exercise.insert { Exercise.Draft(id: id.rawValue, name: name) }.execute(db)
+      try Exercise.insert { Exercise.Draft(id: id.rawValue, name: name, modality: modality) }.execute(db)
     }
     return id
   }
@@ -469,7 +469,7 @@ struct SessionRecoveryTests {
   func resumeUsesTheLiftersUnitForTheAssumedStep() throws {
     let database = try migratedDatabase()
     let store = LoggerStore(database: database)
-    let exercise = try seedExercise(database, "Chest Press")
+    let exercise = try seedExercise(database, "Chest Press", modality: "machine")
     let earlier = try SessionCoordinator.start(
       store: store,
       plan: [PlannedExercise(exerciseID: exercise, exerciseName: "Chest Press", plannedSets: 2)],

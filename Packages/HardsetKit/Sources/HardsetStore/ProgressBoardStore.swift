@@ -64,13 +64,13 @@ public nonisolated struct ProgressBoardStore: Sendable {
     for (key, samples) in grouped {
       guard let exercise = byExercise[key.exerciseID.rawValue] else { continue }
       let machine = key.machineID.flatMap { machines[$0.rawValue] }
-      // An unknown modality is not assumed to be bodyweight, so it still estimates.
+      // Unknown modality cannot establish that the entered load is the whole load moved.
       let modality = ExerciseModality(rawValue: exercise.modality)
-      let estimates = modality?.estimatesOneRepMax ?? true
+      let estimates = modality?.estimatesOneRepMax ?? false
       guard
         let trend = ProgressTrendAnalyzer.trend(
           key: key, samples: samples, incrementKg: machine?.stackIncrementKg,
-          estimatesOneRepMax: estimates)
+          estimatesOneRepMax: estimates, assumesAddedLoad: modality == nil)
       else { continue }
       let machineLabel: String?
       if key.isImported { machineLabel = ProgressCopy.importedHistory }

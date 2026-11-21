@@ -235,7 +235,7 @@ public nonisolated struct LoggerStore: Sendable {
         let key = ProgressionKey(exerciseID: exerciseID, machineID: machineID)
         // These are real representative sets, not a recent sample. A failed
         // comparison read cannot justify a claim, but must not lose a workout.
-        let estimates = modality?.estimatesOneRepMax ?? true
+        let estimates = modality?.estimatesOneRepMax ?? false
         if let history = try? Self.recordComparisonSets(
           in: db, for: key, candidate: candidate, excludingFirstSession: sessionID,
           estimatesOneRepMax: estimates

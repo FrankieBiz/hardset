@@ -19,12 +19,12 @@ struct ProgressionStoreTests {
     return queue
   }
 
-  private func fixture() throws -> (any DatabaseWriter, LoggerStore, ProgressionStore, ExerciseID, GymID) {
+  private func fixture(modality: String = "machine") throws -> (any DatabaseWriter, LoggerStore, ProgressionStore, ExerciseID, GymID) {
     let database = try migratedDatabase()
     let exercise = ExerciseID()
     let gym = GymID()
     try database.write { db in
-      try Exercise.insert { Exercise.Draft(id: exercise.rawValue, name: "Leg Press") }.execute(db)
+      try Exercise.insert { Exercise.Draft(id: exercise.rawValue, name: "Leg Press", modality: modality) }.execute(db)
       try Gym.insert { Gym.Draft(id: gym.rawValue, name: "Gym") }.execute(db)
     }
     return (database, LoggerStore(database: database), ProgressionStore(database: database), exercise, gym)
@@ -216,7 +216,7 @@ struct ProgressionStoreTests {
 
   @Test("Free-weight work is a series labelled as such")
   func freeWeight() throws {
-    let (_, logger, progression, exercise, _) = try fixture()
+    let (_, logger, progression, exercise, _) = try fixture(modality: "barbell")
     try session(logger, exercise, nil, sets: [(100, 5)], at: now.addingTimeInterval(-86_400))
 
     let history = try progression.history(for: exercise)

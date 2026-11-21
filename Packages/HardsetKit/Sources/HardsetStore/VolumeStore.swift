@@ -196,6 +196,7 @@ public nonisolated struct ProgressionStore: Sendable {
     /// Each machine's real load step, so a record on a 5 kg stack needs a genuine 5 kg.
     let increments: [MachineID: Double]
     let estimatesOneRepMax: Bool
+    let assumesAddedLoad: Bool
     let requiresMachineIdentity: Bool
   }
 
@@ -205,15 +206,16 @@ public nonisolated struct ProgressionStore: Sendable {
     let samples = try readSamples(for: exerciseID, limit: Int.max, in: db)
     let ids = Array(Set(samples.compactMap(\.machineID)))
     // The movement's modality decides whether its load may be estimated at all. An unknown or
-    // missing modality is not assumed to be bodyweight.
+    // missing modality cannot establish the whole load moved.
     let modality = try Exercise.where { $0.id.eq(exerciseID.rawValue) }.select(\.modality).fetchOne(db)
     let knownModality = modality.flatMap(ExerciseModality.init(rawValue:))
-    let estimates = knownModality?.estimatesOneRepMax ?? true
+    let estimates = knownModality?.estimatesOneRepMax ?? false
     // One read for both, so labelling a history stays a single query however much it carries.
     let machines = try readMachines(ids, in: db)
     return HistoryInputs(
       samples: samples, names: machines.names, increments: machines.increments,
       estimatesOneRepMax: estimates,
+      assumesAddedLoad: knownModality == nil,
       requiresMachineIdentity: knownModality == .machine || knownModality == .cable
     )
   }
@@ -239,6 +241,7 @@ public nonisolated struct ProgressionStore: Sendable {
     return ProgressionHistory(
       series: series, machineChanges: changes, machineNames: inputs.names,
       estimatesOneRepMax: inputs.estimatesOneRepMax,
+      assumesAddedLoad: inputs.assumesAddedLoad,
       requiresMachineIdentity: inputs.requiresMachineIdentity,
       recordSessionIDs: recordSessions, bestAtWeight: ledgers
     )
@@ -299,6 +302,7 @@ public nonisolated struct ProgressionHistory: Hashable, Sendable {
   /// `false` for a movement whose logged load is not the load moved, such as bodyweight work, so
   /// a chart can say why no one-rep max is estimated rather than blame the rep range.
   public let estimatesOneRepMax: Bool
+  public let assumesAddedLoad: Bool
   /// Machine/cable movements cannot call nil equipment "Free weight".
   public let requiresMachineIdentity: Bool
   /// For each series, the sessions in which at least one record was set, so the chart can mark
@@ -312,6 +316,7 @@ public nonisolated struct ProgressionHistory: Hashable, Sendable {
     machineChanges: [MachineChange],
     machineNames: [MachineID: String],
     estimatesOneRepMax: Bool = true,
+    assumesAddedLoad: Bool = false,
     requiresMachineIdentity: Bool = false,
     recordSessionIDs: [ProgressionKey: Set<SessionID>] = [:],
     bestAtWeight: [ProgressionKey: [BestAtWeight]] = [:]
@@ -319,7 +324,8 @@ public nonisolated struct ProgressionHistory: Hashable, Sendable {
     self.series = series
     self.machineChanges = machineChanges
     self.machineNames = machineNames
-    self.estimatesOneRepMax = estimatesOneRepMax
+    self.estimatesOneRepMax = estimatesOneRepMax && !assumesAddedLoad
+    self.assumesAddedLoad = assumesAddedLoad
     self.requiresMachineIdentity = requiresMachineIdentity
     self.recordSessionIDs = recordSessionIDs
     self.bestAtWeight = bestAtWeight
@@ -329,7 +335,7 @@ public nonisolated struct ProgressionHistory: Hashable, Sendable {
   public func label(for key: ProgressionKey) -> String {
     if key.isImported { return ProgressCopy.importedHistory }
     guard let machineID = key.machineID else {
-      return requiresMachineIdentity ? ProgressCopy.noMachineRecorded : "Free weight"
+      return requiresMachineIdentity || assumesAddedLoad ? ProgressCopy.noMachineRecorded : "Free weight"
     }
     return machineNames[machineID] ?? "Unnamed machine"
   }

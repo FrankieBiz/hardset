@@ -24,12 +24,12 @@ struct LoggerStoreTests {
   }
 
   /// Foreign keys are on, so referenced rows have to exist.
-  private func seedExercise(_ database: any DatabaseWriter, name: String = "Leg Press") throws
+  private func seedExercise(_ database: any DatabaseWriter, name: String = "Leg Press", modality: String = "machine") throws
     -> ExerciseID
   {
     let id = ExerciseID()
     try database.write { db in
-      try Exercise.insert { Exercise.Draft(id: id.rawValue, name: name) }.execute(db)
+      try Exercise.insert { Exercise.Draft(id: id.rawValue, name: name, modality: modality) }.execute(db)
     }
     return id
   }
@@ -283,7 +283,7 @@ struct LoggerStoreTests {
   func writesBodyweightSet() throws {
     let database = try migratedDatabase()
     let store = LoggerStore(database: database)
-    let exercise = try seedExercise(database, name: "Pull-up")
+    let exercise = try seedExercise(database, name: "Pull-up", modality: "bodyweight")
     let session = try store.startSession(at: start)
 
     _ = try store.logSet(
