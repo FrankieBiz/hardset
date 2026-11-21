@@ -198,7 +198,9 @@ public struct SessionView: View {
   public var body: some View {
     ScrollViewReader { proxy in
       ScrollView {
-        LazyVStack(alignment: .leading, spacing: Tokens.Spacing.regular) {
+        // No container around a movement: the page margin is the only inset, and movements are
+        // separated by space. Each owns the space above it, so the gap is one rule in one place.
+        LazyVStack(alignment: .leading, spacing: 0) {
           if let title {
             header(title: title)
               .padding(.bottom, Tokens.Spacing.snug)
@@ -208,13 +210,15 @@ public struct SessionView: View {
           // screen opens, so it moves nothing under a thumb, and it is the first thing to read.
           if showsStaleNotice {
             staleNotice
-              .padding(.horizontal, Tokens.Spacing.regular)
+              .padding(.horizontal, Tokens.Spacing.loose)
+              .padding(.top, Tokens.Spacing.regular)
               .hardsetArrival()
           }
 
           ForEach($exercises) { $exercise in
             card(for: $exercise)
-              .padding(.horizontal, Tokens.Spacing.regular)
+              .padding(.horizontal, Tokens.Spacing.loose)
+              .padding(.top, Tokens.Spacing.block)
           }
 
           // An empty workout says so, and says what to do about it, rather than rendering a bare
@@ -228,14 +232,16 @@ public struct SessionView: View {
               actionTitle: onAddExercise == nil ? nil : "Add movement",
               action: onAddExercise.map { add in { closeKeypad(then: add) } }
             )
+            .padding(.top, Tokens.Spacing.block)
           } else if let onAddExercise {
             addMovementSlot { closeKeypad(then: onAddExercise) }
-              .padding(.horizontal, Tokens.Spacing.regular)
+              .padding(.horizontal, Tokens.Spacing.loose)
+              .padding(.top, Tokens.Spacing.section)
           }
 
           summary
-            .padding(.horizontal, Tokens.Spacing.regular)
-            .padding(.top, Tokens.Spacing.section)
+            .padding(.horizontal, Tokens.Spacing.loose)
+            .padding(.top, Tokens.Spacing.block)
             .id(Self.finishAnchor)
         }
         .padding(.bottom, Tokens.Spacing.section)
@@ -821,6 +827,12 @@ public struct SessionView: View {
     let volume = SessionVolume(exercises: exercises)
     return VStack(alignment: .leading, spacing: Tokens.Spacing.loose) {
       VStack(alignment: .leading, spacing: Tokens.Spacing.regular) {
+        // The one hairline on the screen that is not between two set rows: it separates the
+        // workout's totals from the movements above them.
+        Rectangle()
+          .fill(Tokens.Color.hairline)
+          .frame(height: Tokens.Stroke.hairline)
+          .accessibilityHidden(true)
         SectionLabel("This workout")
         if volume.isEmpty {
           Text("No sets logged yet")
@@ -830,9 +842,7 @@ public struct SessionView: View {
           StatLedger(ledgerItems(volume))
         }
       }
-      .padding(Tokens.Spacing.regular)
       .frame(maxWidth: .infinity, alignment: .leading)
-      .hardsetCard()
       .accessibilityElement(children: .combine)
       .accessibilityLabel(volumeDescription)
 

@@ -17,12 +17,13 @@ the code does yet, so a reader does not look for a screen that has not moved.
   `Elevation.floating`, the `display` role off condensed, `labelEmphasis` retired, and the shared
   kit: the flat control face and its outline rule (`ControlFace.swift`), buttons, chips, the
   segmented control, header buttons, text entry, cards, banners, tags and certainty badges.
+- The live session is in code, rebuilt monochrome and type-led (ruling D12): see Set row, Set log
+  control, Inline control, Panel and the live-session layout below. Its sibling screens have not
+  moved.
 - Not yet in code, so the bullets below that name these describe where they are going: whatever a
-  screen draws for itself instead of through the kit. That is most of the live session (the set
-  row's field faces and logged state, its warning and record cards, the unset gym and machine
-  chips), the rest bar's panel and countdown, the Library's "Curated" tag, the Progress card's
-  layout, the Volume gauge ends, the scorecard headline's type role, and the onboarding and tour
-  surfaces. It also includes four private outlined-card button styles that each draw their own
+  screen draws for itself instead of through the kit. That is the Library's "Curated" tag, the
+  Progress card's layout, the Volume gauge ends, the scorecard headline's type role, and the
+  onboarding and tour surfaces. It also includes four private outlined-card button styles that each draw their own
   stroke: the History row, the Settings disclosure row, the Train screen's gym row and the
   receipt's link row, plus the methodology citation card. A screen that uses the kit picks up the new look with no change; one that draws its own
   face or stroke keeps the old one until it is migrated.
@@ -409,8 +410,9 @@ Selection rows, the unit switch and pickers stay silent.
   +15, pause, skip) share one row when they fit, and otherwise the controls drop to their own
   single row under the countdown; the four controls never split across rows. The countdown is drawn
   directly on the panel in `chalk`, with no knurl tile. The panel is opaque `steelRaised` at the
-  card radius with `Elevation.floating` and no stroke, in every appearance and setting: glass was
-  considered and refused, because the contrast gate cannot certify text on it. Controls are 56 pt
+  card radius with `Elevation.floating` and no stroke, except the `hairline` border Increase
+  Contrast gives every panel because the fill step is gone: glass was considered and refused,
+  because the contrast gate cannot certify text on it. Controls are 56 pt
   inline controls identified by their label or glyph, with no key face; Increase Contrast and
   Button Shapes outline them. "Resting" and "Paused" are `chalkDim`, and the next rest's lengths
   are figures: the chosen one in `chalk` with a 2 pt rule under it, the others `chalkDim`.
@@ -463,6 +465,14 @@ Selection rows, the unit switch and pickers stay silent.
 - **Text entry** (`entryFieldChrome`): raised fill, control border, and a 2 pt plate blue ring that
   fades in on focus. Used by the search field and the name entry sheet. An input keeps its outline,
   because it is identified by its box.
+- **Live session layout** (`SessionView`, `ExerciseSectionView`): no container around a movement.
+  The page margin is `loose` and the only inset, a movement's header, rows and actions sit
+  straight on the canvas, and movements are separated by `block` of space, each owning the space
+  above it. The only hairlines are between two set rows and above the workout's totals, where
+  they separate; the totals are a section label and a ledger with no card. The rest bar and the
+  record notice are panels. The screen's contents are, top to bottom: the header, the gym line,
+  the movements, one "Add movement" inline control, the totals and the finish control; nothing
+  on it is a card except the stale-workout notice, which holds buttons.
 - **Set row**: the figures are the content. Weight and reps are the `readout` role, the largest text
   on the card, tabular and set tight, with a quiet multiply sign between them in `provenance` and
   `chalkDim`: weight ends at the sign and reps begin after it, so the sign is one axis down the list

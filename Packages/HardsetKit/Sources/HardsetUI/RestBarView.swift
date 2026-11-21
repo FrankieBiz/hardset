@@ -93,11 +93,7 @@ public struct RestBarView: View {
         }
       }
       .padding(Tokens.Spacing.regular)
-      .background(Tokens.Color.steelRaised, in: RoundedRectangle(cornerRadius: Tokens.Radius.card))
-      .overlay(
-        RoundedRectangle(cornerRadius: Tokens.Radius.card)
-          .strokeBorder(Tokens.Color.hairline, lineWidth: Tokens.Stroke.hairline)
-      )
+      .hardsetPanel()
       .padding(.horizontal, Tokens.Spacing.regular)
       .padding(.bottom, Tokens.Spacing.snug)
       // The countdown is one element and each control is its own, so a VoiceOver user can hear

@@ -466,11 +466,12 @@ public struct HardsetCardModifier: ViewModifier {
   }
 }
 
-/// A raised panel for a message or a pinned bar: `steelRaised` on a continuous `card` radius, no
-/// colour, no border. It is the one raised tone the live session uses, so the rest bar and a record
-/// notice stand on the same step off the canvas, and what a panel says is carried by its words and
-/// a small mark and never by its fill. Under Increase Contrast, where the fill step is gone, it
-/// wears a `hairline` border, as a card does.
+/// A raised panel for a message or a bar pinned over the list: `steelRaised` on a continuous `card`
+/// radius, no colour, no border. It is the one raised tone the live session uses, so the rest bar
+/// and a record notice stand on the same step off the canvas, and what a panel says is carried by
+/// its words and a small mark and never by its fill. Pinned over scrolling content, it takes
+/// `Elevation.floating`, which draws in light appearance only. Under Increase Contrast, where the
+/// fill step is gone, it wears a `hairline` border, as a card does.
 public struct HardsetPanelModifier: ViewModifier {
   @Environment(\.colorSchemeContrast) private var contrast
 
@@ -484,6 +485,7 @@ public struct HardsetPanelModifier: ViewModifier {
           Tokens.Shape.card.strokeBorder(Tokens.Color.hairline, lineWidth: Tokens.Stroke.hairline)
         }
       }
+      .hardsetFloating()
   }
 }
 

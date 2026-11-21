@@ -136,8 +136,6 @@ public struct ExerciseSectionView: View {
       }
       addSetButtons
     }
-    .padding(Tokens.Spacing.regular)
-    .hardsetCard()
   }
 
   private var header: some View {
