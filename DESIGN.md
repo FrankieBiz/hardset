@@ -563,6 +563,16 @@ Selection rows, the unit switch and pickers stay silent.
 - **Volume bars**: round-ended gauges, 4 pt continuous, scaled to the week's own maximum, never to a target. Modelled
   muscles are solid plate blue; muscles that are counted but not modelled are hollow (plate blue
   outline on `plateBlueSurface`) and say so in words beside the bar.
+- **Certainty on a muscle's count**: the badge beside a weekly count is about the research, not the
+  count: whether published studies of weekly sets reach that muscle at that many sets. It is moderate
+  for the six modelled muscles up to about 25 fractional sets, low above that, and not evaluated for
+  every other muscle, whose count is still shown. The rule is `VolumeAnalyzer.doseResponse` and
+  nothing else: the volume rows and the deep muscle map draw the same `MuscleCertaintyBadge` from it,
+  so one count never carries two answers, and the map carries no badge of its own for the week.
+  `VolumeAnalyzer.certaintyMeaning` says what the badge is about, once, in words on the Volume screen,
+  on the map and at the top of the "How sets are counted" disclosure; the disclosure's capsule is the
+  best level a count can reach, `VolumeAnalyzer.bestCertainty`, and `certaintyScale` names where each
+  level applies. Settings opens the same disclosure. No new token, no motion.
 - **Charts**: one series per machine with its own colour and point symbol, a custom legend in app
   type, with equipment provenance allowed to wrap fully at accessibility sizes, and machine changes
   as 2 pt dashed `warning` rules. The chart opens on the estimated max,

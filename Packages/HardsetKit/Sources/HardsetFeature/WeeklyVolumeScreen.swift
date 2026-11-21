@@ -161,8 +161,8 @@ public struct WeeklyVolumeScreen: View {
 
   private var methodologySheet: some View {
     // Generated from the same value the counting uses, so the disclosure cannot drift from the
-    // arithmetic.
-    MethodologySheet(source: SetCounting.source, certainty: .moderate)
+    // arithmetic, and the same sheet Settings opens, so the two cannot disagree.
+    MethodologySheet.setCounting()
       .hardsetSheet()
   }
 

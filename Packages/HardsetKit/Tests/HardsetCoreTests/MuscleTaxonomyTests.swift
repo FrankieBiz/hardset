@@ -283,12 +283,29 @@ struct SetCountingTests {
     }
   }
 
-  @Test("Modelled muscles cap at moderate, counted muscles at low")
+  /// A counted muscle reads "not evaluated", not "low": the relationship was never fitted for it, so
+  /// there is no weak estimate to be unsure of. The deep muscle map once graded it low while the
+  /// volume row beside the same count read not evaluated; both now read the one rule.
+  @Test("Modelled muscles are moderate, counted muscles are not evaluated")
   func tierCeilings() {
     #expect(SetCounting.certaintyCeiling(for: .quadriceps, fractionalSets: 10) == .moderate)
-    #expect(SetCounting.certaintyCeiling(for: .glutes, fractionalSets: 10) == .low)
+    #expect(SetCounting.certaintyCeiling(for: .glutes, fractionalSets: 10) == .unevaluated)
     // Above ~25 fractional sets even a modelled muscle drops: few studies explored that range.
     #expect(SetCounting.certaintyCeiling(for: .quadriceps, fractionalSets: 26) == .low)
+    // A counted muscle stays not evaluated however much is logged: more sets are no more studied.
+    #expect(SetCounting.certaintyCeiling(for: .glutes, fractionalSets: 40) == .unevaluated)
+  }
+
+  @Test("The certainty a count carries is one rule, whichever screen asks")
+  func oneRuleForEveryScreen() {
+    for muscle in Muscle.allCases {
+      for sets in [0.0, 1.0, 12.0, 25.0, 26.0, 40.0] {
+        #expect(
+          SetCounting.certaintyCeiling(for: muscle, fractionalSets: sets)
+            == VolumeAnalyzer.doseResponse(fractionalSets: sets, for: muscle).certainty,
+          "\(muscle.rawValue) at \(sets)")
+      }
+    }
   }
 
   @Test("Exactly six tokens are modelled, and they are the measured sites")

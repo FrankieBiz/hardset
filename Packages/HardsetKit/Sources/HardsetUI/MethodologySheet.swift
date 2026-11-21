@@ -18,13 +18,18 @@ import SwiftUI
 public struct MethodologySheet: View {
   private let source: EvidenceSource
   private let certainty: Certainty?
+  private let certaintyNote: String?
   /// Every caller presents this as a sheet, so it carries its own way out rather than relying on a
   /// drag a lifter may not know about.
   @Environment(\.dismiss) private var dismiss
 
-  public init(source: EvidenceSource, certainty: Certainty? = nil) {
+  /// - Parameter certaintyNote: What the certainty is about and where each level applies, in words
+  ///   under the capsule. A level with no subject is decoration, so a caller that passes a
+  ///   certainty says what it is a certainty of.
+  public init(source: EvidenceSource, certainty: Certainty? = nil, certaintyNote: String? = nil) {
     self.source = source
     self.certainty = certainty
+    self.certaintyNote = certaintyNote
   }
 
   public var body: some View {
@@ -32,8 +37,16 @@ public struct MethodologySheet: View {
       ScrollView {
         VStack(alignment: .leading, spacing: Tokens.Spacing.section) {
           if let certainty {
-            CertaintyCapsule(level: Self.level(for: certainty), isInteractive: false)
-              .accessibilityElement(children: .combine)
+            VStack(alignment: .leading, spacing: Tokens.Spacing.snug) {
+              CertaintyCapsule(level: Self.level(for: certainty), isInteractive: false)
+                .accessibilityElement(children: .combine)
+              if let certaintyNote {
+                Text(certaintyNote)
+                  .font(Tokens.Text.label)
+                  .foregroundStyle(Tokens.Color.chalk)
+                  .fixedSize(horizontal: false, vertical: true)
+              }
+            }
           }
 
           section("How this is calculated", source.methodology)
@@ -107,6 +120,21 @@ public struct MethodologySheet: View {
     .overlay(
       RoundedRectangle(cornerRadius: Tokens.Radius.card)
         .strokeBorder(Tokens.Color.hairline, lineWidth: Tokens.Stroke.hairline)
+    )
+  }
+
+  /// The set-counting disclosure, the one the Volume screen and Settings both open.
+  ///
+  /// The level is the best a weekly count can reach, taken from the engine rather than written
+  /// here, and the words under it say what a certainty on a muscle's count is about and where each
+  /// level applies, from the same engine, so every screen that states a certainty for these counts
+  /// states the same one.
+  public static func setCounting() -> MethodologySheet {
+    MethodologySheet(
+      source: SetCounting.source,
+      certainty: VolumeAnalyzer.bestCertainty,
+      certaintyNote: VolumeAnalyzer.certaintyMeaning + " "
+        + VolumeAnalyzer.certaintyScale(name: { ExercisePickerView.displayName(MuscleKey($0)) })
     )
   }
 

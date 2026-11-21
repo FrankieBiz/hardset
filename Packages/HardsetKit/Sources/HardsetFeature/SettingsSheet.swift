@@ -98,9 +98,18 @@ public struct SettingsSheet: View {
       // Attached inside this sheet's own stack, so the disclosure presents over Settings rather
       // than competing with it for the presenting view.
       .sheet(item: $disclosure) { item in
-        MethodologySheet(source: item.source, certainty: item.certainty)
+        disclosureSheet(for: item)
           .hardsetSheet()
       }
+    }
+  }
+
+  /// The set-counting disclosure is the one the Volume screen opens, built in one place, so what
+  /// Settings says a certainty is about cannot differ from what the screen that shows it says.
+  @ViewBuilder private func disclosureSheet(for item: Disclosure) -> some View {
+    switch item {
+    case .setCounting: MethodologySheet.setCounting()
+    case .progression: MethodologySheet(source: item.source, certainty: item.certainty)
     }
   }
 
@@ -333,11 +342,11 @@ private nonisolated enum Disclosure: Identifiable {
     }
   }
 
-  /// The same certainty the weekly volume screen states beside its own disclosure. Load history
-  /// states none there, so none is invented here.
+  /// The best certainty a weekly count can reach, from the engine's own rule rather than a value
+  /// written here. Load history states none, so none is invented.
   var certainty: Certainty? {
     switch self {
-    case .setCounting: return .moderate
+    case .setCounting: return VolumeAnalyzer.bestCertainty
     case .progression: return nil
     }
   }

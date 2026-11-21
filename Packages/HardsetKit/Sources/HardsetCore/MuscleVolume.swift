@@ -209,6 +209,48 @@ extension VolumeAnalyzer {
     )
   }
 
+  /// What a certainty beside a weekly muscle count is about, in one sentence.
+  ///
+  /// The count is what was logged, credited by a stated convention. The certainty is not about it:
+  /// it is about whether the published research on weekly sets reaches that muscle at that volume.
+  /// Every screen that shows a certainty beside a muscle's count says this, from here, so the volume
+  /// rows, the deep muscle map and the counting disclosure cannot describe it differently.
+  public static let certaintyMeaning =
+    "Confidence is about the research, not your count. It says whether published studies of "
+    + "weekly sets reach this muscle at this many sets. Not evaluated means they do not; the "
+    + "count is still shown."
+
+  /// The best certainty any weekly count can reach: the strongest placement `doseResponse` gives
+  /// any muscle inside the studied range. Derived rather than written down, so the disclosure that
+  /// names it cannot drift from the rule that applies it. Never `.high`.
+  public static var bestCertainty: Certainty {
+    Muscle.allCases
+      .map { doseResponse(fractionalSets: 1, for: $0).certainty }
+      .max() ?? .unevaluated
+  }
+
+  /// The muscles whose weekly count `doseResponse` places on the published curve at all.
+  public static var modelledMuscles: [Muscle] {
+    Muscle.allCases.filter { $0.tier == .modelled }
+  }
+
+  /// Where each level applies, in a sentence that follows from the rule in `doseResponse`: which
+  /// muscles reach the best level, up to what volume, and what every other muscle reads.
+  ///
+  /// - Parameter name: A muscle's name as the lifter reads it, so Core carries no display copy.
+  public static func certaintyScale(name: (Muscle) -> String) -> String {
+    let names = modelledMuscles.map { name($0).lowercased() }
+    let list: String
+    switch names.count {
+    case 0: list = "no muscle"
+    case 1: list = names[0]
+    default: list = names.dropLast().joined(separator: ", ") + " and " + names[names.count - 1]
+    }
+    return "Moderate is the most any count reaches: it applies to \(list), up to about "
+      + "\(Int(studiedRangeCeiling)) fractional sets a week, and is low above that. Every other "
+      + "muscle is not evaluated."
+  }
+
   /// Whether a weekly set TARGET exists for a muscle.
   ///
   /// v1 returns `.unevaluated` for every muscle, and that is the finding rather than a placeholder.

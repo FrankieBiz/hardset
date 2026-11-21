@@ -181,6 +181,12 @@ public struct VolumeReportView: View {
           .font(Tokens.Text.caption)
           .foregroundStyle(Tokens.Color.chalkDim)
           .fixedSize(horizontal: false, vertical: true)
+        // What the badge beside each count is about, said once here in words, from the engine's own
+        // sentence, so the deep muscle map and the counting disclosure say the same thing.
+        Text(VolumeAnalyzer.certaintyMeaning)
+          .font(Tokens.Text.caption)
+          .foregroundStyle(Tokens.Color.chalkDim)
+          .fixedSize(horizontal: false, vertical: true)
       }
 
       VStack(alignment: .leading, spacing: Tokens.Spacing.loose) {
@@ -217,11 +223,6 @@ public struct VolumeReportView: View {
       "\(name), \(report.isLowerBound ? "at least " : "")\(Self.format(row.sets)) sets"
       + (isCounted ? ", counted, not modelled" : "")
 
-    // Where this muscle's count sits on the published dose-response, as the engine states it:
-    // moderate inside the studied range, low beyond it, and not evaluated for a muscle outside the
-    // corpus. Never a level chosen here.
-    let claim = VolumeAnalyzer.doseResponse(fractionalSets: row.sets, for: row.muscle)
-
     // The name, what is not modelled, and the figure are one spoken element, so the figure is read
     // with its muscle and the badge stays a control of its own.
     let nameBlock = VStack(alignment: .leading, spacing: Tokens.Spacing.hairline) {
@@ -240,11 +241,10 @@ public struct VolumeReportView: View {
       .font(Tokens.Text.figure)
       .foregroundStyle(Tokens.Color.chalk)
       .accessibilityHidden(true)
-    let badge = CertaintyBadge(
-      level: CertaintyLevel(claim.certainty),
-      methodology: claim.source.methodology,
-      citation: claim.source.citation
-    )
+    // Where this muscle's count sits on the published dose-response, as the engine states it:
+    // moderate inside the studied range, low beyond it, and not evaluated for a muscle outside the
+    // corpus. Never a level chosen here.
+    let badge = MuscleCertaintyBadge(muscle: row.muscle, fractionalSets: row.sets)
 
     return VStack(alignment: .leading, spacing: Tokens.Spacing.snug) {
       // One line when the name, its certainty and the figure fit, which they do at ordinary sizes;
@@ -338,6 +338,26 @@ public struct VolumeReportView: View {
 
   static func format(_ sets: Double) -> String {
     sets.formatted(.number.precision(.fractionLength(0...1)))
+  }
+}
+
+/// The certainty beside one muscle's weekly count, drawn the same on every screen that shows one.
+///
+/// It reads `VolumeAnalyzer.doseResponse`, the engine's one rule for where a count sits on the
+/// published research, and states nothing of its own. The volume rows and the deep muscle map both
+/// draw it, so the same count cannot carry two answers, and what it is about is said once in words
+/// by `VolumeAnalyzer.certaintyMeaning`.
+struct MuscleCertaintyBadge: View {
+  let muscle: Muscle
+  let fractionalSets: Double
+
+  var body: some View {
+    let claim = VolumeAnalyzer.doseResponse(fractionalSets: fractionalSets, for: muscle)
+    CertaintyBadge(
+      level: CertaintyLevel(claim.certainty),
+      methodology: claim.source.methodology,
+      citation: claim.source.citation
+    )
   }
 }
 
