@@ -3,6 +3,22 @@ import HardsetStore
 import HardsetUI
 import SwiftUI
 
+/// The sheets the Volume screen opens, one at a time. `nonisolated` so its computed `id` satisfies
+/// `Identifiable` without isolated-conformance inference, as `ReceiptSelection` does.
+private nonisolated enum VolumeSheet: Identifiable {
+  /// The deep muscle map.
+  case map
+  /// How sets are counted.
+  case methodology
+
+  var id: String {
+    switch self {
+    case .map: "map"
+    case .methodology: "methodology"
+    }
+  }
+}
+
 /// Sets per muscle for the last seven days, wired.
 ///
 /// Loads once per appearance rather than observing the database. The report is a snapshot of a
@@ -18,8 +34,8 @@ import SwiftUI
 @MainActor
 public struct WeeklyVolumeScreen: View {
   @State private var snapshot = SnapshotLoader<VolumeWindow>()
-  @State private var isShowingMap = false
-  @State private var isShowingMethodology = false
+  /// The sheet that is up, or `nil`. One value for both, so the screen holds one presentation.
+  @State private var presented: VolumeSheet?
   /// How many whole weeks before now the window ends. Zero is the last seven days.
   @State private var weeksBack = 0
   /// Bumped when the app returns to the foreground, so the rolling window is recomputed from now.
@@ -59,7 +75,7 @@ public struct WeeklyVolumeScreen: View {
           excludedFromGaps: ExerciseCatalog.unauthoredDirectTokens,
           title: Self.title,
           subtitle: window.description,
-          onExplainCounting: { isShowingMethodology = true },
+          onExplainCounting: { presented = .methodology },
           period: window.period,
           onShowSettings: onShowSettings,
           onEarlier: weeksBack < Self.maximumWeeksBack ? { weeksBack += 1 } : nil,
@@ -95,34 +111,16 @@ public struct WeeklyVolumeScreen: View {
     .safeAreaInset(edge: .bottom) {
       // Offered only when there is something to map. An empty window's map is all zeros.
       if let window = snapshot.value, window.report.hardSets > 0 {
-        Button("Deep muscle map") { isShowingMap = true }
+        Button("Deep muscle map") { presented = .map }
           .buttonStyle(HardsetButtonStyle(.secondary))
           .padding(Tokens.Spacing.loose).background(Tokens.Color.canvas)
       }
     }
-    .sheet(isPresented: $isShowingMap) {
-      NavigationStack {
-        ScrollView {
-          // Says it is checking rather than flashing the purchase offer before the entitlement is
-          // known.
-          if !lifetime.hasLoaded {
-            HardsetLoadingState("Checking your purchase…")
-          } else if lifetime.isUnlocked, let window = snapshot.value {
-            VStack(alignment: .leading, spacing: Tokens.Spacing.regular) {
-              // States why the map is open when it was not bought, such as a development build.
-              LifetimeDevelopmentNote(access: lifetime).padding(.horizontal, Tokens.Spacing.loose)
-              MuscleHeatmapView(report: window.report, windowLabel: window.description)
-            }
-          } else {
-            LifetimePurchaseSection(access: lifetime).padding(Tokens.Spacing.loose)
-          }
-        }
-        .background(Tokens.Color.canvas)
-        .hardsetNavigationTitle("Deep muscle map")
-        .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { isShowingMap = false } } }
-        .task { await lifetime.load() }
+    .sheet(item: $presented) { sheet in
+      switch sheet {
+      case .map: mapSheet
+      case .methodology: methodologySheet
       }
-      .hardsetSheet()
     }
     // Keyed on the window, the foreground token and the data revision, so stepping, returning or
     // a write elsewhere re-reads, and a superseded read is cancelled. The loader keeps the
@@ -134,12 +132,38 @@ public struct WeeklyVolumeScreen: View {
     .onChange(of: scenePhase) { _, phase in
       if phase == .active { reloadToken &+= 1 }
     }
-    .sheet(isPresented: $isShowingMethodology) {
-      // Generated from the same value the counting uses, so the disclosure cannot drift from the
-      // arithmetic.
-      MethodologySheet(source: SetCounting.source, certainty: .moderate)
-        .hardsetSheet()
+  }
+
+  private var mapSheet: some View {
+    NavigationStack {
+      ScrollView {
+        // Says it is checking rather than flashing the purchase offer before the entitlement is
+        // known.
+        if !lifetime.hasLoaded {
+          HardsetLoadingState("Checking your purchase…")
+        } else if lifetime.isUnlocked, let window = snapshot.value {
+          VStack(alignment: .leading, spacing: Tokens.Spacing.regular) {
+            // States why the map is open when it was not bought, such as a development build.
+            LifetimeDevelopmentNote(access: lifetime).padding(.horizontal, Tokens.Spacing.loose)
+            MuscleHeatmapView(report: window.report, windowLabel: window.description)
+          }
+        } else {
+          LifetimePurchaseSection(access: lifetime).padding(Tokens.Spacing.loose)
+        }
+      }
+      .background(Tokens.Color.canvas)
+      .hardsetNavigationTitle("Deep muscle map")
+      .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { presented = nil } } }
+      .task { await lifetime.load() }
     }
+    .hardsetSheet()
+  }
+
+  private var methodologySheet: some View {
+    // Generated from the same value the counting uses, so the disclosure cannot drift from the
+    // arithmetic.
+    MethodologySheet(source: SetCounting.source, certainty: .moderate)
+      .hardsetSheet()
   }
 
   private func header(subtitle: String) -> some View {

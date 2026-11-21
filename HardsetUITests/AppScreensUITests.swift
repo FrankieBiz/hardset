@@ -11,6 +11,10 @@ import XCTest
 /// Audit issues are recorded rather than failing the run, so one finding cannot hide the screens
 /// after it; the report is written next to the screenshots. With `HARDSET_UI_SHOT_DIR` set (CI
 /// passes it through `TEST_RUNNER_`), screenshots and the report land in that directory.
+///
+/// Every journey launches the app with an empty store (`HARDSET_STORE=reset`) and checks that it
+/// got one, so none depends on what another left behind and they pass in any order. A journey that
+/// needs data makes it through the real screens first.
 final class AppScreensUITests: XCTestCase {
   private var auditReport: [String] = []
 
@@ -69,6 +73,12 @@ final class AppScreensUITests: XCTestCase {
       .firstMatch
     XCTAssertTrue(bench.waitForExistence(timeout: 5))
     capture(app, "11-movement-picker")
+    // The first audit is of the picker as the lifter meets it, keyboard up. Rows behind the keyboard
+    // were reported for contrast measured on the keyboard's pixels, not their own, so the audit that
+    // judges the picker is the second, with the keyboard down and every row in view.
+    audit(app, screen: "movement picker (keyboard up)")
+    dismissKeyboard(app)
+    capture(app, "11b-movement-picker-keyboard-down")
     audit(app, screen: "movement picker")
     bench.tap()
 
@@ -105,7 +115,7 @@ final class AppScreensUITests: XCTestCase {
     // Recovery must read the committed set from disk, with its values and logged state intact.
     // Relaunching a real app exercises the startup and view wiring that Store tests cannot.
     app.terminate()
-    launch(app)
+    launch(app, keepsStore: true)
     let recoveredRows = app.descendants(matching: .any)
       .matching(NSPredicate(format: "label == %@", savedLabel))
     XCTAssertTrue(recoveredRows.firstMatch.waitForExistence(timeout: 30))
@@ -124,6 +134,17 @@ final class AppScreensUITests: XCTestCase {
       app.buttons["Finish"].tap()
     }
     XCTAssertTrue(app.buttons["Start workout"].waitForExistence(timeout: 5))
+    // Finishing opens the workout's receipt over the start screen, by design, and it stays up until
+    // it is closed. This journey never closed it, so the pictures and audits below that are named for
+    // the start screen, History and Volume were all of the receipt (main's own 17-history-with-workout
+    // and 18-volume-with-workout show it). It is audited here for what it is, then closed, so that
+    // what follows is those screens.
+    let receiptDone = app.buttons["Done"]
+    XCTAssertTrue(receiptDone.waitForExistence(timeout: 10), "Finishing a workout opens its receipt")
+    capture(app, "15b-workout-receipt")
+    audit(app, screen: "workout receipt")
+    receiptDone.tap()
+    XCTAssertTrue(waitUntilGone(receiptDone), "Done closes the receipt")
     capture(app, "16-start-last-workout")
     openTab(app, "History")
     capture(app, "17-history-with-workout")
@@ -131,13 +152,18 @@ final class AppScreensUITests: XCTestCase {
     openTab(app, "Volume")
     capture(app, "18-volume-with-workout")
     audit(app, screen: "volume with a workout")
+    // The first audit saw the top of the list. The muscle rows below it were reported as sitting
+    // behind the map button and the tab bar, so the list is audited again scrolled to them.
+    app.swipeUp()
+    capture(app, "18b-volume-with-workout-scrolled")
+    audit(app, screen: "volume with a workout, scrolled")
 
     writeAuditReport(named: "accessibility-audit-workout")
   }
 
   /// Mistakes are reversible: a logged set is undone from its long-press menu, a movement is
   /// removed from its card menu, and an accidental workout is discarded from the header menu,
-  /// leaving nothing in History. Runs first (alphabetical order) on a fresh simulator.
+  /// leaving nothing in History.
   @MainActor
   func testCorrectionsAndDiscardDark() throws {
     continueAfterFailure = true
@@ -234,7 +260,98 @@ final class AppScreensUITests: XCTestCase {
     writeAuditReport(named: "accessibility-audit-gym")
   }
 
-  /// The main screens again in light mode, over whatever the dark journey left behind.
+  /// Every sheet the live workout opens, one after another from the same screen: the gym picker
+  /// (with the gym added from inside it), the machine picker (with a machine added from inside it,
+  /// then its load step) and a movement's load history. They share one presentation, so each must
+  /// open, show its own content and close back to the workout, with the one before it gone.
+  @MainActor
+  func testSessionSheetsDark() throws {
+    continueAfterFailure = true
+    let app = XCUIApplication()
+    launch(app)
+
+    guard waitForStartScreen(app) else { return }
+    app.buttons["Start workout"].tap()
+    let addMovement = app.buttons["Add movement"]
+    XCTAssertTrue(addMovement.waitForExistence(timeout: 5))
+
+    // The workout's gym, from the header chip, with the add-gym sheet nested inside the picker.
+    let setGym = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Set gym'")).firstMatch
+    XCTAssertTrue(setGym.waitForExistence(timeout: 5), "A workout with no gym offers to set one")
+    setGym.tap()
+    let addGym = app.buttons["Add a gym"]
+    XCTAssertTrue(addGym.waitForExistence(timeout: 10), "The workout's gym picker opens")
+    capture(app, "80-session-gym-picker")
+    addGym.tap()
+    let gymName = app.textFields.firstMatch
+    XCTAssertTrue(gymName.waitForExistence(timeout: 5), "Add a gym opens its name sheet over the picker")
+    gymName.typeText("Journey Gym")
+    app.buttons["Add"].tap()
+    let gymChip = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Journey Gym'")).firstMatch
+    XCTAssertTrue(gymChip.waitForExistence(timeout: 10), "The new gym is set and both sheets close")
+    XCTAssertTrue(waitUntilGone(addGym), "The gym picker closed with the name sheet")
+
+    // The movement picker, then a movement with a gym set, so its card offers a machine.
+    addMovement.tap()
+    let bench = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Barbell Bench Press'"))
+      .firstMatch
+    XCTAssertTrue(bench.waitForExistence(timeout: 5))
+    bench.tap()
+
+    // The machine picker, with a machine named from inside it and chosen at once.
+    let chooseMachine = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Choose machine'"))
+      .firstMatch
+    XCTAssertTrue(chooseMachine.waitForExistence(timeout: 10), "With a gym set, the card offers a machine")
+    chooseMachine.tap()
+    let addMachine = app.buttons["Add a machine"]
+    XCTAssertTrue(addMachine.waitForExistence(timeout: 10), "The machine picker opens")
+    capture(app, "81-session-machine-picker")
+    addMachine.tap()
+    let machineName = app.textFields.firstMatch
+    XCTAssertTrue(machineName.waitForExistence(timeout: 5), "Add a machine opens its name sheet over the picker")
+    machineName.typeText("Hammer Strength")
+    app.buttons["Add"].tap()
+    // The card's chip, not a row of the picker still closing: only the chip says "Change machine".
+    let machineChip = app.buttons.matching(
+      NSPredicate(format: "label BEGINSWITH 'Hammer Strength' AND label ENDSWITH 'Change machine.'")
+    ).firstMatch
+    XCTAssertTrue(machineChip.waitForExistence(timeout: 10), "The new machine is chosen and the picker closes")
+    XCTAssertTrue(waitUntilGone(addMachine), "The machine picker closed with the name sheet")
+
+    // Its load step, from the picker's second nested sheet.
+    machineChip.tap()
+    let loadStep = app.buttons["Set this machine\u{2019}s load step"]
+    XCTAssertTrue(loadStep.waitForExistence(timeout: 10), "The chosen machine offers its load step")
+    loadStep.tap()
+    let saveStep = app.buttons["Save load step"]
+    XCTAssertTrue(saveStep.waitForExistence(timeout: 5), "The load-step editor opens over the machine picker")
+    capture(app, "82-session-load-step")
+    for key in ["1", "0"] { app.buttons[key].tap() }
+    saveStep.tap()
+    XCTAssertTrue(waitUntilGone(saveStep), "Saving the step closes the editor")
+    XCTAssertTrue(loadStep.waitForExistence(timeout: 5), "and returns to the machine picker")
+    app.buttons["Cancel"].tap()
+    let steppedChip = app.buttons.matching(
+      NSPredicate(format: "label BEGINSWITH 'Hammer Strength,' AND label CONTAINS 'steps'")
+    ).firstMatch
+    XCTAssertTrue(steppedChip.waitForExistence(timeout: 10), "The saved step shows on the card's machine chip")
+
+    // The movement's load history, from its name.
+    let history = app.buttons.matching(
+      NSPredicate(format: "label BEGINSWITH 'Barbell Bench Press. Show load history'")
+    ).firstMatch
+    XCTAssertTrue(history.waitForExistence(timeout: 5))
+    history.tap()
+    let done = app.buttons["Done"]
+    XCTAssertTrue(done.waitForExistence(timeout: 10), "The load history opens")
+    capture(app, "83-session-history")
+    done.tap()
+    XCTAssertTrue(waitUntilGone(done), "Done closes the load history")
+    XCTAssertTrue(addMovement.waitForExistence(timeout: 5), "and the workout is where it was left")
+  }
+
+  /// The main screens again in light mode, over a finished workout it makes for itself, so the
+  /// start screen's last workout, History and Volume are drawn with data rather than empty.
   @MainActor
   func testScreensInLightMode() throws {
     continueAfterFailure = true
@@ -242,6 +359,7 @@ final class AppScreensUITests: XCTestCase {
     launch(app)
 
     guard waitForStartScreen(app) else { return }
+    finishOneWorkout(app)
     XCTAssertTrue(app.buttons["Start workout"].exists, "The start screen lost its start action")
     capture(app, "30-light-start")
     audit(app, screen: "light start")
@@ -330,6 +448,7 @@ final class AppScreensUITests: XCTestCase {
     // The tour. Its first step waits while two staged apps are built.
     XCTAssertTrue(app.staticTexts["Step 1 of 8"].waitForExistence(timeout: 90))
     capture(app, "47-onboarding-tour-1")
+    assertStagedPhoneIsHidden(app, at: "tour step 1")
     app.buttons["tour-next"].tap()
 
     // Step 2 is the interactive one: no "Next" until the staged check is tapped.
@@ -337,6 +456,12 @@ final class AppScreensUITests: XCTestCase {
     XCTAssertFalse(app.buttons["tour-next"].exists, "Next waits for the check to be tapped")
     capture(app, "48-onboarding-tour-2")
     audit(app, screen: "onboarding tour 2")
+    // The control for the hidden checks around it: while the staged phone is the thing to tap it is
+    // reachable, so a count of zero elsewhere is the phone being hidden and not the query finding
+    // nothing. Recorded rather than asserted, since it describes the interactive step.
+    auditReport.append(
+      "[onboarding tour 2] control: \(app.tabBars.count) tab bar(s) reachable while the staged phone is interactive"
+    )
     // Tapped where the spotlight is. The staged row is one accessibility element with named actions,
     // so there is no separate "Log set" button to query; a touch at the check's place is also the
     // honest test that the hole lets a touch through while the scrim stops every other one. The
@@ -345,11 +470,13 @@ final class AppScreensUITests: XCTestCase {
     app.coordinate(withNormalizedOffset: CGVector(dx: 0.767, dy: 0.609)).tap()
     XCTAssertTrue(app.buttons["tour-next"].waitForExistence(timeout: 10), "logging the staged set unlocks Next")
     capture(app, "49-onboarding-tour-2-logged")
+    assertStagedPhoneIsHidden(app, at: "tour step 2 after the check")
 
     for step in 3...8 {
       app.buttons["tour-next"].tap()
       XCTAssertTrue(app.staticTexts["Step \(step) of 8"].waitForExistence(timeout: 10))
       capture(app, "5\(step - 3)-onboarding-tour-\(step)")
+      assertStagedPhoneIsHidden(app, at: "tour step \(step)")
     }
     app.buttons["tour-next"].tap()
 
@@ -365,6 +492,42 @@ final class AppScreensUITests: XCTestCase {
     capture(app, "61-onboarding-done")
 
     writeAuditReport(named: "accessibility-audit-onboarding")
+  }
+
+  /// The first-launch pages at an accessibility text size. The audit's "text may be clipped at larger
+  /// sizes" reports are a prediction; this draws the pages at one of those sizes, keeps the pictures
+  /// to look at, and checks that the welcome line, the report's first example, is wholly on screen.
+  @MainActor
+  func testOnboardingAccessibilitySizeDark() throws {
+    continueAfterFailure = true
+    let app = XCUIApplication()
+    launch(app, showsOnboarding: true, contentSize: "UICTContentSizeCategoryAccessibilityXL")
+
+    let tagline = app.staticTexts["A calibrated log for the lifts you actually do."]
+    XCTAssertTrue(tagline.waitForExistence(timeout: 30))
+    capture(app, "90-onboarding-ax-welcome")
+    let window = app.windows.firstMatch.frame
+    XCTAssertTrue(
+      window.contains(tagline.frame),
+      "The welcome line runs off the screen at an accessibility size: \(tagline.frame) in \(window)")
+    audit(app, screen: "onboarding welcome (accessibility size)")
+    app.buttons["Start"].tap()
+
+    XCTAssertTrue(app.staticTexts["One tap per set."].waitForExistence(timeout: 5))
+    capture(app, "91-onboarding-ax-pitch-1")
+    audit(app, screen: "onboarding pitch 1 (accessibility size)")
+    app.buttons["Next"].tap()
+
+    XCTAssertTrue(app.staticTexts["Honest numbers."].waitForExistence(timeout: 5))
+    capture(app, "92-onboarding-ax-pitch-2")
+    audit(app, screen: "onboarding pitch 2 (accessibility size)")
+    app.buttons["Next"].tap()
+
+    XCTAssertTrue(app.staticTexts["Rest that keeps time."].waitForExistence(timeout: 5))
+    capture(app, "93-onboarding-ax-pitch-3")
+    audit(app, screen: "onboarding pitch 3 (accessibility size)")
+
+    writeAuditReport(named: "accessibility-audit-onboarding-ax")
   }
 
   /// The tour again, from Settings: the sheet closes, the same sequence plays in a full-screen cover
@@ -405,26 +568,156 @@ final class AppScreensUITests: XCTestCase {
   /// Launches the app. Appearance is set by CI with `simctl ui` around separate passes, because
   /// `XCUIDevice.appearance` did not reach the system on the runner; the pass is chosen by the
   /// test method CI selects, not by this helper.
+  ///
+  /// - Parameter keepsStore: Leaves the database as the last launch left it. Only a journey that
+  ///   relaunches to prove recovery passes it; every first launch starts from an empty store.
+  /// - Parameter contentSize: A `UICTContentSizeCategory` name to launch at, for the journeys that
+  ///   look at an accessibility text size. `nil` leaves the device's size alone.
   @MainActor
-  private func launch(_ app: XCUIApplication, showsOnboarding: Bool = false) {
+  private func launch(
+    _ app: XCUIApplication, showsOnboarding: Bool = false, keepsStore: Bool = false,
+    contentSize: String? = nil
+  ) {
     // Keeps the app's stderr, so a runtime trap's message survives for CI to collect.
     app.launchEnvironment["HARDSET_CAPTURE_STDERR"] = "1"
     // Every journey but the onboarding one starts past the first-launch sequence; that one starts
     // as a fresh install would.
     app.launchEnvironment["HARDSET_ONBOARDING"] = showsOnboarding ? "reset" : "skip"
+    // The store, and the preferences beside it, are emptied before the app opens them unless the
+    // journey is picking up after a relaunch of its own.
+    app.launchEnvironment["HARDSET_STORE"] = keepsStore ? "keep" : "reset"
+    if let contentSize {
+      app.launchArguments += ["-UIPreferredContentSizeCategoryName", contentSize]
+    }
     app.launch()
   }
 
-  /// Waits for the start screen, and when it does not come, says what is showing instead.
+  /// Waits for the start screen, and when it does not come, says what is showing instead. The
+  /// first launch of every journey is on an empty store, so it also waits for the start screen's own
+  /// statement that there are no sessions: a store that was not reset would show a last workout or
+  /// resume one, and the journeys that follow would be testing another journey's leftovers.
   @MainActor
   private func waitForStartScreen(_ app: XCUIApplication) -> Bool {
-    if app.buttons["Start workout"].waitForExistence(timeout: 30) { return true }
+    if app.buttons["Start workout"].waitForExistence(timeout: 30) {
+      let noSessions = app.descendants(matching: .any)
+        .matching(NSPredicate(format: "label == 'No sessions yet'")).firstMatch
+      XCTAssertTrue(
+        noSessions.waitForExistence(timeout: 10),
+        "The journey did not start from an empty store: the start screen shows a session.")
+      return true
+    }
     capture(app, "00-launch-did-not-reach-start")
     XCTFail(
       "The start screen did not appear within 30 seconds. If the startup failure screen is "
         + "showing, the simulator build could not create the database or the sync engine."
     )
     return false
+  }
+
+  /// A finished one-set workout, made through the real screens: Bench Press, 100 for 8, logged and
+  /// finished. The fixture for a journey that needs History and Volume to hold something.
+  @MainActor
+  private func finishOneWorkout(_ app: XCUIApplication) {
+    app.buttons["Start workout"].tap()
+    let addMovement = app.buttons["Add movement"]
+    XCTAssertTrue(addMovement.waitForExistence(timeout: 5))
+    addMovement.tap()
+    let bench = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Barbell Bench Press'"))
+      .firstMatch
+    XCTAssertTrue(bench.waitForExistence(timeout: 5))
+    bench.tap()
+    let row = app.descendants(matching: .any)
+      .matching(NSPredicate(format: "label BEGINSWITH 'Set 1'")).firstMatch
+    XCTAssertTrue(row.waitForExistence(timeout: 5))
+    row.coordinate(withNormalizedOffset: CGVector(dx: 0.44, dy: 0.5)).tap()
+    XCTAssertTrue(app.buttons["Next field"].waitForExistence(timeout: 5))
+    for key in ["1", "0", "0"] { app.buttons[key].tap() }
+    app.buttons["Next field"].tap()
+    app.buttons["8"].tap()
+    app.buttons["Done"].tap()
+    row.coordinate(withNormalizedOffset: CGVector(dx: 0.93, dy: 0.5)).tap()
+    let loggedRow = app.descendants(matching: .any)
+      .matching(NSPredicate(format: "label BEGINSWITH 'Set 1,' AND label CONTAINS ', logged'"))
+      .firstMatch
+    XCTAssertTrue(loggedRow.waitForExistence(timeout: 5), "The fixture set must actually be saved.")
+    let finish = app.buttons["Finish workout"]
+    XCTAssertTrue(finish.waitForExistence(timeout: 5))
+    finish.tap()
+    XCTAssertTrue(app.buttons["Finish"].waitForExistence(timeout: 5))
+    app.buttons["Finish"].tap()
+    // Finishing opens the receipt over the start screen. Left open it covers every screen the
+    // journey goes on to, so it is closed before the fixture is handed back.
+    let receiptDone = app.buttons["Done"]
+    XCTAssertTrue(receiptDone.waitForExistence(timeout: 10), "Finishing a workout opens its receipt")
+    receiptDone.tap()
+    XCTAssertTrue(waitUntilGone(receiptDone), "Done closes the receipt")
+    XCTAssertTrue(app.buttons["Start workout"].waitForExistence(timeout: 5))
+  }
+
+  /// The staged phone is a picture of the app, so while it is not what the lifter is asked to tap,
+  /// none of it may be reachable by an assistive technology: not its buttons, and not the tab bar of
+  /// the root view inside it, which is UIKit-hosted and was still listed when the phone was only
+  /// hidden with `accessibilityHidden`. This is what an assistive technology is offered, as XCUITest
+  /// sees it; how VoiceOver reads the tour is for a device.
+  ///
+  /// **Both assertions currently fail, and are recorded as expected failures, not removed.** The
+  /// finding is open (`docs/KNOWN-ISSUES.md`). Each is strict: the day the defect is fixed it
+  /// stops failing, and `XCTExpectFailure` reports that, so the expectation is removed on purpose.
+  @MainActor
+  private func assertStagedPhoneIsHidden(_ app: XCUIApplication, at step: String) {
+    XCTExpectFailure(Self.stagedPhoneFinding, options: Self.stagedPhoneFindingOptions) {
+      XCTAssertEqual(
+        app.tabBars.count, 0, "\(step): the staged phone's tab bar is reachable by accessibility")
+    }
+    XCTExpectFailure(Self.stagedPhoneFinding, options: Self.stagedPhoneFindingOptions) {
+      XCTAssertFalse(
+        app.buttons["Start workout"].exists,
+        "\(step): the staged start screen's button is reachable by accessibility")
+    }
+  }
+
+  /// Why the two assertions above are expected to fail.
+  private static let stagedPhoneFinding =
+    "Open finding (docs/KNOWN-ISSUES.md): the staged phone is reachable by assistive technology "
+    + "at every inert tour step. CI run 44755327282, with ScaledPhoneFrame as on main, listed two "
+    + "tab bars and the staged start button at all eight steps. Three fixes failed: "
+    + "accessibilityHidden alone; a hosting controller per root, reverted because it changed the "
+    + "roots' appearance; and a single hidden leaf, reverted because it changed nothing the tree "
+    + "exposes. Strict: when this passes, the test fails so the finding is closed deliberately."
+
+  /// Strict, and limited to the assertion failures themselves: any other kind of issue raised in
+  /// the block is still a failure of the test.
+  private static var stagedPhoneFindingOptions: XCTExpectedFailure.Options {
+    let options = XCTExpectedFailure.Options()
+    options.isStrict = true
+    options.issueMatcher = { $0.type == .assertionFailure }
+    return options
+  }
+
+  /// Puts the keyboard down, so that what is audited is the screen and not the keyboard over it. The
+  /// return key is the search key in the picker; failing that, the list dismisses the keyboard as it
+  /// scrolls. If the keyboard is still up afterwards the audit would be of its pixels, so that fails.
+  @MainActor
+  private func dismissKeyboard(_ app: XCUIApplication) {
+    guard app.keyboards.count > 0 else { return }
+    let search = app.keyboards.buttons.matching(NSPredicate(format: "label ==[c] 'search'")).firstMatch
+    if search.exists {
+      search.tap()
+    } else {
+      app.swipeUp()
+    }
+    let deadline = Date().addingTimeInterval(5)
+    while app.keyboards.count > 0 && Date() < deadline { Thread.sleep(forTimeInterval: 0.2) }
+    XCTAssertEqual(app.keyboards.count, 0, "The keyboard is still up, so the audit would be of it")
+  }
+
+  /// True once the element is no longer on screen: a sheet that has finished closing, rather than one
+  /// still sliding away, whose controls a query would otherwise find beside the next sheet's.
+  @MainActor
+  private func waitUntilGone(_ element: XCUIElement, timeout: TimeInterval = 5) -> Bool {
+    let gone = XCTNSPredicateExpectation(
+      predicate: NSPredicate(format: "exists == false"), object: element)
+    return XCTWaiter().wait(for: [gone], timeout: timeout) == .completed
   }
 
   @MainActor
@@ -460,8 +753,11 @@ final class AppScreensUITests: XCTestCase {
         let element = issue.element
         let label = element?.label ?? "no element"
         let frame = element.map { "\($0.frame)" } ?? "no frame"
+        // The element's type and identifier, which a report line with no label could not otherwise be
+        // traced from. `nil` element: the audit named nothing it could be pointed at.
+        let kind = element.map { "type \($0.elementType.rawValue) id '\($0.identifier)'" } ?? "no type"
         self?.auditReport.append(
-          "[\(screen)] \(issue.compactDescription) | \(label) | \(frame) | \(issue.detailedDescription)"
+          "[\(screen)] \(issue.compactDescription) | \(label) | \(frame) | \(kind) | \(issue.detailedDescription)"
         )
         return true
       }

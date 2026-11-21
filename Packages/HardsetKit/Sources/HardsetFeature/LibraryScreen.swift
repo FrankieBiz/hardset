@@ -82,13 +82,9 @@ public struct LibraryScreen: View {
     do {
       switch target {
       case .creating:
-        // The store returns an existing movement of the same name unchanged, which here would close
-        // the editor as if the lifter's choice had been saved. Say so instead.
-        if (snapshot.value ?? []).contains(where: { Self.isSameName($0.name, name) }) {
-          saveError = "A movement called “\(name)” already exists. Open it from the list to change it."
-          return
-        }
-        _ = try catalog.createCustomExercise(named: name, attribution: attribution)
+        // Refused by the store, not returned: an existing movement of the same name handed back
+        // would close the editor as if the lifter's choice had been saved.
+        _ = try catalog.createNewCustomExercise(named: name, attribution: attribution)
       case .editing(let entry):
         _ = try catalog.updateCustomExercise(entry.id, name: name, attribution: attribution)
       }
@@ -96,7 +92,7 @@ public struct LibraryScreen: View {
       editor = nil
       reloadToken &+= 1
     } catch CatalogSeederError.duplicateName {
-      saveError = "A movement called “\(name)” already exists. Choose another name."
+      saveError = MovementEditorDraft.nameTakenMessage(name)
     } catch CatalogSeederError.curatedNotEditable {
       saveError = "This movement comes with the app, so its muscles cannot be changed."
     } catch CatalogSeederError.blankName {
@@ -104,11 +100,6 @@ public struct LibraryScreen: View {
     } catch {
       saveError = "“\(name)” could not be saved. Try again."
     }
-  }
-
-  private static func isSameName(_ lhs: String, _ rhs: String) -> Bool {
-    lhs.trimmingCharacters(in: .whitespacesAndNewlines)
-      .compare(rhs, options: [.caseInsensitive, .diacriticInsensitive]) == .orderedSame
   }
 }
 
