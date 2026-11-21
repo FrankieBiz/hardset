@@ -207,7 +207,7 @@ public struct WorkoutReceiptView: View {
         ForEach(line.records) { record in
           // The trophy, as the live session marks records. The seal is the high-certainty
           // symbol, and in the record hue it read as a mixed certainty claim.
-          Label(record.kind.label, systemImage: "trophy.fill")
+          Label(record.qualifiedLabel, systemImage: "trophy.fill")
             .font(Tokens.Text.provenance)
             .foregroundStyle(Tokens.Color.plateYellow)
         }

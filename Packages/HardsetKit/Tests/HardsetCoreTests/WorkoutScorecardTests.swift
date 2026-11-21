@@ -137,4 +137,24 @@ struct WorkoutScorecardTests {
     #expect(ScorecardCopy.gainShareText(reps)?.contains("body's own load is unknown") == true)
   }
 
+  @Test("Only movements with exclusively estimated records receive the estimate-only qualifier")
+  func estimateOnlyAndObservedRecordsStayDistinct() {
+    func scored(_ kinds: Set<PersonalRecordKind>) -> WorkoutScorecard {
+      WorkoutScorecard.make([ScorecardInput(key: ProgressionKey(exerciseID: ExerciseID()),
+        exerciseName: "Press", currentSets: [set(97.5, 8)], previousSets: [set(100, 5)],
+        recordKinds: kinds)])
+    }
+    let estimated = scored([.estimatedOneRepMax])
+    #expect(estimated.estimateOnlyRecordMovementCount == 1)
+    #expect(estimated.headline == "Beat last time on 1 of 1 · 1 estimate-only record")
+    #expect(ScorecardCopy.recordsText(estimated) == "An estimated record on 1 movement")
+    let observed = scored([.estimatedOneRepMax, .repsAtLoad])
+    #expect(observed.estimateOnlyRecordMovementCount == 0)
+    #expect(observed.headline == "Beat last time on 1 of 1")
+    #expect(ScorecardCopy.recordsText(observed) == "A record on 1 movement")
+    let mixed = WorkoutScorecard(entries: estimated.entries + observed.entries,
+      beatenCount: 2, comparedCount: 2, recordMovementCount: 2, biggestGain: nil)
+    #expect(ScorecardCopy.recordsText(mixed) == "A record on 1 movement · An estimated record on 1 movement")
+  }
+
 }

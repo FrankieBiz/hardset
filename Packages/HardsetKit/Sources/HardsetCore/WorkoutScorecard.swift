@@ -10,6 +10,7 @@ public struct ScorecardInput: Hashable, Sendable {
   public let previousSets: [PriorSetRecord]
   public let repRange: RepRange?
   public let setRecord: Bool
+  public let recordKinds: Set<PersonalRecordKind>
   public let estimatesOneRepMax: Bool
   public let assumesAddedLoad: Bool
 
@@ -21,14 +22,16 @@ public struct ScorecardInput: Hashable, Sendable {
     repRange: RepRange? = nil,
     setRecord: Bool = false,
     estimatesOneRepMax: Bool = true,
-    assumesAddedLoad: Bool = false
+    assumesAddedLoad: Bool = false,
+    recordKinds: Set<PersonalRecordKind> = []
   ) {
     self.key = key
     self.exerciseName = exerciseName
     self.currentSets = currentSets
     self.previousSets = previousSets
     self.repRange = repRange
-    self.setRecord = setRecord
+    self.setRecord = setRecord || !recordKinds.isEmpty
+    self.recordKinds = recordKinds
     self.estimatesOneRepMax = estimatesOneRepMax
     self.assumesAddedLoad = assumesAddedLoad
   }
@@ -45,21 +48,30 @@ public struct WorkoutScorecard: Hashable, Sendable {
   public let recordMovementCount: Int
   public let biggestGain: Gain?
 
+  public var estimateOnlyRecordMovementCount: Int {
+    entries.filter(\.estimateOnlyRecord).count
+  }
+
   public var headline: String {
     guard comparedCount > 0 else { return "First time on every movement" }
-    return "Beat last time on \(beatenCount) of \(comparedCount)"
+    let headline = "Beat last time on \(beatenCount) of \(comparedCount)"
+    let estimates = estimateOnlyRecordMovementCount
+    guard estimates > 0 else { return headline }
+    return headline + " · \(estimates) estimate-only \(estimates == 1 ? "record" : "records")"
   }
 
   public struct Entry: Hashable, Sendable, Identifiable {
     public let key: ProgressionKey
     public let exerciseName: String
     public let outcome: Outcome
+    public let estimateOnlyRecord: Bool
     public var id: ProgressionKey { key }
 
-    public init(key: ProgressionKey, exerciseName: String, outcome: Outcome) {
+    public init(key: ProgressionKey, exerciseName: String, outcome: Outcome, estimateOnlyRecord: Bool = false) {
       self.key = key
       self.exerciseName = exerciseName
       self.outcome = outcome
+      self.estimateOnlyRecord = estimateOnlyRecord
     }
   }
 
@@ -158,7 +170,8 @@ public struct WorkoutScorecard: Hashable, Sendable {
       } else {
         outcome = .notBeaten
       }
-      entries.append(Entry(key: input.key, exerciseName: input.exerciseName, outcome: outcome))
+      entries.append(Entry(key: input.key, exerciseName: input.exerciseName, outcome: outcome,
+        estimateOnlyRecord: input.recordKinds == [.estimatedOneRepMax]))
 
       if let gain = gain(for: input) { gains.append(gain) }
     }

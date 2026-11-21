@@ -359,12 +359,12 @@ struct ReceiptStoreTests {
     return id
   }
 
-  private func scorecardFixture() async throws -> (DatabaseQueue, ExerciseID, MachineID) {
+  private func scorecardFixture(modality: String = "unknown") async throws -> (DatabaseQueue, ExerciseID, MachineID) {
     let db = try DatabaseQueue()
     try HardsetMigrations.migrator().migrate(db)
     let exercise = ExerciseID(), gym = UUID(), machine = MachineID()
     try await db.write { db in
-      try Exercise.insert { Exercise.Draft(id: exercise.rawValue, name: "Press") }.execute(db)
+      try Exercise.insert { Exercise.Draft(id: exercise.rawValue, name: "Press", modality: modality) }.execute(db)
       try Gym.insert { Gym.Draft(id: gym, name: "Gym") }.execute(db)
       try Machine.insert {
         Machine.Draft(id: machine.rawValue, gymID: gym, name: "Sled A", stackIncrementKg: 2.5)
@@ -472,6 +472,23 @@ struct ReceiptStoreTests {
     let scorecard = try #require(receipt.scorecard)
     #expect(scorecard.entries.first?.outcome == .beat(nil))
     #expect(scorecard.recordMovementCount == 1)
+  }
+
+  @Test("Estimate-only records keep their qualifier on every finished-workout surface")
+  func estimateOnlyRecordKeepsItsQualifier() async throws {
+    let (db, exercise, machine) = try await scorecardFixture(modality: "machine")
+    let t0 = Date(timeIntervalSince1970: 1_000_000)
+    _ = try await seedFinished(db, exercise: exercise, machine: machine, sets: [(100, 5)], at: t0)
+    let current = try await seedFinished(db, exercise: exercise, machine: machine,
+      sets: [(97.5, 8)], at: t0.addingTimeInterval(86_400))
+    let receipt = try await ReceiptStore(database: db).load(current)
+    let line = try #require(receipt.lines.first)
+    #expect(line.records.map(\.kind) == [.estimatedOneRepMax])
+    let card = try #require(receipt.scorecard)
+    #expect(card.headline.contains("estimate-only"))
+    #expect(ScorecardCopy.recordsText(card) == "An estimated record on 1 movement")
+    #expect(ScorecardCopy.markText(try #require(card.entries.first), unit: .kilograms) == "Estimated record")
+    #expect(receipt.text(unit: .kilograms).contains("Best estimated 1RM · Moderate confidence"))
   }
 
   @Test("Warm-ups are neither compared nor counted")

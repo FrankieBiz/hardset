@@ -9,11 +9,14 @@ import Foundation
 public enum ScorecardCopy {
   /// "A record on 1 movement", "Records on 3 movements", or nil when none was set.
   public static func recordsText(_ card: WorkoutScorecard) -> String? {
-    switch card.recordMovementCount {
-    case ..<1: nil
-    case 1: "A record on 1 movement"
-    default: "Records on \(card.recordMovementCount) movements"
-    }
+    let estimated = card.estimateOnlyRecordMovementCount
+    let observed = card.recordMovementCount - estimated
+    var parts: [String] = []
+    if observed == 1 { parts.append("A record on 1 movement") }
+    if observed > 1 { parts.append("Records on \(observed) movements") }
+    if estimated == 1 { parts.append("An estimated record on 1 movement") }
+    if estimated > 1 { parts.append("Estimated records on \(estimated) movements") }
+    return parts.isEmpty ? nil : parts.joined(separator: " · ")
   }
 
   /// "Biggest gain: Chest press, estimated max +6%": the movement, the metric and the change, or nil
@@ -35,7 +38,7 @@ public enum ScorecardCopy {
   }
 
   /// Held in step with `CertaintyLevel.label` in HardsetUI, which Core cannot see.
-  private static func confidenceWords(_ certainty: Certainty) -> String {
+  public static func confidenceWords(_ certainty: Certainty) -> String {
     switch certainty {
     case .high: "High confidence"
     case .moderate: "Moderate confidence"
@@ -50,7 +53,7 @@ public enum ScorecardCopy {
   public static func markText(_ entry: WorkoutScorecard.Entry, unit: WeightUnit) -> String? {
     switch entry.outcome {
     case .beat(let comparison):
-      guard let comparison else { return "Record" }
+      guard let comparison else { return entry.estimateOnlyRecord ? "Estimated record" : "Record" }
       let label = comparison.label(in: unit)
       return label.isEmpty ? "Ahead of last time" : label
     case .matched: return "Matched"

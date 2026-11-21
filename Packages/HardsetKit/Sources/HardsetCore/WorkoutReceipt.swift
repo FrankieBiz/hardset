@@ -205,7 +205,7 @@ public struct WorkoutReceipt: Hashable, Sendable, Identifiable {
         let load = LoadText.entered(line.weightKg, in: unit, locale: locale)
         rows.append("  \(load) \(unit.abbreviation) × \(line.reps)\(line.isWarmup ? " · Warm-up" : "")")
         for record in line.records {
-          rows.append("    \(record.kind.label) · \(line.equipment.recordScope)")
+          rows.append("    \(record.qualifiedLabel) · \(line.equipment.recordScope)")
         }
       }
     }

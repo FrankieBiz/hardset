@@ -103,13 +103,13 @@ public nonisolated struct ReceiptStore: Sendable {
 
     var order: [ProgressionKey] = []
     var current: [ProgressionKey: [PriorSetRecord]] = [:]
-    var recorded = Set<ProgressionKey>()
+    var recorded: [ProgressionKey: Set<PersonalRecordKind>] = [:]
     // `lines` were built one per set, in the same order.
     for (set, line) in zip(sets, lines) {
       let setKey = key(set)
       if !order.contains(setKey) { order.append(setKey) }
       if !set.isWarmup { current[setKey, default: []].append(record(set)) }
-      if !line.records.isEmpty { recorded.insert(setKey) }
+      recorded[setKey, default: []].formUnion(line.records.map(\.kind))
     }
 
     let earlier = Dictionary(grouping: prior, by: key)
@@ -130,9 +130,9 @@ public nonisolated struct ReceiptStore: Sendable {
         repRange: planRow.flatMap { row in
           row.repRangeLower.flatMap { lower in row.repRangeUpper.flatMap { RepRange(lower: lower, upper: $0) } }
         },
-        setRecord: recorded.contains(movement),
         estimatesOneRepMax: (modalities[movement.exerciseID.rawValue] ?? nil)?.estimatesOneRepMax ?? false,
-        assumesAddedLoad: (modalities[movement.exerciseID.rawValue] ?? nil) == nil
+        assumesAddedLoad: (modalities[movement.exerciseID.rawValue] ?? nil) == nil,
+        recordKinds: recorded[movement] ?? []
       )
     }
     let card = WorkoutScorecard.make(inputs)
