@@ -68,7 +68,7 @@ public final class SessionCoordinator {
 
   /// The exercise-state id the running rest follows, so the rest bar can offer that movement's next
   /// rest. `nil` when this coordinator has not started the rest that is running, as after a
-  /// relaunch.
+  /// relaunch; see `restExerciseID(matching:)`.
   public private(set) var restExerciseID: UUID?
   /// What this coordinator last asked the timer to run. The screen shows it when the timer reports
   /// none of its own, as in previews and the tour's demo timer.
@@ -748,6 +748,20 @@ public final class SessionCoordinator {
       else { continue }
       rememberedRest[exercise.exerciseID] = stored
     }
+  }
+
+  /// The movement a running rest follows. This coordinator's own record while it has one; after a
+  /// relaunch the timer remembers the rest and the coordinator does not, so the movement is found
+  /// from what the timer reports, by name and machine, and only when that names exactly one block.
+  /// Two blocks of one movement on one machine cannot be told apart from a name, and the rest bar
+  /// then offers no "next rest" rather than offering it for the wrong block.
+  public func restExerciseID(matching metadata: RestMetadata?) -> UUID? {
+    if let restExerciseID { return restExerciseID }
+    guard let metadata else { return nil }
+    let candidates = exercises.filter {
+      $0.exerciseName == metadata.exerciseName && $0.machineName == metadata.machineName
+    }
+    return candidates.count == 1 ? candidates[0].id : nil
   }
 
   /// The length to start after a working set of this movement: the lifter's own last choice. The

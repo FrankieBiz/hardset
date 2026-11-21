@@ -411,6 +411,98 @@ struct SessionRestTests {
     #expect(live.isFinished)
   }
 
+  // MARK: - After a relaunch
+
+  /// The timer remembers a running rest across a relaunch, because its journal does; the rebuilt
+  /// coordinator does not remember which movement it followed. Without that the rest bar is there
+  /// but offers no "next rest", which the lifter had a moment before the app was killed.
+  @Test("After a relaunch the movement a running rest followed is found from what the timer reports")
+  func relaunchFindsTheMovementFromTheTimersMetadata() throws {
+    let database = try migratedDatabase()
+    let press = try seedExercise(database)
+    let curl = try seedExercise(database, name: "Curl")
+    _ = try SessionCoordinator.start(
+      store: LoggerStore(database: database),
+      plan: [
+        PlannedExercise(exerciseID: press, exerciseName: "Chest Press", plannedSets: 2),
+        PlannedExercise(exerciseID: curl, exerciseName: "Curl", plannedSets: 2),
+      ],
+      now: { self.start })
+    let recovered = try #require(
+      try SessionCoordinator.resume(store: LoggerStore(database: database), now: { self.start }))
+    #expect(recovered.restExerciseID == nil)
+
+    let found = recovered.restExerciseID(
+      matching: RestMetadata(exerciseName: "Curl", setOrdinal: 1, plannedSets: 2))
+
+    #expect(found == recovered.exercises[1].id)
+  }
+
+  @Test("The coordinator's own record of the rest it started wins over a name")
+  func ownRestRecordWinsOverTheTimersMetadata() throws {
+    let database = try migratedDatabase()
+    let press = try seedExercise(database)
+    let rest = scratchRest()
+    rest.remember(.seconds(75), for: press)
+    let live = try liveWorkout(restPreferences: rest, spy: TimerSpy(), database: database, exercise: press)
+    #expect(log(live))
+
+    let found = live.restExerciseID(
+      matching: RestMetadata(exerciseName: "Something else", setOrdinal: 1))
+
+    #expect(found == live.exercises[0].id)
+  }
+
+  @Test("A name that does not name exactly one block finds none, rather than the wrong one")
+  func ambiguousOrUnknownNamesFindNone() throws {
+    let database = try migratedDatabase()
+    let press = try seedExercise(database)
+    // Two blocks of one movement, with no machine to tell them apart.
+    _ = try SessionCoordinator.start(
+      store: LoggerStore(database: database),
+      plan: [
+        PlannedExercise(exerciseID: press, exerciseName: "Chest Press", plannedSets: 1),
+        PlannedExercise(exerciseID: press, exerciseName: "Chest Press", plannedSets: 1),
+      ],
+      now: { self.start })
+    let recovered = try #require(
+      try SessionCoordinator.resume(store: LoggerStore(database: database), now: { self.start }))
+
+    #expect(
+      recovered.restExerciseID(matching: RestMetadata(exerciseName: "Chest Press", setOrdinal: 1))
+        == nil)
+    #expect(
+      recovered.restExerciseID(matching: RestMetadata(exerciseName: "Squat", setOrdinal: 1)) == nil)
+    #expect(recovered.restExerciseID(matching: nil) == nil)
+  }
+
+  @Test("The machine is part of the match: a rest on another machine, or on none, is not this block's")
+  func theMachineNameIsPartOfTheMatch() throws {
+    let database = try migratedDatabase()
+    let press = try seedExercise(database)
+    let gyms = GymStore(database: database)
+    let gym = try gyms.createGym(name: "Gym")
+    let machine = try gyms.createMachine(at: gym, name: "Chest Press", brand: "Hammer")
+    _ = try SessionCoordinator.start(
+      store: LoggerStore(database: database), gymID: gym,
+      plan: [PlannedExercise(exerciseID: press, machineID: machine, exerciseName: "Chest Press", plannedSets: 1)],
+      now: { self.start })
+    let recovered = try #require(
+      try SessionCoordinator.resume(store: LoggerStore(database: database), now: { self.start }))
+    let machineName = try #require(recovered.exercises[0].machineName)
+
+    let same = recovered.restExerciseID(
+      matching: RestMetadata(exerciseName: "Chest Press", setOrdinal: 1, machineName: machineName))
+    let other = recovered.restExerciseID(
+      matching: RestMetadata(exerciseName: "Chest Press", setOrdinal: 1, machineName: "Another machine"))
+    let none = recovered.restExerciseID(
+      matching: RestMetadata(exerciseName: "Chest Press", setOrdinal: 1))
+
+    #expect(same == recovered.exercises[0].id)
+    #expect(other == nil)
+    #expect(none == nil)
+  }
+
   private final class ClockBox: @unchecked Sendable {
     var value: Date
     init(_ value: Date) { self.value = value }

@@ -148,7 +148,9 @@ public struct LiveSessionScreen: View {
       records: recordsAreDismissed ? [] : coordinator.lastRecords,
       recordsExerciseName: coordinator.lastRecordsExerciseName,
       lastRest: coordinator.lastRestByCard,
-      restExerciseID: coordinator.restExerciseID,
+      // After a relaunch the timer still has the rest and the coordinator does not know which
+      // movement it followed, so it is found from what the timer reports.
+      restExerciseID: coordinator.restExerciseID(matching: hooks.metadata()),
       onChooseNextRest: { exerciseStateID, duration in
         coordinator.rememberRest(duration, forExercise: exerciseStateID)
       },
