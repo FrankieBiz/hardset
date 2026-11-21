@@ -38,6 +38,11 @@ TEXT_ON = {
     "plateRed": SURFACES + ["plateRedSurface"],
     "warning": SURFACES + ["warningSurface"],
     "onPlateBlue": ["plateBlueFill"],
+    # The next-up log control is `checkmark.square.fill`, whose check is knocked out of the fill, so
+    # the check is whatever surface is behind the control: the canvas in the live session, `steel`
+    # inside a card. It is read as a glyph against the fill, so it is gated like text.
+    "canvas": ["plateBlueFill"],
+    "steel": ["plateBlueFill"],
 }
 # Body text drawn on the tinted state surfaces.
 TINTS = ["plateBlueSurface", "plateGreenSurface", "plateYellowSurface", "plateRedSurface", "warningSurface"]
@@ -148,28 +153,6 @@ def main():
                 measured = ratio(value, palette[bg][appearance])
                 if measured < 3.0:
                     failures.append(f"series[{index}] on {bg} ({appearance}): {measured:.2f}:1 < 3:1")
-
-    # Knurl backing: `KnurlPattern` strokes chalk at 8% over the opaque `steelRaised` panel behind
-    # the rest countdown, and where the two stroke families cross the coverage is
-    # 1 - (1 - 0.08)^2 = 0.1536. The countdown is `chalk`, the only text colour allowed on the
-    # knurl, so it is gated at 7:1 against both blends in every appearance. `chalkDim` is not
-    # allowed on the knurl, and the logged seal's glyph never sits over it, so neither is gated.
-    # This loop adds no key to `palette`, so the swatch count is unchanged.
-    for opacity in (0.08, 1 - (1 - 0.08) ** 2):
-        for appearance in palette["chalk"]:
-            chalk = palette["chalk"][appearance]
-            base = palette["steelRaised"][appearance]
-            blended = 0
-            for shift in (16, 8, 0):
-                fg_channel, bg_channel = (chalk >> shift) & 255, (base >> shift) & 255
-                blended |= round(bg_channel + (fg_channel - bg_channel) * opacity) << shift
-            checked += 1
-            measured = ratio(chalk, blended)
-            if measured < 7.0:
-                failures.append(
-                    f"chalk on steelRaised with knurl at {opacity:.4f} ({appearance}): "
-                    f"{measured:.2f}:1 < 7:1"
-                )
 
     if failures:
         print("\n".join(failures))

@@ -466,6 +466,27 @@ public struct HardsetCardModifier: ViewModifier {
   }
 }
 
+/// A raised panel for a message or a pinned bar: `steelRaised` on a continuous `card` radius, no
+/// colour, no border. It is the one raised tone the live session uses, so the rest bar and a record
+/// notice stand on the same step off the canvas, and what a panel says is carried by its words and
+/// a small mark and never by its fill. Under Increase Contrast, where the fill step is gone, it
+/// wears a `hairline` border, as a card does.
+public struct HardsetPanelModifier: ViewModifier {
+  @Environment(\.colorSchemeContrast) private var contrast
+
+  public init() {}
+
+  public func body(content: Content) -> some View {
+    content
+      .background(Tokens.Color.steelRaised, in: Tokens.Shape.card)
+      .overlay {
+        if contrast == .increased {
+          Tokens.Shape.card.strokeBorder(Tokens.Color.hairline, lineWidth: Tokens.Stroke.hairline)
+        }
+      }
+  }
+}
+
 /// A sheet's background and chrome. The corner radius is the system's own, which is concentric
 /// with the device's corners; overriding it with a token only made it differ from every other
 /// sheet on the phone.
@@ -501,6 +522,11 @@ public extension View {
 
   func hardsetSheet() -> some View {
     modifier(HardsetSheetModifier())
+  }
+
+  /// Puts the view on the one raised panel tone. See `HardsetPanelModifier`.
+  func hardsetPanel() -> some View {
+    modifier(HardsetPanelModifier())
   }
 
   /// Lifts a pinned opaque surface off the content scrolling beneath it with a soft shadow, in

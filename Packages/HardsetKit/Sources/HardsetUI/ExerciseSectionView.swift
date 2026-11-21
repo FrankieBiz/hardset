@@ -204,7 +204,7 @@ public struct ExerciseSectionView: View {
         if isLink {
           Image(systemName: "chart.xyaxis.line")
             .hardsetText(.caption, weight: .semibold)
-            .foregroundStyle(Tokens.Color.plateBlue)
+            .foregroundStyle(Tokens.Color.chalkDim)
         }
       }
       .frame(minHeight: Tokens.minimumTapTarget, alignment: .leading)
@@ -247,8 +247,9 @@ public struct ExerciseSectionView: View {
 
   /// How far through the working sets the lifter is, as the count in figures: "1/3". The strip of
   /// pips that used to sit beside it said the same thing a second time in a different shape. The
-  /// count turns green only when the number of rows came from this movement's history: with no
-  /// history the rows are whatever the lifter added, and "1/1" in green read as a target met.
+  /// count is `chalkDim` and goes to full `chalk`, not green, once every working set is logged, and
+  /// only when the number of rows came from this movement's history: with no history the rows are
+  /// whatever the lifter added, and "1/1" brightening read as a target met.
   private var progress: some View {
     let working = state.workingSetCount
     let logged = loggedWorkingSets
@@ -257,7 +258,7 @@ public struct ExerciseSectionView: View {
       .font(Tokens.Text.figure)
       .foregroundStyle(
         hasHistory && logged == working && working > 0
-          ? Tokens.Color.plateGreen : Tokens.Color.chalkDim
+          ? Tokens.Color.chalk : Tokens.Color.chalkDim
       )
       .accessibilityElement(children: .combine)
       .accessibilityLabel("\(logged) of \(working) working sets logged")

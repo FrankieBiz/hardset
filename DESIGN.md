@@ -47,6 +47,14 @@ glass; the content beneath it is never glass.
   plate colour: an action you can take (plate blue), a set that is saved (plate green), a record
   (plate yellow), a caveat (warning orange), a failure (plate red). Everything else is steel and
   chalk.
+- **On the live session, one accent, and colour only as a small mark.** The next set's log control
+  is the only saturated colour on the screen. A saved set is a small `plateGreen` seal, a record is
+  the `plateYellow` trophy, a caveat is a small `warning` glyph, and a failure is `plateRed`; none
+  of them is ever a row fill, a tint, a capsule or a badge background, and no other control is blue.
+  The machine, the gym, the history link, the rest lengths and every quiet action are `chalk` or
+  `chalkDim`. Certainty is a phrase, not a coloured capsule (see `CertaintyBadge`). The finish
+  confirmation's primary button is the one other plate-blue fill, and it exists only while the
+  lifter is answering that question.
 - **Numbers are the hero.** Weights, reps and rest are set in SF Pro Condensed with tabular
   figures: large, narrow and steady, like stamped plates or a scale readout. Condensed figures fit
   pound values such as `132.28` at full size, so nothing shrinks to fit.
@@ -54,7 +62,8 @@ glass; the content beneath it is never glass.
   a step of surface. A control is identified by a fill, a verb label or a standard glyph. A 3:1
   outline is kept where those cannot carry it alone: an input that is empty or being typed into,
   every control under Increase Contrast, and every control when Button Shapes is on. Static text and
-  a saved value never imitate a button.
+  a saved value never imitate a button. The live session goes further: no input is boxed, a control
+  may be only its label, and the outline returns under Increase Contrast and Button Shapes.
 - **Restraint everywhere except the log tap.** The one memorable moment is logging a set: the
   check stamps in with a short spring and a success haptic, and the row settles into its logged
   state. Nothing else moves without being asked.
@@ -247,6 +256,11 @@ Selection rows, the unit switch and pickers stay silent.
   step to `canvas`; inside a card, rows separate by `hairline` only where they need to. Selected
   uses a 2 pt `plateBlue` ring and `plateBlueSurface` fill, because selection is state. Under
   Increase Contrast, where the fill step is gone, a card wears a `hairline` border.
+- **Panel** (`hardsetPanel`): the one raised tone of the live session: `steelRaised` on the `card`
+  radius, no colour and no border, with a `hairline` border under Increase Contrast. The rest bar
+  and the record notice are panels, so they stand on the same step off the canvas, and what a panel
+  says is carried by its words and one small mark. The stale-workout notice is a neutral `hardsetCard`
+  with a small `warning` glyph, because it holds buttons that need a fill to step off.
 - **Chips** (`HardsetChip`): capsule, raised fill, no stroke; selected uses `plateBlueFill` with
   `onPlateBlue` text.
 - **Inline control** (`InlineControlStyle`): a control that is only its label, for a screen that has
@@ -271,7 +285,7 @@ Selection rows, the unit switch and pickers stay silent.
 - **Screen header** (`ScreenHeader`): display title, one context line, optional trailing action.
 - **Banner** (`HardsetBanner`): record, caveat, and error messages on their tinted surfaces. The
   `info` kind stays as a neutral note and is listed for deletion in the final phase if nothing
-  uses it. A banner, the session screen's warning and record cards, and a non-interactive
+  uses it. A banner and a non-interactive
   `CertaintyCapsule` carry no stroke: the words, the symbol and the tinted surface identify the
   kind or level. An interactive `CertaintyBadge` is identified by its symbol and word, and wears
   an outline only under Increase Contrast or Button Shapes. A message-only banner speaks only its message to
@@ -392,7 +406,8 @@ Selection rows, the unit switch and pickers stay silent.
   card radius with `Elevation.floating` and no stroke, in every appearance and setting: glass was
   considered and refused, because the contrast gate cannot certify text on it. Controls are 56 pt
   inline controls identified by their label or glyph, with no key face; Increase Contrast and
-  Button Shapes outline them.
+  Button Shapes outline them. "Resting" and "Paused" are `chalkDim`, and the next rest's lengths
+  are figures: the chosen one in `chalk` with a 2 pt rule under it, the others `chalkDim`.
 - **Navigation titles** (`hardsetNavigationTitle`): the one title that may shrink, with
   `minimumScaleFactor(0.8)`, so a long exercise name stays on a single line in a bar. It is a
   documented exception to "adaptive layouts in place of shrinking text".

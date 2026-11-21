@@ -454,6 +454,8 @@ public struct SessionView: View {
   private var staleNotice: some View {
     VStack(alignment: .leading, spacing: Tokens.Spacing.regular) {
       HStack(alignment: .firstTextBaseline, spacing: Tokens.Spacing.regular) {
+        // The one mark of the caveat: a small `warning` glyph. The headline is chalk and the card
+        // is neutral, so nothing but the glyph is coloured.
         Image(systemName: "clock.badge.exclamationmark")
           .font(Tokens.Text.headline)
           .foregroundStyle(Tokens.Color.warning)
@@ -461,7 +463,7 @@ public struct SessionView: View {
         VStack(alignment: .leading, spacing: Tokens.Spacing.tight) {
           Text(startedAt.map { "Started \(Self.moment($0))" } ?? "Started earlier")
             .font(Tokens.Text.headline)
-            .foregroundStyle(Tokens.Color.warning)
+            .foregroundStyle(Tokens.Color.chalk)
           Text(staleDetail)
             .font(Tokens.Text.provenance)
             .foregroundStyle(Tokens.Color.chalk)
@@ -494,11 +496,7 @@ public struct SessionView: View {
       }
     }
     .padding(Tokens.Spacing.regular)
-    .background(Tokens.Color.warningSurface, in: RoundedRectangle(cornerRadius: Tokens.Radius.card))
-    .overlay(
-      RoundedRectangle(cornerRadius: Tokens.Radius.card)
-        .strokeBorder(Tokens.Color.warning.opacity(0.35), lineWidth: Tokens.Stroke.hairline)
-    )
+    .hardsetCard()
   }
 
   private var staleDetail: String {
@@ -702,6 +700,9 @@ public struct SessionView: View {
   /// Records from the set just logged, under the movement's name. Each one names what it beat, so
   /// the claim is checkable rather than a bare "PR!", and an estimated maximum carries its
   /// certainty beside it. One line per record, because it shares the bottom with the rest bar.
+  ///
+  /// A record is marked by the trophy in `plateYellow` and nothing else: the panel is the same
+  /// neutral raised tone as the rest bar, the title is chalk, and no yellow fills or outlines it.
   private var recordsCard: some View {
     VStack(alignment: .leading, spacing: Tokens.Spacing.snug) {
       HStack(alignment: .firstTextBaseline, spacing: Tokens.Spacing.regular) {
@@ -711,7 +712,7 @@ public struct SessionView: View {
           .accessibilityHidden(true)
         Text(recordsTitle)
           .font(Tokens.Text.headline)
-          .foregroundStyle(Tokens.Color.plateYellow)
+          .foregroundStyle(Tokens.Color.chalk)
           .frame(maxWidth: .infinity, alignment: .leading)
         if let onDismissRecords {
           DismissGlyphButton(action: onDismissRecords)
@@ -746,11 +747,7 @@ public struct SessionView: View {
       }
     }
     .padding(Tokens.Spacing.regular)
-    .background(Tokens.Color.plateYellowSurface, in: RoundedRectangle(cornerRadius: Tokens.Radius.card))
-    .overlay(
-      RoundedRectangle(cornerRadius: Tokens.Radius.card)
-        .strokeBorder(Tokens.Color.plateYellow.opacity(0.35), lineWidth: Tokens.Stroke.hairline)
-    )
+    .hardsetPanel()
   }
 
   private var recordsTitle: String {

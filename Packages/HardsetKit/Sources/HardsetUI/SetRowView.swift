@@ -330,10 +330,10 @@ public struct SetRowView: View {
   }
 
   /// A short mark, not a control and not a badge: a symbol and the figures of the set, in type, on
-  /// nothing. It names what grew, "+1 rep", "+2.5 kg · +1 rep", or says "Matched". A win is
-  /// `plateGreen` with an up arrow and a match is `chalkDim` with an equals sign, so neither is
-  /// carried by colour alone. It arrives with the standard reveal, so the row's height changes at
-  /// once and nothing animates layout.
+  /// nothing. It names what grew, "+1 rep", "+2.5 kg · +1 rep", or says "Matched". A win is `chalk`
+  /// with an up arrow and a match is `chalkDim` with an equals sign: the arrow and the words carry
+  /// the difference, and no hue does, because green on the screen means a set is saved. It arrives
+  /// with the standard reveal, so the row's height changes at once and nothing animates layout.
   private func beatMark(_ comparison: SetComparison) -> some View {
     let isMatch = comparison == .matched
     return HStack(spacing: Tokens.Spacing.tight) {
@@ -343,7 +343,7 @@ public struct SetRowView: View {
     }
     .hardsetText(.caption, weight: .semibold)
     .monospacedDigit()
-    .foregroundStyle(isMatch ? Tokens.Color.chalkDim : Tokens.Color.plateGreen)
+    .foregroundStyle(isMatch ? Tokens.Color.chalkDim : Tokens.Color.chalk)
     .hardsetArrival()
   }
 

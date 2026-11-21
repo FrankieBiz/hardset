@@ -130,7 +130,7 @@ public struct RestBarView: View {
         .contentShape(Rectangle())
       }
       .buttonStyle(HardsetPressStyle())
-      .foregroundStyle(Tokens.Color.plateBlue)
+      .foregroundStyle(Tokens.Color.chalkDim)
       .accessibilityLabel(
         nextRest.map { "Next rest, \(ExerciseSectionView.spoken($0))" } ?? "Choose the next rest")
       .accessibilityHint(isChoosing ? "Hides the lengths" : "Shows the lengths to choose from")
@@ -161,13 +161,38 @@ public struct RestBarView: View {
     }
   }
 
+  /// The lengths on offer, as figures in a row. The next rest's length is `chalk` with a rule
+  /// under it, the others `chalkDim`, so the choice is carried by weight and a mark and no hue: the
+  /// rest bar has no accent, because the screen has one and it is the next set's check.
   @ViewBuilder private var chooserChips: some View {
     ForEach(restChoices, id: \.self) { duration in
-      HardsetChip(duration.clockString, isSelected: duration == nextRest) {
+      let isSelected = duration == nextRest
+      Button {
         chosenCount += 1
         onChooseNextRest?(duration)
         isChoosing = false
+      } label: {
+        Text(duration.clockString)
+          .font(Tokens.Text.figure)
+          .foregroundStyle(isSelected ? Tokens.Color.chalk : Tokens.Color.chalkDim)
+          .lineLimit(1)
+          .frame(minWidth: Tokens.minimumTapTarget)
+          .overlay(alignment: .bottom) {
+            if isSelected {
+              Rectangle()
+                .fill(Tokens.Color.chalk)
+                .frame(height: Tokens.Stroke.selected)
+                .offset(y: Tokens.Spacing.tight)
+                .accessibilityHidden(true)
+            }
+          }
       }
+      .buttonStyle(
+        InlineControlStyle(
+          minHeight: Tokens.minimumTapTarget, alignment: .center,
+          fullWidth: dynamicTypeSize.isAccessibilitySize)
+      )
+      .accessibilityAddTraits(isSelected ? [.isSelected] : [])
       .accessibilityLabel(ExerciseSectionView.spoken(duration))
     }
   }
@@ -192,7 +217,7 @@ public struct RestBarView: View {
       VStack(alignment: .leading, spacing: Tokens.Spacing.hairline) {
         Text(state.isRunning ? "Resting" : "Paused")
           .font(Tokens.Text.sectionHeader)
-          .foregroundStyle(state.isRunning ? Tokens.Color.plateBlue : Tokens.Color.chalkDim)
+          .foregroundStyle(Tokens.Color.chalkDim)
         if let metadata {
           Text("\(metadata.exerciseName), \(metadata.setLabel.lowercased())")
             .hardsetText(.caption)
