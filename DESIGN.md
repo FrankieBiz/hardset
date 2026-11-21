@@ -379,15 +379,21 @@ Selection rows, the unit switch and pickers stay silent.
   that have no body part last under the `warning` header. A row is a `SelectionCardButtonStyle` card: the
   movement in `headline`, its machine in `provenance`, a small `plateBlue` sparkline of the last dozen
   sessions (hidden from VoiceOver and dropped at accessibility sizes), and one sentence that names its
-  metric: "Estimated max +8% in 6 weeks", or "Not enough history" in `chalkDim` when no session sits six
-  weeks back. Beside every estimated-max figure sits its `CertaintyBadge`, drawn over the card's corner
+  metric: "Estimated max +8% in 6 weeks", or, in `chalkDim`, "Estimated max · no 6-week comparison" with
+  the history the movement does have ("4 sessions over 3 weeks. A comparison needs a session 5 to 7
+  weeks before the latest.") when no session sits in that band. It never says "Not enough history":
+  a movement trained every four weeks has plenty and only misses the band. The band is
+  `ProgressTrendAnalyzer.comparisonBandDays`, and the words are written from it. Beside every estimated-max figure sits its `CertaintyBadge`, drawn over the card's corner
   as its own control so it never nests inside the card's button. A six-week change uses the weaker
   certainty of its two estimates. Imported history has its own series and says "Imported · machine
   not recorded" in the same `provenance` role. Machine and cable movements whose sets have no
   machine say "No machine recorded" there and in the chart legend. A movement with no record in its last
   three sessions is flagged "Stalled · 3 sessions" in `warning` with `pause.circle`, and no advice. "Most
-  improved · estimated max" at the top repeats the three biggest estimated-max gains; load and rep
-  percentages stay in their own movement rows. Empty, it says "Log a workout and your progress
+  improved · estimated max" at the top repeats three estimated-max gains, ordered by the confidence of
+  the estimate first, then the size of the gain, with a stalled movement after one of the same
+  confidence that is not, and a `caption` under its label says so (`ProgressCopy.mostImprovedOrdering`),
+  so a Low-confidence gain that is also Stalled is never on top while a better-supported gain sits
+  below it; load and rep percentages stay in their own movement rows. Empty, it says "Log a workout and your progress
   shows up here"; loading is a quiet line and a failed read says so, never an empty board. It adds no
   token and no motion.
 - **Scorecard** (`WorkoutReceiptView`, `ScorecardCopy`): the block at the top of a finished workout's

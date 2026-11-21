@@ -26,6 +26,9 @@ public struct MovementTrend: Hashable, Sendable, Identifiable {
   /// those sessions are checked.
   public let stalledSessions: Int?
   public let latestDate: Date
+  /// The date of the movement's first session, so a row with no six-week change can say how much
+  /// history it does have. Nil when the caller does not know it.
+  public let firstDate: Date?
   /// How far to trust the displayed estimate/change. A six-week ratio carries the weaker of
   /// its two estimates, using the same combination rule as the scorecard. Without a comparison
   /// window this is the latest estimate's certainty. Unknown-modality metrics are low; other
@@ -43,6 +46,7 @@ public struct MovementTrend: Hashable, Sendable, Identifiable {
     sessionCount: Int,
     stalledSessions: Int?,
     latestDate: Date,
+    firstDate: Date? = nil,
     certainty: Certainty? = nil,
     loadAssumption: String? = nil
   ) {
@@ -53,6 +57,7 @@ public struct MovementTrend: Hashable, Sendable, Identifiable {
     self.sessionCount = sessionCount
     self.stalledSessions = stalledSessions
     self.latestDate = latestDate
+    self.firstDate = firstDate
     self.certainty = certainty
     self.loadAssumption = loadAssumption
   }
@@ -62,6 +67,11 @@ public struct MovementTrend: Hashable, Sendable, Identifiable {
 public enum ProgressTrendAnalyzer {
   public static let stallRun = 3
   public static let minimumSessionsForStall = 4
+
+  /// How many days before the latest session an earlier one may sit and still be what a six-week
+  /// change is read against: five to seven weeks. The change is computed from this band and the
+  /// copy that explains a missing change is written from it, so neither can drift from the other.
+  public static let comparisonBandDays: ClosedRange<Int> = 35...49
 
   private static let day: TimeInterval = 86_400
 
@@ -95,8 +105,8 @@ public enum ProgressTrendAnalyzer {
     guard let latest = points.last else { return nil }
 
     let change: Double?
-    let windowStart = latestSession.date.addingTimeInterval(-49 * day)
-    let windowEnd = latestSession.date.addingTimeInterval(-35 * day)
+    let windowStart = latestSession.date.addingTimeInterval(-Double(comparisonBandDays.upperBound) * day)
+    let windowEnd = latestSession.date.addingTimeInterval(-Double(comparisonBandDays.lowerBound) * day)
     let base = points
       .filter { $0.date >= windowStart && $0.date <= windowEnd }
       // Reps at the top load are only a fair comparison at the same top load: ten bodyweight
@@ -139,6 +149,7 @@ public enum ProgressTrendAnalyzer {
       sessionCount: sessions.count,
       stalledSessions: stalled,
       latestDate: latestSession.date,
+      firstDate: sessions.first?.date,
       certainty: assumesAddedLoad ? .low : metric == .estimatedMax
         ? Certainty.combine([latest.certainty, change == nil ? nil : base?.certainty].compactMap { $0 })
         : nil,
@@ -189,7 +200,13 @@ public enum ProgressTrendAnalyzer {
   /// alongside percentages of estimated max. Other metrics remain visible in body-part sections.
   public static let mostImprovedMetric: TrendMetric = .estimatedMax
 
-  /// The largest positive six-week gains within one metric, largest first.
+  /// The positive six-week gains within one metric, best-supported first.
+  ///
+  /// Ordered by how sure the estimate is, then by whether the movement has stalled, then by the size
+  /// of the gain. A bigger percentage from a weaker estimate does not outrank a smaller one from a
+  /// better one, and a movement that has stalled ranks after one of the same confidence that has not,
+  /// so the strip never leads with a Low-confidence movement that is also flagged Stalled while a
+  /// better-supported gain sits below it. `ProgressCopy.mostImprovedOrdering` says so on screen.
   public static func mostImproved(
     _ trends: [MovementTrend], metric: TrendMetric = mostImprovedMetric, limit: Int = 3
   ) -> [MovementTrend] {
@@ -197,6 +214,12 @@ public enum ProgressTrendAnalyzer {
     return trends
       .filter { $0.metric == metric && ($0.sixWeekChange ?? 0) > 0 }
       .sorted { lhs, rhs in
+        let leftCertainty = lhs.certainty ?? .unevaluated
+        let rightCertainty = rhs.certainty ?? .unevaluated
+        if leftCertainty != rightCertainty { return leftCertainty > rightCertainty }
+        let leftStalled = lhs.stalledSessions != nil
+        let rightStalled = rhs.stalledSessions != nil
+        if leftStalled != rightStalled { return !leftStalled }
         let left = lhs.sixWeekChange ?? 0
         let right = rhs.sixWeekChange ?? 0
         if left != right { return left > right }

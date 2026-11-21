@@ -6,10 +6,11 @@ import SwiftUI
 ///
 /// A row is one movement on one machine, as it is one series everywhere else, and says what it
 /// measures: "Estimated max +8% in 6 weeks", never a bare number. Where that figure is an estimate
-/// its certainty sits beside it, and a movement with no session six weeks back says "Not enough
-/// history" rather than borrowing another window. At the top, the three biggest estimated-max gains. A movement
-/// that has not set a record in its last three sessions is flagged "Stalled" in the warning colour,
-/// with no advice attached: it is a fact about the sessions, not a prescription.
+/// its certainty sits beside it, and a movement with no session five to seven weeks before its
+/// latest says it has no 6-week comparison and how much history it does have, rather than borrowing
+/// another window. At the top, the three best-supported estimated-max gains, in an order the strip
+/// states. A movement that has not set a record in its last three sessions is flagged "Stalled" in
+/// the warning colour, with no advice attached: it is a fact about the sessions, not a prescription.
 ///
 /// The words come from `ProgressCopy` and the grouping from `ProgressBoard`, both tested without a
 /// view; this draws them. The sparkline is decoration for the eye and is hidden from VoiceOver,
@@ -99,6 +100,11 @@ public struct ProgressBoardView: View {
   private func mostImprovedStrip(_ rows: [ProgressBoard.Row], metric: TrendMetric) -> some View {
     VStack(alignment: .leading, spacing: Tokens.Spacing.snug) {
       SectionLabel("Most improved · " + ProgressCopy.metricName(metric).lowercased())
+      // The order is not by percentage alone, so the strip says what it is.
+      Text(ProgressCopy.mostImprovedOrdering)
+        .font(Tokens.Text.caption)
+        .foregroundStyle(Tokens.Color.chalkDim)
+        .fixedSize(horizontal: false, vertical: true)
       ForEach(rows) { row in
         rowCard(row, showsSparkline: false)
       }
@@ -179,9 +185,17 @@ public struct ProgressBoardView: View {
             .foregroundStyle(Tokens.Color.chalk)
             .fixedSize(horizontal: false, vertical: true)
         } else {
-          Text(ProgressCopy.metricName(row.trend.metric) + " · " + ProgressCopy.notEnoughHistory)
+          // What is missing, not a verdict on the history: a movement trained every four weeks, or
+          // with a gap, has plenty of history and no session in the comparison band. The span the
+          // movement does have is said on the line below.
+          Text(ProgressCopy.noChangeText(for: row.trend))
             .font(Tokens.Text.provenance)
             .foregroundStyle(Tokens.Color.chalkDim)
+            .fixedSize(horizontal: false, vertical: true)
+          Text(ProgressCopy.historyText(for: row.trend))
+            .font(Tokens.Text.provenance)
+            .foregroundStyle(Tokens.Color.chalkDim)
+            .fixedSize(horizontal: false, vertical: true)
         }
         if let assumption = row.trend.loadAssumption {
           Text(assumption)
