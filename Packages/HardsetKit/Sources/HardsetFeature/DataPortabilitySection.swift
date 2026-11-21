@@ -13,6 +13,10 @@ import UniformTypeIdentifiers
 struct DataPortabilitySection: View {
   let store: DataTransferStore
   let unit: WeightUnit
+  /// Whether this build keeps history on this phone only, so the plain warning above the export
+  /// buttons is true. False when sync is on or the state is not known: the section then says
+  /// nothing about where history lives rather than claim what it cannot back.
+  var isLocalOnly = false
   /// Called after an import writes workouts, so screens showing history can re-read it.
   var onDataChanged: () -> Void = {}
   @State private var isChoosingFile = false
@@ -44,6 +48,12 @@ struct DataPortabilitySection: View {
       Text("Logging, personal history and exports are always free.")
         .font(Tokens.Text.provenance)
         .foregroundStyle(Tokens.Color.chalkDim)
+      if isLocalOnly {
+        Text(DataSafetyCopy.beforeExporting)
+          .font(Tokens.Text.provenance)
+          .foregroundStyle(Tokens.Color.chalk)
+          .fixedSize(horizontal: false, vertical: true)
+      }
       // Each format says what it is for beside its own button, so no format reads as a backup
       // it is not. What each can do comes from `Format.restoresIntoHardset`.
       ForEach(DataTransferStore.Format.allCases, id: \.self) { format in

@@ -68,7 +68,9 @@ public struct SettingsSheet: View {
           // the only copy off this phone, so it sits near the top, above anything optional.
           if let sync { syncSection(sync) }
           if let transfer {
-            DataPortabilitySection(store: transfer, unit: unit, onDataChanged: { onDataChanged?() })
+            DataPortabilitySection(
+              store: transfer, unit: unit, isLocalOnly: sync == .localOnly,
+              onDataChanged: { onDataChanged?() })
           }
           if let gyms { gymsSection(gyms) }
           #if os(iOS)
@@ -176,19 +178,23 @@ public struct SettingsSheet: View {
           Text(sync.isSyncing ? "iCloud sync is set up" : "Saved on this iPhone only")
             .font(Tokens.Text.headline)
             .foregroundStyle(Tokens.Color.chalk)
-          Text(
-            sync.isSyncing
-              ? "Workouts replicate to your private iCloud database while you are signed in "
-                + "to iCloud."
-              // Sync, not backup, is what this build lacks; whether a device backup includes the
-              // database is iOS's to say. A CSV export is the copy Hardset itself can read back in.
-              : "This build can't use iCloud sync, so workouts stay on this iPhone and don't reach "
-                + "your other devices. Deleting Hardset deletes them. A CSV export below is a copy "
-                + "Hardset can read back in; JSON and SQLite exports are for keeping and inspecting."
-          )
-          .font(Tokens.Text.caption)
-          .foregroundStyle(Tokens.Color.chalkDim)
-          .fixedSize(horizontal: false, vertical: true)
+          // Sync, not backup, is what this build lacks; whether a device backup includes the
+          // database is iOS's to say. A local-only build says plainly that its history is on this
+          // phone, that an export is how to keep it, and that an update goes over the old app,
+          // because a free profile expires and deleting the app is the natural reaction.
+          VStack(alignment: .leading, spacing: Tokens.Spacing.tight) {
+            ForEach(
+              sync.isSyncing
+                ? ["Workouts replicate to your private iCloud database while you are signed in to iCloud."]
+                : DataSafetyCopy.localOnly,
+              id: \.self
+            ) { paragraph in
+              Text(paragraph)
+                .font(Tokens.Text.caption)
+                .foregroundStyle(Tokens.Color.chalkDim)
+                .fixedSize(horizontal: false, vertical: true)
+            }
+          }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
       }
