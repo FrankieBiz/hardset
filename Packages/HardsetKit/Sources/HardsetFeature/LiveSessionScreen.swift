@@ -714,6 +714,12 @@ public struct LiveSessionScreen: View {
       case .gymChangeConflictsWithMachines:
         return "Movements in this workout already have machines recorded, so the gym was not "
           + "changed. Set them to “Not recorded” first."
+      case .gymChangeConflictsWithSavedSets:
+        // No "Not recorded" remedy here: a saved set keeps the machine it was done on, so setting
+        // the movements to it would leave this refusal standing.
+        return "Sets you have already logged keep the machine they were done on, so the gym was "
+          + "not changed. To use another gym, finish this workout and start the next one there, "
+          + "or discard this workout."
       case .invalidFinishTime:
         return "A workout can only finish after its last set and not in the future, so this one "
           + "is still open. Your logged sets are saved. Check your device's date and time."
