@@ -223,7 +223,7 @@ public struct ExerciseSectionView: View {
   /// Order and removal: things done to the movement as a whole, rarely, so they sit in one menu
   /// in the card's corner rather than as buttons repeated on every card.
   private var movementMenu: some View {
-    HeaderIconMenu(accessibilityLabel: "\(state.exerciseName) options") {
+    HeaderIconMenu(accessibilityLabel: "\(state.exerciseName) options", style: .bare) {
       Button {
         onMoveUp?()
       } label: {
@@ -245,42 +245,22 @@ public struct ExerciseSectionView: View {
     }
   }
 
-  /// How far through the working sets the lifter is: a pip per set, filled when logged, and the
-  /// count in figures beside it. The pips are hidden from VoiceOver, which reads the sentence.
-  ///
-  /// The count turns green only when the number of rows came from this movement's history. With
-  /// no history the rows are whatever the lifter added, and "1/1" in green read as a target met.
+  /// How far through the working sets the lifter is, as the count in figures: "1/3". The strip of
+  /// pips that used to sit beside it said the same thing a second time in a different shape. The
+  /// count turns green only when the number of rows came from this movement's history: with no
+  /// history the rows are whatever the lifter added, and "1/1" in green read as a target met.
   private var progress: some View {
     let working = state.workingSetCount
     let logged = loggedWorkingSets
     let hasHistory = state.suggestion(forSetIndex: 0) != nil
-    return HStack(spacing: Tokens.Spacing.snug) {
-      // Beyond eight sets the pips stop being countable at a glance, so only the figure remains.
-      if working > 0 && working <= 8 {
-        HStack(spacing: Tokens.Spacing.hairline) {
-          ForEach(0..<working, id: \.self) { index in
-            Capsule()
-              .fill(index < logged ? Tokens.Color.plateGreen : Tokens.Color.steelRaised)
-              .overlay(
-                Capsule().strokeBorder(
-                  index < logged ? Tokens.Color.plateGreen : Tokens.Color.controlEdge,
-                  lineWidth: Tokens.Stroke.hairline
-                )
-              )
-              .frame(width: 10, height: 6)
-          }
-        }
-        .accessibilityHidden(true)
-      }
-      Text("\(logged)/\(working)")
-        .font(Tokens.Text.figure)
-        .foregroundStyle(
-          hasHistory && logged == working && working > 0
-            ? Tokens.Color.plateGreen : Tokens.Color.chalkDim
-        )
-    }
-    .accessibilityElement(children: .combine)
-    .accessibilityLabel("\(logged) of \(working) working sets logged")
+    return Text("\(logged)/\(working)")
+      .font(Tokens.Text.figure)
+      .foregroundStyle(
+        hasHistory && logged == working && working > 0
+          ? Tokens.Color.plateGreen : Tokens.Color.chalkDim
+      )
+      .accessibilityElement(children: .combine)
+      .accessibilityLabel("\(logged) of \(working) working sets logged")
   }
 
   /// Working sets only. Counting a logged warm-up here made "1 of 3 logged" appear before a single
@@ -339,40 +319,27 @@ public struct ExerciseSectionView: View {
       )
   }
 
-  /// A set chip is a raised flat face that sinks on press; an unset one keeps its plate blue
-  /// tint and takes the opacity press, because it draws its own fill and outline. The two are
-  /// separate buttons because a button takes one style, and the label is shared so they cannot
-  /// drift apart.
+  /// The machine, as a line of type with a chevron: a quiet inline control, with no capsule, no
+  /// outline and no icon tile. Unset, it reads "Choose machine" in full chalk, because the one
+  /// thing missing is the lifter's to supply; set, it reads the machine's name in `chalkDim`. Its
+  /// hit region is 44 pt tall and as wide as its words, and Button Shapes or Increase Contrast
+  /// draw its outline.
   @ViewBuilder
   private func machineChipButton(action: @escaping () -> Void) -> some View {
-    if state.machineID == nil {
-      Button(action: action) {
-        machineChipContent
-          .background(Tokens.Color.plateBlueSurface, in: Capsule())
-          .overlay(
-            Capsule().strokeBorder(Tokens.Color.plateBlue, lineWidth: Tokens.Stroke.hairline)
-          )
-          .frame(minHeight: Tokens.minimumTapTarget)
-          .contentShape(Rectangle())
-      }
-      .buttonStyle(HardsetPressStyle())
-    } else {
-      Button(action: action) {
-        machineChipContent
-      }
-      .buttonStyle(ControlPressStyle(shape: Capsule(), outline: .always))
+    Button(action: action) {
+      machineChipContent
     }
+    .buttonStyle(InlineControlStyle(minHeight: Tokens.minimumTapTarget, alignment: .leading))
   }
 
   private var machineChipContent: some View {
     HStack(spacing: Tokens.Spacing.snug) {
-      Image(systemName: state.machineID == nil ? "plus" : "dumbbell.fill")
-        .hardsetText(.caption, weight: .semibold)
       Text(state.machineName ?? "Choose machine")
-        .hardsetText(.caption, weight: .semibold)
+        .hardsetText(.provenance, weight: .medium)
         // One line at ordinary sizes; at accessibility sizes the name wraps rather than
         // truncating to "Hamm…", because it is how the lifter recognises the machine.
         .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 1)
+        .multilineTextAlignment(.leading)
       if let increment = state.machineIncrementKg {
         // Shown because it is the constraint on what a suggestion may propose. Written with the
         // same figure as the step buttons and the fields, so 10 kg reads "22.05 lb steps" here
@@ -385,10 +352,9 @@ public struct ExerciseSectionView: View {
       Image(systemName: "chevron.down")
         .hardsetText(.caption, weight: .semibold)
         .foregroundStyle(Tokens.Color.chalkDim)
+        .accessibilityHidden(true)
     }
-    .foregroundStyle(state.machineID == nil ? Tokens.Color.plateBlue : Tokens.Color.chalk)
-    .padding(.horizontal, Tokens.Spacing.regular)
-    .padding(.vertical, Tokens.Spacing.snug)
+    .foregroundStyle(state.machineID == nil ? Tokens.Color.chalk : Tokens.Color.chalkDim)
   }
 
   private var machineChipLabel: String {
@@ -402,36 +368,45 @@ public struct ExerciseSectionView: View {
   /// this movement it is a single tap, "Rest 1:30", with the other durations one tap further in
   /// the menu beside it; with none, the menu asks.
   ///
-  /// 56 pt like every logger control, and no taller: the label once carried its own minimum height
-  /// inside the style's padding and made rest the largest control on the card.
+  /// Words and a symbol, with no button face: the logger's 56 pt region is the control, and the
+  /// type is what the lifter sees. The label once carried its own minimum height inside the style's
+  /// padding and made rest the largest control on the card.
   @ViewBuilder private func restControl(start: @escaping (Duration) -> Void) -> some View {
     if let lastRest {
-      HStack(spacing: Tokens.Spacing.snug) {
+      HStack(spacing: Tokens.Spacing.tight) {
         Button {
           start(lastRest)
         } label: {
           Label("Rest \(lastRest.clockString)", systemImage: "timer")
             .monospacedDigit()
+            .font(Tokens.Text.headline)
+            .foregroundStyle(Tokens.Color.chalk)
         }
-        .buttonStyle(HardsetButtonStyle(.secondary, size: .logger))
+        .buttonStyle(InlineControlStyle(minHeight: Tokens.loggerTapTarget, alignment: .leading))
         .accessibilityLabel("Start a rest of \(Self.spoken(lastRest))")
 
         Menu {
           restMenuItems(start: start)
         } label: {
           Image(systemName: "chevron.down")
+            .font(Tokens.Text.caption.weight(.semibold))
+            .foregroundStyle(Tokens.Color.chalkDim)
             .frame(minWidth: Tokens.minimumTapTarget)
         }
-        .buttonStyle(HardsetButtonStyle(.secondary, size: .logger, fullWidth: false))
+        .buttonStyle(InlineControlStyle(minHeight: Tokens.loggerTapTarget, alignment: .center))
         .accessibilityLabel("Other rest durations")
+
+        Spacer(minLength: 0)
       }
     } else {
       Menu {
         restMenuItems(start: start)
       } label: {
         Label("Start rest", systemImage: "timer")
+          .font(Tokens.Text.headline)
+          .foregroundStyle(Tokens.Color.chalk)
       }
-      .buttonStyle(HardsetButtonStyle(.secondary, size: .logger))
+      .buttonStyle(InlineControlStyle(minHeight: Tokens.loggerTapTarget, alignment: .leading))
     }
   }
 
@@ -455,23 +430,43 @@ public struct ExerciseSectionView: View {
     duration.formatted(.units(allowed: [.minutes, .seconds], width: .wide))
   }
 
+  /// Adding a row: "Add set" and "Add warm-up", as two lines of type side by side, or one above the
+  /// other where they would not fit. Each is a 56 pt region with no face; the plus says what it is.
   private var addSetButtons: some View {
-    HStack(spacing: Tokens.Spacing.snug) {
-      Button {
-        state.appendSlot()
-      } label: {
-        Label("Add set", systemImage: "plus")
+    ViewThatFits(in: .horizontal) {
+      HStack(spacing: Tokens.Spacing.loose) {
+        addSetButton
+        addWarmupButton
+        Spacer(minLength: 0)
       }
-      .buttonStyle(HardsetButtonStyle(.secondary, size: .logger, fullWidth: true))
-
-      Button {
-        state.appendSlot(isWarmup: true)
-      } label: {
-        Label("Warm-up", systemImage: "plus")
+      VStack(alignment: .leading, spacing: 0) {
+        addSetButton
+        addWarmupButton
       }
-      .buttonStyle(HardsetButtonStyle(.quiet, size: .logger, fullWidth: false))
-      .accessibilityLabel("Add warm-up set")
     }
+  }
+
+  private var addSetButton: some View {
+    Button {
+      state.appendSlot()
+    } label: {
+      Label("Add set", systemImage: "plus")
+        .font(Tokens.Text.headline)
+        .foregroundStyle(Tokens.Color.chalk)
+    }
+    .buttonStyle(InlineControlStyle(minHeight: Tokens.loggerTapTarget, alignment: .leading))
+  }
+
+  private var addWarmupButton: some View {
+    Button {
+      state.appendSlot(isWarmup: true)
+    } label: {
+      Label("Warm-up", systemImage: "plus")
+        .font(Tokens.Text.headline)
+        .foregroundStyle(Tokens.Color.chalkDim)
+    }
+    .buttonStyle(InlineControlStyle(minHeight: Tokens.loggerTapTarget, alignment: .leading))
+    .accessibilityLabel("Add warm-up set")
   }
 
   /// Warm-ups do not consume a working-set number, so the badge on row three still reads "3"

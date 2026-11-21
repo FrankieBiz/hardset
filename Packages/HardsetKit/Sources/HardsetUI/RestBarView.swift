@@ -205,11 +205,10 @@ public struct RestBarView: View {
     .accessibilityLabel(spokenLabel)
   }
 
-  /// The countdown, in `chalk` whether it runs or is paused: chalk is the only text colour the
-  /// knurl behind it is gated for, so the paused state is carried by the word "Paused" and the
-  /// play key, never by a dimmer colour. The knurl is a backing layer clipped to its own shape,
-  /// above the opaque panel fill and under the glyphs; `.knurl()` is an overlay and would hatch
-  /// the digits, so it is not used here.
+  /// The countdown, in `chalk` whether it runs or is paused: the paused state is carried by the
+  /// word "Paused" and the play key, never by a dimmer colour. It is drawn straight on the panel,
+  /// with no tile or texture behind it: the figure is the largest on the screen and needs nothing
+  /// to stand on.
   @ViewBuilder private var countdown: some View {
     switch state {
     case .idle:
@@ -222,23 +221,13 @@ public struct RestBarView: View {
         .foregroundStyle(Tokens.Color.chalk)
         .lineLimit(1)
         .fixedSize()
-        .padding(Tokens.Spacing.snug)
-        .background { countdownBacking }
     case .paused(let remaining):
       Text(remaining.clockString)
         .hardsetText(.hero)
         .foregroundStyle(Tokens.Color.chalk)
         .lineLimit(1)
         .fixedSize()
-        .padding(Tokens.Spacing.snug)
-        .background { countdownBacking }
     }
-  }
-
-  /// The knurl behind the countdown at the pattern's default 8%, clipped to the control radius.
-  private var countdownBacking: some View {
-    KnurlPattern(opacity: 0.08)
-      .clipShape(RoundedRectangle(cornerRadius: Tokens.Radius.control))
   }
 
   /// The ±15 labels begin with what the keys show, "−15" read as "Minus 15", so a Voice Control
@@ -272,7 +261,8 @@ public struct RestBarView: View {
     }
   }
 
-  /// A rest control: a 56 pt key, with a figure or a symbol.
+  /// A rest control: a figure or a symbol in a 56 pt region, with no key face. Four of them share
+  /// the bar's width, so each is wide enough that the whole region is the target.
   private func control(
     title: String?,
     systemImage: String?,
@@ -290,9 +280,10 @@ public struct RestBarView: View {
             .font(Tokens.Text.headline)
         }
       }
+      .foregroundStyle(Tokens.Color.chalk)
       .frame(minWidth: Tokens.loggerTapTarget)
     }
-    .buttonStyle(HardsetKeyStyle())
+    .buttonStyle(InlineControlStyle(minHeight: Tokens.loggerTapTarget, alignment: .center))
     .accessibilityLabel(accessibilityLabel)
     .accessibilityInputLabels(inputLabels.isEmpty ? [accessibilityLabel] : inputLabels)
   }

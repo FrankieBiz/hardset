@@ -75,29 +75,28 @@ private struct LogControlStates: View {
     CatalogSection("Log control") {
       VStack(alignment: .leading, spacing: Tokens.Spacing.loose) {
         setRowNote(
-          "Four states, never confused. Ready and next up press with the opacity press; "
-            + "incomplete and logged are disabled and show no press."
+          "Four states, never confused: one SF Symbol of one weight and one size in each. A square "
+            + "logs a set and a circle is a set that is logged, so logged and next up differ in shape "
+            + "and not only in hue. Ready and next up press with the opacity press; incomplete and "
+            + "logged are disabled and show no press."
         )
-        setRowSample("Incomplete: dashed, disabled, 0.6") {
+        setRowSample("Incomplete: an empty square in controlEdge, disabled") {
           SetLogControlFace(state: .incomplete, isPressed: false)
         }
-        setRowSample("Ready: plate blue outline") {
+        setRowSample("Ready: a checked square in chalkDim") {
           SetLogControlFace(state: .ready, isPressed: false)
         }
         setRowSample("Ready, pressed: sinks to 0.97 and dims to 80%") {
           SetLogControlFace(state: .ready, isPressed: true)
         }
-        setRowSample("Next up: opaque plate blue fill") {
+        setRowSample("Next up: the square filled with plate blue, the screen's one accent") {
           SetLogControlFace(state: .nextUp, isPressed: false)
         }
         setRowSample("Next up, pressed: same fill, 0.97 and 80%") {
           SetLogControlFace(state: .nextUp, isPressed: true)
         }
-        setRowSample("Logged: plate green seal on a knurled ring, on the row tint") {
+        setRowSample("Logged: a round plate green seal, no tint behind it") {
           SetLogControlFace(state: .logged, isPressed: false)
-            .background(
-              Tokens.Color.plateGreenSurface,
-              in: RoundedRectangle(cornerRadius: Tokens.Radius.control))
         }
       }
     }
@@ -141,7 +140,7 @@ private struct FieldStates: View {
   }
 
   /// A weight field and a reps field in the same state; `editingBoth: false` leaves the reps field
-  /// at rest so only one field wears the ring.
+  /// at rest so only one field wears the caret.
   private func pair(
     _ state: SetRowFieldState, weight: String?, reps: String?, editingBoth: Bool = true
   ) -> some View {
@@ -166,12 +165,12 @@ private struct RowStates: View {
     CatalogSection("Rows") {
       VStack(alignment: .leading, spacing: Tokens.Spacing.loose) {
         setRowNote("The live row on constant drafts, in the order a set moves through the card.")
-        setRowSample("Logged: the seal, the row tint, values saved") {
+        setRowSample("Logged: the seal, saved figures in full chalk, no tint") {
           row(
             draft(100, 8), ordinal: 0, isLogged: true, previous: setRowPrior(100, 8),
             onUndo: {}, onEdit: {})
         }
-        setRowSample("Next up and ready: filled control, step buttons in kg") {
+        setRowSample("Next up and ready: filled square, step buttons in kg") {
           row(
             draft(105, 6), ordinal: 1, isNext: true, increment: 2.5, previous: setRowPrior(105, 6),
             editable: true)
@@ -181,10 +180,10 @@ private struct RowStates: View {
             draft(100, 8), ordinal: 1, isNext: true, unit: .pounds, increment: 2.26796185,
             previous: setRowPrior(100, 8), editable: true)
         }
-        setRowSample("Ready, not next: outlined control") {
+        setRowSample("Ready, not next: checked square") {
           row(draft(105, 6), ordinal: 2, previous: setRowPrior(105, 6), editable: true)
         }
-        setRowSample("Next row, incomplete: dashed, not blue") {
+        setRowSample("Next row, incomplete: empty square, not blue") {
           row(blank, ordinal: 3, isNext: true, editable: true)
         }
         setRowSample("Warm-up, blank") {

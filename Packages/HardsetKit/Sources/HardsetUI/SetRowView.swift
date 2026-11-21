@@ -329,13 +329,13 @@ public struct SetRowView: View {
     }
   }
 
-  /// A tag-shaped mark, not a control: it names what grew, in the words and figures of the set. A
-  /// win is `plateGreen` with an up arrow; a match is `chalkDim` with an equals sign, so neither is
+  /// A short mark, not a control and not a badge: a symbol and the figures of the set, in type, on
+  /// nothing. It names what grew, "+1 rep", "+2.5 kg · +1 rep", or says "Matched". A win is
+  /// `plateGreen` with an up arrow and a match is `chalkDim` with an equals sign, so neither is
   /// carried by colour alone. It arrives with the standard reveal, so the row's height changes at
   /// once and nothing animates layout.
   private func beatMark(_ comparison: SetComparison) -> some View {
     let isMatch = comparison == .matched
-    let hue = isMatch ? Tokens.Color.chalkDim : Tokens.Color.plateGreen
     return HStack(spacing: Tokens.Spacing.tight) {
       Image(systemName: isMatch ? "equal" : "arrow.up")
         .accessibilityHidden(true)
@@ -343,28 +343,7 @@ public struct SetRowView: View {
     }
     .hardsetText(.caption, weight: .semibold)
     .monospacedDigit()
-    .foregroundStyle(hue)
-    .padding(.horizontal, Tokens.Spacing.snug)
-    .padding(.vertical, Tokens.Spacing.tight)
-    .background {
-      // A capsule, except where the words can wrap: its corner radius would then push the second
-      // line across the outline, so the control radius takes over, as it does for every tag.
-      let fill = isMatch ? Tokens.Color.steelRaised : Tokens.Color.plateGreenSurface
-      if isStacked {
-        RoundedRectangle(cornerRadius: Tokens.Radius.control).fill(fill)
-      } else {
-        Capsule().fill(fill)
-      }
-    }
-    // Decorative, like a banner's stroke: the arrow, the words and the colour say what it is.
-    .overlay {
-      if isStacked {
-        RoundedRectangle(cornerRadius: Tokens.Radius.control)
-          .strokeBorder(hue.opacity(0.35), lineWidth: Tokens.Stroke.hairline)
-      } else {
-        Capsule().strokeBorder(hue.opacity(0.35), lineWidth: Tokens.Stroke.hairline)
-      }
-    }
+    .foregroundStyle(isMatch ? Tokens.Color.chalkDim : Tokens.Color.plateGreen)
     .hardsetArrival()
   }
 
@@ -395,8 +374,20 @@ public struct SetRowView: View {
   private func loadAdjustment(_ delta: Double) -> some View {
     let step = LoadFigure.text(unit.fromKilograms(abs(delta)))
     let label = "\(delta < 0 ? "−" : "+")\(step) \(unit.abbreviation)"
-    return Button(label) { adjustLoad(by: delta) }
-    .buttonStyle(HardsetButtonStyle(.secondary, size: .logger, fullWidth: true))
+    return Button {
+      adjustLoad(by: delta)
+    } label: {
+      Text(label)
+        .font(Tokens.Text.figure)
+        .foregroundStyle(Tokens.Color.chalk)
+    }
+    // A step is a line of type in a 56 pt region, like every other logger action with no face of
+    // its own; it dims when there is no load to step from.
+    .buttonStyle(
+      InlineControlStyle(
+        minHeight: Tokens.loggerTapTarget, alignment: .center, fullWidth: true,
+        dimsWhenDisabled: true)
+    )
     .disabled(draft.weightKg == nil || (delta < 0 && draft.weightKg == 0))
     .accessibilityLabel("\(delta < 0 ? "Decrease" : "Increase") load by \(step) \(unit.abbreviation)")
   }
@@ -499,15 +490,16 @@ public struct SetRowView: View {
 
   /// The one tap the whole logger is built around.
   ///
-  /// Four states, each drawn differently so none is mistaken for another: incomplete (dashed, and
-  /// disabled), ready (outlined), next up (filled with plate blue), and logged (the plate-green
-  /// seal). The stamp is the app's one spring; with Reduce Motion it simply appears.
+  /// Four states, each drawn differently so none is mistaken for another: incomplete (an empty
+  /// square, and disabled), ready (a checked square), next up (a square filled with plate blue), and
+  /// logged (the plate-green seal). The stamp is the app's one spring; with Reduce Motion it simply
+  /// appears.
   ///
   /// Logged and next up differ in shape, not only in hue. Both used to be a filled square with the
   /// same check, about 1.1:1 apart in luminance, so in glare or with a colour-vision deficiency a
-  /// set waiting to be logged looked saved. A key face (square, check) means "tap to log"; a
-  /// logged set loses its key face and wears a round seal, which nothing tappable in the logger
-  /// uses. At accessibility sizes the control also says which it is in words.
+  /// set waiting to be logged looked saved. A square means "tap to log"; a logged set is a round
+  /// seal, which nothing tappable in the logger uses. At accessibility sizes the control also says
+  /// which it is in words.
   ///
   /// `SetLogControlFace` draws the whole control, so the live button and the catalogue's forced
   /// states cannot drift. The button's own label is never drawn.
@@ -809,23 +801,23 @@ enum SetLogState: Sendable {
   case logged
 }
 
-/// The set log control in a given state, drawn whole: the key face and its check, or the seal, and
-/// at accessibility sizes the words "Log set" or "Logged" beside it. The live button and the
-/// catalogue both draw this view, so a forced state cannot drift from what a press shows.
+/// The set log control in a given state, drawn whole: one SF Symbol, and at accessibility sizes the
+/// words "Log set" or "Logged" beside it. The live button and the catalogue both draw this view, so
+/// a forced state cannot drift from what a press shows.
 ///
-/// Incomplete is dashed and dimmed to 0.6; ready is outlined in plate blue; next up is an opaque
-/// `plateBlueFill`; logged has no key face and wears a round `plateGreen` seal on the row's tint.
-/// Ready and next up take the opacity press through `HardsetPressFace`: next up keeps its fill
-/// while pressed, with no pressed swap and no edge light. Incomplete and logged are disabled, so
-/// they ignore `isPressed` and show no press.
+/// Four glyphs of one weight and one size, drawn by the system and not by hand. Incomplete is an
+/// empty square in `controlEdge`, faint but above the 3:1 floor for a graphic; ready is the same
+/// square with its check in `chalkDim`; next up is that square filled with plate blue, the one
+/// saturated colour on the screen; logged is a round `plateGreen` seal. A square is a control that
+/// logs a set and a circle is a set that is logged, so logged and next up differ in shape and not
+/// only in hue: in glare or with a colour-vision deficiency a set waiting to be logged still never
+/// looks saved. The glyph is about 30 pt, inside the logger's whole 56 pt region.
 ///
-/// The seal is three layers. Back to front: a `KnurlPattern` at 8% clipped to a circle of the
-/// control's full 56 pt square, an opaque `plateGreenSurface` disc 48 pt across, and the
-/// `checkmark.circle.fill` glyph in `plateGreen`. The knurl shows only in the 4 pt annulus around
-/// the disc, so the glyph is never over knurl. The glyph's text size stops growing at xxxLarge, at
-/// 34 pt, so its roughly 37 pt bounds stay inside the disc; at larger sizes the words beside the
-/// control carry the state. The ring follows the seal's opacity and never moves: only the disc and
-/// glyph start at 0.6 and settle with the stamp.
+/// Ready and next up take the opacity press through `HardsetPressFace`; incomplete and logged are
+/// disabled, so they ignore `isPressed` and show no press. The stamp is the app's one spring, on
+/// the seal and nothing else: it scales in from 0.6 as the unlogged glyph fades out, and with
+/// Reduce Motion it simply appears. The glyph's text size stops growing at xxxLarge so it stays
+/// inside the region; past that the words beside it carry the state.
 struct SetLogControlFace: View {
   private let state: SetLogState
   private let isPressed: Bool
@@ -838,9 +830,6 @@ struct SetLogControlFace: View {
     self.isPressed = isPressed
   }
 
-  /// A seal's inner disc, inset from the control's square by the knurled annulus.
-  private static let sealDiscDiameter = Tokens.loggerTapTarget - 2 * Tokens.Spacing.tight
-
   private var isStacked: Bool { dynamicTypeSize.isAccessibilitySize }
   private var isLogged: Bool { state == .logged }
 
@@ -851,99 +840,85 @@ struct SetLogControlFace: View {
     }
   }
 
+  /// One weight and one size for every state, so the glyphs differ by shape and fill alone.
+  private static let glyphFont = Tokens.Text.readout.weight(.regular)
+
   var body: some View {
-    let shape = RoundedRectangle(cornerRadius: Tokens.Radius.control)
     HardsetPressFace(isPressed: isPressed && isPressable, reduceMotion: reduceMotion) {
       HStack(spacing: Tokens.Spacing.snug) {
         ZStack {
-          Image(systemName: "checkmark")
-            .font(Tokens.Text.headline.weight(.bold))
-            .foregroundStyle(symbolColor)
+          unloggedGlyph
             .opacity(isLogged ? 0 : 1)
           seal
         }
-        // Only the glyphs spring. The key face below changes at once, so nothing is laid out
-        // twice and the stamp stays the one moving thing.
+        // Only the glyphs spring, so nothing is laid out twice and the stamp stays the one moving
+        // thing.
         .animation(
           Tokens.Motion.adaptive(Tokens.Motion.stamp, reduceMotion: reduceMotion),
           value: isLogged
         )
+        .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
         if isStacked {
           Text(isLogged ? "Logged" : "Log set")
             .font(Tokens.Text.headline)
-            .foregroundStyle(isLogged ? Tokens.Color.plateGreen : symbolColor)
+            .foregroundStyle(isLogged ? Tokens.Color.chalk : labelColor)
         }
       }
       .frame(
         maxWidth: isStacked ? .infinity : Tokens.loggerTapTarget,
-        minHeight: Tokens.loggerTapTarget
+        minHeight: Tokens.loggerTapTarget,
+        alignment: isStacked ? .leading : .center
       )
       .frame(width: isStacked ? nil : Tokens.loggerTapTarget)
-      .background(fill, in: shape)
-      .overlay { outline(shape) }
-      .contentShape(shape)
+      .contentShape(Rectangle())
     }
-    .opacity(state == .incomplete ? 0.6 : 1)
   }
 
-  /// The logged seal: knurled ring, opaque disc, glyph. It is always laid out at the control's
+  /// The glyph of a set that is not logged yet: an empty square, a checked square, or a filled
+  /// one. All three are the same size, so the control never moves between them.
+  private var unloggedGlyph: some View {
+    Image(systemName: unloggedSymbol)
+      .font(Self.glyphFont)
+      .foregroundStyle(unloggedColor)
+  }
+
+  private var unloggedSymbol: String {
+    switch state {
+    case .incomplete: "square"
+    case .ready: "checkmark.square"
+    case .nextUp, .logged: "checkmark.square.fill"
+    }
+  }
+
+  private var unloggedColor: Color {
+    switch state {
+    case .incomplete: Tokens.Color.controlEdge
+    case .ready: Tokens.Color.chalkDim
+    case .nextUp, .logged: Tokens.Color.plateBlueFill
+    }
+  }
+
+  /// The logged seal: a round filled check in `plateGreen`. It is always laid out at the control's
   /// square, so the control does not shift when a set is logged, and fades in as one layer.
   private var seal: some View {
-    ZStack {
-      Circle()
-        .fill(Tokens.Color.plateGreenSurface)
-        .frame(width: Self.sealDiscDiameter, height: Self.sealDiscDiameter)
-      Image(systemName: "checkmark.circle.fill")
-        .hardsetText(.readout)
-        .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
-        .foregroundStyle(Tokens.Color.plateGreen)
-    }
-    .scaleEffect(isLogged || reduceMotion ? 1 : 0.6)
-    .frame(width: Tokens.loggerTapTarget, height: Tokens.loggerTapTarget)
-    .background {
-      KnurlPattern(opacity: 0.08)
-        .clipShape(Circle())
-    }
-    .opacity(isLogged ? 1 : 0)
+    Image(systemName: "checkmark.circle.fill")
+      .font(Self.glyphFont)
+      .foregroundStyle(Tokens.Color.plateGreen)
+      .scaleEffect(isLogged || reduceMotion ? 1 : 0.6)
+      .opacity(isLogged ? 1 : 0)
   }
 
-  /// A logged set has no key face: its seal sits straight on the row's logged tint.
-  private var fill: Color {
+  /// The words beside the glyph at accessibility sizes, in chalk: the colour belongs to the glyph.
+  private var labelColor: Color {
     switch state {
-    case .logged: .clear
-    case .nextUp: Tokens.Color.plateBlueFill
-    case .incomplete, .ready: Tokens.Color.steelRaised
-    }
-  }
-
-  @ViewBuilder
-  private func outline(_ shape: RoundedRectangle) -> some View {
-    switch state {
-    case .logged, .nextUp:
-      EmptyView()
-    case .ready:
-      shape.strokeBorder(Tokens.Color.plateBlue, lineWidth: Tokens.Stroke.selected)
-    case .incomplete:
-      shape.strokeBorder(
-        Tokens.Color.controlEdge,
-        style: StrokeStyle(lineWidth: Tokens.Stroke.hairline, dash: [4, 3])
-      )
-    }
-  }
-
-  private var symbolColor: Color {
-    // `onPlateBlue` is dark on the dark-mode plate blue fill and white on the light-mode one,
-    // which is the pairing that clears 7:1 on it.
-    switch state {
-    case .nextUp: Tokens.Color.onPlateBlue
-    case .ready: Tokens.Color.plateBlue
-    case .incomplete, .logged: Tokens.Color.chalkDim
+    case .incomplete: Tokens.Color.chalkDim
+    case .ready, .nextUp, .logged: Tokens.Color.chalk
     }
   }
 }
 
-/// The log control's button style. Saved rows retain measured text contrast; only actions are
-/// disabled, and the incomplete control's explicit 0.6 lives in `SetLogControlFace`.
+/// The log control's button style. Saved rows retain measured contrast; only actions are
+/// disabled, and the incomplete control is drawn faint by its own colour in `SetLogControlFace`.
 ///
 /// Pressed, the check sinks to 0.97 and dims to 80%, as every control that draws its own fill and
 /// shape does: the most frequent tap in the app gave no touch-down feedback at all. The press is

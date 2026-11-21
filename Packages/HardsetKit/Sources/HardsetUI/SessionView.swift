@@ -219,7 +219,7 @@ public struct SessionView: View {
 
           // An empty workout says so, and says what to do about it, rather than rendering a bare
           // "Finish" button under nothing. When it is empty, the empty state carries the add
-          // action, so the dashed slot below is not drawn twice.
+          // action, so the add row below is not drawn twice.
           if exercises.isEmpty {
             HardsetEmptyState(
               title: "Nothing added yet",
@@ -354,7 +354,7 @@ public struct SessionView: View {
             workoutMenu
           }
           if let onShowSettings {
-            HeaderIconButton(systemImage: "gearshape", accessibilityLabel: "Settings") {
+            HeaderIconButton(systemImage: "gearshape", accessibilityLabel: "Settings", style: .bare) {
               closeKeypad(then: onShowSettings)
             }
           }
@@ -386,7 +386,7 @@ public struct SessionView: View {
   /// The things done to the workout as a whole. Finish is here as well as at the end of the list,
   /// so a long workout can be ended without scrolling past every card.
   private var workoutMenu: some View {
-    HeaderIconMenu(accessibilityLabel: "Workout options") {
+    HeaderIconMenu(accessibilityLabel: "Workout options", style: .bare) {
       if let onChangeGym {
         Button {
           closeKeypad(then: onChangeGym)
@@ -410,38 +410,30 @@ public struct SessionView: View {
     }
   }
 
-  /// The workout's gym, as the machine chip on each card shows its machine: an invitation in the
-  /// accent when none is set, the name with a chevron when one is. Setting it is what makes the
-  /// machine chips appear.
+  /// The workout's gym, as the machine line on each card shows its machine: a line of type with a
+  /// chevron, and no capsule. Unset it reads "Set gym" in full chalk, an invitation to say where
+  /// the lifter is; set, it reads the name in `chalkDim` with the pin that says what the name is.
+  /// Setting it is what makes the machine lines appear.
   private func gymChip(action: @escaping () -> Void) -> some View {
     let isSet = gymName != nil
     return Button(action: action) {
       HStack(spacing: Tokens.Spacing.snug) {
         Image(systemName: isSet ? "mappin.and.ellipse" : "plus")
-          .font(Tokens.Text.caption.weight(.semibold))
+          .font(Tokens.Text.provenance.weight(.medium))
+          .accessibilityHidden(true)
         Text(gymName ?? "Set gym")
-          .font(Tokens.Text.caption.weight(.semibold))
+          .font(Tokens.Text.provenance.weight(.medium))
           .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 1)
+          .multilineTextAlignment(.leading)
         if isSet {
           Image(systemName: "chevron.down")
             .font(Tokens.Text.caption.weight(.semibold))
-            .foregroundStyle(Tokens.Color.chalkDim)
+            .accessibilityHidden(true)
         }
       }
-      .foregroundStyle(isSet ? Tokens.Color.chalk : Tokens.Color.plateBlue)
-      .padding(.horizontal, Tokens.Spacing.regular)
-      .padding(.vertical, Tokens.Spacing.snug)
-      .background(isSet ? Tokens.Color.steelRaised : Tokens.Color.plateBlueSurface, in: Capsule())
-      .overlay(
-        Capsule().strokeBorder(
-          isSet ? Tokens.Color.controlEdge : Tokens.Color.plateBlue,
-          lineWidth: Tokens.Stroke.hairline
-        )
-      )
-      .frame(minHeight: Tokens.minimumTapTarget)
-      .contentShape(Rectangle())
+      .foregroundStyle(isSet ? Tokens.Color.chalkDim : Tokens.Color.chalk)
     }
-    .buttonStyle(HardsetPressStyle())
+    .buttonStyle(InlineControlStyle(minHeight: Tokens.minimumTapTarget, alignment: .leading))
     // Begins with the words on the chip, so a Voice Control user can say what they see.
     .accessibilityLabel(
       gymName.map { "\($0). Change gym." }
@@ -589,23 +581,17 @@ public struct SessionView: View {
     Binding(get: { removal != nil }, set: { if !$0 { removal = nil } })
   }
 
-  /// The place the next movement goes. Dashed, like every empty slot in the app.
+  /// The place the next movement goes: a line of type with a plus, across the width of the list,
+  /// with no dashed outline. It is a 56 pt row because it is a logger control.
   private func addMovementSlot(action: @escaping () -> Void) -> some View {
-    let shape = RoundedRectangle(cornerRadius: Tokens.Radius.card)
-    return Button(action: action) {
+    Button(action: action) {
       Label("Add movement", systemImage: "plus")
         .font(Tokens.Text.headline)
-        .foregroundStyle(Tokens.Color.plateBlue)
-        .frame(maxWidth: .infinity, minHeight: Tokens.loggerTapTarget)
-        .contentShape(shape)
-        .overlay(
-          shape.strokeBorder(
-            Tokens.Color.controlEdge,
-            style: StrokeStyle(lineWidth: Tokens.Stroke.hairline, dash: [5, 4])
-          )
-        )
+        .foregroundStyle(Tokens.Color.chalk)
     }
-    .buttonStyle(HardsetPressStyle())
+    .buttonStyle(
+      InlineControlStyle(minHeight: Tokens.loggerTapTarget, alignment: .leading, fullWidth: true)
+    )
   }
 
   // MARK: - Feedback beside the thumb
