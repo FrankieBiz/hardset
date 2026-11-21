@@ -533,6 +533,47 @@ public final class SessionCoordinator {
     }
   }
 
+  /// Corrects the weight and reps of a saved set without taking it back: the write comes first,
+  /// and only once it has succeeded does the row show the new figures. The row never leaves its
+  /// saved state, keeps the machine it was saved on and its save time, and a failed write leaves
+  /// the screen and the database as they were.
+  ///
+  /// A correction is not a log. It starts no rest, and it claims no record: it only withdraws the
+  /// celebration if that celebration belonged to this set, since the figures that earned it may no
+  /// longer be the set's. Correcting to the figures the row already holds writes nothing and
+  /// succeeds. An unsaved row is not corrected here; its figures are its draft.
+  @discardableResult
+  public func correctSet(
+    slotID: UUID, inExercise exerciseStateID: UUID, to draft: SetEntryDraft
+  ) -> Bool {
+    guard
+      let exerciseIndex = exercises.firstIndex(where: { $0.id == exerciseStateID }),
+      let slot = exercises[exerciseIndex].slots.first(where: { $0.id == slotID })
+    else {
+      return fail(SessionCoordinatorError.unknownSlot, .correctSet)
+    }
+    guard let setID = slot.loggedSetID else {
+      return fail(SessionCoordinatorError.slotIsNotLogged, .correctSet)
+    }
+    guard let resolved = draft.resolved() else {
+      return fail(LoggerStoreError.incompleteSet, .correctSet)
+    }
+    if slot.draft.weightKg == resolved.weightKg, slot.draft.reps == resolved.reps {
+      clearError()
+      return true
+    }
+    do {
+      try store.correctLoggedSet(setID, in: sessionID, to: draft)
+      exercises[exerciseIndex].correctLogged(slotID: slotID, to: draft)
+      forgetRecords(earnedByAnyOf: [setID])
+      refreshSavedSummary()
+      clearError()
+      return true
+    } catch {
+      return fail(error, .correctSet)
+    }
+  }
+
   public func addSet(inExercise exerciseStateID: UUID, isWarmup: Bool = false) {
     guard let index = exercises.firstIndex(where: { $0.id == exerciseStateID }) else {
       _ = fail(SessionCoordinatorError.unknownExercise, .addSet)
@@ -890,6 +931,7 @@ public nonisolated enum SessionCommand: Equatable, Sendable {
   case addExercise
   case logSet
   case undoSet
+  case correctSet
   case addSet
   case removeSlot
   case removeExercise
@@ -943,6 +985,9 @@ public enum SessionCoordinatorError: Error, Equatable, Sendable {
   /// `removeSlot` was asked to remove a saved row. Saved work is taken back with `undoSet`, which
   /// deletes it from storage first; a row is never dropped from the screen while still saved.
   case slotIsLogged
+  /// `correctSet` was asked to correct a row that is not saved. An unsaved row's figures are its
+  /// draft, which the keypad writes; there is no saved set to correct.
+  case slotIsNotLogged
   /// `setGym` was refused because a movement or saved set already carries a machine from another
   /// gym. Machines belong to a gym, so moving the workout would contradict recorded equipment.
   case gymChangeConflictsWithMachines

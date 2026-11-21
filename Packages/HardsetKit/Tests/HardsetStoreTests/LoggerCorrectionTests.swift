@@ -99,6 +99,124 @@ struct LoggerCorrectionTests {
     }
   }
 
+  // MARK: - Correcting a saved set
+
+  @Test("Correcting a saved set changes its weight and reps and nothing else")
+  func correctLoggedSetChangesFiguresOnly() throws {
+    let database = try migratedDatabase()
+    let store = LoggerStore(database: database)
+    let gyms = GymStore(database: database)
+    let exercise = try seedExercise(database)
+    let gym = try gyms.createGym(name: "Gym", now: start)
+    let hammer = try gyms.createMachine(at: gym, name: "Leg Press", brand: "Hammer", now: start)
+    let session = try store.startSession(gymID: gym, at: start)
+    let row = try store.addExercise(
+      to: session, exerciseID: exercise, machineID: hammer, position: 0)
+    let target = try log(
+      store, session, exercise, machine: hammer, row: row, weight: 100, at: 30)
+    let neighbour = try log(
+      store, session, exercise, machine: hammer, row: row, weight: 105, at: 90)
+    let before = try #require(try store.sets(in: session).first { $0.id == target })
+
+    try store.correctLoggedSet(
+      target, in: session, to: SetEntryDraft(weightKg: 102.5, reps: 9))
+
+    let sets = try store.sets(in: session)
+    let after = try #require(sets.first { $0.id == target })
+    #expect(after.weightKg == 102.5)
+    #expect(after.reps == 9)
+    // The machine, the plan row, the place in the workout, the time and the flags are untouched,
+    // so a correction cannot move a set between machines, between blocks or in time.
+    #expect(after.machineID == hammer)
+    #expect(after.sessionExerciseID == row)
+    #expect(after.setOrdinal == before.setOrdinal)
+    #expect(after.completedAt == before.completedAt)
+    #expect(after.isWarmup == before.isWarmup)
+    #expect(after.rpe == before.rpe)
+    #expect(after.exerciseID == before.exerciseID)
+    // The neighbouring set is not the one corrected.
+    let other = try #require(sets.first { $0.id == neighbour })
+    #expect(other.weightKg == 105)
+    #expect(other.reps == 8)
+    #expect(sets.count == 2)
+  }
+
+  @Test("A correction needs a complete set, and zero added load is one")
+  func correctLoggedSetValidates() throws {
+    let database = try migratedDatabase()
+    let store = LoggerStore(database: database)
+    let exercise = try seedExercise(database)
+    let session = try store.startSession(at: start)
+    let set = try log(store, session, exercise)
+
+    #expect(throws: LoggerStoreError.incompleteSet) {
+      try store.correctLoggedSet(set, in: session, to: SetEntryDraft(weightKg: 90, reps: nil))
+    }
+    #expect(throws: LoggerStoreError.incompleteSet) {
+      try store.correctLoggedSet(set, in: session, to: SetEntryDraft(weightKg: nil, reps: 8))
+    }
+    #expect(throws: LoggerStoreError.incompleteSet) {
+      try store.correctLoggedSet(set, in: session, to: SetEntryDraft(weightKg: 90, reps: 0))
+    }
+    #expect(throws: LoggerStoreError.incompleteSet) {
+      try store.correctLoggedSet(set, in: session, to: SetEntryDraft(weightKg: -5, reps: 8))
+    }
+    let untouched = try #require(try store.sets(in: session).first)
+    #expect(untouched.weightKg == 100)
+    #expect(untouched.reps == 8)
+
+    try store.correctLoggedSet(set, in: session, to: SetEntryDraft(weightKg: 0, reps: 12))
+    let bodyweight = try #require(try store.sets(in: session).first)
+    #expect(bodyweight.weightKg == 0)
+    #expect(bodyweight.reps == 12)
+  }
+
+  @Test("A saved set cannot be corrected in a finished, missing or different workout")
+  func correctLoggedSetGuards() throws {
+    let database = try migratedDatabase()
+    let store = LoggerStore(database: database)
+    let exercise = try seedExercise(database)
+    let finished = try store.startSession(at: start)
+    let finishedSet = try log(store, finished, exercise)
+    try store.finishSession(finished, at: start.addingTimeInterval(600))
+    let draft = SetEntryDraft(weightKg: 90, reps: 10)
+    #expect(throws: LoggerStoreError.sessionClosed) {
+      try store.correctLoggedSet(finishedSet, in: finished, to: draft)
+    }
+    #expect(throws: LoggerStoreError.sessionNotFound) {
+      try store.correctLoggedSet(finishedSet, in: SessionID(), to: draft)
+    }
+    let open = try store.startSession(at: start.addingTimeInterval(700))
+    // Naming the open workout does not reach into another one, and a set that is not there is a
+    // refusal, not a success: the screen would otherwise show a number that was never saved.
+    #expect(throws: LoggerStoreError.writeNotApplied) {
+      try store.correctLoggedSet(finishedSet, in: open, to: draft)
+    }
+    #expect(throws: LoggerStoreError.writeNotApplied) {
+      try store.correctLoggedSet(SetID(), in: open, to: draft)
+    }
+    let kept = try #require(try store.sets(in: finished).first)
+    #expect(kept.weightKg == 100)
+    #expect(kept.reps == 8)
+  }
+
+  @Test("An ignored correction cannot report success")
+  func ignoredCorrectionFails() throws {
+    let database = try migratedDatabase()
+    let store = LoggerStore(database: database)
+    let exercise = try seedExercise(database)
+    let session = try store.startSession(at: start)
+    let set = try log(store, session, exercise)
+    try database.write { db in
+      try db.execute(sql: "CREATE TEMP TRIGGER ignore_update BEFORE UPDATE ON loggedSets BEGIN SELECT RAISE(IGNORE); END")
+    }
+    #expect(throws: LoggerStoreError.writeNotApplied) {
+      try store.correctLoggedSet(set, in: session, to: SetEntryDraft(weightKg: 90, reps: 10))
+    }
+    let kept = try #require(try store.sets(in: session).first)
+    #expect(kept.weightKg == 100)
+  }
+
   // MARK: - Removing a movement
 
   @Test("Removing a movement deletes its plan row and this workout's sets for it, nothing else")
