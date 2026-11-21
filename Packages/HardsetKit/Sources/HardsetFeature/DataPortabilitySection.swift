@@ -147,9 +147,7 @@ struct DataPortabilitySection: View {
           .fixedSize(horizontal: false, vertical: true)
       }
       if skippedWorkouts > 0 {
-        Text(skippedWorkouts == preview.sessions.count
-          ? "Every workout in this file was already imported from \(preview.source). There is nothing new to import."
-          : "\(skippedWorkouts) of these workouts were already imported from \(preview.source) and will be skipped.")
+        Text(Self.alreadyHereText(skipped: skippedWorkouts, of: preview))
           .font(Tokens.Text.provenance)
           .foregroundStyle(Tokens.Color.chalkDim)
           .fixedSize(horizontal: false, vertical: true)
@@ -162,13 +160,24 @@ struct DataPortabilitySection: View {
       }
       Text(preview.interpretation).font(Tokens.Text.provenance).foregroundStyle(Tokens.Color.chalkDim)
         .fixedSize(horizontal: false, vertical: true)
-      Text("Imported • Unevaluated Machine. Imported movements stay separate from your machine-specific history. Set times are unavailable and will be grouped at workout start. A fingerprint of the file is kept on this device so the same file is never imported twice.")
-        .font(Tokens.Text.provenance)
-        .foregroundStyle(Tokens.Color.chalkDim)
-        .fixedSize(horizontal: false, vertical: true)
-      CertaintyBadge(level: .unevaluated, methodology: "The CSV contains no physical machine identity. No machine or muscle attribution is inferred.")
+      if let restore = preview.restore {
+        // Hardset's own file: nothing is converted or guessed, so there is no "unevaluated"
+        // claim to make. Say what a restore does and what it leaves alone.
+        ForEach(Self.restoreNotes(restore), id: \.self) { note in
+          Text(note)
+            .font(Tokens.Text.provenance)
+            .foregroundStyle(Tokens.Color.chalkDim)
+            .fixedSize(horizontal: false, vertical: true)
+        }
+      } else {
+        Text("Imported • Unevaluated Machine. Imported movements stay separate from your machine-specific history. Set times are unavailable and will be grouped at workout start. A fingerprint of the file is kept on this device so the same file is never imported twice.")
+          .font(Tokens.Text.provenance)
+          .foregroundStyle(Tokens.Color.chalkDim)
+          .fixedSize(horizontal: false, vertical: true)
+        CertaintyBadge(level: .unevaluated, methodology: "The CSV contains no physical machine identity. No machine or muscle attribution is inferred.")
+      }
       if newWorkouts > 0 {
-        Button(skippedWorkouts == 0 ? "Import \(preview.setCount) sets" : "Import \(newWorkouts) new workouts") {
+        Button(Self.commitTitle(for: preview, newWorkouts: newWorkouts, skipped: skippedWorkouts)) {
           commit(preview)
         }
         .buttonStyle(HardsetButtonStyle())
@@ -181,6 +190,36 @@ struct DataPortabilitySection: View {
     .padding(Tokens.Spacing.loose)
     .frame(maxWidth: .infinity, alignment: .leading)
     .hardsetCard()
+  }
+
+  private static func alreadyHereText(skipped: Int, of preview: WorkoutImportPreview) -> String {
+    if preview.restore != nil {
+      return skipped == preview.sessions.count
+        ? "Every workout in this file is already on this iPhone. There is nothing new to restore."
+        : "\(skipped) of these workouts are already on this iPhone and will be left exactly as they are."
+    }
+    return skipped == preview.sessions.count
+      ? "Every workout in this file was already imported from \(preview.source). There is nothing new to import."
+      : "\(skipped) of these workouts were already imported from \(preview.source) and will be skipped."
+  }
+
+  private static func commitTitle(for preview: WorkoutImportPreview, newWorkouts: Int, skipped: Int) -> String {
+    let verb = preview.restore == nil ? "Import" : "Restore"
+    return skipped == 0 ? "\(verb) \(preview.setCount) sets" : "\(verb) \(newWorkouts) new workouts"
+  }
+
+  /// What a restore from Hardset's own file will and will not do, said before anything is saved.
+  private static func restoreNotes(_ restore: WorkoutImportPreview.Restore) -> [String] {
+    var notes = [
+      "A restore only adds what is missing. A workout already on this iPhone is left exactly as it is, and a set you have since deleted from one is not brought back. Movements, gyms and machines come back as they were, with their muscles and machine identity.",
+    ]
+    if restore.layout == .earlierCSV {
+      notes.append("This file was made by an earlier version of Hardset. It names gyms but does not identify them, so each is matched to a gym of the same name here, or created. Movements you made yourself come back with no muscles recorded; set a body part for them in Library.")
+    }
+    if restore.unfinishedWorkouts > 0 {
+      notes.append("\(restore.unfinishedWorkouts) \(restore.unfinishedWorkouts == 1 ? "workout was" : "workouts were") still open when this file was made and will be left out. Finish \(restore.unfinishedWorkouts == 1 ? "it" : "them") in Hardset and export again to keep \(restore.unfinishedWorkouts == 1 ? "it" : "them").")
+    }
+    return notes
   }
 
   /// "9 rows not imported: 6 timed, distance or zero-rep sets, 3 sets with no recorded load.
@@ -335,6 +374,7 @@ struct DataPortabilitySection: View {
   }
 
   private static func summary(_ result: WorkoutImportResult, preview: WorkoutImportPreview) -> String {
+    if preview.restore != nil { return restoreSummary(result) }
     guard result.importedSets > 0 else {
       return "Nothing new: all \(result.skippedWorkouts) workouts in this file were already imported from \(preview.source)."
     }
@@ -345,6 +385,23 @@ struct DataPortabilitySection: View {
     }
     if !preview.skipped.isEmpty {
       text += " \(preview.skipped.count) timed, distance or unweighted rows were left out."
+    }
+    return text
+  }
+
+  private static func restoreSummary(_ result: WorkoutImportResult) -> String {
+    var text: String
+    if result.importedSets > 0 {
+      text = "Restored \(result.importedSets) sets in \(result.importedWorkouts) "
+        + "\(result.importedWorkouts == 1 ? "workout" : "workouts"). They're in History."
+      if result.skippedWorkouts > 0 {
+        text += " \(result.skippedWorkouts) already here and left as they were."
+      }
+    } else {
+      text = "Nothing new: all \(result.skippedWorkouts) workouts in this file are already on this iPhone."
+    }
+    if result.leftOutUnfinishedWorkouts > 0 {
+      text += " \(result.leftOutUnfinishedWorkouts) unfinished left out."
     }
     return text
   }

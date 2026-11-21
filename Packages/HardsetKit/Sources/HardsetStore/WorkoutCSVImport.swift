@@ -11,7 +11,44 @@ public nonisolated struct WorkoutImportPreview: Sendable {
   /// invented load or rep count. Empty unless the preview was built with
   /// `skippingUnsupportedRows`.
   public let skipped: [SkippedRow]
+  /// Non-nil when the file is Hardset's own export. Such a file is put back by id rather than
+  /// converted: its movements, gyms and machines come back as they were, and nothing already here
+  /// is changed.
+  public let restore: Restore?
   public var setCount: Int { sessions.reduce(0) { $0 + $1.sets.count } }
+
+  init(
+    source: String, sessions: [Workout], interpretation: String, originalCSV: String,
+    skipped: [SkippedRow], restore: Restore? = nil
+  ) {
+    self.source = source
+    self.sessions = sessions
+    self.interpretation = interpretation
+    self.originalCSV = originalCSV
+    self.skipped = skipped
+    self.restore = restore
+  }
+
+  /// What a restore from Hardset's own export will do, for the preview to say before anything is
+  /// saved.
+  public struct Restore: Sendable {
+    public enum Layout: Sendable, Equatable {
+      /// The current CSV: one row per set, with its workout, movement, gym, machine and plan row.
+      case csv
+      /// A CSV from an earlier build, which has the original 19 columns only. Gyms are matched by
+      /// name, and a movement made by the lifter comes back with no muscles recorded.
+      case earlierCSV
+    }
+
+    public let layout: Layout
+    /// Saved workouts in the file. The CSV is one row per set and carries none.
+    public let savedWorkouts: Int
+    /// Body mass entries in the file. The CSV is one row per set and carries none.
+    public let bodyweightEntries: Int
+    /// Workouts with no finish time. They are left out of a restore.
+    public let unfinishedWorkouts: Int
+    let plan: HardsetRestorePlan
+  }
 
   /// A file row that will not be imported, and why.
   public struct SkippedRow: Sendable, Equatable {
@@ -77,6 +114,9 @@ public nonisolated enum WorkoutCSVImport {
     var skipped: [WorkoutImportPreview.SkippedRow] = []
     let headers = first.map { $0.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() }
     guard Set(headers).count == headers.count else { throw WorkoutImportError.headers }
+    if RestoreCSV.isOwnExport(headers: headers) {
+      return try RestoreCSV.preview(rows: rows, headers: headers, commaDecimals: commaDecimals, text: text)
+    }
     let hevy = headers.contains("exercise_title")
     guard headers.contains(hevy ? "start_time" : "date"),
       headers.contains(hevy ? "exercise_title" : "exercise name"), headers.contains("reps")
@@ -281,10 +321,14 @@ public nonisolated enum WorkoutImportError: Error, Equatable, Sendable, Localize
   case alreadyImported
   /// Every row was a timed, distance or unloaded set, so there is nothing to import.
   case noSupportedSets(skipped: Int)
+  /// A Hardset export this version cannot read whole, with the reason.
+  case unreadable(String)
   public var errorDescription: String? {
     switch self {
     case .empty: "The CSV contains no sets."
-    case .headers: "Use an English Strong or Hevy CSV export with its original header."
+    case .headers:
+      "Use a Hardset CSV export, or an English Strong or Hevy CSV export, with its original header."
+    case .unreadable(let reason): "\(reason). No workouts were imported."
     case .row(let row, let reason): "Row \(row): \(reason). No workouts were imported."
     case .alreadyImported: "This exact CSV has already been imported on this device."
     case .noSupportedSets(let skipped):
