@@ -48,8 +48,9 @@ glass; the content beneath it is never glass.
   plate colour: an action you can take (plate blue), a set that is saved (plate green), a record
   (plate yellow), a caveat (warning orange), a failure (plate red). Everything else is steel and
   chalk.
-- **On the live session, one accent, and colour only as a small mark.** The next set's log control
-  is the only saturated colour on the screen. A saved set is a small `plateGreen` seal, a record is
+- **On the live session, one accent, and colour only as a small mark.** The workout's next set's
+  log control, the first set still to log in the whole workout and not one per movement, is the
+  only saturated colour on the screen. A saved set is a small `plateGreen` seal, a record is
   the `plateYellow` trophy, a caveat is a small `warning` glyph, and a failure is `plateRed`; none
   of them is ever a row fill, a tint, a capsule or a badge background, and no other control is blue.
   The machine, the gym, the history link, the rest lengths and every quiet action are `chalk` or
@@ -493,7 +494,8 @@ Selection rows, the unit switch and pickers stay silent.
 - **Set log control**: four states, never confused, each one SF Symbol of one weight and one size,
   about 30 pt inside the logger's whole 56 pt region: incomplete is an empty square in `controlEdge`
   (faint, and above the 3:1 floor for a graphic), ready is a checked square in `chalkDim`, next up is
-  that square filled with `plateBlueFill`, the one saturated colour on the screen, and logged is a
+  that square filled with `plateBlueFill`, the one saturated colour on the screen and only on the
+  workout's next set (another movement's next row is drawn as ready), and logged is a
   round `plateGreen` `checkmark.circle.fill`. A square logs a set and a circle is a set that is
   logged, so logged and next up differ by shape, not only by hue. Nothing is dashed, knurled or
   boxed, and a logged row has no tint. The stamp is the seal scaling in from 0.6 on `Motion.stamp`
@@ -503,9 +505,8 @@ Selection rows, the unit switch and pickers stay silent.
   and, on the next-up row, "Log set".
 - **Press feedback on self-drawn controls** (`HardsetPressStyle` and the set row's own styles): flat
   faces sink, everything else dims, and no press moves layout.
-  - Flat faces (a raised fill: unselected chips, `AssumptionChip`, the header icon button, the set
-    machine chip, keys and secondary buttons) sink to `steelPressed` and scale to 0.97 (keys 0.96)
-    on `Motion.press`. They never dim, so a boundary that is drawn survives a press. The header icon
+  - Flat faces (a raised fill: unselected chips, `AssumptionChip`, the header icon button, keys and
+    secondary buttons) sink to `steelPressed` and scale to 0.97 (keys 0.96) on `Motion.press`. They never dim, so a boundary that is drawn survives a press. The header icon
     menu is the one exception: `HeaderIconMenu` is a `Menu`, not a `Button`, so it keeps its resting
     face, and its press feel is a device check. A selected chip swaps `plateBlueFill` to
     `plateBlueFillPressed`. A control's hit region is at least 44 by 44 pt, however compact its face.

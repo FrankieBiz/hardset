@@ -18,6 +18,7 @@ public struct ExerciseSectionView: View {
   private let onSelectMachine: (() -> Void)?
   private let onShowHistory: (() -> Void)?
   private let lastRest: Duration?
+  private let accentsNext: Bool
   private let editingSlotID: UUID?
   private let editingField: SetRowField?
   private let editingText: String?
@@ -40,6 +41,9 @@ public struct ExerciseSectionView: View {
   /// - Parameter onShowHistory: Opens this movement's load history. `nil` leaves the name inert.
   /// - Parameter lastRest: The rest the lifter last chose for this movement. When known, it is
   ///   offered as one tap; it is never a default the app made up, so with none the card asks.
+  /// - Parameter accentsNext: Draws this card's next-up control in plate blue. The screen's one
+  ///   accent belongs to the workout's next set, so a session passes `false` for every card but the
+  ///   first with a set still to log; a card shown alone keeps the default.
   /// - Parameter editingSlotID: The row the session's keypad is on, if it is on this card.
   /// - Parameter onMoveUp: Moves the card up the workout. `nil` for the first card, which shows
   ///   the action disabled rather than absent, so the menu keeps its shape.
@@ -53,6 +57,7 @@ public struct ExerciseSectionView: View {
     onSelectMachine: (() -> Void)? = nil,
     onShowHistory: (() -> Void)? = nil,
     lastRest: Duration? = nil,
+    accentsNext: Bool = true,
     editingSlotID: UUID? = nil,
     editingField: SetRowField? = nil,
     editingText: String? = nil,
@@ -71,6 +76,7 @@ public struct ExerciseSectionView: View {
     self.onSelectMachine = onSelectMachine
     self.onShowHistory = onShowHistory
     self.lastRest = lastRest
+    self.accentsNext = accentsNext
     self.editingSlotID = editingSlotID
     self.editingField = editingField
     self.editingText = editingText
@@ -103,6 +109,7 @@ public struct ExerciseSectionView: View {
             isWarmup: slot.isWarmup,
             isLogged: slot.isLogged,
             isNext: slot.id == state.nextUnloggedSlotID,
+            accentsNext: accentsNext,
             // A hairline only where two rows meet, never above the first.
             isSeparated: slot.id != state.slots.first?.id,
             showsInlineLabels: false,

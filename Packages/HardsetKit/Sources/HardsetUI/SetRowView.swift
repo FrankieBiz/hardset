@@ -46,6 +46,7 @@ public struct SetRowView: View {
   private let isWarmup: Bool
   private let isLogged: Bool
   private let isNext: Bool
+  private let accentsNext: Bool
   private let isSeparated: Bool
   private let showsInlineLabels: Bool
   private let unit: WeightUnit
@@ -63,6 +64,11 @@ public struct SetRowView: View {
 
   /// - Parameter isNext: The first unlogged set of its exercise. Its log control is filled rather
   ///   than outlined, so the eye lands on the one tap that matters between sets.
+  /// - Parameter accentsNext: Draws the next-up control in plate blue. A screen with several
+  ///   movements has several next rows, and its one accent belongs to the workout's next set, so
+  ///   the host passes `false` for every movement but the one holding it; the other next rows draw
+  ///   as ready. It changes colour only: `isNext` still drives the spoken "next to log", the bare
+  ///   Voice Control command and the −/+ steps.
   /// - Parameter isSeparated: Draws a hairline across the top of the row, inset from the leading
   ///   edge, because it meets another row there. The first row of a movement passes `false`, so a
   ///   hairline exists only where two rows meet.
@@ -90,6 +96,7 @@ public struct SetRowView: View {
     isWarmup: Bool = false,
     isLogged: Bool = false,
     isNext: Bool = false,
+    accentsNext: Bool = true,
     isSeparated: Bool = false,
     showsInlineLabels: Bool = true,
     unit: WeightUnit,
@@ -110,6 +117,7 @@ public struct SetRowView: View {
     self.isWarmup = isWarmup
     self.isLogged = isLogged
     self.isNext = isNext
+    self.accentsNext = accentsNext
     self.isSeparated = isSeparated
     self.showsInlineLabels = showsInlineLabels
     self.unit = unit
@@ -524,7 +532,7 @@ public struct SetRowView: View {
 
   private var logState: SetLogState {
     if isLogged { return .logged }
-    if draft.isLoggable { return isNext ? .nextUp : .ready }
+    if draft.isLoggable { return isNext && accentsNext ? .nextUp : .ready }
     return .incomplete
   }
 

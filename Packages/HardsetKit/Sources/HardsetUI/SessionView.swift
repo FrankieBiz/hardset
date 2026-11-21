@@ -533,6 +533,9 @@ public struct SessionView: View {
         { closeKeypad { show(id) } }
       },
       lastRest: lastRest[id],
+      // The one accent on the screen is the workout's next set: the first movement with a set
+      // still to log. Every other movement's next row is drawn as ready, in chalk.
+      accentsNext: id == exercises.first(where: { $0.nextUnloggedSlotID != nil })?.id,
       editingSlotID: editsThisCard ? keypad?.slotID : nil,
       editingField: editsThisCard ? keypad?.field : nil,
       editingText: editsThisCard ? keypadBuffer.displayText : nil,
