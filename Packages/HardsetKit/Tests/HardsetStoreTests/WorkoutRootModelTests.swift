@@ -324,9 +324,16 @@ struct WorkoutRootModelTests {
     let homeMachine: MachineID
   }
 
+  /// What the rest timer was asked to do, as `HardsetRootView`'s own wiring would see it.
+  private final class TimerSpy {
+    var starts: [(duration: Duration, metadata: RestMetadata)] = []
+    var cancels = 0
+  }
+
   @MainActor
   private func savedWorkoutFixture(
-    clock: (@Sendable () -> Date)? = nil
+    clock: (@Sendable () -> Date)? = nil, restPreferences: RestPreferences? = nil,
+    timer: TimerSpy? = nil
   ) async throws -> SavedWorkoutFixture {
     let database = try fixture()
     let logger = LoggerStore(database: database)
@@ -340,7 +347,9 @@ struct WorkoutRootModelTests {
     let fixedNow = now
     let model = WorkoutRootModel(
       logger: logger, catalog: CatalogSeeder(database: database), gyms: gyms,
-      now: clock ?? { fixedNow }
+      now: clock ?? { fixedNow },
+      onStartRest: { duration, metadata in timer?.starts.append((duration, metadata)) },
+      restPreferences: restPreferences, onCancelRest: { timer?.cancels += 1 }
     )
     await model.load()
     #expect(model.restoreGymPick(home))
@@ -473,6 +482,122 @@ struct WorkoutRootModelTests {
 
     #expect(rest.lastRest(for: f.press) == .seconds(90))
     #expect(rest.lastRest(for: other) == .seconds(45))
+  }
+
+  // MARK: - Rest, as the app wires it
+
+  /// The app passes no fixed rest length (`restAfterSet` is nil), so these are the only rests it
+  /// ever starts: the one remembered for the movement, through a model built the way
+  /// `HardsetRootView` builds it.
+  @Test("A workout started the way the app starts one rests after a set at the remembered length")
+  @MainActor
+  func startedWorkoutRestsAtTheRememberedLength() async throws {
+    let rest = scratchRest()
+    let timer = TimerSpy()
+    let f = try await savedWorkoutFixture(restPreferences: rest, timer: timer)
+    rest.remember(.seconds(75), for: f.press)
+
+    try f.model.startWorkout()
+
+    let live = try #require(f.model.coordinator)
+    live.addExercise(exerciseID: f.press, exerciseName: "Chest Press", plannedSets: 1)
+    live.exercises[0].slots[0].draft = SetEntryDraft(weightKg: 40, reps: 10)
+    #expect(live.logSet(slotID: live.exercises[0].slots[0].id, inExercise: live.exercises[0].id))
+    #expect(timer.starts.map(\.duration) == [.seconds(75)])
+    #expect(timer.starts.first?.metadata.exerciseName == "Chest Press")
+    #expect(live.restExerciseID == live.exercises[0].id)
+
+    try live.finish()
+    #expect(timer.cancels == 1)
+  }
+
+  @Test("A saved workout's own rest is what its first working set starts, over an older choice")
+  @MainActor
+  func savedWorkoutRestStartsAfterTheFirstSet() async throws {
+    let rest = scratchRest()
+    let timer = TimerSpy()
+    let f = try await savedWorkoutFixture(restPreferences: rest, timer: timer)
+    // The lifter once chose a minute for this movement; the saved workout says a minute and a half.
+    rest.remember(.seconds(60), for: f.press)
+
+    try f.model.startWorkout(
+      from: plan(press: f.press, machine: nil, rest: 90), unit: .kilograms, rest: rest)
+
+    let live = try #require(f.model.coordinator)
+    #expect(timer.starts.isEmpty)
+    // The card offers what the next set will start, not the choice it replaced.
+    #expect(live.lastRestByCard[live.exercises[0].id] == .seconds(90))
+    live.exercises[0].slots[0].draft = SetEntryDraft(weightKg: 40, reps: 10)
+    #expect(live.logSet(slotID: live.exercises[0].slots[0].id, inExercise: live.exercises[0].id))
+    #expect(timer.starts.map(\.duration) == [.seconds(90)])
+  }
+
+  @Test("A workout recovered after a relaunch rests after its next set, and ends that rest when it closes")
+  @MainActor
+  func recoveredWorkoutRests() async throws {
+    let rest = scratchRest()
+    let timer = TimerSpy()
+    let database = try fixture()
+    let logger = LoggerStore(database: database)
+    let gyms = GymStore(database: database)
+    let press = ExerciseID()
+    let curl = ExerciseID()
+    try await database.write { db in
+      try Exercise.insert { Exercise.Draft(id: press.rawValue, name: "Chest Press") }.execute(db)
+      try Exercise.insert { Exercise.Draft(id: curl.rawValue, name: "Curl") }.execute(db)
+    }
+    // A workout left open by the app being killed.
+    _ = try SessionCoordinator.start(
+      store: logger,
+      plan: [
+        PlannedExercise(exerciseID: press, exerciseName: "Chest Press", plannedSets: 2),
+        PlannedExercise(exerciseID: curl, exerciseName: "Curl", plannedSets: 1),
+      ],
+      now: { self.now })
+    rest.remember(.seconds(75), for: press)
+    let fixedNow = now
+    let model = WorkoutRootModel(
+      logger: logger, catalog: CatalogSeeder(database: database), gyms: gyms,
+      now: { fixedNow },
+      onStartRest: { timer.starts.append(($0, $1)) },
+      restPreferences: rest, onCancelRest: { timer.cancels += 1 })
+
+    await model.load()
+
+    let live = try #require(model.coordinator)
+    // A movement the lifter never chose a rest for starts none.
+    live.exercises[1].slots[0].draft = SetEntryDraft(weightKg: 15, reps: 12)
+    #expect(live.logSet(slotID: live.exercises[1].slots[0].id, inExercise: live.exercises[1].id))
+    #expect(timer.starts.isEmpty)
+    live.exercises[0].slots[0].draft = SetEntryDraft(weightKg: 40, reps: 10)
+    #expect(live.logSet(slotID: live.exercises[0].slots[0].id, inExercise: live.exercises[0].id))
+    #expect(timer.starts.map(\.duration) == [.seconds(75)])
+    try live.discard()
+    #expect(timer.cancels == 1)
+  }
+
+  @Test("Repeating the last workout rests the same way")
+  @MainActor
+  func repeatedWorkoutRests() async throws {
+    let rest = scratchRest()
+    let timer = TimerSpy()
+    let f = try await savedWorkoutFixture(restPreferences: rest, timer: timer)
+    rest.remember(.seconds(100), for: f.press)
+    try f.model.startWorkout()
+    let first = try #require(f.model.coordinator)
+    first.addExercise(exerciseID: f.press, exerciseName: "Chest Press", plannedSets: 1)
+    first.exercises[0].slots[0].draft = SetEntryDraft(weightKg: 40, reps: 10)
+    #expect(first.logSet(slotID: first.exercises[0].slots[0].id, inExercise: first.exercises[0].id))
+    try first.finish()
+    f.model.clearFinishedWorkout()
+    timer.starts.removeAll()
+
+    try f.model.repeatLastWorkout(unit: .kilograms)
+
+    let again = try #require(f.model.coordinator)
+    again.exercises[0].slots[0].draft = SetEntryDraft(weightKg: 40, reps: 10)
+    #expect(again.logSet(slotID: again.exercises[0].slots[0].id, inExercise: again.exercises[0].id))
+    #expect(timer.starts.map(\.duration) == [.seconds(100)])
   }
 
   @Test("A start that fails changes no remembered rest")

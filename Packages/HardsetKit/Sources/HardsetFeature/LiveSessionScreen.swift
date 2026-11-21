@@ -43,18 +43,14 @@ private nonisolated struct NewMovementName: Identifiable {
 
 /// The live workout, wired.
 ///
-/// Owns the `SessionCoordinator`, binds it to `SessionView`, and routes rest requests to the
-/// hooks. Every rule that matters is enforced a layer down — the coordinator marks a row logged
-/// only after the write succeeds, and `SetEntryDraft.isLoggable` gates the control — so this
-/// type is deliberately thin, and contains no logic worth testing on its own.
+/// Owns the `SessionCoordinator` and binds it to `SessionView`. Every rule that matters is enforced
+/// a layer down — the coordinator marks a row logged only after the write succeeds, decides which
+/// rest starts and ends it when the workout closes, and `SetEntryDraft.isLoggable` gates the
+/// control — so this type is deliberately thin, and contains no logic worth testing on its own.
 @MainActor
 public struct LiveSessionScreen: View {
   @State private var coordinator: SessionCoordinator
   @State private var machineSubsheet: MachineSubsheet?
-  @State private var restMetadata: RestMetadata?
-  /// The exercise-state id the running rest follows, so the rest bar can offer that movement's
-  /// next rest.
-  @State private var restExerciseStateID: UUID?
   /// The sheet that is up, or `nil`. The only presentation state this screen holds for its own
   /// sheets; what each sheet reads and the errors it shows are the properties below.
   @State private var presented: SessionSheet?
@@ -86,18 +82,15 @@ public struct LiveSessionScreen: View {
   @State private var gymOptions: [GymOption] = []
   @State private var gymError: String?
   @State private var gymNameError: String?
-  /// The movement whose set produced `coordinator.lastRecords`, so the records name it.
-  @State private var recordsExerciseName: String?
-  @State private var recordsDismissed = false
-  /// The rest each movement was last given, read once per movement rather than on every render.
-  @State private var rememberedRest: [ExerciseID: Duration] = [:]
+  /// The set whose records the lifter dismissed, so the card stays gone for those records and comes
+  /// back for the next set that earns one.
+  @State private var dismissedRecordsSetID: SetID?
   private let unit: WeightUnit
   private let hooks: RestTimerHooks
   private let catalog: CatalogSeeder?
   private let gyms: GymStore?
   private let progression: ProgressionStore?
   private let gymName: String?
-  private let restPreferences: RestPreferences
   /// What the first-launch tour asks of this screen: the machine picker, open on the first
   /// movement. Asks for nothing in the daily app.
   @Environment(\.tourStaging) private var staging
@@ -110,7 +103,6 @@ public struct LiveSessionScreen: View {
   ///   both; a session with no gym hides the machine chips until one is set.
   /// - Parameter gymName: Shown in the screen's header, so the lifter can see which gym's
   ///   machines the chips are offering. `nil` reads "No gym recorded".
-  /// - Parameter restPreferences: Where each movement's last chosen rest is remembered.
   /// - Parameter onShowSettings: Puts the settings button in the header, so the unit can be
   ///   changed mid-workout as it could be from the start screen.
   /// - Parameter onFinished: Called once the workout is finished or discarded, and no longer open.
@@ -122,7 +114,6 @@ public struct LiveSessionScreen: View {
     gyms: GymStore? = nil,
     progression: ProgressionStore? = nil,
     gymName: String? = nil,
-    restPreferences: RestPreferences? = nil,
     onShowSettings: (() -> Void)? = nil,
     onFinished: @escaping () -> Void = {}
   ) {
@@ -133,7 +124,6 @@ public struct LiveSessionScreen: View {
     self.gyms = gyms
     self.progression = progression
     self.gymName = gymName
-    self.restPreferences = restPreferences ?? RestPreferences()
     self.onShowSettings = onShowSettings
     self.onFinished = onFinished
   }
@@ -150,27 +140,27 @@ public struct LiveSessionScreen: View {
       lastLoggedAt: coordinator.lastLoggedAt,
       isStale: isStale,
       restState: hooks.state(),
-      restMetadata: hooks.metadata() ?? restMetadata,
+      restMetadata: hooks.metadata() ?? coordinator.restMetadata,
       errorMessage: errorMessage,
       errorEvent: failedCommands,
       // Without a working alarm nothing else marks the end of a rest, so the screen does.
       restEndsSilently: hooks.issue() != nil,
-      records: recordsDismissed ? [] : coordinator.lastRecords,
-      recordsExerciseName: recordsExerciseName,
-      lastRest: lastRestByCard,
-      restExerciseID: restExerciseStateID,
+      records: recordsAreDismissed ? [] : coordinator.lastRecords,
+      recordsExerciseName: coordinator.lastRecordsExerciseName,
+      lastRest: coordinator.lastRestByCard,
+      restExerciseID: coordinator.restExerciseID,
       onChooseNextRest: { exerciseStateID, duration in
-        rememberRest(duration, forExercise: exerciseStateID)
+        coordinator.rememberRest(duration, forExercise: exerciseStateID)
       },
       onLogSet: { exerciseStateID, slot in
         logSet(slot, inExercise: exerciseStateID)
       },
       onStartRest: { exerciseStateID, duration in
-        startRest(duration, afterExercise: exerciseStateID)
+        coordinator.startRest(duration, afterExercise: exerciseStateID)
       },
       onAdjustRest: hooks.adjust,
       onPauseResumeRest: hooks.pauseOrResume,
-      onSkipRest: endRest,
+      onSkipRest: { coordinator.endRest() },
       onAddExercise: catalog == nil ? nil : { presented = .addMovement },
       // Offered only when there is a gym to attach equipment to. Machines belong to a gym, so
       // without one there is nothing honest to put in the list.
@@ -195,13 +185,11 @@ public struct LiveSessionScreen: View {
         noteOutcome(coordinator.moveExercise(exerciseStateID, by: offset))
       },
       onDismissError: dismissError,
-      onDismissRecords: { recordsDismissed = true },
+      onDismissRecords: { dismissedRecordsSetID = coordinator.lastRecordsSetID },
       onFinish: { finish() },
       onFinishAt: coordinator.lastLoggedAt == nil ? nil : { finish(at: $0) },
       onDiscard: discard
     )
-    .onAppear { loadRememberedRest() }
-    .onChange(of: coordinator.exercises.map(\.exerciseID)) { loadRememberedRest() }
     // The tour opens the machine picker on the first movement, and closes it when its step ends.
     .onChange(of: staging.opensMachinePicker, initial: true) { _, opens in
       if opens {
@@ -437,72 +425,19 @@ public struct LiveSessionScreen: View {
     return succeeded
   }
 
-  // MARK: - Logging and rest
+  // MARK: - Logging
 
+  /// The record card stays dismissed for the records the lifter dismissed. A later set that earns
+  /// records has a set of its own, so the card returns for it.
+  private var recordsAreDismissed: Bool {
+    coordinator.lastRecordsSetID != nil && coordinator.lastRecordsSetID == dismissedRecordsSetID
+  }
+
+  /// Logging is the coordinator's: it writes the set, claims any records, and starts the rest the
+  /// lifter chose for the movement, all only once the write has succeeded.
   private func logSet(_ slot: SetSlot, inExercise exerciseStateID: UUID) {
     begin(.log)
-    recordsDismissed = false
-    if noteOutcome(coordinator.logSet(slotID: slot.id, inExercise: exerciseStateID)) {
-      recordsExerciseName = coordinator.exercises.first { $0.id == exerciseStateID }?.exerciseName
-      startRememberedRest(afterSet: slot, inExercise: exerciseStateID)
-    }
-  }
-
-  /// A working set that was just logged starts the rest the lifter last chose for this movement,
-  /// so the second tap after every set is gone. A movement they have never chosen a rest for is not
-  /// given one: it asks once, through the card's rest control, and remembers the answer. A warm-up
-  /// starts nothing, as before.
-  private func startRememberedRest(afterSet slot: SetSlot, inExercise exerciseStateID: UUID) {
-    guard !slot.isWarmup,
-      let exercise = coordinator.exercises.first(where: { $0.id == exerciseStateID }),
-      let duration = rememberedRest[exercise.exerciseID]
-    else { return }
-    startRest(duration, afterExercise: exerciseStateID)
-  }
-
-  /// Remembers a length the lifter picked on the rest bar for a movement's next rest.
-  private func rememberRest(_ duration: Duration, forExercise exerciseStateID: UUID) {
-    guard let exercise = coordinator.exercises.first(where: { $0.id == exerciseStateID }) else { return }
-    restPreferences.remember(duration, for: exercise.exerciseID)
-    rememberedRest[exercise.exerciseID] = duration
-  }
-
-  /// Starts a rest the lifter chose, and remembers it for this movement so it is one tap next
-  /// time. Remembering their own choice is not a default: a movement with none still asks.
-  private func startRest(_ duration: Duration, afterExercise exerciseStateID: UUID) {
-    guard let exercise = coordinator.exercises.first(where: { $0.id == exerciseStateID }) else { return }
-    restPreferences.remember(duration, for: exercise.exerciseID)
-    rememberedRest[exercise.exerciseID] = duration
-    let completed = exercise.slots.filter { $0.isLogged && !$0.isWarmup }.count
-    let metadata = RestMetadata(exerciseName: exercise.exerciseName, setOrdinal: completed,
-      plannedSets: exercise.workingSetCount, machineName: exercise.machineName)
-    restMetadata = metadata
-    restExerciseStateID = exerciseStateID
-    hooks.start(duration, metadata)
-  }
-
-  private func endRest() {
-    hooks.cancel()
-    restMetadata = nil
-    restExerciseStateID = nil
-  }
-
-  private func loadRememberedRest() {
-    for exercise in coordinator.exercises where rememberedRest[exercise.exerciseID] == nil {
-      if let duration = restPreferences.lastRest(for: exercise.exerciseID) {
-        rememberedRest[exercise.exerciseID] = duration
-      }
-    }
-  }
-
-  private var lastRestByCard: [UUID: Duration] {
-    var byCard: [UUID: Duration] = [:]
-    for exercise in coordinator.exercises {
-      if let duration = rememberedRest[exercise.exerciseID] {
-        byCard[exercise.id] = duration
-      }
-    }
-    return byCard
+    noteOutcome(coordinator.logSet(slotID: slot.id, inExercise: exerciseStateID))
   }
 
   // MARK: - Movements
@@ -789,7 +724,7 @@ public struct LiveSessionScreen: View {
   // MARK: - Finishing
 
   /// Finishes now, or at `endedAt` when the lifter chose the last set's time for a workout left
-  /// open. The rest timer is stopped only once the workout really is closed: a failed finish
+  /// open. The coordinator stops the rest timer once the workout really is closed: a failed finish
   /// leaves the lifter mid-workout, and mid-rest.
   private func finish(at endedAt: Date? = nil) {
     begin(.finish)
@@ -799,12 +734,10 @@ public struct LiveSessionScreen: View {
       } else {
         try coordinator.finish()
       }
-      endRest()
       onFinished()
     } catch SessionTimelineError.alreadyFinished {
       // Genuinely closed already — a double tap, or a finish that raced a recovery. Moving on is
       // correct here because the session really is finished.
-      endRest()
       onFinished()
     } catch {
       // Anything else and the session is STILL OPEN. Calling onFinished() here was a bug: the root
@@ -825,13 +758,11 @@ public struct LiveSessionScreen: View {
     begin(.discard)
     do {
       try coordinator.discard()
-      endRest()
       onFinished()
     } catch {
       // Finished on another device in the meantime: it is closed, and saved, so the screen moves
       // on rather than offering to discard it again.
       if coordinator.isFinished {
-        endRest()
         onFinished()
         return
       }
@@ -842,11 +773,11 @@ public struct LiveSessionScreen: View {
 }
 
 extension SessionCoordinator {
-  /// Builds a coordinator whose rest requests are routed to `hooks`.
+  /// Builds a coordinator whose rest requests, and their end, are routed to `hooks`.
   ///
-  /// A convenience with a purpose: the `onStartRest` closure has to be supplied at
-  /// construction, before the view exists, which is easy to forget and silently produces a
-  /// session that never rests.
+  /// A convenience with a purpose: the `onStartRest` and `onCancelRest` closures have to be supplied
+  /// at construction, before the view exists, which is easy to forget and silently produces a
+  /// session that never rests, or one whose rest outlives it.
   public static func start(
     store: LoggerStore,
     gymID: GymID? = nil,
@@ -863,7 +794,8 @@ extension SessionCoordinator {
       plan: plan,
       now: now,
       restAfterSet: restAfterSet,
-      onStartRest: { duration, metadata in hooks.start(duration, metadata) }
+      onStartRest: { duration, metadata in hooks.start(duration, metadata) },
+      onCancelRest: { hooks.cancel() }
     )
   }
 }

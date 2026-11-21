@@ -47,6 +47,10 @@ public final class SessionCoordinator {
   /// celebration cannot linger onto a set that did not earn it, and when the set that earned it
   /// is undone or removed.
   public private(set) var lastRecords: [PersonalRecord] = []
+  /// The movement whose set produced `lastRecords`, so the record card can name it. Cleared with
+  /// them. Kept here, beside the records, because the screen cannot tell from a successful log
+  /// whether a set was written or the row was already saved.
+  public private(set) var lastRecordsExerciseName: String?
   /// The saved sets across the workout.
   ///
   /// Stored, and updated only by the commands that save or delete sets, rather than derived from
@@ -57,8 +61,22 @@ public final class SessionCoordinator {
   /// reason as `loggedSetCount`. Useful as an honest finish time for a workout left open.
   public private(set) var lastLoggedAt: Date?
 
-  /// The set whose save produced `lastRecords`, so undoing or removing it clears them.
-  private var lastRecordsSetID: SetID?
+  /// The set whose save produced `lastRecords`, so undoing or removing it clears them. `nil` when
+  /// there are none. A screen that lets the lifter dismiss the card remembers which set it
+  /// dismissed, so the next set that earns one is shown.
+  public private(set) var lastRecordsSetID: SetID?
+
+  /// The exercise-state id the running rest follows, so the rest bar can offer that movement's next
+  /// rest. `nil` when this coordinator has not started the rest that is running, as after a
+  /// relaunch.
+  public private(set) var restExerciseID: UUID?
+  /// What this coordinator last asked the timer to run. The screen shows it when the timer reports
+  /// none of its own, as in previews and the tour's demo timer.
+  public private(set) var restMetadata: RestMetadata?
+  /// The rest the lifter last chose for each movement, kept so a render never reads the device
+  /// preferences. The preferences stay the authority when there are any: this mirrors them for
+  /// display, and is the only memory there is when a coordinator is built without them.
+  public private(set) var rememberedRest: [ExerciseID: Duration] = [:]
 
   /// Maps an `ExerciseLogState.id` to its `sessionExercises` row id.
   ///
@@ -71,13 +89,19 @@ public final class SessionCoordinator {
   private let now: () -> Date
   private let restAfterSet: Duration?
   private let onStartRest: (Duration, RestMetadata) -> Void
+  private let restPreferences: RestPreferences?
+  private let onCancelRest: () -> Void
 
   /// - Parameters:
-  ///   - restAfterSet: Rest to request after a working set is logged. `nil` means the app does
-  ///     not start a timer on its own. There is no built-in default: a rest prescription is a
-  ///     training decision, and inventing 90 seconds here would be the app asserting something
-  ///     it has no basis for.
+  ///   - restAfterSet: A fixed rest to request after a working set when the lifter has chosen none
+  ///     for that movement. `nil`, as the app passes it, means nothing starts for a movement with no
+  ///     remembered rest. There is no built-in default: a rest prescription is a training decision,
+  ///     and inventing 90 seconds here would be the app asserting something it has no basis for.
   ///   - onStartRest: Where a rest request goes. Left empty in tests and in previews.
+  ///   - restPreferences: Where each movement's last chosen rest is remembered. With it, a working
+  ///     set starts the rest the lifter last chose for its movement: the app's own path. Without it,
+  ///     only what is chosen during this workout is remembered.
+  ///   - onCancelRest: Where the end of a rest goes: skipping it, and the workout closing.
   /// The gym this session is at, when one is known.
   ///
   /// Retained rather than re-read per render: the machine picker needs it to offer the rest of the
@@ -95,7 +119,9 @@ public final class SessionCoordinator {
     startedAt: Date? = nil,
     now: @escaping () -> Date = { Date() },
     restAfterSet: Duration? = nil,
-    onStartRest: @escaping (Duration, RestMetadata) -> Void = { _, _ in }
+    onStartRest: @escaping (Duration, RestMetadata) -> Void = { _, _ in },
+    restPreferences: RestPreferences? = nil,
+    onCancelRest: @escaping () -> Void = {}
   ) {
     self.store = store
     self.sessionID = sessionID
@@ -105,7 +131,10 @@ public final class SessionCoordinator {
     self.now = now
     self.restAfterSet = restAfterSet
     self.onStartRest = onStartRest
+    self.restPreferences = restPreferences
+    self.onCancelRest = onCancelRest
     refreshSavedSummary()
+    refreshRememberedRest()
   }
 
   /// Opens a session and builds its exercise states from one history read.
@@ -121,7 +150,9 @@ public final class SessionCoordinator {
     weightUnit: WeightUnit = .kilograms,
     now: @escaping () -> Date = { Date() },
     restAfterSet: Duration? = nil,
-    onStartRest: @escaping (Duration, RestMetadata) -> Void = { _, _ in }
+    onStartRest: @escaping (Duration, RestMetadata) -> Void = { _, _ in },
+    restPreferences: RestPreferences? = nil,
+    onCancelRest: @escaping () -> Void = {}
   ) throws -> SessionCoordinator {
     let startedAt = now()
     // Prepare fallible reads before creating durable state. There is no new
@@ -166,7 +197,9 @@ public final class SessionCoordinator {
       startedAt: startedAt,
       now: now,
       restAfterSet: restAfterSet,
-      onStartRest: onStartRest
+      onStartRest: onStartRest,
+      restPreferences: restPreferences,
+      onCancelRest: onCancelRest
     )
     coordinator.planRowIDs = rowIDs
     return coordinator
@@ -186,12 +219,14 @@ public final class SessionCoordinator {
     weightUnit: WeightUnit = .kilograms,
     now: @escaping () -> Date = { Date() },
     restAfterSet: Duration? = nil,
-    onStartRest: @escaping (Duration, RestMetadata) -> Void = { _, _ in }
+    onStartRest: @escaping (Duration, RestMetadata) -> Void = { _, _ in },
+    restPreferences: RestPreferences? = nil,
+    onCancelRest: @escaping () -> Void = {}
   ) throws -> SessionCoordinator? {
     guard let recovery = try store.recoverySnapshot(asOf: now()) else { return nil }
     return restore(
       recovery, store: store, weightUnit: weightUnit, now: now, restAfterSet: restAfterSet,
-      onStartRest: onStartRest)
+      onStartRest: onStartRest, restPreferences: restPreferences, onCancelRest: onCancelRest)
   }
 
   /// Asynchronously reads the complete recovery snapshot, then builds actor-owned state.
@@ -200,19 +235,22 @@ public final class SessionCoordinator {
     weightUnit: WeightUnit = .kilograms,
     now: @escaping () -> Date = { Date() },
     restAfterSet: Duration? = nil,
-    onStartRest: @escaping (Duration, RestMetadata) -> Void = { _, _ in }
+    onStartRest: @escaping (Duration, RestMetadata) -> Void = { _, _ in },
+    restPreferences: RestPreferences? = nil,
+    onCancelRest: @escaping () -> Void = {}
   ) async throws -> SessionCoordinator? {
     guard let recovery = try await store.loadRecoverySnapshot(asOf: now()) else { return nil }
     try Task.checkCancellation()
     return restore(
       recovery, store: store, weightUnit: weightUnit, now: now, restAfterSet: restAfterSet,
-      onStartRest: onStartRest)
+      onStartRest: onStartRest, restPreferences: restPreferences, onCancelRest: onCancelRest)
   }
 
   private static func restore(
     _ recovery: SessionRecoverySnapshot, store: LoggerStore, weightUnit: WeightUnit,
     now: @escaping () -> Date, restAfterSet: Duration?,
-    onStartRest: @escaping (Duration, RestMetadata) -> Void
+    onStartRest: @escaping (Duration, RestMetadata) -> Void,
+    restPreferences: RestPreferences?, onCancelRest: @escaping () -> Void
   ) -> SessionCoordinator {
     let session = recovery.session
     let planned = recovery.planned
@@ -292,7 +330,9 @@ public final class SessionCoordinator {
       startedAt: session.timeline.startedAt,
       now: now,
       restAfterSet: restAfterSet,
-      onStartRest: onStartRest
+      onStartRest: onStartRest,
+      restPreferences: restPreferences,
+      onCancelRest: onCancelRest
     )
     coordinator.planRowIDs = rowIDs
     return coordinator
@@ -360,6 +400,7 @@ public final class SessionCoordinator {
       )
       planRowIDs[state.id] = rowID
       exercises.append(state)
+      refreshRememberedRest()
       clearError()
       return true
     } catch {
@@ -394,18 +435,21 @@ public final class SessionCoordinator {
   /// populates `lastError`.
   @discardableResult
   public func logSet(slotID: UUID, inExercise exerciseStateID: UUID) -> Bool {
-    lastRecords = []
-    lastRecordsSetID = nil
     guard
       let exerciseIndex = exercises.firstIndex(where: { $0.id == exerciseStateID }),
       let slotIndex = exercises[exerciseIndex].slots.firstIndex(where: { $0.id == slotID })
     else {
+      clearRecords()
       return fail(SessionCoordinatorError.unknownSlot, .logSet)
     }
 
     let exercise = exercises[exerciseIndex]
     let slot = exercise.slots[slotIndex]
+    // Already saved, so nothing is written and nothing is claimed: no celebration to clear, no rest
+    // to start. Clearing the records first made a repeated tap on a saved row take away the card
+    // for the set that had earned it.
     guard !slot.isLogged else { return true }
+    clearRecords()
     // A block with no plan row is the same inconsistency `changeMachine` and `removeExercise`
     // refuse. Writing a set without one makes recovery attribute it to a different block.
     guard let planRow = planRowIDs[exercise.id] else {
@@ -442,18 +486,18 @@ public final class SessionCoordinator {
       // is: a celebration for a set that was not saved is worse than no celebration.
       lastRecords = saved.records
       lastRecordsSetID = saved.records.isEmpty ? nil : saved.setID
+      lastRecordsExerciseName = saved.records.isEmpty ? nil : exercise.exerciseName
 
-      // Warm-ups do not start a rest timer: the user is still warming up.
-      if let restAfterSet, !slot.isWarmup {
-        onStartRest(
-          restAfterSet,
-          RestMetadata(
-            exerciseName: exercise.exerciseName,
-            setOrdinal: exercises[exerciseIndex].workingOrdinal(ofSlotID: slotID) ?? 1,
-            plannedSets: exercises[exerciseIndex].workingSetCount,
-            machineName: exercise.machineName
-          )
-        )
+      // Warm-ups do not start a rest timer: the user is still warming up. A working set starts the
+      // rest the lifter last chose for this movement and, failing that, a fixed one when the caller
+      // supplied it. With neither, nothing starts: the app never starts a rest of a length nobody
+      // chose.
+      if !slot.isWarmup,
+        let duration = restLength(for: exercise.exerciseID) ?? restAfterSet
+      {
+        beginRest(
+          duration, inExercise: exerciseStateID,
+          setOrdinal: exercises[exerciseIndex].workingOrdinal(ofSlotID: slotID) ?? 1)
       }
       return true
     } catch {
@@ -655,6 +699,82 @@ public final class SessionCoordinator {
     }
   }
 
+  // MARK: - Rest
+
+  /// The rest the lifter last chose for each movement, keyed by exercise-state id, for the card's
+  /// one-tap control.
+  public var lastRestByCard: [UUID: Duration] {
+    var byCard: [UUID: Duration] = [:]
+    for exercise in exercises {
+      if let duration = rememberedRest[exercise.exerciseID] { byCard[exercise.id] = duration }
+    }
+    return byCard
+  }
+
+  /// Starts a rest the lifter chose, from the card's control, and remembers it for the movement so
+  /// it is one tap next time. Remembering their own choice is not a default: a movement with none
+  /// still asks.
+  public func startRest(_ duration: Duration, afterExercise exerciseStateID: UUID) {
+    guard let exercise = exercises.first(where: { $0.id == exerciseStateID }) else { return }
+    remember(duration, for: exercise.exerciseID)
+    let completed = exercise.slots.filter { $0.isLogged && !$0.isWarmup }.count
+    beginRest(duration, inExercise: exerciseStateID, setOrdinal: completed)
+  }
+
+  /// Remembers the length the lifter picked on the rest bar for a movement's next rest. Starts
+  /// nothing: the rest running now is not changed.
+  public func rememberRest(_ duration: Duration, forExercise exerciseStateID: UUID) {
+    guard let exercise = exercises.first(where: { $0.id == exerciseStateID }) else { return }
+    remember(duration, for: exercise.exerciseID)
+  }
+
+  /// Ends the running rest, as the lifter skipping it does and as the workout closing does.
+  /// Cancelling is unconditional: a rest restored after a relaunch was not started by this
+  /// coordinator, but it belongs to the workout all the same.
+  public func endRest() {
+    onCancelRest()
+    restMetadata = nil
+    restExerciseID = nil
+  }
+
+  /// Re-reads what the lifter last chose for each movement, for a caller that has just changed the
+  /// preferences underneath the coordinator, such as a saved workout's own rests being remembered
+  /// once the workout exists.
+  public func refreshRememberedRest() {
+    guard let restPreferences else { return }
+    for exercise in exercises {
+      guard let stored = restPreferences.lastRest(for: exercise.exerciseID),
+        rememberedRest[exercise.exerciseID] != stored
+      else { continue }
+      rememberedRest[exercise.exerciseID] = stored
+    }
+  }
+
+  /// The length to start after a working set of this movement: the lifter's own last choice. The
+  /// preferences are asked first, so a change made underneath this coordinator is seen.
+  private func restLength(for exerciseID: ExerciseID) -> Duration? {
+    restPreferences?.lastRest(for: exerciseID) ?? rememberedRest[exerciseID]
+  }
+
+  private func remember(_ duration: Duration, for exerciseID: ExerciseID) {
+    guard duration > .zero else { return }
+    restPreferences?.remember(duration, for: exerciseID)
+    rememberedRest[exerciseID] = duration
+  }
+
+  private func beginRest(_ duration: Duration, inExercise exerciseStateID: UUID, setOrdinal: Int) {
+    guard let exercise = exercises.first(where: { $0.id == exerciseStateID }) else { return }
+    let metadata = RestMetadata(
+      exerciseName: exercise.exerciseName,
+      setOrdinal: setOrdinal,
+      plannedSets: exercise.workingSetCount,
+      machineName: exercise.machineName
+    )
+    restMetadata = metadata
+    restExerciseID = exerciseStateID
+    onStartRest(duration, metadata)
+  }
+
   // MARK: - Finishing
 
   /// Closes the session now. Refuses to double-finish, so `finishedAt` cannot drift.
@@ -686,6 +806,9 @@ public final class SessionCoordinator {
       // stuck: the root drops a coordinator only once it reports finished.
     }
     isFinished = true
+    // Only now that the workout really is closed: a failed finish leaves the lifter mid-workout,
+    // and mid-rest.
+    endRest()
   }
 
   /// Deletes this open workout with its plan and saved sets, for a workout started by mistake.
@@ -701,11 +824,12 @@ public final class SessionCoordinator {
       // Removed elsewhere already.
     } catch LoggerStoreError.sessionClosed {
       isFinished = true
+      endRest()
       throw LoggerStoreError.sessionClosed
     }
     isDiscarded = true
-    lastRecords = []
-    lastRecordsSetID = nil
+    clearRecords()
+    endRest()
   }
 
   // MARK: - Bookkeeping
@@ -729,8 +853,13 @@ public final class SessionCoordinator {
 
   private func forgetRecords(earnedByAnyOf setIDs: [SetID]) {
     guard let earned = lastRecordsSetID, setIDs.contains(earned) else { return }
+    clearRecords()
+  }
+
+  private func clearRecords() {
     lastRecords = []
     lastRecordsSetID = nil
+    lastRecordsExerciseName = nil
   }
 }
 
