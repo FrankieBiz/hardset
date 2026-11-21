@@ -230,4 +230,92 @@ struct MachineChangeTests {
     #expect(live.exercises[0].slots[0].isWarmup)
     #expect(live.exercises[0].slots[0].draft.weightKg == nil)
   }
+
+  // MARK: - What the lifter already did or typed
+
+  /// A block of three rows on the Hammer, with 95 on the Hammer and 80 on the Cybex in history.
+  private func threeRowBlock(
+    _ logger: LoggerStore, _ exercise: ExerciseID, _ hammer: MachineID, _ cybex: MachineID
+  ) throws -> SessionCoordinator {
+    try seedHistory(logger, exercise, hammer, weight: 95, daysAgo: 7)
+    try seedHistory(logger, exercise, cybex, weight: 80, daysAgo: 5)
+    return try SessionCoordinator.start(
+      store: logger,
+      plan: [
+        PlannedExercise(
+          exerciseID: exercise, machineID: hammer, exerciseName: "Leg Press", plannedSets: 3)
+      ],
+      now: { self.now }
+    )
+  }
+
+  /// The occupied-machine shuffle: A, then B, then back to A. History says 95; the lifter just did 100.
+  @Test("Returning to a machine used earlier in the workout opens rows at what was just done on it")
+  func returnToMachineUsedToday() throws {
+    let (_, logger, _, exercise, hammer, cybex) = try fixture()
+    let live = try threeRowBlock(logger, exercise, hammer, cybex)
+    let id = live.exercises[0].id
+    live.exercises[0].slots[0].draft = SetEntryDraft(weightKg: 100, reps: 8)
+    #expect(live.logSet(slotID: live.exercises[0].slots[0].id, inExercise: id))
+
+    #expect(live.changeMachine(to: cybex, machineName: "Cybex", inExercise: id))
+    #expect(live.changeMachine(to: hammer, machineName: "Hammer", inExercise: id))
+
+    #expect(live.exercises[0].slots[1].draft.weightKg == 100)
+    #expect(live.exercises[0].slots[2].draft.weightKg == 100)
+    // What "Add set" gives on the same card.
+    live.addSet(inExercise: id)
+    #expect(live.exercises[0].slots[3].draft.weightKg == 100)
+  }
+
+  @Test("A machine change keeps what the lifter typed in an open row, in memory and in what is logged")
+  func machineChangeKeepsTypedRow() throws {
+    let (_, logger, _, exercise, hammer, cybex) = try fixture()
+    let live = try threeRowBlock(logger, exercise, hammer, cybex)
+    let id = live.exercises[0].id
+    live.exercises[0].slots[1].draft.weightKg = 87.5
+    live.exercises[0].slots[1].draft.reps = 6
+
+    #expect(live.changeMachine(to: cybex, machineName: "Cybex", inExercise: id))
+
+    // The typed row is untouched; the rows nobody typed in follow the Cybex's history.
+    #expect(live.exercises[0].slots[1].draft.weightKg == 87.5)
+    #expect(live.exercises[0].slots[1].draft.reps == 6)
+    #expect(live.exercises[0].slots[0].draft.weightKg == 80)
+    #expect(live.exercises[0].slots[2].draft.weightKg == 80)
+    // One tap writes the lifter's number, on the machine they are now at.
+    #expect(live.logSet(slotID: live.exercises[0].slots[1].id, inExercise: id))
+    let stored = try logger.sets(in: live.sessionID)
+    #expect(stored.map(\.weightKg) == [87.5])
+    #expect(stored.map(\.reps) == [6])
+    #expect(stored.map(\.machineID) == [cybex])
+  }
+
+  @Test("A machine trained on in this workout is not called borrowed when the lifter returns to it")
+  func machineTrainedOnTodayIsNotBorrowed() throws {
+    let (_, logger, gyms, exercise, hammer, _) = try fixture()
+    try seedHistory(logger, exercise, hammer, weight: 120, daysAgo: 7)
+    let brandNew = try gyms.createMachine(
+      at: try gyms.gyms()[0].id, name: "Leg Press", brand: "Panatta", now: now)
+    let live = try SessionCoordinator.start(
+      store: logger,
+      plan: [
+        PlannedExercise(
+          exerciseID: exercise, machineID: hammer, exerciseName: "Leg Press", plannedSets: 3)
+      ],
+      now: { self.now }
+    )
+    let id = live.exercises[0].id
+    #expect(live.changeMachine(to: brandNew, machineName: "Panatta", inExercise: id))
+    #expect(live.exercises[0].priorNote == "From another machine")
+    live.exercises[0].slots[0].draft = SetEntryDraft(weightKg: 70, reps: 10)
+    #expect(live.logSet(slotID: live.exercises[0].slots[0].id, inExercise: id))
+
+    #expect(live.changeMachine(to: hammer, machineName: "Hammer", inExercise: id))
+    #expect(live.changeMachine(to: brandNew, machineName: "Panatta", inExercise: id))
+
+    #expect(live.exercises[0].priorNote == nil)
+    #expect(live.exercises[0].slots[1].draft.weightKg == 70)
+    #expect(live.exercises[0].slots[1].draft.reps == 10)
+  }
 }

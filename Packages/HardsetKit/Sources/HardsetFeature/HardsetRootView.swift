@@ -158,9 +158,15 @@ public struct HardsetRootView: View {
     self.hooks = hooks
     self.onShowTour = onShowTour
     self.restoresSceneState = restoresSceneState
+    // The model builds every workout the app has, so the rest decision and the end of a rest are
+    // wired once, here: a set starts the rest the lifter last chose for its movement, and a workout
+    // closing, or the lifter skipping, cancels it.
     _model = State(initialValue: WorkoutRootModel(
       logger: environment.logger, catalog: environment.catalog, gyms: environment.gyms,
-      restAfterSet: restAfterSet, onStartRest: { duration, metadata in hooks.start(duration, metadata) }
+      restAfterSet: restAfterSet,
+      onStartRest: { duration, metadata in hooks.start(duration, metadata) },
+      restPreferences: RestPreferences(),
+      onCancelRest: { hooks.cancel() }
     ))
   }
 

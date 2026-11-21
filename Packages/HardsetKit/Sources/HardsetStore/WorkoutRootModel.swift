@@ -30,12 +30,21 @@ public final class WorkoutRootModel {
   private let now: () -> Date
   private let restAfterSet: Duration?
   private let onStartRest: (Duration, RestMetadata) -> Void
+  private let restPreferences: RestPreferences?
+  private let onCancelRest: () -> Void
   @ObservationIgnored private var preparation: Task<Void, Never>?
 
+  /// - Parameters:
+  ///   - restPreferences: Where each movement's last chosen rest is remembered, handed to every
+  ///     workout this model starts or recovers. Without it no workout starts a rest of its own.
+  ///   - onCancelRest: Where a workout ending, or the lifter skipping the rest, sends the end of
+  ///     the rest.
   public init(
     logger: LoggerStore, catalog: CatalogSeeder, gyms: GymStore,
     now: @escaping () -> Date = { Date() }, restAfterSet: Duration? = nil,
-    onStartRest: @escaping (Duration, RestMetadata) -> Void = { _, _ in }
+    onStartRest: @escaping (Duration, RestMetadata) -> Void = { _, _ in },
+    restPreferences: RestPreferences? = nil,
+    onCancelRest: @escaping () -> Void = {}
   ) {
     self.logger = logger
     self.catalog = catalog
@@ -43,6 +52,8 @@ public final class WorkoutRootModel {
     self.now = now
     self.restAfterSet = restAfterSet
     self.onStartRest = onStartRest
+    self.restPreferences = restPreferences
+    self.onCancelRest = onCancelRest
   }
 
   public func load() async {
@@ -69,7 +80,7 @@ public final class WorkoutRootModel {
       try await catalog.loadCatalog(now: now())
       let recovered = try await SessionCoordinator.loadResume(
         store: logger, weightUnit: weightUnit, now: now, restAfterSet: restAfterSet,
-        onStartRest: onStartRest
+        onStartRest: onStartRest, restPreferences: restPreferences, onCancelRest: onCancelRest
       )
       let selection = try await gyms.loadSelection()
       try Task.checkCancellation()
@@ -87,7 +98,8 @@ public final class WorkoutRootModel {
     guard coordinator == nil else { throw WorkoutRootError.workoutAlreadyOpen }
     coordinator = try SessionCoordinator.start(
       store: logger, gymID: selectedGym, plan: [], now: now,
-      restAfterSet: restAfterSet, onStartRest: onStartRest
+      restAfterSet: restAfterSet, onStartRest: onStartRest,
+      restPreferences: restPreferences, onCancelRest: onCancelRest
     )
   }
 
@@ -117,16 +129,21 @@ public final class WorkoutRootModel {
         repRange: exercise.repRange
       )
     }
-    coordinator = try SessionCoordinator.start(
+    let started = try SessionCoordinator.start(
       store: logger, gymID: selectedGym, title: template.name, plan: plan,
       templateID: template.id, weightUnit: unit, now: now,
-      restAfterSet: restAfterSet, onStartRest: onStartRest
+      restAfterSet: restAfterSet, onStartRest: onStartRest,
+      restPreferences: restPreferences, onCancelRest: onCancelRest
     )
+    coordinator = started
     for exercise in template.exercises {
       if let seconds = exercise.restSeconds {
         rest.remember(.seconds(seconds), for: exercise.exerciseID)
       }
     }
+    // The workout read the lifter's rests when it was built, before the saved workout's own were
+    // remembered, so its cards would still offer the old ones.
+    started.refreshRememberedRest()
   }
 
   /// Starts the last finished workout again: its movements in order, with machines resolved as
@@ -153,7 +170,8 @@ public final class WorkoutRootModel {
     coordinator = try SessionCoordinator.start(
       store: logger, gymID: selectedGym, title: last.title, plan: plan,
       templateID: last.templateID, weightUnit: unit, now: now,
-      restAfterSet: restAfterSet, onStartRest: onStartRest
+      restAfterSet: restAfterSet, onStartRest: onStartRest,
+      restPreferences: restPreferences, onCancelRest: onCancelRest
     )
   }
 

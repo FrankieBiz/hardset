@@ -25,8 +25,10 @@ public nonisolated struct TemplateStore: Sendable {
 
   /// Live workouts in the lifter's order, with movement and machine names resolved.
   ///
-  /// `lastDoneAt` is the start of the latest finished session started from the plan. An open
-  /// session does not count: a workout is not done until it is finished.
+  /// `lastDoneAt` is the start of the latest session started from the plan that counts as done
+  /// (`Session.TableColumns.isCounted`): finished, with a working set. An open session does not
+  /// count, and neither does one finished with nothing trained, so an accidental Start leaves the
+  /// rotation where it was.
   public func loadTemplates() async throws -> [WorkoutTemplate] {
     try Task.checkCancellation()
     let templates = try await database.read { db in
@@ -103,7 +105,9 @@ public nonisolated struct TemplateStore: Sendable {
     return draft
   }
 
-  /// The most recent finished session started from this workout, if any.
+  /// The most recent session started from this workout that counts as done, if any: finished, with
+  /// a working set. It is the "last time" the up-next card compares against, so it follows the same
+  /// rule as the rotation.
   ///
   /// Ordered by start time alone, which is the order of the index that finds it. Two sessions of
   /// one workout starting in the same millisecond is not something a lifter can do, so there is no
@@ -112,7 +116,7 @@ public nonisolated struct TemplateStore: Sendable {
     try Task.checkCancellation()
     let session = try await database.read { db in
       try Session
-        .where { $0.templateID.eq(id.rawValue) && $0.finishedAt.isNot(nil) }
+        .where { $0.templateID.eq(id.rawValue) && $0.isCounted }
         .order { $0.startedAt.desc() }
         .limit(1)
         .select(\.id)
@@ -141,7 +145,7 @@ public nonisolated struct TemplateStore: Sendable {
 
     var lastDone: [UUID: Date] = [:]
     let grouped: [(UUID?, Date?)] = try Session
-      .where { $0.templateID.isNot(nil) && $0.finishedAt.isNot(nil) }
+      .where { $0.templateID.isNot(nil) && $0.isCounted }
       .group { $0.templateID }
       .select { ($0.templateID, $0.startedAt.max()) }
       .fetchAll(db)

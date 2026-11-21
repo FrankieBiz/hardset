@@ -229,9 +229,11 @@ struct FailedFinishTests {
     // refuses. `LiveSessionScreen.finish` used to swallow this and advance anyway, so the root view
     // dropped the coordinator, the user started a new session, and the first one's sets became
     // unreachable — openSession() returns only the newest, and history lists finished sessions only.
+    // Built with the session's real start, as `start` and `resume` always build one: left to its
+    // default the start would be the rewound clock itself, and the clock would not be behind it.
     let rewound = SessionCoordinator(
       store: logger, sessionID: live.sessionID, exercises: live.exercises,
-      now: { self.now.addingTimeInterval(-60) }
+      startedAt: live.startedAt, now: { self.now.addingTimeInterval(-60) }
     )
     #expect(throws: SessionTimelineError.finishedBeforeStart) { try rewound.finish() }
 

@@ -62,12 +62,18 @@ struct TemplateStoreTests {
   /// A session started from a template, with one planned movement per row, as a finished or open
   /// workout. Written directly so these tests do not depend on how a session is started.
   @discardableResult
+  ///
+  /// A finished session holds `workingSets` working sets and `warmUps` warm-ups, one working set by
+  /// default: a finished workout in these tests is one the lifter did, and an empty one is the case
+  /// being tested, so it says so.
   private func seedSession(
     _ database: DatabaseQueue, template: TemplateID?, startedAt: Date, finished: Bool,
-    movements: [(exercise: ExerciseID, machine: MachineID?, range: RepRange?)] = []
+    movements: [(exercise: ExerciseID, machine: MachineID?, range: RepRange?)] = [],
+    workingSets: Int? = nil, warmUps: Int = 0
   ) throws -> (session: SessionID, planRows: [UUID]) {
     let session = SessionID()
     let rows = movements.map { _ in UUID() }
+    let working = workingSets ?? (finished ? 1 : 0)
     try database.write { db in
       try Session.insert {
         Session.Draft(
@@ -83,6 +89,21 @@ struct TemplateStoreTests {
             id: rows[index], sessionID: session.rawValue, exerciseID: movement.exercise.rawValue,
             machineID: movement.machine?.rawValue, position: index, plannedSets: 3,
             repRangeLower: movement.range?.lower, repRangeUpper: movement.range?.upper
+          )
+        }
+        .execute(db)
+      }
+      guard working + warmUps > 0 else { return }
+      let exercise = movements.first?.exercise.rawValue ?? UUID()
+      if movements.isEmpty {
+        try Exercise.insert { Exercise.Draft(id: exercise, name: "Seeded movement") }.execute(db)
+      }
+      for ordinal in 0..<(warmUps + working) {
+        try LoggedSet.insert {
+          LoggedSet.Draft(
+            sessionID: session.rawValue, exerciseID: exercise, setOrdinal: ordinal,
+            weightKg: 40, reps: 8, isWarmup: ordinal < warmUps,
+            completedAt: startedAt.addingTimeInterval(60 + Double(ordinal))
           )
         }
         .execute(db)
@@ -278,6 +299,91 @@ struct TemplateStoreTests {
 
     #expect(loaded.first { $0.id == done.id }?.lastDoneAt == day(-2))
     #expect(loaded.first { $0.id == neverFinished.id }?.lastDoneAt == nil)
+  }
+
+  /// What counts as having done a workout is one rule, shared by the rotation, "Repeat last workout"
+  /// and Apple Health: it ended, and it holds a working set. An accidental Start finished empty, or a
+  /// workout of warm-ups only, is none of them.
+  @Test("A workout finished with no working set does not move the rotation")
+  func anEmptyFinishedWorkoutDoesNotAdvanceTheRotation() async throws {
+    let database = try migratedDatabase()
+    let store = TemplateStore(database: database)
+    let press = try seedExercise(database, name: "Chest Press")
+    let upperA = template("Upper A", position: 0, [planned(press, "Chest Press")])
+    let upperB = template("Upper B", position: 1, [planned(press, "Chest Press")])
+    try await store.save(upperA, now: start)
+    try await store.save(upperB, now: start)
+    try seedSession(database, template: upperA.id, startedAt: day(-6), finished: true)
+    try seedSession(database, template: upperB.id, startedAt: day(-3), finished: true)
+    // Upper A started and finished again, with nothing trained, and another with warm-ups only.
+    try seedSession(database, template: upperA.id, startedAt: day(-2), finished: true, workingSets: 0)
+    try seedSession(
+      database, template: upperA.id, startedAt: day(-1), finished: true, workingSets: 0, warmUps: 2)
+
+    let loaded = try await store.loadTemplates()
+
+    #expect(loaded.first { $0.id == upperA.id }?.lastDoneAt == day(-6))
+    #expect(WorkoutRotation.upNextOrder(loaded).first?.name == "Upper A")
+  }
+
+  @Test("A workout that was only ever finished empty has not been done")
+  func aWorkoutFinishedOnlyEmptyIsNeverDone() async throws {
+    let database = try migratedDatabase()
+    let store = TemplateStore(database: database)
+    let press = try seedExercise(database, name: "Chest Press")
+    let upperA = template("Upper A", position: 0, [planned(press, "Chest Press")])
+    try await store.save(upperA, now: start)
+    try seedSession(database, template: upperA.id, startedAt: day(-2), finished: true, workingSets: 0)
+    try seedSession(
+      database, template: upperA.id, startedAt: day(-1), finished: true, workingSets: 0, warmUps: 1)
+
+    let loaded = try await store.loadTemplates()
+    let last = try await store.lastFinishedSession(for: upperA.id)
+
+    #expect(loaded.first?.lastDoneAt == nil)
+    #expect(last == nil)
+  }
+
+  @Test("The last finished session of a workout is the last one that held a working set")
+  func lastFinishedSessionSkipsAnEmptyOne() async throws {
+    let database = try migratedDatabase()
+    let store = TemplateStore(database: database)
+    let template = TemplateID()
+    let real = try seedSession(database, template: template, startedAt: day(-4), finished: true)
+    try seedSession(database, template: template, startedAt: day(-1), finished: true, workingSets: 0)
+
+    let found = try await store.lastFinishedSession(for: template)
+
+    #expect(found == real.session)
+  }
+
+  @Test("The rotation, Repeat last workout and Apple Health count the same workouts")
+  func rotationRepeatAndHealthAgree() async throws {
+    let database = try migratedDatabase()
+    let store = TemplateStore(database: database)
+    let press = try seedExercise(database, name: "Chest Press")
+    var byTemplate: [(id: TemplateID, session: SessionID)] = []
+    // One workout of each kind, each from a plan of its own so the rotation can tell them apart.
+    for (index, kind) in [(1, 0), (0, 0), (0, 2)].enumerated() {
+      let saved = template("Plan \(index)", position: index, [planned(press, "Chest Press")])
+      try await store.save(saved, now: start)
+      let seeded = try seedSession(
+        database, template: saved.id, startedAt: day(-10 + index), finished: true,
+        workingSets: kind.0, warmUps: kind.1)
+      byTemplate.append((saved.id, seeded.session))
+    }
+
+    let loaded = try await store.loadTemplates()
+    let rotationCounts = Set(
+      byTemplate.filter { pair in loaded.first { $0.id == pair.id }?.lastDoneAt != nil }
+        .map(\.session.rawValue))
+    let healthCounts = Set(
+      try await DeviceHealthStore(database: database).workoutsToExport().map(\.id.rawValue))
+    let repeatable = try LoggerStore(database: database).hasRepeatableWorkout()
+
+    #expect(rotationCounts == [byTemplate[0].session.rawValue])
+    #expect(healthCounts == rotationCounts)
+    #expect(repeatable)
   }
 
   @Test("The last finished session of a workout is the most recent one")
