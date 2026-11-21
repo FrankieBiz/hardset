@@ -15,11 +15,16 @@ public nonisolated struct WorkoutImportResult: Sendable, Equatable {
   public let restoredBodyweightEntries: Int
   /// Workouts in a Hardset export with no finish time, which a restore leaves out.
   public let leftOutUnfinishedWorkouts: Int
+  /// Gyms, machines and movements a restore had to create because this phone did not have them.
+  public let restoredGyms: Int
+  public let restoredMachines: Int
+  public let restoredMovements: Int
 
   public init(
     importedWorkouts: Int, importedSets: Int, skippedWorkouts: Int,
     restoredSavedWorkouts: Int = 0, restoredBodyweightEntries: Int = 0,
-    leftOutUnfinishedWorkouts: Int = 0
+    leftOutUnfinishedWorkouts: Int = 0, restoredGyms: Int = 0, restoredMachines: Int = 0,
+    restoredMovements: Int = 0
   ) {
     self.importedWorkouts = importedWorkouts
     self.importedSets = importedSets
@@ -27,6 +32,17 @@ public nonisolated struct WorkoutImportResult: Sendable, Equatable {
     self.restoredSavedWorkouts = restoredSavedWorkouts
     self.restoredBodyweightEntries = restoredBodyweightEntries
     self.leftOutUnfinishedWorkouts = leftOutUnfinishedWorkouts
+    self.restoredGyms = restoredGyms
+    self.restoredMachines = restoredMachines
+    self.restoredMovements = restoredMovements
+  }
+
+  /// Whether anything at all was added: a restore of a file whose every row is already here is
+  /// "nothing new", whatever it held.
+  public var addedAnything: Bool {
+    importedSets > 0 || importedWorkouts > 0 || restoredSavedWorkouts > 0
+      || restoredBodyweightEntries > 0 || restoredGyms > 0 || restoredMachines > 0
+      || restoredMovements > 0
   }
 }
 
@@ -64,7 +80,9 @@ public nonisolated enum WorkoutImportUndoError: Error, LocalizedError, Equatable
 /// JSON and SQLite are complete snapshots of every table, including device-local ones. CSV is one
 /// row per logged set with the set's workout, movement, gym, machine and plan row written beside
 /// it; see `RestoreCSV` for exactly what it carries. The CSV and the JSON can be read back by
-/// `commit` (see `DataTransferStore+Restore.swift`); the SQLite copy cannot.
+/// `commit` (see `DataTransferStore+Restore.swift`); the SQLite copy cannot. A SQLite file is the
+/// database itself: opening an arbitrary one as a source would trust its schema and triggers, and
+/// the JSON holds the same rows in a form that is checked column by column before it is read.
 public nonisolated struct DataTransferStore: Sendable {
   let database: any DatabaseWriter
   public init(database: any DatabaseWriter) { self.database = database }
@@ -178,8 +196,8 @@ public nonisolated struct DataTransferStore: Sendable {
     /// importer, so the app cannot promise a restore it cannot do.
     public var restoresIntoHardset: Bool {
       switch self {
-      case .csv: true
-      case .json, .sqlite: false
+      case .csv, .json: true
+      case .sqlite: false
       }
     }
 
@@ -188,10 +206,13 @@ public nonisolated struct DataTransferStore: Sendable {
       switch self {
       case .csv:
         "Every finished workout, set by set, with the movements, gyms and machines it used. "
-          + "Hardset can read this file back in, so this is the one to keep. It leaves out saved "
-          + "workouts and body mass, and a workout still open when you export."
+          + "Hardset can read this file back in, and a spreadsheet can open it. It leaves out "
+          + "saved workouts and body mass, and a workout still open when you export."
       case .json:
-        "Every table, for inspecting your data or keeping a full copy. Hardset can't read it back in."
+        "Everything Hardset can restore: workouts, movements, gyms and machines, saved workouts "
+          + "and body mass. Hardset can read this file back in. A workout still open when you "
+          + "export is not restored. It also holds any Apple Health data you chose to copy, "
+          + "which Hardset does not restore."
       case .sqlite:
         "The database itself, for inspecting your data or keeping a full copy. Hardset can't read it back in."
       }
@@ -203,7 +224,7 @@ public nonisolated struct DataTransferStore: Sendable {
         ? "\(fileName) is ready. Save it somewhere off this iPhone. To restore, choose it under "
           + "Restore or bring in workouts."
         : "\(fileName) is ready. It is a copy to keep and inspect; Hardset can't restore from it. "
-          + "Export a CSV to keep a copy you can restore."
+          + "Export JSON or CSV to keep a copy you can restore."
     }
   }
 

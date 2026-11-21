@@ -16,8 +16,8 @@ public nonisolated enum DataSafetyCopy {
     + "Deleting Hardset deletes it."
 
   public static let exportingKeepsIt =
-    "Exporting is how you keep it: a CSV export is a copy Hardset can read back in. "
-    + "JSON and SQLite exports are for keeping and inspecting."
+    "Exporting is how you keep it: a JSON or CSV export is a copy Hardset can read back in, and "
+    + "JSON also brings back saved workouts and body mass. SQLite exports are for keeping and inspecting."
 
   public static let installOverTheOldApp =
     "Install new builds over the old app, and don't delete it first: updating keeps your history. "
@@ -28,6 +28,6 @@ public nonisolated enum DataSafetyCopy {
 
   /// The same three facts in one place, above the export buttons.
   public static let beforeExporting =
-    "Your history is saved on this iPhone only. Export a CSV to keep a copy you can restore, "
+    "Your history is saved on this iPhone only. Export a JSON or CSV copy to keep it, "
     + "and install new builds over the old app; deleting it first deletes your history."
 }

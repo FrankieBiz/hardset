@@ -65,6 +65,9 @@ nonisolated extension DataTransferStore {
     var importedSets = 0
     var skippedWorkouts = 0
     var addedBodyweight = 0
+    var addedGyms = 0
+    var addedMachines = 0
+    var addedMovements = 0
 
     for table in RestoreSchema.tables {
       // Sets and plan rows can be numerous, and are only ever added under a workout that was
@@ -119,6 +122,12 @@ nonisolated extension DataTransferStore {
           if let uuid = UUID(uuidString: id) { undo.sessions.append(uuid) }
         case "bodyweightEntries":
           addedBodyweight += 1
+        case "gyms":
+          addedGyms += 1
+        case "machines":
+          addedMachines += 1
+        case "exercises":
+          addedMovements += 1
         default: break
         }
       }
@@ -130,7 +139,8 @@ nonisolated extension DataTransferStore {
       importedWorkouts: addedSessions.count, importedSets: importedSets,
       skippedWorkouts: skippedWorkouts, restoredSavedWorkouts: addedTemplates.count,
       restoredBodyweightEntries: addedBodyweight,
-      leftOutUnfinishedWorkouts: plan.unfinishedWorkouts)
+      leftOutUnfinishedWorkouts: plan.unfinishedWorkouts, restoredGyms: addedGyms,
+      restoredMachines: addedMachines, restoredMovements: addedMovements)
   }
 
   /// Column names are this module's own, from `RestoreSchema`; only values come from the file.

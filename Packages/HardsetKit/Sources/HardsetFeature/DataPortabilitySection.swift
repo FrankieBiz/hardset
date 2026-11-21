@@ -86,7 +86,7 @@ struct DataPortabilitySection: View {
         .fixedSize(horizontal: false, vertical: true)
 
       SectionLabel("Restore or bring in workouts")
-      Text("To restore, choose a CSV you exported from Hardset. It comes back as it was, and anything already on this iPhone is left alone.")
+      Text("To restore, choose a JSON or CSV you exported from Hardset. It comes back as it was, and anything already on this iPhone is left alone.")
         .font(Tokens.Text.provenance)
         .foregroundStyle(Tokens.Color.chalkDim)
         .fixedSize(horizontal: false, vertical: true)
@@ -94,7 +94,7 @@ struct DataPortabilitySection: View {
         .font(Tokens.Text.provenance)
         .foregroundStyle(Tokens.Color.chalkDim)
         .fixedSize(horizontal: false, vertical: true)
-      Button("Choose workout CSV") { isChoosingFile = true }
+      Button("Choose workout file") { isChoosingFile = true }
         .buttonStyle(HardsetButtonStyle(.secondary))
         .disabled(isBusy)
       if let lastImportUndo {
@@ -131,7 +131,7 @@ struct DataPortabilitySection: View {
     } message: { confirmed in
       Text(confirmed.confirmationMessage)
     }
-    .fileImporter(isPresented: $isChoosingFile, allowedContentTypes: [.commaSeparatedText, .plainText]) { result in
+    .fileImporter(isPresented: $isChoosingFile, allowedContentTypes: [.commaSeparatedText, .plainText, .json]) { result in
       switch result {
       case .success(let url):
         let selectedUnit = liveUnit ?? unit
@@ -144,7 +144,9 @@ struct DataPortabilitySection: View {
     // read still running when Units changes is caught when it finishes, in `replacePreview`.
     .onChange(of: unit) { _, newUnit in
       liveUnit = newUnit
-      guard let current = preview else { return }
+      // A Hardset export is in kilograms with exact dates, so the unit changes nothing in it and
+      // there is nothing to read again; the preview's figures follow the unit live.
+      guard let current = preview, current.restore == nil else { return }
       let text = current.originalCSV
       replacePreview(in: newUnit, unitChanged: true) { try await Self.reparse(text, unit: newUnit) }
     }
@@ -198,14 +200,14 @@ struct DataPortabilitySection: View {
           .fixedSize(horizontal: false, vertical: true)
         CertaintyBadge(level: .unevaluated, methodology: "The CSV contains no physical machine identity. No machine or muscle attribution is inferred.")
       }
-      if newWorkouts > 0 {
+      if newWorkouts > 0 || preview.restore?.layout == .json {
         Button(Self.commitTitle(for: preview, newWorkouts: newWorkouts, skipped: skippedWorkouts)) {
           commit(preview)
         }
         .buttonStyle(HardsetButtonStyle())
         .disabled(isBusy || alreadyImported == nil)
       }
-      Button(newWorkouts > 0 ? "Cancel import" : "Close preview") { dropPreview() }
+      Button(newWorkouts > 0 || preview.restore?.layout == .json ? "Cancel import" : "Close preview") { dropPreview() }
         .buttonStyle(HardsetButtonStyle(.quiet))
         .disabled(isBusy)
     }
@@ -215,10 +217,15 @@ struct DataPortabilitySection: View {
   }
 
   private static func alreadyHereText(skipped: Int, of preview: WorkoutImportPreview) -> String {
-    if preview.restore != nil {
-      return skipped == preview.sessions.count
-        ? "Every workout in this file is already on this iPhone. There is nothing new to restore."
-        : "\(skipped) of these workouts are already on this iPhone and will be left exactly as they are."
+    if let restore = preview.restore {
+      guard skipped == preview.sessions.count else {
+        return "\(skipped) of these workouts are already on this iPhone and will be left exactly as they are."
+      }
+      // A CSV is made of its workouts, so with every workout here there is nothing left to add. A
+      // JSON also holds saved workouts, body mass, gyms and machines, which may still be missing.
+      return restore.layout == .json
+        ? "Every workout in this file is already on this iPhone and will be left exactly as it is. Anything else in it that is missing, such as saved workouts, will still be restored."
+        : "Every workout in this file is already on this iPhone. There is nothing new to restore."
     }
     return skipped == preview.sessions.count
       ? "Every workout in this file was already imported from \(preview.source). There is nothing new to import."
@@ -227,6 +234,7 @@ struct DataPortabilitySection: View {
 
   private static func commitTitle(for preview: WorkoutImportPreview, newWorkouts: Int, skipped: Int) -> String {
     let verb = preview.restore == nil ? "Import" : "Restore"
+    if newWorkouts == 0 { return "Restore what is missing" }
     return skipped == 0 ? "\(verb) \(preview.setCount) sets" : "\(verb) \(newWorkouts) new workouts"
   }
 
@@ -237,6 +245,16 @@ struct DataPortabilitySection: View {
     ]
     if restore.layout == .earlierCSV {
       notes.append("This file was made by an earlier version of Hardset. It names gyms but does not identify them, so each is matched to a gym of the same name here, or created. Movements you made yourself come back with no muscles recorded; set a body part for them in Library.")
+    }
+    if restore.savedWorkouts > 0 || restore.bodyweightEntries > 0 {
+      var also: [String] = []
+      if restore.savedWorkouts > 0 {
+        also.append("\(restore.savedWorkouts) saved \(restore.savedWorkouts == 1 ? "workout" : "workouts")")
+      }
+      if restore.bodyweightEntries > 0 {
+        also.append("\(restore.bodyweightEntries) body mass \(restore.bodyweightEntries == 1 ? "entry" : "entries")")
+      }
+      notes.append("Also in this file: \(also.joined(separator: " and ")), restored where they are not already here. Apple Health data in an export is not restored; copy it again from Health in Settings.")
     }
     if restore.unfinishedWorkouts > 0 {
       notes.append("\(restore.unfinishedWorkouts) \(restore.unfinishedWorkouts == 1 ? "workout was" : "workouts were") still open when this file was made and will be left out. Finish \(restore.unfinishedWorkouts == 1 ? "it" : "them") in Hardset and export again to keep \(restore.unfinishedWorkouts == 1 ? "it" : "them").")
@@ -286,7 +304,7 @@ struct DataPortabilitySection: View {
       do {
         let next = try await read()
         guard generation == previewGeneration else { return }
-        if let liveUnit, liveUnit != readUnit {
+        if next.restore == nil, let liveUnit, liveUnit != readUnit {
           let text = next.originalCSV
           replacePreview(in: liveUnit, unitChanged: true) { try await Self.reparse(text, unit: liveUnit) }
           return
@@ -295,7 +313,7 @@ struct DataPortabilitySection: View {
         guard generation == previewGeneration else { return }
         preview = next
         alreadyImported = duplicates
-        if unitChanged {
+        if unitChanged, next.restore == nil {
           importMessage = "Units changed: unitless Strong loads are now read as \(readUnit.abbreviation)."
         }
       } catch {
@@ -412,20 +430,33 @@ struct DataPortabilitySection: View {
   }
 
   private static func restoreSummary(_ result: WorkoutImportResult) -> String {
-    var text: String
-    if result.importedSets > 0 {
-      text = "Restored \(result.importedSets) sets in \(result.importedWorkouts) "
-        + "\(result.importedWorkouts == 1 ? "workout" : "workouts"). They're in History."
-      if result.skippedWorkouts > 0 {
-        text += " \(result.skippedWorkouts) already here and left as they were."
-      }
-    } else {
-      text = "Nothing new: all \(result.skippedWorkouts) workouts in this file are already on this iPhone."
+    guard result.addedAnything else {
+      return "Nothing new: everything in this file is already on this iPhone."
+    }
+    var parts: [String] = []
+    if result.importedWorkouts > 0 {
+      parts.append("Restored \(result.importedSets) sets in \(result.importedWorkouts) "
+        + "\(result.importedWorkouts == 1 ? "workout" : "workouts"). They're in History.")
+    }
+    var also: [String] = []
+    func add(_ count: Int, _ one: String, _ many: String) {
+      if count > 0 { also.append("\(count) \(count == 1 ? one : many)") }
+    }
+    add(result.restoredSavedWorkouts, "saved workout", "saved workouts")
+    add(result.restoredBodyweightEntries, "body mass entry", "body mass entries")
+    add(result.restoredMovements, "movement", "movements")
+    add(result.restoredGyms, "gym", "gyms")
+    add(result.restoredMachines, "machine", "machines")
+    if !also.isEmpty {
+      parts.append((result.importedWorkouts > 0 ? "Also added " : "Added ") + also.joined(separator: ", ") + ".")
+    }
+    if result.skippedWorkouts > 0 {
+      parts.append("\(result.skippedWorkouts) \(result.skippedWorkouts == 1 ? "workout was" : "workouts were") already here and left as they were.")
     }
     if result.leftOutUnfinishedWorkouts > 0 {
-      text += " \(result.leftOutUnfinishedWorkouts) unfinished left out."
+      parts.append("\(result.leftOutUnfinishedWorkouts) unfinished left out.")
     }
-    return text
+    return parts.joined(separator: " ")
   }
 
   private func reportImport(_ error: any Error) {
@@ -443,8 +474,8 @@ private nonisolated enum DataFileError: LocalizedError {
   case tooLarge, encoding
   var errorDescription: String? {
     switch self {
-    case .tooLarge: "Choose a CSV smaller than 20 MB."
-    case .encoding: "Choose a UTF-8 CSV smaller than 20 MB."
+    case .tooLarge: "Choose a file smaller than 20 MB."
+    case .encoding: "Choose a UTF-8 CSV or JSON file smaller than 20 MB."
     }
   }
 }

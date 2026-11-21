@@ -38,12 +38,14 @@ public nonisolated struct WorkoutImportPreview: Sendable {
       /// A CSV from an earlier build, which has the original 19 columns only. Gyms are matched by
       /// name, and a movement made by the lifter comes back with no muscles recorded.
       case earlierCSV
+      /// The JSON export: every table, so saved workouts and body mass come back too.
+      case json
     }
 
     public let layout: Layout
-    /// Saved workouts in the file. The CSV is one row per set and carries none.
+    /// Saved workouts in the file. Only the JSON carries them.
     public let savedWorkouts: Int
-    /// Body mass entries in the file. The CSV is one row per set and carries none.
+    /// Body mass entries in the file. Only the JSON carries them.
     public let bodyweightEntries: Int
     /// Workouts with no finish time. They are left out of a restore.
     public let unfinishedWorkouts: Int
@@ -103,6 +105,8 @@ public nonisolated enum WorkoutCSVImport {
     _ text: String, strongUnit: WeightUnit, timeZone: TimeZone = .current,
     skippingUnsupportedRows: Bool = false
   ) throws -> WorkoutImportPreview {
+    // Hardset's own JSON export is read back by id; the unit and zone below do not apply to it.
+    if RestoreJSON.looksLikeJSON(text) { return try RestoreJSON.preview(text) }
     let rows = try CSVDocument.decode(text)
     guard let first = rows.first, rows.count > 1 else { throw WorkoutImportError.empty }
     // A semicolon-separated file comes from a comma-decimal locale, where "82,5" is 82.5. In a
@@ -325,9 +329,9 @@ public nonisolated enum WorkoutImportError: Error, Equatable, Sendable, Localize
   case unreadable(String)
   public var errorDescription: String? {
     switch self {
-    case .empty: "The CSV contains no sets."
+    case .empty: "The file contains no sets."
     case .headers:
-      "Use a Hardset CSV export, or an English Strong or Hevy CSV export, with its original header."
+      "Use a Hardset CSV or JSON export, or an English Strong or Hevy CSV export, with its original header."
     case .unreadable(let reason): "\(reason). No workouts were imported."
     case .row(let row, let reason): "Row \(row): \(reason). No workouts were imported."
     case .alreadyImported: "This exact CSV has already been imported on this device."

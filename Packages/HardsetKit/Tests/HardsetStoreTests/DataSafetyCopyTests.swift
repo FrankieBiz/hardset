@@ -19,15 +19,15 @@ struct DataSafetyCopyTests {
     #expect(beforeExporting.contains("deleting it first deletes your history"))
   }
 
-  @Test("It says exporting is how to keep it, and only a CSV can be read back in")
+  @Test("It says exporting is how to keep it, and that JSON and CSV can be read back in, not SQLite")
   func exportingKeepsIt() {
     #expect(settings.contains("exporting is how you keep it"))
-    #expect(settings.contains("csv export is a copy hardset can read back in"))
-    #expect(beforeExporting.contains("export a csv"))
-    // The copy names CSV as the one restorable format; if that changes, so must the words.
+    #expect(settings.contains("json or csv export is a copy hardset can read back in"))
+    #expect(beforeExporting.contains("export a json or csv copy"))
+    // The copy names JSON and CSV as the restorable formats; if that changes, so must the words.
     let restorable = DataTransferStore.Format.allCases.filter(\.restoresIntoHardset)
-    #expect(restorable == [.csv])
-    #expect(settings.contains("json and sqlite exports are for keeping and inspecting"))
+    #expect(restorable == [.csv, .json])
+    #expect(settings.contains("sqlite exports are for keeping and inspecting"))
   }
 
   @Test("It says to install over the old app, not after deleting it, and why that comes up")

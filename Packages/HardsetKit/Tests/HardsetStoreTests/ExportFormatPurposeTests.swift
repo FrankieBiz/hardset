@@ -57,6 +57,16 @@ struct ExportFormatPurposeTests {
     }
   }
 
+  @Test("The JSON's own copy says what it brings back and what it does not")
+  func jsonCopySaysWhatItRestores() {
+    let purpose = DataTransferStore.Format.json.purpose
+    #expect(purpose.contains("saved workouts"))
+    #expect(purpose.contains("body mass"))
+    #expect(purpose.contains("still open"))
+    #expect(purpose.contains("Apple Health"))
+    #expect(purpose.contains("does not restore"))
+  }
+
   @Test("The CSV's own copy says what it leaves out")
   func csvCopySaysWhatItLeavesOut() {
     let purpose = DataTransferStore.Format.csv.purpose
