@@ -21,6 +21,9 @@ import SwiftUI
 /// week". `onEarlier` and `onLater` step the window back and forward a week at a time.
 public struct VolumeReportView: View {
   private let report: MuscleVolumeReport
+  /// Muscles the catalogue cannot yet train directly. They are left out of "Nothing logged for", since
+  /// a zero there would blame the lifter for a gap in the catalogue, and named in their own section
+  /// instead, so they are neither blamed nor silently missing.
   private let excludedFromGaps: Set<Muscle>
   private let title: String?
   private let subtitle: String?
@@ -76,6 +79,7 @@ public struct VolumeReportView: View {
             header
             trainedSection(trained)
             gapsSection
+            uncatalogedSection
           }
         }
         .padding(.horizontal, Tokens.Spacing.loose)
@@ -156,12 +160,19 @@ public struct VolumeReportView: View {
     }
   }
 
+  /// Says what is wrong, that it is not the lifter's miscount, and where the part that can be fixed
+  /// is fixed. Shared with the deep muscle map, so the two screens give the same reason.
+  ///
+  /// A movement the lifter made gets its muscles from a body part set in Library, on the Train tab.
+  /// An imported one cannot be given any, and the message says so rather than pointing at a fix that
+  /// is not there.
   static func lowerBoundMessage(unattributed: Int) -> String {
     let lead =
       unattributed == 1
-      ? "1 of those is on an exercise with no muscles recorded"
-      : "\(unattributed) of those are on exercises with no muscles recorded"
-    return lead + ", so every count below is at least this much — not exactly this much."
+      ? "1 working set is on a movement with no muscles recorded, so it counts toward no muscle."
+      : "\(unattributed) working sets are on movements with no muscles recorded, so they count toward no muscle."
+    return lead + " Every count below is at least this much, not exactly this much. "
+      + "Set a body part for a movement you made in Library, on the Train tab; imported movements can't be given one."
   }
 
   // MARK: - Trained
@@ -336,9 +347,52 @@ public struct VolumeReportView: View {
     }
   }
 
+  // MARK: - Muscles the catalogue cannot train directly yet
+
+  /// The muscles the caller excluded that have nothing credited in this window, named with the
+  /// reason, in the place the gap list would otherwise leave them out without a word. A muscle that
+  /// did get credit appears among the trained rows instead.
+  private var uncatalogedSection: some View {
+    let muscles = Muscle.allCases.filter { excludedFromGaps.contains($0) && report.sets(for: $0) == 0 }
+    return Group {
+      if !muscles.isEmpty {
+        VStack(alignment: .leading, spacing: Tokens.Spacing.regular) {
+          VStack(alignment: .leading, spacing: Tokens.Spacing.tight) {
+            SectionLabel("Not counted directly yet", count: muscles.count)
+            Text(UncatalogedMuscleCopy.explanation)
+              .font(Tokens.Text.caption)
+              .foregroundStyle(Tokens.Color.chalkDim)
+              .fixedSize(horizontal: false, vertical: true)
+          }
+          FlowLayout(spacing: Tokens.Spacing.snug) {
+            ForEach(muscles, id: \.self) { muscle in
+              HardsetTag(ExercisePickerView.displayName(MuscleKey(muscle)))
+            }
+          }
+          .accessibilityElement(children: .combine)
+        }
+      }
+    }
+  }
+
   static func format(_ sets: Double) -> String {
     sets.formatted(.number.precision(.fractionLength(0...1)))
   }
+}
+
+/// What the volume report and the deep muscle map say about the muscles the catalogue has no movement
+/// for yet, so the two screens give the same reason. A zero there is the catalogue's gap, not the
+/// lifter's, and the words say so.
+enum UncatalogedMuscleCopy {
+  /// Under the list of those muscles. "Only indirect credit" is exact: a few movements credit one of
+  /// them at half a set, and none credits it as a main muscle.
+  static let explanation =
+    "No built-in movement trains these directly yet, so only indirect credit (half a set) can count "
+    + "toward them. This is a gap in the catalogue, not in your training. A movement you make "
+    + "yourself can credit them."
+
+  /// On a tile with nothing credited.
+  static let tile = "No built-in movement trains this directly yet"
 }
 
 /// The certainty beside one muscle's weekly count, drawn the same on every screen that shows one.

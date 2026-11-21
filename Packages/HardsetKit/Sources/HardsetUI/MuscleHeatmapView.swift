@@ -28,7 +28,9 @@ public struct MuscleHeatmapView: View {
       Text(VolumeAnalyzer.certaintyMeaning)
         .font(Tokens.Text.provenance).foregroundStyle(Tokens.Color.chalkDim)
       if report.isLowerBound {
-        HardsetBanner(.caveat, message: "\(report.unattributedHardSets) working sets have unknown attribution. All muscle counts are lower bounds.")
+        HardsetBanner(
+          .caveat, title: "Counts below are lower bounds",
+          message: VolumeReportView.lowerBoundMessage(unattributed: report.unattributedHardSets))
       }
       LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: Tokens.Spacing.snug), count: typeSize.isAccessibilitySize ? 1 : 2), spacing: Tokens.Spacing.snug) {
         ForEach(Muscle.allCases, id: \.self) { muscle in
@@ -40,7 +42,7 @@ public struct MuscleHeatmapView: View {
               if isUncatalogued(muscle) {
                 // No catalogue movement credits it directly, so a zero here is the catalogue's gap,
                 // not the lifter's.
-                Text("No catalogue movement credits this yet")
+                Text(UncatalogedMuscleCopy.tile)
                   .font(Tokens.Text.caption).foregroundStyle(Tokens.Color.chalkDim)
               } else {
                 Text("\(report.isLowerBound ? "≥ " : "")\(report.sets(for: muscle).formatted(.number.precision(.fractionLength(0...1)))) fractional sets")

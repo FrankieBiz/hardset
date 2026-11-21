@@ -579,6 +579,15 @@ Selection rows, the unit switch and pickers stay silent.
   on the map and at the top of the "How sets are counted" disclosure; the disclosure's capsule is the
   best level a count can reach, `VolumeAnalyzer.bestCertainty`, and `certaintyScale` names where each
   level applies. Settings opens the same disclosure. No new token, no motion.
+- **Lower bounds and muscles the catalogue cannot train yet**: the `caveat` banner "Counts below are
+  lower bounds" says the cause and the way out, and is shared by the Volume screen and the map: sets
+  on a movement with no muscles recorded count toward no muscle, a movement the lifter made gets its
+  muscles from a body part set in Library on the Train tab, and an imported movement cannot be given
+  one. The muscles no built-in movement trains directly (`ExerciseCatalog.unauthoredDirectTokens`) are
+  not listed under "Nothing logged for", where a zero would blame the lifter; the Volume screen names
+  the ones with nothing credited in their own section, "Not counted directly yet", with the reason
+  ("This is a gap in the catalogue, not in your training"), and a tile on the map with nothing
+  credited says the same. Tags, `caption` and the `caveat` banner; no new token, no motion.
 - **Charts**: one series per machine with its own colour and point symbol, a custom legend in app
   type, with equipment provenance allowed to wrap fully at accessibility sizes, and machine changes
   as 2 pt dashed `warning` rules. The chart opens on the estimated max,
