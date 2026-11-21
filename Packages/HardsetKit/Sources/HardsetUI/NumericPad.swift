@@ -193,7 +193,7 @@ public struct NumericPad: View {
             .fixedSize()
         }
         .font(Tokens.Text.figure)
-        .foregroundStyle(Tokens.Color.plateBlue)
+        .foregroundStyle(Tokens.Color.chalkDim)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(Text("Resting, \(remaining) remaining"))
       }
@@ -209,27 +209,40 @@ public struct NumericPad: View {
         .foregroundStyle(Tokens.Color.chalkDim)
       Spacer(minLength: Tokens.Spacing.snug)
       // An empty buffer shows an em dash, never "0": nothing typed is not a value.
-      Text(buffer.isEmpty ? "—" : LoadFigure.typed(buffer.displayText))
-        .hardsetText(.hero)
-        .foregroundStyle(buffer.isEmpty ? Tokens.Color.chalkDim : Tokens.Color.chalk)
-        .lineLimit(1)
-        // A readout must show the whole number: at the largest text sizes it scales down rather
-        // than clip "1002.5" to "100…". The row's own field keeps the full-size figure.
-        .minimumScaleFactor(0.5)
-        // Padded whether or not it is highlighted, so the highlight never moves the figure.
-        .padding(.horizontal, Tokens.Spacing.snug)
-        .background {
-          // A prefill the next key will replace is drawn as selected, the way iOS marks text
-          // about to be typed over. Pressing "." on a highlighted "100" then reads as starting a
-          // new number, not as a bug that turned 100 into "0.". Static: nothing animates.
-          if replacesPrefill {
-            let shape = RoundedRectangle(cornerRadius: Tokens.Radius.control - Tokens.Spacing.tight)
-            shape
-              .fill(Tokens.Color.plateBlueSurface)
-              .overlay(
-                shape.strokeBorder(Tokens.Color.plateBlue, lineWidth: Tokens.Stroke.hairline))
-          }
+      HStack(alignment: .firstTextBaseline, spacing: 0) {
+        Text(buffer.isEmpty ? "—" : LoadFigure.typed(buffer.displayText))
+          .hardsetText(.hero)
+          // Selected text is drawn as it is in a text field: the figure knocked out of a solid
+          // block. `steel` on `chalk` is the panel's own colour on the loudest text colour, so the
+          // block needs no hue and the figure is still above 7:1.
+          .foregroundStyle(
+            replacesPrefill
+              ? Tokens.Color.steel
+              : (buffer.isEmpty ? Tokens.Color.chalkDim : Tokens.Color.chalk)
+          )
+          .lineLimit(1)
+          // A readout must show the whole number: at the largest text sizes it scales down rather
+          // than clip "1002.5" to "100…". The row's own field keeps the full-size figure.
+          .minimumScaleFactor(0.5)
+        if !replacesPrefill && !buffer.isEmpty {
+          // The row's own caret, at the display's size: the figure is being typed, not replaced.
+          Text("|")
+            .hardsetText(.hero, weight: .light)
+            .foregroundStyle(Tokens.Color.chalk)
+            .accessibilityHidden(true)
         }
+      }
+      // Padded whether or not it is highlighted, so the highlight never moves the figure.
+      .padding(.horizontal, Tokens.Spacing.snug)
+      .background {
+        // A prefill the next key will replace is drawn as selected, the way iOS marks text about to
+        // be typed over. Pressing "." on a highlighted "100" then reads as starting a new number,
+        // not as a bug that turned 100 into "0.". Static: nothing animates.
+        if replacesPrefill {
+          Tokens.Shape.rounded(Tokens.Radius.control - Tokens.Spacing.tight)
+            .fill(Tokens.Color.chalk)
+        }
+      }
       if let unit {
         Text(unit)
           .hardsetText(.unit)
@@ -272,7 +285,7 @@ public struct NumericPad: View {
       // hyphen next to a plus reads as a dash.
       Text(delta > 0 ? "+\(figure)" : "−\(figure)")
         .font(Tokens.Text.setEntry)
-        .foregroundStyle(Tokens.Color.plateBlue)
+        .foregroundStyle(Tokens.Color.chalk)
         .lineLimit(1)
     }
     .buttonStyle(HardsetKeyStyle())
@@ -304,8 +317,7 @@ public struct NumericPad: View {
   private var footerActions: some View {
     if let onDone, let onNext {
       HStack(spacing: Tokens.Spacing.snug) {
-        Button(doneTitle, action: onDone)
-          .buttonStyle(HardsetButtonStyle(.secondary, size: .logger))
+        doneButton(onDone)
         Button(action: onNext) {
           HStack(spacing: Tokens.Spacing.tight) {
             Text("Next")
@@ -319,8 +331,7 @@ public struct NumericPad: View {
       }
     } else if let onDone, let onLog {
       HStack(spacing: Tokens.Spacing.snug) {
-        Button(doneTitle, action: onDone)
-          .buttonStyle(HardsetButtonStyle(.secondary, size: .logger))
+        doneButton(onDone)
         Button(action: onLog) {
           Label("Log set", systemImage: "checkmark")
             .lineLimit(1)
@@ -335,6 +346,22 @@ public struct NumericPad: View {
         .buttonStyle(HardsetButtonStyle(.primary, size: .logger))
         .disabled(!isDoneEnabled)
     }
+  }
+
+  /// Done beside the primary action: a word in `chalk` in a 56 pt cell, with no face. The one filled
+  /// control on the pad is the primary action beside it, which owns the screen's accent while the
+  /// pad is up.
+  private func doneButton(_ action: @escaping () -> Void) -> some View {
+    Button(action: action) {
+      Text(doneTitle)
+        .font(Tokens.Text.headline)
+        .foregroundStyle(Tokens.Color.chalk)
+    }
+    .buttonStyle(
+      InlineControlStyle(
+        minHeight: Tokens.loggerTapTarget, alignment: .center, fullWidth: true,
+        outlinesRegion: true)
+    )
   }
 
   private func keyButton(_ key: Key) -> some View {

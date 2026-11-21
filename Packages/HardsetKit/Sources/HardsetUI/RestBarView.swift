@@ -92,12 +92,11 @@ public struct RestBarView: View {
           chooser
         }
       }
+      // The panel spans the width whatever it holds. Without a key face to expand, its content
+      // alone set the width and the bar shrank to hug the countdown, centred, over the list.
+      .frame(maxWidth: .infinity, alignment: .leading)
       .padding(Tokens.Spacing.regular)
-      .background(Tokens.Color.steelRaised, in: RoundedRectangle(cornerRadius: Tokens.Radius.card))
-      .overlay(
-        RoundedRectangle(cornerRadius: Tokens.Radius.card)
-          .strokeBorder(Tokens.Color.hairline, lineWidth: Tokens.Stroke.hairline)
-      )
+      .hardsetPanel()
       .padding(.horizontal, Tokens.Spacing.regular)
       .padding(.bottom, Tokens.Spacing.snug)
       // The countdown is one element and each control is its own, so a VoiceOver user can hear
@@ -130,7 +129,7 @@ public struct RestBarView: View {
         .contentShape(Rectangle())
       }
       .buttonStyle(HardsetPressStyle())
-      .foregroundStyle(Tokens.Color.plateBlue)
+      .foregroundStyle(Tokens.Color.chalkDim)
       .accessibilityLabel(
         nextRest.map { "Next rest, \(ExerciseSectionView.spoken($0))" } ?? "Choose the next rest")
       .accessibilityHint(isChoosing ? "Hides the lengths" : "Shows the lengths to choose from")
@@ -161,13 +160,38 @@ public struct RestBarView: View {
     }
   }
 
+  /// The lengths on offer, as figures in a row. The next rest's length is `chalk` with a rule
+  /// under it, the others `chalkDim`, so the choice is carried by weight and a mark and no hue: the
+  /// rest bar has no accent, because the screen has one and it is the next set's check.
   @ViewBuilder private var chooserChips: some View {
     ForEach(restChoices, id: \.self) { duration in
-      HardsetChip(duration.clockString, isSelected: duration == nextRest) {
+      let isSelected = duration == nextRest
+      Button {
         chosenCount += 1
         onChooseNextRest?(duration)
         isChoosing = false
+      } label: {
+        Text(duration.clockString)
+          .font(Tokens.Text.figure)
+          .foregroundStyle(isSelected ? Tokens.Color.chalk : Tokens.Color.chalkDim)
+          .lineLimit(1)
+          .frame(minWidth: Tokens.minimumTapTarget)
+          .overlay(alignment: .bottom) {
+            if isSelected {
+              Rectangle()
+                .fill(Tokens.Color.chalk)
+                .frame(height: Tokens.Stroke.selected)
+                .offset(y: Tokens.Spacing.tight)
+                .accessibilityHidden(true)
+            }
+          }
       }
+      .buttonStyle(
+        InlineControlStyle(
+          minHeight: Tokens.minimumTapTarget, alignment: .center,
+          fullWidth: dynamicTypeSize.isAccessibilitySize)
+      )
+      .accessibilityAddTraits(isSelected ? [.isSelected] : [])
       .accessibilityLabel(ExerciseSectionView.spoken(duration))
     }
   }
@@ -192,7 +216,7 @@ public struct RestBarView: View {
       VStack(alignment: .leading, spacing: Tokens.Spacing.hairline) {
         Text(state.isRunning ? "Resting" : "Paused")
           .font(Tokens.Text.sectionHeader)
-          .foregroundStyle(state.isRunning ? Tokens.Color.plateBlue : Tokens.Color.chalkDim)
+          .foregroundStyle(Tokens.Color.chalkDim)
         if let metadata {
           Text("\(metadata.exerciseName), \(metadata.setLabel.lowercased())")
             .hardsetText(.caption)
@@ -205,11 +229,10 @@ public struct RestBarView: View {
     .accessibilityLabel(spokenLabel)
   }
 
-  /// The countdown, in `chalk` whether it runs or is paused: chalk is the only text colour the
-  /// knurl behind it is gated for, so the paused state is carried by the word "Paused" and the
-  /// play key, never by a dimmer colour. The knurl is a backing layer clipped to its own shape,
-  /// above the opaque panel fill and under the glyphs; `.knurl()` is an overlay and would hatch
-  /// the digits, so it is not used here.
+  /// The countdown, in `chalk` whether it runs or is paused: the paused state is carried by the
+  /// word "Paused" and the play key, never by a dimmer colour. It is drawn straight on the panel,
+  /// with no tile or texture behind it: the figure is the largest on the screen and needs nothing
+  /// to stand on.
   @ViewBuilder private var countdown: some View {
     switch state {
     case .idle:
@@ -222,23 +245,13 @@ public struct RestBarView: View {
         .foregroundStyle(Tokens.Color.chalk)
         .lineLimit(1)
         .fixedSize()
-        .padding(Tokens.Spacing.snug)
-        .background { countdownBacking }
     case .paused(let remaining):
       Text(remaining.clockString)
         .hardsetText(.hero)
         .foregroundStyle(Tokens.Color.chalk)
         .lineLimit(1)
         .fixedSize()
-        .padding(Tokens.Spacing.snug)
-        .background { countdownBacking }
     }
-  }
-
-  /// The knurl behind the countdown at the pattern's default 8%, clipped to the control radius.
-  private var countdownBacking: some View {
-    KnurlPattern(opacity: 0.08)
-      .clipShape(RoundedRectangle(cornerRadius: Tokens.Radius.control))
   }
 
   /// The ±15 labels begin with what the keys show, "−15" read as "Minus 15", so a Voice Control
@@ -272,7 +285,8 @@ public struct RestBarView: View {
     }
   }
 
-  /// A rest control: a 56 pt key, with a figure or a symbol.
+  /// A rest control: a figure or a symbol in a 56 pt region, with no key face. Four of them share
+  /// the bar's width, so each is wide enough that the whole region is the target.
   private func control(
     title: String?,
     systemImage: String?,
@@ -290,9 +304,14 @@ public struct RestBarView: View {
             .font(Tokens.Text.headline)
         }
       }
+      .foregroundStyle(Tokens.Color.chalk)
       .frame(minWidth: Tokens.loggerTapTarget)
     }
-    .buttonStyle(HardsetKeyStyle())
+    // Equal columns across the bar, as the key faces were: a control with no face still owns its
+    // share of the width, so the four of them spread instead of bunching under the countdown.
+    .buttonStyle(
+      InlineControlStyle(minHeight: Tokens.loggerTapTarget, alignment: .center, fullWidth: true)
+    )
     .accessibilityLabel(accessibilityLabel)
     .accessibilityInputLabels(inputLabels.isEmpty ? [accessibilityLabel] : inputLabels)
   }

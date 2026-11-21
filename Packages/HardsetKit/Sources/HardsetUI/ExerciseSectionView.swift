@@ -18,6 +18,9 @@ public struct ExerciseSectionView: View {
   private let onSelectMachine: (() -> Void)?
   private let onShowHistory: (() -> Void)?
   private let lastRest: Duration?
+  private let accentedSlotID: UUID?
+  private let decidesAccent: Bool
+  private let allowsCorrection: Bool
   private let editingSlotID: UUID?
   private let editingField: SetRowField?
   private let editingText: String?
@@ -40,6 +43,14 @@ public struct ExerciseSectionView: View {
   /// - Parameter onShowHistory: Opens this movement's load history. `nil` leaves the name inert.
   /// - Parameter lastRest: The rest the lifter last chose for this movement. When known, it is
   ///   offered as one tap; it is never a default the app made up, so with none the card asks.
+  /// - Parameter decidesAccent: Whether the host, not the card, says which row's log control is plate
+  ///   blue. A session passes `true`, because its one accent belongs to the workout's next loggable
+  ///   set, which may be on another card; a card shown alone leaves it `false`, and draws its next
+  ///   row blue.
+  /// - Parameter accentedSlotID: The row that wears the accent when `decidesAccent`; `nil` for none
+  ///   on this card.
+  /// - Parameter allowsCorrection: Lets a saved row's figures open the keypad. The session passes
+  ///   `true` when it can write a correction to a saved set.
   /// - Parameter editingSlotID: The row the session's keypad is on, if it is on this card.
   /// - Parameter onMoveUp: Moves the card up the workout. `nil` for the first card, which shows
   ///   the action disabled rather than absent, so the menu keeps its shape.
@@ -53,6 +64,9 @@ public struct ExerciseSectionView: View {
     onSelectMachine: (() -> Void)? = nil,
     onShowHistory: (() -> Void)? = nil,
     lastRest: Duration? = nil,
+    decidesAccent: Bool = false,
+    accentedSlotID: UUID? = nil,
+    allowsCorrection: Bool = false,
     editingSlotID: UUID? = nil,
     editingField: SetRowField? = nil,
     editingText: String? = nil,
@@ -71,6 +85,9 @@ public struct ExerciseSectionView: View {
     self.onSelectMachine = onSelectMachine
     self.onShowHistory = onShowHistory
     self.lastRest = lastRest
+    self.decidesAccent = decidesAccent
+    self.accentedSlotID = accentedSlotID
+    self.allowsCorrection = allowsCorrection
     self.editingSlotID = editingSlotID
     self.editingField = editingField
     self.editingText = editingText
@@ -87,7 +104,7 @@ public struct ExerciseSectionView: View {
     VStack(alignment: .leading, spacing: Tokens.Spacing.regular) {
       header
 
-      VStack(spacing: Tokens.Spacing.tight) {
+      VStack(spacing: 0) {
         // Labelled once, above the columns, rather than inside every row: "Last time" and "kg"
         // repeated down a five-set card is noise the eye learns to skip. At accessibility sizes
         // the rows stack and label themselves, so there are no columns to head.
@@ -103,6 +120,10 @@ public struct ExerciseSectionView: View {
             isWarmup: slot.isWarmup,
             isLogged: slot.isLogged,
             isNext: slot.id == state.nextUnloggedSlotID,
+            accentOverride: decidesAccent ? slot.id == accentedSlotID : nil,
+            allowsCorrection: allowsCorrection,
+            // A hairline only where two rows meet, never above the first.
+            isSeparated: slot.id != state.slots.first?.id,
             showsInlineLabels: false,
             unit: unit,
             machineIncrementKg: state.machineIncrementKg,
@@ -134,8 +155,6 @@ public struct ExerciseSectionView: View {
       }
       addSetButtons
     }
-    .padding(Tokens.Spacing.regular)
-    .hardsetCard()
   }
 
   private var header: some View {
@@ -173,10 +192,15 @@ public struct ExerciseSectionView: View {
         machineChip(action: onSelectMachine)
       }
       if let note = state.priorNote {
+        // Said in words: "From another machine · Low confidence". The borrowed loads are the
+        // caveat, so they are the one thing on the card allowed to speak up, and they do it as a
+        // sentence and not as a tinted capsule.
         CertaintyBadge(
           level: .low,
           methodology: "Suggested loads are borrowed from another machine (\(note)). Movement mechanics and leverage differ between equipment.",
-          citation: "Epistemic honesty: equipment cannot be merged"
+          citation: "Epistemic honesty: equipment cannot be merged",
+          context: note,
+          style: .language
         )
       }
     }
@@ -202,7 +226,7 @@ public struct ExerciseSectionView: View {
         if isLink {
           Image(systemName: "chart.xyaxis.line")
             .hardsetText(.caption, weight: .semibold)
-            .foregroundStyle(Tokens.Color.plateBlue)
+            .foregroundStyle(Tokens.Color.chalkDim)
         }
       }
       .frame(minHeight: Tokens.minimumTapTarget, alignment: .leading)
@@ -221,7 +245,7 @@ public struct ExerciseSectionView: View {
   /// Order and removal: things done to the movement as a whole, rarely, so they sit in one menu
   /// in the card's corner rather than as buttons repeated on every card.
   private var movementMenu: some View {
-    HeaderIconMenu(accessibilityLabel: "\(state.exerciseName) options") {
+    HeaderIconMenu(accessibilityLabel: "\(state.exerciseName) options", style: .bare) {
       Button {
         onMoveUp?()
       } label: {
@@ -243,42 +267,23 @@ public struct ExerciseSectionView: View {
     }
   }
 
-  /// How far through the working sets the lifter is: a pip per set, filled when logged, and the
-  /// count in figures beside it. The pips are hidden from VoiceOver, which reads the sentence.
-  ///
-  /// The count turns green only when the number of rows came from this movement's history. With
-  /// no history the rows are whatever the lifter added, and "1/1" in green read as a target met.
+  /// How far through the working sets the lifter is, as the count in figures: "1/3". The strip of
+  /// pips that used to sit beside it said the same thing a second time in a different shape. The
+  /// count is `chalkDim` and goes to full `chalk`, not green, once every working set is logged, and
+  /// only when the number of rows came from this movement's history: with no history the rows are
+  /// whatever the lifter added, and "1/1" brightening read as a target met.
   private var progress: some View {
     let working = state.workingSetCount
     let logged = loggedWorkingSets
     let hasHistory = state.suggestion(forSetIndex: 0) != nil
-    return HStack(spacing: Tokens.Spacing.snug) {
-      // Beyond eight sets the pips stop being countable at a glance, so only the figure remains.
-      if working > 0 && working <= 8 {
-        HStack(spacing: Tokens.Spacing.hairline) {
-          ForEach(0..<working, id: \.self) { index in
-            Capsule()
-              .fill(index < logged ? Tokens.Color.plateGreen : Tokens.Color.steelRaised)
-              .overlay(
-                Capsule().strokeBorder(
-                  index < logged ? Tokens.Color.plateGreen : Tokens.Color.controlEdge,
-                  lineWidth: Tokens.Stroke.hairline
-                )
-              )
-              .frame(width: 10, height: 6)
-          }
-        }
-        .accessibilityHidden(true)
-      }
-      Text("\(logged)/\(working)")
-        .font(Tokens.Text.figure)
-        .foregroundStyle(
-          hasHistory && logged == working && working > 0
-            ? Tokens.Color.plateGreen : Tokens.Color.chalkDim
-        )
-    }
-    .accessibilityElement(children: .combine)
-    .accessibilityLabel("\(logged) of \(working) working sets logged")
+    return Text("\(logged)/\(working)")
+      .font(Tokens.Text.figure)
+      .foregroundStyle(
+        hasHistory && logged == working && working > 0
+          ? Tokens.Color.chalk : Tokens.Color.chalkDim
+      )
+      .accessibilityElement(children: .combine)
+      .accessibilityLabel("\(logged) of \(working) working sets logged")
   }
 
   /// Working sets only. Counting a logged warm-up here made "1 of 3 logged" appear before a single
@@ -288,26 +293,31 @@ public struct ExerciseSectionView: View {
   }
 
   /// Labels for the set rows' columns, using the same widths so each label sits over its values.
+  /// The weight's unit ends where the weight does and "Reps" begins where the reps do, either side
+  /// of the multiply sign's column, so each name sits over the figures it labels.
   private var columnHeader: some View {
     HStack(spacing: Tokens.Spacing.snug) {
       Text("Set")
-        .frame(width: SetRowMetrics.ordinalWidth)
+        .frame(width: SetRowMetrics.ordinalWidth, alignment: .leading)
       Text("Last time")
         // A label, not a value, so it may tighten to share the narrow column's width.
         .minimumScaleFactor(0.8)
         .frame(width: SetRowMetrics.previousWidth, alignment: .leading)
-      Text(unit.abbreviation)
-        .frame(minWidth: SetRowMetrics.weightMinWidth, maxWidth: .infinity)
-      Text("Reps")
-        .frame(minWidth: SetRowMetrics.repsMinWidth, maxWidth: .infinity)
+      HStack(spacing: 0) {
+        Text(unit.abbreviation)
+          .frame(maxWidth: .infinity, alignment: .trailing)
+        Color.clear
+          .frame(width: SetRowMetrics.multiplyWidth, height: 1)
+        Text("Reps")
+          .frame(maxWidth: .infinity, alignment: .leading)
+      }
       Color.clear
         .frame(width: Tokens.loggerTapTarget, height: 1)
     }
     .hardsetText(.caption, weight: .medium)
     .foregroundStyle(Tokens.Color.chalkDim)
     .lineLimit(1)
-    // The same inset as each row, so every label sits over its column.
-    .padding(.horizontal, Tokens.Spacing.tight)
+    .padding(.bottom, Tokens.Spacing.tight)
     // The rows carry the same information in their spoken labels; reading the header as well
     // would only add a stop before every set.
     .accessibilityHidden(true)
@@ -332,40 +342,27 @@ public struct ExerciseSectionView: View {
       )
   }
 
-  /// A set chip is a raised flat face that sinks on press; an unset one keeps its plate blue
-  /// tint and takes the opacity press, because it draws its own fill and outline. The two are
-  /// separate buttons because a button takes one style, and the label is shared so they cannot
-  /// drift apart.
+  /// The machine, as a line of type with a chevron: a quiet inline control, with no capsule, no
+  /// outline and no icon tile. Unset, it reads "Choose machine" in full chalk, because the one
+  /// thing missing is the lifter's to supply; set, it reads the machine's name in `chalkDim`. Its
+  /// hit region is 44 pt tall and as wide as its words, and Button Shapes or Increase Contrast
+  /// draw its outline.
   @ViewBuilder
   private func machineChipButton(action: @escaping () -> Void) -> some View {
-    if state.machineID == nil {
-      Button(action: action) {
-        machineChipContent
-          .background(Tokens.Color.plateBlueSurface, in: Capsule())
-          .overlay(
-            Capsule().strokeBorder(Tokens.Color.plateBlue, lineWidth: Tokens.Stroke.hairline)
-          )
-          .frame(minHeight: Tokens.minimumTapTarget)
-          .contentShape(Rectangle())
-      }
-      .buttonStyle(HardsetPressStyle())
-    } else {
-      Button(action: action) {
-        machineChipContent
-      }
-      .buttonStyle(ControlPressStyle(shape: Capsule(), outline: .always))
+    Button(action: action) {
+      machineChipContent
     }
+    .buttonStyle(InlineControlStyle(minHeight: Tokens.minimumTapTarget, alignment: .leading))
   }
 
   private var machineChipContent: some View {
     HStack(spacing: Tokens.Spacing.snug) {
-      Image(systemName: state.machineID == nil ? "plus" : "dumbbell.fill")
-        .hardsetText(.caption, weight: .semibold)
       Text(state.machineName ?? "Choose machine")
-        .hardsetText(.caption, weight: .semibold)
+        .hardsetText(.provenance, weight: .medium)
         // One line at ordinary sizes; at accessibility sizes the name wraps rather than
         // truncating to "Hamm…", because it is how the lifter recognises the machine.
         .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 1)
+        .multilineTextAlignment(.leading)
       if let increment = state.machineIncrementKg {
         // Shown because it is the constraint on what a suggestion may propose. Written with the
         // same figure as the step buttons and the fields, so 10 kg reads "22.05 lb steps" here
@@ -378,10 +375,9 @@ public struct ExerciseSectionView: View {
       Image(systemName: "chevron.down")
         .hardsetText(.caption, weight: .semibold)
         .foregroundStyle(Tokens.Color.chalkDim)
+        .accessibilityHidden(true)
     }
-    .foregroundStyle(state.machineID == nil ? Tokens.Color.plateBlue : Tokens.Color.chalk)
-    .padding(.horizontal, Tokens.Spacing.regular)
-    .padding(.vertical, Tokens.Spacing.snug)
+    .foregroundStyle(state.machineID == nil ? Tokens.Color.chalk : Tokens.Color.chalkDim)
   }
 
   private var machineChipLabel: String {
@@ -395,36 +391,45 @@ public struct ExerciseSectionView: View {
   /// this movement it is a single tap, "Rest 1:30", with the other durations one tap further in
   /// the menu beside it; with none, the menu asks.
   ///
-  /// 56 pt like every logger control, and no taller: the label once carried its own minimum height
-  /// inside the style's padding and made rest the largest control on the card.
+  /// Words and a symbol, with no button face: the logger's 56 pt region is the control, and the
+  /// type is what the lifter sees. The label once carried its own minimum height inside the style's
+  /// padding and made rest the largest control on the card.
   @ViewBuilder private func restControl(start: @escaping (Duration) -> Void) -> some View {
     if let lastRest {
-      HStack(spacing: Tokens.Spacing.snug) {
+      HStack(spacing: Tokens.Spacing.tight) {
         Button {
           start(lastRest)
         } label: {
           Label("Rest \(lastRest.clockString)", systemImage: "timer")
             .monospacedDigit()
+            .font(Tokens.Text.headline)
+            .foregroundStyle(Tokens.Color.chalk)
         }
-        .buttonStyle(HardsetButtonStyle(.secondary, size: .logger))
+        .buttonStyle(InlineControlStyle(minHeight: Tokens.loggerTapTarget, alignment: .leading))
         .accessibilityLabel("Start a rest of \(Self.spoken(lastRest))")
 
         Menu {
           restMenuItems(start: start)
         } label: {
           Image(systemName: "chevron.down")
+            .font(Tokens.Text.caption.weight(.semibold))
+            .foregroundStyle(Tokens.Color.chalkDim)
             .frame(minWidth: Tokens.minimumTapTarget)
         }
-        .buttonStyle(HardsetButtonStyle(.secondary, size: .logger, fullWidth: false))
+        .buttonStyle(InlineControlStyle(minHeight: Tokens.loggerTapTarget, alignment: .center))
         .accessibilityLabel("Other rest durations")
+
+        Spacer(minLength: 0)
       }
     } else {
       Menu {
         restMenuItems(start: start)
       } label: {
         Label("Start rest", systemImage: "timer")
+          .font(Tokens.Text.headline)
+          .foregroundStyle(Tokens.Color.chalk)
       }
-      .buttonStyle(HardsetButtonStyle(.secondary, size: .logger))
+      .buttonStyle(InlineControlStyle(minHeight: Tokens.loggerTapTarget, alignment: .leading))
     }
   }
 
@@ -448,23 +453,46 @@ public struct ExerciseSectionView: View {
     duration.formatted(.units(allowed: [.minutes, .seconds], width: .wide))
   }
 
-  private var addSetButtons: some View {
-    HStack(spacing: Tokens.Spacing.snug) {
-      Button {
-        state.appendSlot()
-      } label: {
-        Label("Add set", systemImage: "plus")
+  /// Adding a row: "Add set" and "Add warm-up", as two lines of type side by side, or one above the
+  /// other at accessibility sizes, where they would not fit. Each is a 56 pt region with no face;
+  /// the plus says what it is. The layout follows Dynamic Type directly, as the rest of the card
+  /// does, rather than being measured, so the text is laid out at the size it will be read at.
+  @ViewBuilder private var addSetButtons: some View {
+    if dynamicTypeSize.isAccessibilitySize {
+      VStack(alignment: .leading, spacing: 0) {
+        addSetButton
+        addWarmupButton
       }
-      .buttonStyle(HardsetButtonStyle(.secondary, size: .logger, fullWidth: true))
-
-      Button {
-        state.appendSlot(isWarmup: true)
-      } label: {
-        Label("Warm-up", systemImage: "plus")
+    } else {
+      HStack(spacing: Tokens.Spacing.loose) {
+        addSetButton
+        addWarmupButton
+        Spacer(minLength: 0)
       }
-      .buttonStyle(HardsetButtonStyle(.quiet, size: .logger, fullWidth: false))
-      .accessibilityLabel("Add warm-up set")
     }
+  }
+
+  private var addSetButton: some View {
+    Button {
+      state.appendSlot()
+    } label: {
+      Label("Add set", systemImage: "plus")
+        .font(Tokens.Text.headline)
+        .foregroundStyle(Tokens.Color.chalk)
+    }
+    .buttonStyle(InlineControlStyle(minHeight: Tokens.loggerTapTarget, alignment: .leading))
+  }
+
+  private var addWarmupButton: some View {
+    Button {
+      state.appendSlot(isWarmup: true)
+    } label: {
+      Label("Warm-up", systemImage: "plus")
+        .font(Tokens.Text.headline)
+        .foregroundStyle(Tokens.Color.chalkDim)
+    }
+    .buttonStyle(InlineControlStyle(minHeight: Tokens.loggerTapTarget, alignment: .leading))
+    .accessibilityLabel("Add warm-up set")
   }
 
   /// Warm-ups do not consume a working-set number, so the badge on row three still reads "3"

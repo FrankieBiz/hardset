@@ -17,12 +17,13 @@ the code does yet, so a reader does not look for a screen that has not moved.
   `Elevation.floating`, the `display` role off condensed, `labelEmphasis` retired, and the shared
   kit: the flat control face and its outline rule (`ControlFace.swift`), buttons, chips, the
   segmented control, header buttons, text entry, cards, banners, tags and certainty badges.
+- The live session is in code, rebuilt monochrome and type-led (ruling D12): see Set row, Set log
+  control, Inline control, Panel and the live-session layout below. Its sibling screens have not
+  moved.
 - Not yet in code, so the bullets below that name these describe where they are going: whatever a
-  screen draws for itself instead of through the kit. That is most of the live session (the set
-  row's field faces and logged state, its warning and record cards, the unset gym and machine
-  chips), the rest bar's panel and countdown, the Library's "Curated" tag, the Progress card's
-  layout, the Volume gauge ends, the scorecard headline's type role, and the onboarding and tour
-  surfaces. It also includes four private outlined-card button styles that each draw their own
+  screen draws for itself instead of through the kit. That is the Library's "Curated" tag, the
+  Progress card's layout, the Volume gauge ends, the scorecard headline's type role, and the
+  onboarding and tour surfaces. It also includes four private outlined-card button styles that each draw their own
   stroke: the History row, the Settings disclosure row, the Train screen's gym row and the
   receipt's link row, plus the methodology citation card. A screen that uses the kit picks up the new look with no change; one that draws its own
   face or stroke keeps the old one until it is migrated.
@@ -47,6 +48,18 @@ glass; the content beneath it is never glass.
   plate colour: an action you can take (plate blue), a set that is saved (plate green), a record
   (plate yellow), a caveat (warning orange), a failure (plate red). Everything else is steel and
   chalk.
+- **On the live session, one accent, and colour only as a small mark.** The log control of the
+  workout's primary action is the only saturated colour on the screen: the first set, in workout
+  order, that is not logged and can be, not one per movement and not whatever row happens to be
+  next. A blank warm-up is next up but cannot be logged, so it does not hold the accent from the
+  working set behind it. While the keypad is up its own primary action, Next or Log set, is the
+  accent and no row has it. A saved set is a small `plateGreen` seal, a record is
+  the `plateYellow` trophy, a caveat is a small `warning` glyph, and a failure is `plateRed`; none
+  of them is ever a row fill, a tint, a capsule or a badge background, and no other control is blue.
+  The machine, the gym, the history link, the rest lengths and every quiet action are `chalk` or
+  `chalkDim`. Certainty is a phrase, not a coloured capsule (see `CertaintyBadge`). The finish
+  confirmation's primary button is the one other plate-blue fill, and it exists only while the
+  lifter is answering that question.
 - **Numbers are the hero.** Weights, reps and rest are set in SF Pro Condensed with tabular
   figures: large, narrow and steady, like stamped plates or a scale readout. Condensed figures fit
   pound values such as `132.28` at full size, so nothing shrinks to fit.
@@ -54,7 +67,8 @@ glass; the content beneath it is never glass.
   a step of surface. A control is identified by a fill, a verb label or a standard glyph. A 3:1
   outline is kept where those cannot carry it alone: an input that is empty or being typed into,
   every control under Increase Contrast, and every control when Button Shapes is on. Static text and
-  a saved value never imitate a button.
+  a saved value never imitate a button. The live session goes further: no input is boxed, a control
+  may be only its label, and the outline returns under Increase Contrast and Button Shapes.
 - **Restraint everywhere except the log tap.** The one memorable moment is logging a set: the
   check stamps in with a short spring and a success haptic, and the row settles into its logged
   state. Nothing else moves without being asked.
@@ -83,7 +97,7 @@ primary appearance; light is derived from the same roles and held to the same fl
 | `onPlateBlue` | `#0C0D10` | `#FFFFFF` | Text on `plateBlueFill` |
 | `plateBlueSurface` | `#10233A` | `#E3EFFC` | Selected / focused tint |
 | `plateGreen` | `#8FE3A3` | `#0F5A27` | The 10 kg plate: logged, high certainty |
-| `plateGreenSurface` | `#122A1A` | `#E5F5EA` | The logged seal's inner disc, win marks, high-certainty capsule |
+| `plateGreenSurface` | `#122A1A` | `#E5F5EA` | The high-certainty capsule where a screen still draws one |
 | `plateYellow` | `#FFD86B` | `#604A00` | The 15 kg plate: records, moderate certainty |
 | `plateYellowSurface` | `#2B2410` | `#FBF3DA` | Record banner |
 | `plateRed` | `#FF9A9A` | `#9A1B24` | The 25 kg plate: failed writes |
@@ -119,7 +133,10 @@ fill step is gone and every control wears its `controlEdge`. Resolution happens 
 collection, in code, with no asset catalogue.
 
 Certainty maps high → `plateGreen`, moderate → `plateYellow`, low → `warning`, unevaluated →
-`chalkDim`, always with its word and symbol so colour is never the only carrier.
+`chalkDim`, always with its word and symbol so colour is never the only carrier. On the live
+session certainty is language instead: a phrase in `provenance` and `chalkDim`, "Moderate
+confidence", with what it is about before it ("From another machine · Low confidence") and a small
+info glyph that says it opens. The words carry the level and no hue does; see `CertaintyBadge`.
 
 Chart series (one line per machine, never merged) use `plateBlue`, chalk `#E7E7EC`/`#3A3A42`,
 lilac `#B9A8FF`/`#5236B8` and rose `#FF9DD6`/`#9A1F66`, each paired with a distinct point symbol.
@@ -228,29 +245,47 @@ Selection rows, the unit switch and pickers stay silent.
   never disappears under a finger. A button takes the fill of the surface it sits on, through
   `ControlSurface`: `hardsetCard()` sets `steel` for everything inside it, a steel panel that is not
   a card (the keypad) sets it with `hardsetControlSurface(_:)`, and anything else is on the canvas.
-- **Keys** (`HardsetKeyStyle`): a flat `steelRaised` face on the keypad's `steel` panel, with no
-  edge light; pressed, the darker pressed fill and a 0.96 scale. Keys keep their `controlEdge`
-  outline in every setting for now: dropping it reverses the note this style used to carry, that a
-  key identified only by a fill one shade off its pad is a key the lifter has to look for, and
-  glare and sweaty hands cannot be judged from a render. That is the keypad pass, with its own
-  device check, and it reverts alone: it is one argument in `HardsetKeyFace`. When it lands, a key
-  wears the outline only under Increase Contrast or Button Shapes, like every other control.
+- **Keys** (`HardsetKeyStyle`): a key is its figure or glyph in `chalk` in a 56 pt cell a third of
+  the pad's width: no face, no fill and no outline. Pressed, it sinks to 0.96 and dims to 80% on
+  `Motion.press` (Reduce Motion drops the scale), as every control with no face of its own does;
+  disabled, it dims to 40%. Under Increase Contrast or Button Shapes each key wears the 3:1
+  `controlEdge` outline around its whole cell. The quick steps (−5, −2.5, +2.5, +5) are keys in
+  `chalk`, and Done is an inline control; the one filled control on the pad is its primary action,
+  Next or Log set, which owns the screen's accent while the pad is up (the rows give theirs up, see
+  the set log control). The keypad drops its keys' faces because the screen behind it has none; gym
+  glare and sweaty hands on a face-less key are a device check, and it reverts in one place,
+  `HardsetKeyFace`. The same pad serves the load-step editor.
 - **Knurl** (`KnurlPattern`, `.knurl(opacity:)`): a `Canvas` crosshatch at 8% opacity, the
   `KnurlPattern` default. It fills rectangular bounds, so callers with rounded shapes clip it
-  themselves. It is allowed in one place in the product UI, as the logged-set seal's rim, because
-  the stamp is the one theatrical moment; it is retired from behind the rest bar's countdown, which
-  is drawn directly on the panel in `chalk`. The welcome bar's shaft, in onboarding, is the one
-  other place. The knurl is always a backing layer, `KnurlPattern` inside a `.background { }`
-  clipped to the backing shape. The seal's `checkmark.circle.fill` glyph is never over knurl: the
-  knurl fills only an annulus around an opaque `plateGreenSurface` inner disc that holds the glyph,
-  because `plateGreen` on `plateGreenSurface` loses contrast with knurl under it.
+  themselves. It is retired from the live session: the rest bar's countdown is drawn directly on
+  the panel in `chalk`, and the logged-set seal is a plain `checkmark.circle.fill` with no knurled
+  rim and no disc, so the stamp is the one theatrical moment and a texture is not part of it. The
+  welcome bar's shaft, in onboarding, is the one place left, and the token catalogue keeps one
+  labelled sample. The knurl is always a backing layer, `KnurlPattern` inside a `.background { }`
+  clipped to the backing shape, and is never drawn behind text.
 - **Cards** (`hardsetCard`): `steel` fill, continuous `card` radius, no border. Separation is the
   step to `canvas`; inside a card, rows separate by `hairline` only where they need to. Selected
   uses a 2 pt `plateBlue` ring and `plateBlueSurface` fill, because selection is state. Under
   Increase Contrast, where the fill step is gone, a card wears a `hairline` border.
+- **Panel** (`hardsetPanel`): the one raised tone of the live session: `steelRaised` on the `card`
+  radius, no colour and no border, with a `hairline` border under Increase Contrast. The rest bar
+  and the record notice are panels, so they stand on the same step off the canvas, and what a panel
+  says is carried by its words and one small mark. The stale-workout notice is a neutral `hardsetCard`
+  with a small `warning` glyph, because it holds buttons that need a fill to step off.
 - **Chips** (`HardsetChip`): capsule, raised fill, no stroke; selected uses `plateBlueFill` with
-  `onPlateBlue` text. An unset gym or machine chip ("Set gym", "Choose machine") is `plateBlueSurface`
-  with `plateBlue` text and no outline.
+  `onPlateBlue` text.
+- **Inline control** (`InlineControlStyle`): a control that is only its label, for a screen that has
+  dropped its containers: words, a symbol or both, with no fill, no outline and no shape. The
+  caller sets the font and colour; the style supplies a rectangular hit region, 44 pt tall in
+  general and the logger's 56 pt where a missed tap costs a set, and the press, which sinks the
+  label to 0.97 and dims it to 80% on `Motion.press` with Reduce Motion dropping the scale. Under
+  Increase Contrast or Button Shapes it draws the `controlEdge` outline and a little padding to
+  sit inside it, so a control that looks like plain text still looks like one to anyone who asked.
+  It dims to 40% when disabled only if the caller says so. The live session's machine line, gym
+  line, "Add set", "Warm-up", rest, "Add movement", load-step and rest-bar controls are inline
+  controls, and `HeaderIconStyle.bare` is the same idea for the header's glyphs. An unset gym or
+  machine ("Set gym", "Choose machine") reads in full `chalk`, an invitation; a set one reads in
+  `chalkDim` with a chevron.
 - **Tags** (`HardsetTag`): the public name of the non-interactive label on a row (modality,
   "Recent", "Custom"). Flat `steelRaised`, no outline, no edge light. It stays on one line at
   ordinary sizes and wraps at accessibility sizes, never truncating the word it carries.
@@ -261,10 +296,13 @@ Selection rows, the unit switch and pickers stay silent.
 - **Screen header** (`ScreenHeader`): display title, one context line, optional trailing action.
 - **Banner** (`HardsetBanner`): record, caveat, and error messages on their tinted surfaces. The
   `info` kind stays as a neutral note and is listed for deletion in the final phase if nothing
-  uses it. A banner, the session screen's warning and record cards, and a non-interactive
+  uses it. A banner and a non-interactive
   `CertaintyCapsule` carry no stroke: the words, the symbol and the tinted surface identify the
   kind or level. An interactive `CertaintyBadge` is identified by its symbol and word, and wears
-  an outline only under Increase Contrast or Button Shapes. A message-only banner speaks only its message to
+  an outline only under Increase Contrast or Button Shapes. Its `.language` style, which the live
+  session uses, is the same control as a phrase with an info glyph and no tint, and the disclosure it
+  opens restates the level as a chalk heading instead of a capsule; the other screens keep the
+  capsule until they are rebuilt. A message-only banner speaks only its message to
   VoiceOver, as it does today; speaking the kind is recorded for the accessibility pass. A
   picker's error banner (gym, machine and exercise pickers) is pinned above the list at ordinary
   sizes and moves into the scrolling content at accessibility sizes, so a tall banner can never
@@ -277,8 +315,9 @@ Selection rows, the unit switch and pickers stay silent.
   and compact ledgers; a larger headline figure uses `readout`.
 - **Empty and loading states**: explain what is missing and what to do next; loading is a quiet line
   of text, not a spinner. An empty slot is drawn with a dashed outline, the app's one mark for
-  "nothing here yet": the empty-state socket, the "Add movement" slot, a warm-up's ordinal, an
-  incomplete set's log control, and the rule under "Not evaluated".
+  "nothing here yet": the empty-state socket, the workout editor's "Add movement" slot and the rule
+  under "Not evaluated". The live session draws none: its "Add movement" is an inline control, a
+  warm-up's ordinal is a plain "W", and an incomplete set's log control is an empty square.
 - **Tags versus chips**: a chip can be tapped and is a raised fill with an action label; a tag
   (modality, "Recent", "Custom", an untrained muscle) is flat `steelRaised`, so it never imitates a
   control. At
@@ -378,9 +417,12 @@ Selection rows, the unit switch and pickers stay silent.
   +15, pause, skip) share one row when they fit, and otherwise the controls drop to their own
   single row under the countdown; the four controls never split across rows. The countdown is drawn
   directly on the panel in `chalk`, with no knurl tile. The panel is opaque `steelRaised` at the
-  card radius with `Elevation.floating` and no stroke, in every appearance and setting: glass was
-  considered and refused, because the contrast gate cannot certify text on it. Controls are 56 pt
-  targets identified by their label or glyph.
+  card radius with `Elevation.floating` and no stroke, except the `hairline` border Increase
+  Contrast gives every panel because the fill step is gone: glass was considered and refused,
+  because the contrast gate cannot certify text on it. Controls are 56 pt
+  inline controls identified by their label or glyph, with no key face; Increase Contrast and
+  Button Shapes outline them. "Resting" and "Paused" are `chalkDim`, and the next rest's lengths
+  are figures: the chosen one in `chalk` with a 2 pt rule under it, the others `chalkDim`.
 - **Navigation titles** (`hardsetNavigationTitle`): the one title that may shrink, with
   `minimumScaleFactor(0.8)`, so a long exercise name stays on a single line in a bar. It is a
   documented exception to "adaptive layouts in place of shrinking text".
@@ -430,38 +472,70 @@ Selection rows, the unit switch and pickers stay silent.
 - **Text entry** (`entryFieldChrome`): raised fill, control border, and a 2 pt plate blue ring that
   fades in on focus. Used by the search field and the name entry sheet. An input keeps its outline,
   because it is identified by its box.
-- **Set row**: the ordinal is a plain numeral in a fixed-width column; a warm-up's is the dashed "W".
-  An unlogged row's weight and reps are filled, outlined fields, because a container means the value
-  can be changed. A logged row shows plain `setEntry` values on the card with the same frames, no
-  field faces and no tint, and its green seal; the field faces fade out on `Motion.state`, and with
-  Reduce Motion the swap is instant, so nothing reflows when a set is logged.
-- **Set log control**: four states, never confused: incomplete (dashed, disabled), ready (plate blue
-  outline), next up (plate blue fill), logged (the stamp). The first three are square key faces with
-  a check; a logged set loses its key face and wears a round `plateGreen` seal
-  (`checkmark.circle.fill`) with a knurled rim, on the card's own surface, so logged and
-  next up differ by shape, not only by hue. At accessibility sizes the control also reads "Log set"
-  or "Logged", and VoiceOver hears "next to log" on the next-up row. Voice Control answers to
-  "Set 2", "Log set 2", and, on the next-up row, "Log set".
+- **Live session layout** (`SessionView`, `ExerciseSectionView`): no container around a movement.
+  The page margin is `loose` and the only inset, a movement's header, rows and actions sit
+  straight on the canvas, and movements are separated by `block` of space, each owning the space
+  above it. The only hairlines are between two set rows and above the workout's totals, where
+  they separate; the totals are a section label and a ledger with no card. The rest bar and the
+  record notice are panels. The screen's contents are, top to bottom: the header, the gym line,
+  the movements, one "Add movement" inline control, the totals and the finish control; nothing
+  on it is a card except the stale-workout notice, which holds buttons.
+- **Set row**: the figures are the content. Weight and reps are the `readout` role, the largest text
+  on the card, tabular and set tight, with a quiet multiply sign between them in `provenance` and
+  `chalkDim`: weight ends at the sign and reps begin after it, so the sign is one axis down the list
+  and the column header's unit and "Reps" sit over their figures. The ordinal is small and dim
+  (`caption`, `chalkDim`) in a fixed column with no tile behind it; a warm-up's is a plain "W", and
+  at accessibility sizes it is spelled "Set 2" or "Warm-up". Last time is a small dim pair in its own
+  fixed column. Nothing is boxed, tinted or outlined: there is no wash on a logged row, and a
+  hairline exists only between two rows, inset past the ordinal column.
+  Weight and reps have no box because the keypad is the input surface and the row is never a form.
+  A figure still to be logged is dimmed to `chalkDim`, which clears 7:1 on every surface; once the
+  set is logged it reads in full `chalk`. While the keypad types into a field its figure is `chalk`
+  with a still caret after it and a 2 pt `chalk` underline, and nothing else changes; the caret does
+  not blink. Each field's hit region is the logger's 56 pt tall and its whole half of the row wide,
+  and the ordinal and last time are a button into the weight, so no part of the row left of the
+  check is dead. Increase Contrast and Button Shapes bring the `controlEdge` outline back around an
+  editable figure, so a boundary appears exactly where it was asked for.
+  A saved figure is tappable too, and does what a figure that looks tappable should: it opens the
+  keypad to correct it. The set stays saved while it is corrected: the figure on screen is the saved
+  one until the correction has been written, the keypad says "Correcting" beside the set's name, and
+  its last field offers Done and no "Log set", because there is nothing left to log. The correction
+  is written when the keypad leaves that figure (Next, Done, another figure, the sheet going away),
+  through the coordinator, which persists first and changes the row only after the write succeeds;
+  a failed write leaves the saved figures and shows the failure. A field left empty, or typed back to
+  what it held, writes nothing. A correction keeps the set's machine, its place and its save time,
+  starts no rest and claims no record. A finished workout's sets are never edited; its corrections
+  are removals, in the receipt. "Edit set" in the long-press menu and for VoiceOver does the same
+  thing as tapping the weight, and "Undo log" still takes a set back.
+- **Set log control**: four states, never confused, each one SF Symbol of one weight and one size,
+  about 30 pt inside the logger's whole 56 pt region: incomplete is an empty square in `controlEdge`
+  (faint, and above the 3:1 floor for a graphic), ready is a checked square in `chalkDim`, next up is
+  that square filled with `plateBlueFill`, the one saturated colour on the screen and only on the
+  workout's primary action (every other loggable row is drawn as ready), and logged is a
+  round `plateGreen` `checkmark.circle.fill`. A square logs a set and a circle is a set that is
+  logged, so logged and next up differ by shape, not only by hue. Nothing is dashed, knurled or
+  boxed, and a logged row has no tint. The stamp is the seal scaling in from 0.6 on `Motion.stamp`
+  as the unlogged glyph fades out, and the one flourish on the screen; with Reduce Motion it simply
+  appears. At accessibility sizes the control also reads "Log set" or "Logged" in `chalk`, and
+  VoiceOver hears "next to log" on the next-up row. Voice Control answers to "Set 2", "Log set 2",
+  and, on the next-up row, "Log set".
 - **Press feedback on self-drawn controls** (`HardsetPressStyle` and the set row's own styles): flat
   faces sink, everything else dims, and no press moves layout.
-  - Flat faces (a raised fill: unselected chips, `AssumptionChip`, the header icon button, the set
-    machine chip, the set row's unlogged value fields, keys and secondary buttons) sink to
-    `steelPressed` and scale to 0.97 (keys 0.96) on `Motion.press`. They never dim, so a
-    boundary that is drawn survives a press. The header icon menu is the one exception:
-    `HeaderIconMenu` is a `Menu`, not a `Button`, so it keeps its resting face, and its press feel is
-    a device check. A selected chip swaps `plateBlueFill` to `plateBlueFillPressed`. An editing
-    set-row field is `plateBlueSurface` with a 2 pt `plateBlue` ring. A control's hit region is at
-    least 44 by 44 pt, however compact its face.
-  - Controls that draw their own fill and shape with no steel face (segments, the dashed "Add
-    movement" slot, the exercise-name link, an unset machine chip, the dismiss glyph, the "Clear
-    search" glyph and the certainty badge) sink to 0.97 and drop to 80% opacity on `Motion.press`,
+  - Flat faces (a raised fill: unselected chips, `AssumptionChip`, the header icon button, keys and
+    secondary buttons) sink to `steelPressed` and scale to 0.97 (keys 0.96) on `Motion.press`. They never dim, so a boundary that is drawn survives a press. The header icon
+    menu is the one exception: `HeaderIconMenu` is a `Menu`, not a `Button`, so it keeps its resting
+    face, and its press feel is a device check. A selected chip swaps `plateBlueFill` to
+    `plateBlueFillPressed`. A control's hit region is at least 44 by 44 pt, however compact its face.
+  - Controls that draw their own fill and shape with no steel face (segments, the exercise-name
+    link, every inline control, the dismiss glyph, the "Clear search" glyph, the certainty badge and
+    the set row's weight and reps figures) sink to 0.97 and drop to 80% opacity on `Motion.press`,
     in place of a pressed fill.
-  - The set log control draws its own fill and shape: the set row's unlogged value fields sink as
-    flat faces; the log control (ready and next up) dims and scales like other self-drawn controls;
-    incomplete and logged show no press. Next up keeps its `plateBlueFill` while pressed.
-  - Static surfaces take no press: tags, the empty-state socket, entry fields, banners, cards, a
-    logged row's values and the rest bar's panel. Tags never take a control's face, so a tag never
-    imitates a control.
+  - The set log control draws its own fill and shape: the log control (ready and next up) dims and
+    scales like other self-drawn controls; incomplete and logged show no press. Next up keeps its
+    `plateBlueFill` while pressed.
+  - Static surfaces take no press: tags, the empty-state socket, entry fields, banners, cards, the
+    rest bar's panel, and a saved row's figures where the screen cannot correct a set. Tags never
+    take a control's face, so a tag never imitates a control.
   - Reduce Motion drops the scale and keeps only the fill or opacity change. Disabled controls are
     never dimmed by a press style, so saved rows and inert titles keep full contrast.
 - **Target line** (set row): when a movement has a rep range and history on this exact machine, an
@@ -470,19 +544,19 @@ Selection rows, the unit switch and pickers stay silent.
   the top of your range: add one step" (one plate, "assumed step", when the machine has no saved step).
   The "Last time" column still shows what last time was, so a target is never read as history. History
   borrowed from another machine gives no target and the prefill is as it always was. It adds no motion.
-- **Beat mark** (set row): once a set is logged, a tag-shaped capsule under the values says how it compares
-  with the same set last time on this machine, in the figures of the set: "+1 rep", "+2.5 kg", "+5 lb · +1
-  rep", never a bare "Beat". A win is `plateGreen` on `plateGreenSurface` with an up arrow; a match is
-  "Matched" in `chalkDim` on `steelRaised` with an equals sign, so neither is carried by colour alone. It
-  carries no stroke: a logged row has no tint, so the capsule's own fill is visible on the card. At
-  accessibility sizes, where its words can wrap, it takes the control radius instead of a capsule. A
-  set that fell short, a warm-up, a set with no partner and a set done on another machine show nothing.
-  It arrives through `hardsetArrival()`, the insertion-only opacity reveal on `Motion.reveal`, so the row's
-  height changes at once and nothing animates layout. The row's spoken label says it in the same words
+- **Beat mark** (set row): once a set is logged, a short mark under the values, in type with no
+  capsule, fill or stroke, says how it compares with the same set last time on this machine, in the
+  figures of the set: "+1 rep", "+2.5 kg", "+5 lb · +1 rep", never a bare "Beat". A win is `plateGreen`
+  with an up arrow; a match is "Matched" in `chalkDim` with an equals sign, so neither is carried by
+  colour alone. It hangs under the last-time column, which it speaks about. A set that fell short, a
+  warm-up, a set with no partner and a set done on another machine show nothing. It arrives through
+  `hardsetArrival()`, the insertion-only opacity reveal on `Motion.reveal`, so the row's height
+  changes at once and nothing animates layout. The row's spoken label says it in the same words
   ("plus 1 rep on last time"). It adds no token and no motion beyond `Motion.reveal`.
 - **Replaceable prefill**: when the keypad opens on a value the next key will replace, its display
-  draws that value on `plateBlueSurface` with a hairline `plateBlue` ring, as selected text, until
-  the first edit. Static; no motion.
+  draws that value as selected text, the figure in `steel` knocked out of a solid `chalk` block,
+  until the first edit. Once it is being typed the figure is `chalk` with a still caret after it,
+  as in the row. Static; no motion, and no hue.
 - **Button Shapes**: with the system setting on, every stroke-free control, `quiet` buttons
   included, wears the `controlEdge` outline, and the exercise name (the load-history link) is
   underlined.

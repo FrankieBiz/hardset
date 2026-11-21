@@ -521,11 +521,49 @@ public struct ExerciseLogState: Hashable, Sendable, Identifiable {
     slots[index].loggedAt = nil
     slots[index].commandID = UUID()
     loggedEvents.removeAll { $0.slotID == slotID }
+    rebuildLastLogged()
+    return true
+  }
+
+  /// Corrects the weight and reps of a saved row, after the correction was written.
+  ///
+  /// The counterpart of `markLogged` for a number that was wrong, with the same rule about order:
+  /// call it only once the write has succeeded. Unlike `unmarkLogged` the row never leaves its
+  /// saved state: it keeps its id, its place, its set id, the machine it was saved on, its save
+  /// time and its write identity, and only the two figures change. What the next row opens at and
+  /// what the row is compared with follow the corrected figures, because the values captured at
+  /// the save are replaced by them. The draft's suggestion and target, which say where the row's
+  /// numbers first came from, are left alone.
+  ///
+  /// Returns `false`, and changes nothing, for an unknown or unlogged row, and for a draft that is
+  /// not a complete set: the same predicate that gates writing one.
+  @discardableResult
+  public mutating func correctLogged(slotID: UUID, to draft: SetEntryDraft) -> Bool {
+    guard let index = slots.firstIndex(where: { $0.id == slotID }), slots[index].isLogged,
+      let resolved = draft.resolved()
+    else { return false }
+    slots[index].draft.weightKg = resolved.weightKg
+    slots[index].draft.reps = resolved.reps
+    if let eventIndex = loggedEvents.firstIndex(where: { $0.slotID == slotID }) {
+      let event = loggedEvents[eventIndex]
+      loggedEvents[eventIndex] = LoggedEvent(
+        slotID: event.slotID, key: event.key, isWarmup: event.isWarmup,
+        record: PriorSetRecord(
+          weightKg: resolved.weightKg, reps: resolved.reps, completedAt: event.record.completedAt
+        )
+      )
+      rebuildLastLogged()
+    }
+    return true
+  }
+
+  /// The last working save per machine, rebuilt from the saves that remain, in the order they
+  /// were made.
+  private mutating func rebuildLastLogged() {
     lastLoggedByKey = [:]
     for event in loggedEvents where !event.isWarmup {
       lastLoggedByKey[event.key] = event.record
     }
-    return true
   }
 
   /// Calls arrive in persistence order, independently of the row's display index.
@@ -543,6 +581,24 @@ public struct ExerciseLogState: Hashable, Sendable, Identifiable {
     )
     guard !slot.isWarmup else { return }
     lastLoggedByKey[key] = record
+  }
+}
+
+extension ExerciseLogState {
+  /// The row that is the workout's primary action: the first row, in workout order, that is not
+  /// logged and can be, or `nil` when there is none.
+  ///
+  /// "Can be" is the predicate that gates writing a set, `SetEntryDraft.isLoggable`, so the answer
+  /// is always a row one tap will log. That is not the same as `nextUnloggedSlotID`, the first row
+  /// not yet written, which may be a blank warm-up with nothing to log; the primary action skips
+  /// it for the working set behind it. A screen with one accent gives it to this row.
+  public static func primarySlotID(in exercises: [ExerciseLogState]) -> UUID? {
+    for exercise in exercises {
+      if let slot = exercise.slots.first(where: { !$0.isLogged && $0.draft.isLoggable }) {
+        return slot.id
+      }
+    }
+    return nil
   }
 }
 

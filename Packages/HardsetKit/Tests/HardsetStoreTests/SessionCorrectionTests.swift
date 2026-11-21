@@ -224,6 +224,147 @@ struct SessionCorrectionTests {
     #expect(try store.sets(in: coordinator.sessionID).count == 1)
   }
 
+  // MARK: - Correcting a saved set in place
+
+  @Test("Correcting a saved set writes first, keeps the row saved, and survives a resume")
+  func correctSetKeepsTheRowSaved() throws {
+    let database = try migratedDatabase()
+    let store = LoggerStore(database: database)
+    let clock = Clock(start)
+    let rest = RestSpy()
+    let exercise = try seedExercise(database)
+    let coordinator = try live(
+      database, clock: clock, plan: [.init(exerciseID: exercise, exerciseName: "Press", plannedSets: 2)],
+      rest: rest
+    )
+    log(coordinator, slot: 0, weight: 100, reps: 8)
+    let state = coordinator.exercises[0]
+    let setID = try #require(state.slots[0].loggedSetID)
+    let savedAt = try #require(state.slots[0].loggedAt)
+    let requestsBefore = rest.requests.count
+    clock.now = start.addingTimeInterval(600)
+
+    #expect(
+      coordinator.correctSet(
+        slotID: state.slots[0].id, inExercise: state.id,
+        to: SetEntryDraft(weightKg: 102.5, reps: 9)))
+
+    let slot = coordinator.exercises[0].slots[0]
+    #expect(slot.isLogged)
+    #expect(slot.loggedSetID == setID)
+    #expect(slot.loggedAt == savedAt)
+    #expect(slot.draft.weightKg == 102.5)
+    #expect(slot.draft.reps == 9)
+    #expect(coordinator.loggedSetCount == 1)
+    #expect(coordinator.lastError == nil)
+    // The database holds the same set with the new figures, saved at the same time.
+    let saved = try store.sets(in: coordinator.sessionID)
+    #expect(saved.count == 1)
+    #expect(saved[0].id == setID)
+    #expect(saved[0].weightKg == 102.5)
+    #expect(saved[0].reps == 9)
+    #expect(saved[0].completedAt == savedAt)
+    // A correction is not a log: it starts no rest.
+    #expect(rest.requests.count == requestsBefore)
+
+    let resumed = try #require(
+      try SessionCoordinator.resume(store: LoggerStore(database: database), now: { clock.now })
+    )
+    let recovered = resumed.exercises[0].slots[0]
+    #expect(recovered.isLogged)
+    #expect(recovered.draft.weightKg == 102.5)
+    #expect(recovered.draft.reps == 9)
+  }
+
+  @Test("Correcting the set that earned a celebration withdraws it, and another set leaves it")
+  func correctSetWithdrawsItsCelebration() throws {
+    let database = try migratedDatabase()
+    let store = LoggerStore(database: database)
+    let clock = Clock(start)
+    let exercise = try seedExercise(database)
+    let past = try store.startSession(at: start.addingTimeInterval(-86_400))
+    _ = try store.logSet(sessionID: past, exerciseID: exercise,
+                         draft: SetEntryDraft(weightKg: 100, reps: 8), at: start.addingTimeInterval(-86_000))
+    try store.finishSession(past, at: start.addingTimeInterval(-85_000))
+    let coordinator = try live(
+      database, clock: clock, plan: [.init(exerciseID: exercise, exerciseName: "Press", plannedSets: 2)]
+    )
+    log(coordinator, slot: 0, weight: 60)
+    log(coordinator, slot: 1, weight: 120)
+    #expect(!coordinator.lastRecords.isEmpty)
+    let state = coordinator.exercises[0]
+
+    // Correcting the earlier set does not touch the celebration that belongs to the later one.
+    #expect(
+      coordinator.correctSet(
+        slotID: state.slots[0].id, inExercise: state.id, to: SetEntryDraft(weightKg: 65, reps: 8)))
+    #expect(!coordinator.lastRecords.isEmpty)
+
+    // Correcting the set that earned it withdraws it, and claims nothing in its place.
+    #expect(
+      coordinator.correctSet(
+        slotID: state.slots[1].id, inExercise: state.id, to: SetEntryDraft(weightKg: 90, reps: 8)))
+    #expect(coordinator.lastRecords.isEmpty)
+  }
+
+  @Test("A refused correction leaves the row, memory and database as they were")
+  func refusedCorrectionChangesNothing() throws {
+    let database = try migratedDatabase()
+    let store = LoggerStore(database: database)
+    let clock = Clock(start)
+    let exercise = try seedExercise(database)
+    let coordinator = try live(database, clock: clock, plan: [.init(exerciseID: exercise, exerciseName: "Press")])
+    log(coordinator, slot: 0, weight: 100)
+    try store.finishSession(coordinator.sessionID, at: start.addingTimeInterval(60))
+    let before = coordinator.exercises
+    let state = coordinator.exercises[0]
+
+    #expect(
+      !coordinator.correctSet(
+        slotID: state.slots[0].id, inExercise: state.id, to: SetEntryDraft(weightKg: 90, reps: 8)))
+    #expect(coordinator.lastError as? LoggerStoreError == .sessionClosed)
+    #expect(coordinator.lastFailedCommand == .correctSet)
+    #expect(coordinator.exercises == before)
+    #expect(coordinator.loggedSetCount == 1)
+    let kept = try #require(try store.sets(in: coordinator.sessionID).first)
+    #expect(kept.weightKg == 100)
+    #expect(kept.reps == 8)
+  }
+
+  @Test("Only a saved row is corrected, to a complete set, and the same figures write nothing")
+  func correctSetEdgeCases() throws {
+    let database = try migratedDatabase()
+    let store = LoggerStore(database: database)
+    let clock = Clock(start)
+    let exercise = try seedExercise(database)
+    let coordinator = try live(
+      database, clock: clock, plan: [.init(exerciseID: exercise, exerciseName: "Press", plannedSets: 2)]
+    )
+    log(coordinator, slot: 0, weight: 100, reps: 8)
+    let state = coordinator.exercises[0]
+    let draft = SetEntryDraft(weightKg: 90, reps: 8)
+
+    #expect(!coordinator.correctSet(slotID: UUID(), inExercise: state.id, to: draft))
+    #expect(coordinator.lastError as? SessionCoordinatorError == .unknownSlot)
+    #expect(!coordinator.correctSet(slotID: state.slots[1].id, inExercise: state.id, to: draft))
+    #expect(coordinator.lastError as? SessionCoordinatorError == .slotIsNotLogged)
+    #expect(!coordinator.correctSet(slotID: state.slots[0].id, inExercise: UUID(), to: draft))
+    #expect(
+      !coordinator.correctSet(
+        slotID: state.slots[0].id, inExercise: state.id,
+        to: SetEntryDraft(weightKg: 90, reps: nil)))
+    #expect(coordinator.lastError as? LoggerStoreError == .incompleteSet)
+    #expect(coordinator.lastFailedCommand == .correctSet)
+    #expect(try store.sets(in: coordinator.sessionID)[0].weightKg == 100)
+
+    // The same figures are a success that touches nothing, and clear the last failure.
+    #expect(
+      coordinator.correctSet(
+        slotID: state.slots[0].id, inExercise: state.id, to: SetEntryDraft(weightKg: 100, reps: 8)))
+    #expect(coordinator.lastError == nil)
+    #expect(coordinator.lastFailedCommand == nil)
+  }
+
   // MARK: - Removing rows and movements
 
   @Test("An unlogged row can be removed; a saved one cannot")

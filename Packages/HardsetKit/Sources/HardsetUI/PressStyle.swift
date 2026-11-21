@@ -149,3 +149,92 @@ private struct ControlPressBody<S: InsettableShape>: View {
     )
   }
 }
+
+// MARK: - Inline control
+
+/// The style of a control that is only its label: words, a symbol or both, with no fill, no
+/// outline and no shape of its own.
+///
+/// This is how a control looks when type carries the screen. The caller sets the label's font and
+/// colour; the style supplies the hit region and the press. The region is `minHeight` tall, 44 pt
+/// in general and the logger's 56 pt where a missed tap costs a set, and rectangular, because
+/// there is no face to define it. Pressed, the label sinks to 0.97 and dims to 80% on
+/// `Motion.press`, as every control that draws no fill of its own does, and Reduce Motion drops
+/// the scale.
+///
+/// Where the lifter has asked for boundaries, through Increase Contrast or Button Shapes, the
+/// label gets the 3:1 `controlEdge` outline and a little padding to sit inside it, so a control
+/// that looks like plain text still looks like a control to anyone who asked it to. A disabled
+/// control is dimmed to 40% only when `dimsWhenDisabled` says so: an inert title keeps its
+/// contrast, an action that cannot be used does not.
+struct InlineControlStyle: ButtonStyle {
+  let minHeight: CGFloat
+  let alignment: Alignment
+  let fullWidth: Bool
+  let dimsWhenDisabled: Bool
+  let outlinesRegion: Bool
+
+  init(
+    minHeight: CGFloat = Tokens.minimumTapTarget,
+    alignment: Alignment = .leading,
+    fullWidth: Bool = false,
+    dimsWhenDisabled: Bool = false,
+    outlinesRegion: Bool = false
+  ) {
+    self.minHeight = minHeight
+    self.alignment = alignment
+    self.fullWidth = fullWidth
+    self.dimsWhenDisabled = dimsWhenDisabled
+    self.outlinesRegion = outlinesRegion
+  }
+
+  func makeBody(configuration: Configuration) -> some View {
+    InlineControlBody(
+      configuration: configuration, minHeight: minHeight, alignment: alignment,
+      fullWidth: fullWidth, dimsWhenDisabled: dimsWhenDisabled, outlinesRegion: outlinesRegion)
+  }
+}
+
+private struct InlineControlBody: View {
+  let configuration: ButtonStyleConfiguration
+  let minHeight: CGFloat
+  let alignment: Alignment
+  let fullWidth: Bool
+  let dimsWhenDisabled: Bool
+  let outlinesRegion: Bool
+
+  @Environment(\.isEnabled) private var isEnabled
+  @Environment(\.accessibilityReduceMotion) private var reduceMotion
+  @Environment(\.colorSchemeContrast) private var contrast
+  @Environment(\.accessibilityShowButtonShapes) private var showsButtonShapes
+
+  var body: some View {
+    let request = ControlEdgeRequest(contrast: contrast, showsButtonShapes: showsButtonShapes)
+    HardsetPressFace(isPressed: configuration.isPressed, reduceMotion: reduceMotion) {
+      configuration.label
+        .padding(.horizontal, request.isRequested && !outlinesRegion ? Tokens.Spacing.regular : 0)
+        .padding(.vertical, request.isRequested && !outlinesRegion ? Tokens.Spacing.snug : 0)
+        .overlay {
+          if request.isRequested && !outlinesRegion {
+            Tokens.Shape.control
+              .strokeBorder(Tokens.Color.controlEdge, lineWidth: Tokens.Stroke.hairline)
+          }
+        }
+        .frame(maxWidth: fullWidth ? .infinity : nil, minHeight: minHeight, alignment: alignment)
+        // A control whose region is its outline, such as a footer action, is outlined around the
+        // whole region and not around its label.
+        .overlay {
+          if request.isRequested && outlinesRegion {
+            Tokens.Shape.control
+              .strokeBorder(Tokens.Color.controlEdge, lineWidth: Tokens.Stroke.hairline)
+          }
+        }
+        .contentShape(Rectangle())
+    }
+    .opacity(dimsWhenDisabled && !isEnabled ? 0.4 : 1)
+    .animation(
+      Tokens.Motion.adaptive(Tokens.Motion.press, reduceMotion: reduceMotion),
+      value: configuration.isPressed
+    )
+  }
+}

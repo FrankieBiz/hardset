@@ -29,8 +29,12 @@ public enum SetRowField: Hashable, Sendable {
 /// field it is editing; the row reports taps with `onBeginEditing`.
 ///
 /// Two layouts, chosen from Dynamic Type rather than by shrinking text: a single line of columns
-/// at ordinary sizes, and a stacked card at accessibility sizes, where the values take the full
-/// width and carry their own labels.
+/// at ordinary sizes, and a stack at accessibility sizes, where the values take the full width and
+/// carry their own labels.
+///
+/// The figures are the content. Weight and reps are the largest text on the card, set against a
+/// quiet multiply sign; the ordinal and last time are small and dim; nothing is boxed, tinted or
+/// outlined, and a hairline exists only between rows.
 public struct SetRowView: View {
   @Binding private var draft: SetEntryDraft
   @State private var adjustmentFeedback = 0
@@ -42,6 +46,9 @@ public struct SetRowView: View {
   private let isWarmup: Bool
   private let isLogged: Bool
   private let isNext: Bool
+  private let accentOverride: Bool?
+  private let allowsCorrection: Bool
+  private let isSeparated: Bool
   private let showsInlineLabels: Bool
   private let unit: WeightUnit
   private let machineIncrementKg: Double?
@@ -58,14 +65,26 @@ public struct SetRowView: View {
 
   /// - Parameter isNext: The first unlogged set of its exercise. Its log control is filled rather
   ///   than outlined, so the eye lands on the one tap that matters between sets.
+  /// - Parameter accentOverride: Whether this row's log control is drawn in plate blue, the screen's
+  ///   one accent, when the set can be logged. `nil` leaves it to the row: the accent is on the next
+  ///   row up. A host with several movements decides for them, because the accent belongs to the
+  ///   workout's next loggable set wherever that row sits, and a warm-up with nothing in it is next
+  ///   up without being loggable. It changes colour only: `isNext` still drives the spoken "next to
+  ///   log", the bare Voice Control command and the −/+ steps.
+  /// - Parameter allowsCorrection: Lets a saved row's figures open the keypad, so a wrong weight or
+  ///   rep count is corrected where it is written. The host decides what a correction does and
+  ///   whether it can; without it a saved figure is plain text, as it was.
+  /// - Parameter isSeparated: Draws a hairline across the top of the row, inset from the leading
+  ///   edge, because it meets another row there. The first row of a movement passes `false`, so a
+  ///   hairline exists only where two rows meet.
   /// - Parameter showsInlineLabels: Draws "Last time" and the unit inside the row. A caller that
   ///   draws a column header above its rows passes `false`; accessibility sizes always show them,
   ///   because the stacked layout has no columns for a header to label.
   /// - Parameter comparison: How a logged set compares with the same set last time on this machine,
   ///   drawn as a small mark under the row: "+1 rep", "+2.5 kg · +1 rep", or "Matched". `nil` draws
   ///   nothing, which is the answer for a set that fell short, has no partner, or is a warm-up.
-  /// - Parameter editingField: The field the keypad is on, drawn with the focus ring. `nil` when
-  ///   the keypad is elsewhere or closed.
+  /// - Parameter editingField: The field the keypad is on, drawn with a caret and an underline.
+  ///   `nil` when the keypad is elsewhere or closed.
   /// - Parameter editingText: What has been typed into that field so far, exactly as typed, so
   ///   "100." reads "100." mid-entry rather than a reformatted number.
   /// - Parameter onBeginEditing: Asks the host to put its keypad on a field. `nil` leaves the
@@ -82,6 +101,9 @@ public struct SetRowView: View {
     isWarmup: Bool = false,
     isLogged: Bool = false,
     isNext: Bool = false,
+    accentOverride: Bool? = nil,
+    allowsCorrection: Bool = false,
+    isSeparated: Bool = false,
     showsInlineLabels: Bool = true,
     unit: WeightUnit,
     machineIncrementKg: Double? = nil,
@@ -101,6 +123,9 @@ public struct SetRowView: View {
     self.isWarmup = isWarmup
     self.isLogged = isLogged
     self.isNext = isNext
+    self.accentOverride = accentOverride
+    self.allowsCorrection = allowsCorrection
+    self.isSeparated = isSeparated
     self.showsInlineLabels = showsInlineLabels
     self.unit = unit
     self.machineIncrementKg = machineIncrementKg
@@ -119,8 +144,13 @@ public struct SetRowView: View {
   /// True at accessibility text sizes, where five columns cannot share one line legibly.
   private var isStacked: Bool { dynamicTypeSize.isAccessibilitySize }
 
+  /// Whether the figures take a tap. An unsaved row's always do, with a host to open the keypad; a
+  /// saved row's do only where the host can write a correction.
+  private var canEditFigures: Bool {
+    onBeginEditing != nil && (!isLogged || allowsCorrection)
+  }
+
   public var body: some View {
-    let shape = RoundedRectangle(cornerRadius: Tokens.Radius.control)
     Group {
       if isStacked {
         VStack(spacing: Tokens.Spacing.snug) {
@@ -136,32 +166,28 @@ public struct SetRowView: View {
         }
       }
     }
-    .padding(.horizontal, Tokens.Spacing.tight)
     .padding(.vertical, Tokens.Spacing.tight)
-    // Opaque. Dense numeric rows are the one surface glass is actively wrong for. A logged row
-    // takes the logged tint, so a glance down the card shows what is done without reading.
-    //
-    // The tint is a layer that fades in place; only its opacity is animated. An animation on the
-    // whole row also animated its height when the step buttons left it, so the shrinking tint
-    // and the fading buttons were drawn over the next row, which had already moved up.
-    .background {
-      ZStack {
-        shape.fill(Tokens.Color.steel)
-        shape.fill(Tokens.Color.plateGreenSurface)
-          .opacity(isLogged ? 1 : 0)
+    // No fill and no tint: a row is its figures. Logging used to wash the whole row green so a
+    // glance down the card showed what was done; now the saved figures go to full chalk and the
+    // check fills, which says the same thing without turning the list into a spreadsheet with
+    // conditional formatting. Only the hairline above a row, where it meets the row before, draws.
+    .overlay(alignment: .top) {
+      if isSeparated {
+        Rectangle()
+          .fill(Tokens.Color.hairline)
+          .frame(height: Tokens.Stroke.hairline)
+          .padding(.leading, SetRowMetrics.ordinalWidth + Tokens.Spacing.snug)
+          .accessibilityHidden(true)
       }
-      .animation(
-        Tokens.Motion.adaptive(Tokens.Motion.state, reduceMotion: reduceMotion), value: isLogged
-      )
     }
-    // The row paints its own `steel`, so its fields take the fill for a control on steel wherever
-    // the row is drawn, in a card or not.
-    .hardsetControlSurface(.steel)
+    // With nothing painted behind it the row would be hit-testable only where it draws, so a long
+    // press in a gap between columns would find no menu. The whole row is the interaction shape.
+    .contentShape(.interaction, Rectangle())
     // Corrections live behind a long press, the iOS convention for acting on one item in place:
     // deliberate enough that a hurried tap on the check can never undo or remove a set.
     // The preview shape is iOS-only; the macOS host build (tests only) uses the default.
     #if os(iOS)
-      .contentShape(.contextMenuPreview, shape)
+      .contentShape(.contextMenuPreview, Tokens.Shape.control)
     #endif
     .contextMenu { corrections }
     .sensoryFeedback(Tokens.Haptic.selection, trigger: adjustmentFeedback)
@@ -184,6 +210,10 @@ public struct SetRowView: View {
     .accessibilityActions {
       if isLogged {
         if let onEdit { Button("Edit set", action: onEdit) }
+        if canEditFigures, let onBeginEditing {
+          Button("Edit weight") { onBeginEditing(.weight) }
+          Button("Edit reps") { onBeginEditing(.reps) }
+        }
         if let onUndo { Button("Undo log", action: onUndo) }
       } else {
         Button("Log set") { if draft.isLoggable { onLog() } }
@@ -231,23 +261,58 @@ public struct SetRowView: View {
 
   // MARK: - Layouts
 
-  /// Ordinary sizes: ordinal, last time, weight, reps, log — one line, aligned to the column
+  /// Ordinary sizes: ordinal, last time, weight and reps, log, on one line aligned to the column
   /// header `ExerciseSectionView` draws above.
+  ///
+  /// The figures are the content. Weight ends at the multiply sign and reps begin after it, so the
+  /// sign is one vertical axis down the list and the figures read as a pair. The ordinal and last
+  /// time are small and dim in fixed columns; tapping them opens the weight, so no part of the row
+  /// between its two edges is dead.
   private var rowLayout: some View {
     HStack(spacing: Tokens.Spacing.snug) {
-      ordinalBadge
-        .frame(width: SetRowMetrics.ordinalWidth)
+      leadingColumns
 
-      previousColumn
-        .frame(width: SetRowMetrics.previousWidth, alignment: .leading)
-
-      valueField(.weight, suffix: showsInlineLabels ? unit.abbreviation : nil)
-        .frame(minWidth: SetRowMetrics.weightMinWidth)
-      valueField(.reps, suffix: showsInlineLabels ? "reps" : nil)
-        .frame(minWidth: SetRowMetrics.repsMinWidth)
+      HStack(alignment: .firstTextBaseline, spacing: 0) {
+        valueField(.weight, suffix: showsInlineLabels ? unit.abbreviation : nil, alignment: .trailing)
+        multiplySign
+        valueField(.reps, suffix: showsInlineLabels ? "reps" : nil, alignment: .leading)
+      }
 
       logButton
     }
+  }
+
+  /// The ordinal and last time. A button into the weight whenever the weight can be edited, so the
+  /// 56 pt row answers a tap anywhere left of the check; plain text otherwise, for a saved row.
+  @ViewBuilder private var leadingColumns: some View {
+    let columns = HStack(spacing: Tokens.Spacing.snug) {
+      ordinalLabel
+        .frame(width: SetRowMetrics.ordinalWidth, alignment: .leading)
+      previousColumn
+        .frame(width: SetRowMetrics.previousWidth, alignment: .leading)
+    }
+    .frame(minHeight: Tokens.loggerTapTarget)
+    .contentShape(Rectangle())
+    if !canEditFigures {
+      columns
+    } else {
+      Button {
+        onBeginEditing?(.weight)
+      } label: {
+        columns
+      }
+      .buttonStyle(HardsetPressStyle())
+    }
+  }
+
+  /// The multiply sign between weight and reps: quieter than the figures it joins, in size and in
+  /// weight, but still `chalkDim`, which clears 7:1. Decoration, so VoiceOver does not read it.
+  private var multiplySign: some View {
+    Text("×")
+      .hardsetText(.provenance)
+      .foregroundStyle(Tokens.Color.chalkDim)
+      .frame(width: SetRowMetrics.multiplyWidth)
+      .accessibilityHidden(true)
   }
 
   /// Accessibility sizes: a header line with the ordinal and last time, then the two values at
@@ -255,14 +320,20 @@ public struct SetRowView: View {
   private var stackedLayout: some View {
     VStack(alignment: .leading, spacing: Tokens.Spacing.snug) {
       HStack(alignment: .firstTextBaseline, spacing: Tokens.Spacing.regular) {
-        ordinalBadge
+        ordinalLabel
         previousColumn
       }
-      valueField(.weight, suffix: unit.abbreviation)
-      valueField(.reps, suffix: "reps")
+      valueField(.weight, suffix: unit.abbreviation, alignment: .leading)
+      valueField(.reps, suffix: "reps", alignment: .leading)
       logButton
     }
     .padding(.vertical, Tokens.Spacing.tight)
+  }
+
+  /// Where the line under the columns starts: under the last-time column at ordinary sizes, since
+  /// both speak about last time, and at the edge when the layout is stacked.
+  private var markInset: CGFloat {
+    isStacked ? 0 : SetRowMetrics.ordinalWidth + Tokens.Spacing.snug
   }
 
   /// Under the columns, one of two lines and never both. An unlogged row prefilled from a rep range
@@ -275,21 +346,21 @@ public struct SetRowView: View {
         .foregroundStyle(Tokens.Color.chalkDim)
         .fixedSize(horizontal: false, vertical: true)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.horizontal, Tokens.Spacing.snug)
+        .padding(.leading, markInset)
     } else if isLogged, let comparison {
       beatMark(comparison)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.horizontal, Tokens.Spacing.snug)
+        .padding(.leading, markInset)
     }
   }
 
-  /// A tag-shaped mark, not a control: it names what grew, in the words and figures of the set. A
-  /// win is `plateGreen` with an up arrow; a match is `chalkDim` with an equals sign, so neither is
-  /// carried by colour alone. It arrives with the standard reveal, so the row's height changes at
-  /// once and nothing animates layout.
+  /// A short mark, not a control and not a badge: a symbol and the figures of the set, in type, on
+  /// nothing. It names what grew, "+1 rep", "+2.5 kg · +1 rep", or says "Matched". A win is `chalk`
+  /// with an up arrow and a match is `chalkDim` with an equals sign: the arrow and the words carry
+  /// the difference, and no hue does, because green on the screen means a set is saved. It arrives
+  /// with the standard reveal, so the row's height changes at once and nothing animates layout.
   private func beatMark(_ comparison: SetComparison) -> some View {
     let isMatch = comparison == .matched
-    let hue = isMatch ? Tokens.Color.chalkDim : Tokens.Color.plateGreen
     return HStack(spacing: Tokens.Spacing.tight) {
       Image(systemName: isMatch ? "equal" : "arrow.up")
         .accessibilityHidden(true)
@@ -297,28 +368,7 @@ public struct SetRowView: View {
     }
     .hardsetText(.caption, weight: .semibold)
     .monospacedDigit()
-    .foregroundStyle(hue)
-    .padding(.horizontal, Tokens.Spacing.snug)
-    .padding(.vertical, Tokens.Spacing.tight)
-    .background {
-      // A capsule, except where the words can wrap: its corner radius would then push the second
-      // line across the outline, so the control radius takes over, as it does for every tag.
-      let fill = isMatch ? Tokens.Color.steelRaised : Tokens.Color.plateGreenSurface
-      if isStacked {
-        RoundedRectangle(cornerRadius: Tokens.Radius.control).fill(fill)
-      } else {
-        Capsule().fill(fill)
-      }
-    }
-    // Decorative, like a banner's stroke: the arrow, the words and the colour say what it is.
-    .overlay {
-      if isStacked {
-        RoundedRectangle(cornerRadius: Tokens.Radius.control)
-          .strokeBorder(hue.opacity(0.35), lineWidth: Tokens.Stroke.hairline)
-      } else {
-        Capsule().strokeBorder(hue.opacity(0.35), lineWidth: Tokens.Stroke.hairline)
-      }
-    }
+    .foregroundStyle(isMatch ? Tokens.Color.chalkDim : Tokens.Color.chalk)
     .hardsetArrival()
   }
 
@@ -349,8 +399,20 @@ public struct SetRowView: View {
   private func loadAdjustment(_ delta: Double) -> some View {
     let step = LoadFigure.text(unit.fromKilograms(abs(delta)))
     let label = "\(delta < 0 ? "−" : "+")\(step) \(unit.abbreviation)"
-    return Button(label) { adjustLoad(by: delta) }
-    .buttonStyle(HardsetButtonStyle(.secondary, size: .logger, fullWidth: true))
+    return Button {
+      adjustLoad(by: delta)
+    } label: {
+      Text(label)
+        .font(Tokens.Text.figure)
+        .foregroundStyle(Tokens.Color.chalk)
+    }
+    // A step is a line of type in a 56 pt region, like every other logger action with no face of
+    // its own; it dims when there is no load to step from.
+    .buttonStyle(
+      InlineControlStyle(
+        minHeight: Tokens.loggerTapTarget, alignment: .center, fullWidth: true,
+        dimsWhenDisabled: true)
+    )
     .disabled(draft.weightKg == nil || (delta < 0 && draft.weightKg == 0))
     .accessibilityLabel("\(delta < 0 ? "Decrease" : "Increase") load by \(step) \(unit.abbreviation)")
   }
@@ -367,23 +429,15 @@ public struct SetRowView: View {
 
   // MARK: - Pieces
 
-  /// Working sets are numbered; a warm-up reads "W" inside a dashed outline, the app's mark for
-  /// something that is present but not counted.
-  private var ordinalBadge: some View {
-    let shape = RoundedRectangle(cornerRadius: Tokens.Radius.control - Tokens.Spacing.tight)
-    return Text(isWarmup ? "W" : String(ordinal + 1))
-      .font(Tokens.Text.figure)
-      .foregroundStyle(isWarmup ? Tokens.Color.chalkDim : Tokens.Color.chalk)
-      .frame(minWidth: SetRowMetrics.ordinalWidth, minHeight: SetRowMetrics.ordinalWidth)
-      .background(isWarmup ? Color.clear : Tokens.Color.steelRaised, in: shape)
-      .overlay {
-        if isWarmup {
-          shape.strokeBorder(
-            Tokens.Color.controlEdge,
-            style: StrokeStyle(lineWidth: Tokens.Stroke.hairline, dash: [3, 2])
-          )
-        }
-      }
+  /// Working sets are numbered; a warm-up reads "W". Small and dim, a label for the row and not a
+  /// figure in it, with no tile behind it: the letter alone says a warm-up is not counted. At
+  /// accessibility sizes it is spelled out, "Set 2", which is also what Voice Control is told.
+  private var ordinalLabel: some View {
+    let word = isWarmup ? "W" : String(ordinal + 1)
+    return Text(isStacked ? (isWarmup ? "Warm-up" : "Set \(ordinal + 1)") : word)
+      .hardsetText(.caption, weight: .medium)
+      .monospacedDigit()
+      .foregroundStyle(Tokens.Color.chalkDim)
   }
 
   /// Last time's set as a logbook would write it: the load, and the reps beneath it. Two short
@@ -399,7 +453,8 @@ public struct SetRowView: View {
       }
       if let previous {
         Text(LoadFigure.text(unit.fromKilograms(previous.weightKg)))
-          .font(Tokens.Text.figure)
+          .font(Tokens.Text.unit)
+          .monospacedDigit()
           .foregroundStyle(Tokens.Color.chalkDim)
           .lineLimit(1)
           // The one value allowed to give a little: it is a hint, read second, and a long pound
@@ -412,7 +467,7 @@ public struct SetRowView: View {
           .lineLimit(1)
       } else {
         Text("—")
-          .font(Tokens.Text.figure)
+          .font(Tokens.Text.unit)
           .foregroundStyle(Tokens.Color.chalkDim)
       }
       if let priorNote {
@@ -436,31 +491,40 @@ public struct SetRowView: View {
     }
   }
 
-  private func valueField(_ field: SetRowField, suffix: String?) -> some View {
+  /// A value is plain text, with no box around it: dimmed until the set is logged, full chalk once
+  /// it is saved, and carrying a caret and an underline while the keypad is typing into it. The
+  /// whole field stays a 56 pt target, so removing the box removed nothing to tap.
+  private func valueField(
+    _ field: SetRowField, suffix: String?, alignment: Alignment = .center
+  ) -> some View {
     let isEditing = editingField == field
-    let isReadOnly = isLogged || onBeginEditing == nil
+    let isReadOnly = !canEditFigures
+    let shown: SetRowFieldState = isEditing ? .editing : (isReadOnly ? .readOnly : .rest)
     return Button {
       onBeginEditing?(field)
     } label: {
-      SetRowFieldValue(text: displayText(field), suffix: suffix)
+      SetRowFieldValue(
+        text: displayText(field), suffix: suffix, state: shown, isLogged: isLogged,
+        alignment: alignment)
     }
-    // Raised fields sink on press through their own style; neither `SetReadoutStyle` nor the
-    // opacity press belongs on a steel face, because a dim would fade the boundary.
+    // Presses dim and sink through the field's own style: with no face to darken, the figure
+    // itself takes the press, as every control that draws no fill of its own does.
     .buttonStyle(SetFieldStyle(isEditing: isEditing, isReadOnly: isReadOnly))
     .disabled(isReadOnly)
   }
 
   /// The one tap the whole logger is built around.
   ///
-  /// Four states, each drawn differently so none is mistaken for another: incomplete (dashed, and
-  /// disabled), ready (outlined), next up (filled with plate blue), and logged (the plate-green
-  /// seal). The stamp is the app's one spring; with Reduce Motion it simply appears.
+  /// Four states, each drawn differently so none is mistaken for another: incomplete (an empty
+  /// square, and disabled), ready (a checked square), next up (a square filled with plate blue), and
+  /// logged (the plate-green seal). The stamp is the app's one spring; with Reduce Motion it simply
+  /// appears.
   ///
   /// Logged and next up differ in shape, not only in hue. Both used to be a filled square with the
   /// same check, about 1.1:1 apart in luminance, so in glare or with a colour-vision deficiency a
-  /// set waiting to be logged looked saved. A key face (square, check) means "tap to log"; a
-  /// logged set loses its key face and wears a round seal, which nothing tappable in the logger
-  /// uses. At accessibility sizes the control also says which it is in words.
+  /// set waiting to be logged looked saved. A square means "tap to log"; a logged set is a round
+  /// seal, which nothing tappable in the logger uses. At accessibility sizes the control also says
+  /// which it is in words.
   ///
   /// `SetLogControlFace` draws the whole control, so the live button and the catalogue's forced
   /// states cannot drift. The button's own label is never drawn.
@@ -485,7 +549,7 @@ public struct SetRowView: View {
 
   private var logState: SetLogState {
     if isLogged { return .logged }
-    if draft.isLoggable { return isNext ? .nextUp : .ready }
+    if draft.isLoggable { return accentOverride ?? isNext ? .nextUp : .ready }
     return .incomplete
   }
 
@@ -601,41 +665,97 @@ enum SetRowFieldState: Sendable {
 
 /// A value field's content: the figure, or an em dash when empty, and its unit beside it. The live
 /// field and the catalogue draw the same view, so a sample cannot drift from the row.
+///
+/// There is no box. A figure that has not been logged is dimmed to `chalkDim`, which still clears
+/// 7:1 on every surface it sits on; a saved figure is full `chalk`. While the keypad types into the
+/// field the figure is `chalk`, a caret follows it and a 2 pt rule sits beneath it, and nothing
+/// else changes: the keypad is the input surface, so the row never becomes a form. The caret is
+/// drawn still. It does not blink, so the field adds no motion.
 struct SetRowFieldValue: View {
   let text: String?
   let suffix: String?
+  let state: SetRowFieldState
+  /// A logged set is saved, so its figures read in full chalk; before that they are only
+  /// proposed, and read dimmed.
+  let isLogged: Bool
+  /// Where the figure sits in its column. A row sets weight against the multiply sign from the
+  /// left and reps from the right, so the sign is one axis down the card; the catalogue centres.
+  var alignment: Alignment = .center
+
+  private var isEditing: Bool { state == .editing }
+
+  /// An empty field shows an em dash, never "0": a zero on screen reads as a value. While typing,
+  /// an empty field shows only its caret, so the first digit is plainly the first character.
+  private var shown: String {
+    if isEditing { return text ?? "" }
+    return text ?? "—"
+  }
+
+  private var figureColor: Color {
+    guard text != nil else { return Tokens.Color.chalkDim }
+    return isEditing || isLogged ? Tokens.Color.chalk : Tokens.Color.chalkDim
+  }
 
   var body: some View {
     HStack(alignment: .firstTextBaseline, spacing: Tokens.Spacing.tight) {
-      // An empty field shows an em dash, never "0" — a zero on screen reads as a value.
-      Text(text ?? "—")
-        .font(Tokens.Text.setEntry)
-        .foregroundStyle(text == nil ? Tokens.Color.chalkDim : Tokens.Color.chalk)
-        // Condensed tabular figures fit a pound value such as "132.28" at full size on a 375 pt
-        // phone. The mild floor below exists only so an extreme value shrinks a little rather
-        // than truncating: a number cut to "132.…" is worse than one drawn slightly smaller.
-        .lineLimit(1)
-        .minimumScaleFactor(0.85)
+      HStack(alignment: .firstTextBaseline, spacing: 0) {
+        // The largest thing on the card: the readout role, set tight and tabular, so a column of
+        // weights lines up digit under digit.
+        Text(shown)
+          .hardsetText(.readout)
+          .foregroundStyle(figureColor)
+          // Condensed tabular figures fit a pound value such as "132.28" at full size on a 375 pt
+          // phone. The mild floor below exists only so an extreme value shrinks a little rather
+          // than truncating: a number cut to "132.…" is worse than one drawn slightly smaller.
+          .lineLimit(1)
+          .minimumScaleFactor(0.85)
+        if isEditing {
+          // The caret is the vertical bar glyph at the figure's own size, so it is as tall as the
+          // digits at every Dynamic Type size without a measured frame.
+          Text("|")
+            .hardsetText(.readout, weight: .light)
+            .foregroundStyle(Tokens.Color.chalk)
+            .accessibilityHidden(true)
+        }
+      }
+      .frame(minWidth: isEditing ? Self.minimumRuleWidth : nil)
+      .overlay(alignment: .bottom) {
+        if isEditing {
+          Rectangle()
+            .fill(Tokens.Color.chalk)
+            .frame(height: Tokens.Stroke.selected)
+            .offset(y: Tokens.Spacing.tight)
+            .accessibilityHidden(true)
+        }
+      }
       if let suffix {
         Text(suffix)
           .hardsetText(.unit)
           .foregroundStyle(Tokens.Color.chalkDim)
       }
     }
-    .padding(.horizontal, Tokens.Spacing.tight)
-    .frame(maxWidth: .infinity, minHeight: Tokens.loggerTapTarget)
+    .frame(maxWidth: .infinity, minHeight: Tokens.loggerTapTarget, alignment: alignment)
   }
+
+  /// A rule under an empty field would be as wide as its caret; this keeps it a visible line.
+  private static let minimumRuleWidth: CGFloat = 32
 }
 
-/// A value field's face in a given state. At rest, pressed and read-only it is a raised flat face
-/// with the control edge, which sinks to `steelPressed` when pressed, through `ControlPressFace`:
-/// one modifier whose arguments change, so the label keeps its identity across a press. Under the
-/// keypad it is `plateBlueSurface` inside a 2 pt `plateBlue` ring. A read-only field never reports
-/// a press, and an editing one has nothing left to press, so both ignore it.
+/// A value field's chrome in a given state, which is almost none.
+///
+/// At rest and read-only the field is its figure and nothing else. Pressed, the figure sinks to
+/// 0.97 and dims to 80%, as every control with no fill of its own does, and Reduce Motion drops the
+/// scale. Where the lifter has asked for boundaries, through Increase Contrast or Button Shapes, an
+/// editable field wears the 3:1 `controlEdge` outline again, so the box comes back exactly where it
+/// was requested and nowhere else. A read-only field is never outlined: it is a saved fact, not a
+/// control. The hit region is the whole field, a rectangle, because there is no face to define it.
 struct SetRowFieldFace<Label: View>: View {
   private let state: SetRowFieldState
   private let reduceMotion: Bool
   private let label: Label
+
+  @Environment(\.colorSchemeContrast) private var contrast
+  @Environment(\.accessibilityShowButtonShapes) private var showsButtonShapes
 
   init(state: SetRowFieldState, reduceMotion: Bool, @ViewBuilder label: () -> Label) {
     self.state = state
@@ -644,22 +764,18 @@ struct SetRowFieldFace<Label: View>: View {
   }
 
   var body: some View {
-    let shape = RoundedRectangle(cornerRadius: Tokens.Radius.control)
-    if state == .editing {
-      label
-        .background(Tokens.Color.plateBlueSurface, in: shape)
-        .overlay(shape.strokeBorder(Tokens.Color.plateBlue, lineWidth: Tokens.Stroke.selected))
-        .contentShape(shape)
-    } else {
-      ControlPressFace(
-        shape: shape,
-        outline: .always,
-        isPressed: state == .pressed,
-        reduceMotion: reduceMotion
-      ) {
-        label
+    let request = ControlEdgeRequest(contrast: contrast, showsButtonShapes: showsButtonShapes)
+    let isEditable = state != .readOnly
+    label
+      .overlay {
+        if request.isRequested && isEditable {
+          Tokens.Shape.control
+            .strokeBorder(Tokens.Color.controlEdge, lineWidth: Tokens.Stroke.hairline)
+        }
       }
-    }
+      .contentShape(Rectangle())
+      .scaleEffect(state == .pressed && !reduceMotion ? 0.97 : 1)
+      .opacity(state == .pressed ? 0.8 : 1)
   }
 }
 
@@ -710,23 +826,23 @@ enum SetLogState: Sendable {
   case logged
 }
 
-/// The set log control in a given state, drawn whole: the key face and its check, or the seal, and
-/// at accessibility sizes the words "Log set" or "Logged" beside it. The live button and the
-/// catalogue both draw this view, so a forced state cannot drift from what a press shows.
+/// The set log control in a given state, drawn whole: one SF Symbol, and at accessibility sizes the
+/// words "Log set" or "Logged" beside it. The live button and the catalogue both draw this view, so
+/// a forced state cannot drift from what a press shows.
 ///
-/// Incomplete is dashed and dimmed to 0.6; ready is outlined in plate blue; next up is an opaque
-/// `plateBlueFill`; logged has no key face and wears a round `plateGreen` seal on the row's tint.
-/// Ready and next up take the opacity press through `HardsetPressFace`: next up keeps its fill
-/// while pressed, with no pressed swap and no edge light. Incomplete and logged are disabled, so
-/// they ignore `isPressed` and show no press.
+/// Four glyphs of one weight and one size, drawn by the system and not by hand. Incomplete is an
+/// empty square in `controlEdge`, faint but above the 3:1 floor for a graphic; ready is the same
+/// square with its check in `chalkDim`; next up is that square filled with plate blue, the one
+/// saturated colour on the screen; logged is a round `plateGreen` seal. A square is a control that
+/// logs a set and a circle is a set that is logged, so logged and next up differ in shape and not
+/// only in hue: in glare or with a colour-vision deficiency a set waiting to be logged still never
+/// looks saved. The glyph is about 30 pt, inside the logger's whole 56 pt region.
 ///
-/// The seal is three layers. Back to front: a `KnurlPattern` at 8% clipped to a circle of the
-/// control's full 56 pt square, an opaque `plateGreenSurface` disc 48 pt across, and the
-/// `checkmark.circle.fill` glyph in `plateGreen`. The knurl shows only in the 4 pt annulus around
-/// the disc, so the glyph is never over knurl. The glyph's text size stops growing at xxxLarge, at
-/// 34 pt, so its roughly 37 pt bounds stay inside the disc; at larger sizes the words beside the
-/// control carry the state. The ring follows the seal's opacity and never moves: only the disc and
-/// glyph start at 0.6 and settle with the stamp.
+/// Ready and next up take the opacity press through `HardsetPressFace`; incomplete and logged are
+/// disabled, so they ignore `isPressed` and show no press. The stamp is the app's one spring, on
+/// the seal and nothing else: it scales in from 0.6 as the unlogged glyph fades out, and with
+/// Reduce Motion it simply appears. The glyph's text size stops growing at xxxLarge so it stays
+/// inside the region; past that the words beside it carry the state.
 struct SetLogControlFace: View {
   private let state: SetLogState
   private let isPressed: Bool
@@ -739,9 +855,6 @@ struct SetLogControlFace: View {
     self.isPressed = isPressed
   }
 
-  /// A seal's inner disc, inset from the control's square by the knurled annulus.
-  private static let sealDiscDiameter = Tokens.loggerTapTarget - 2 * Tokens.Spacing.tight
-
   private var isStacked: Bool { dynamicTypeSize.isAccessibilitySize }
   private var isLogged: Bool { state == .logged }
 
@@ -752,99 +865,85 @@ struct SetLogControlFace: View {
     }
   }
 
+  /// One weight and one size for every state, so the glyphs differ by shape and fill alone.
+  private static let glyphFont = Tokens.Text.readout.weight(.regular)
+
   var body: some View {
-    let shape = RoundedRectangle(cornerRadius: Tokens.Radius.control)
     HardsetPressFace(isPressed: isPressed && isPressable, reduceMotion: reduceMotion) {
       HStack(spacing: Tokens.Spacing.snug) {
         ZStack {
-          Image(systemName: "checkmark")
-            .font(Tokens.Text.headline.weight(.bold))
-            .foregroundStyle(symbolColor)
+          unloggedGlyph
             .opacity(isLogged ? 0 : 1)
           seal
         }
-        // Only the glyphs spring. The key face below changes at once, so nothing is laid out
-        // twice and the stamp stays the one moving thing.
+        // Only the glyphs spring, so nothing is laid out twice and the stamp stays the one moving
+        // thing.
         .animation(
           Tokens.Motion.adaptive(Tokens.Motion.stamp, reduceMotion: reduceMotion),
           value: isLogged
         )
+        .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
         if isStacked {
           Text(isLogged ? "Logged" : "Log set")
             .font(Tokens.Text.headline)
-            .foregroundStyle(isLogged ? Tokens.Color.plateGreen : symbolColor)
+            .foregroundStyle(isLogged ? Tokens.Color.chalk : labelColor)
         }
       }
       .frame(
         maxWidth: isStacked ? .infinity : Tokens.loggerTapTarget,
-        minHeight: Tokens.loggerTapTarget
+        minHeight: Tokens.loggerTapTarget,
+        alignment: isStacked ? .leading : .center
       )
       .frame(width: isStacked ? nil : Tokens.loggerTapTarget)
-      .background(fill, in: shape)
-      .overlay { outline(shape) }
-      .contentShape(shape)
+      .contentShape(Rectangle())
     }
-    .opacity(state == .incomplete ? 0.6 : 1)
   }
 
-  /// The logged seal: knurled ring, opaque disc, glyph. It is always laid out at the control's
+  /// The glyph of a set that is not logged yet: an empty square, a checked square, or a filled
+  /// one. All three are the same size, so the control never moves between them.
+  private var unloggedGlyph: some View {
+    Image(systemName: unloggedSymbol)
+      .font(Self.glyphFont)
+      .foregroundStyle(unloggedColor)
+  }
+
+  private var unloggedSymbol: String {
+    switch state {
+    case .incomplete: "square"
+    case .ready: "checkmark.square"
+    case .nextUp, .logged: "checkmark.square.fill"
+    }
+  }
+
+  private var unloggedColor: Color {
+    switch state {
+    case .incomplete: Tokens.Color.controlEdge
+    case .ready: Tokens.Color.chalkDim
+    case .nextUp, .logged: Tokens.Color.plateBlueFill
+    }
+  }
+
+  /// The logged seal: a round filled check in `plateGreen`. It is always laid out at the control's
   /// square, so the control does not shift when a set is logged, and fades in as one layer.
   private var seal: some View {
-    ZStack {
-      Circle()
-        .fill(Tokens.Color.plateGreenSurface)
-        .frame(width: Self.sealDiscDiameter, height: Self.sealDiscDiameter)
-      Image(systemName: "checkmark.circle.fill")
-        .hardsetText(.readout)
-        .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
-        .foregroundStyle(Tokens.Color.plateGreen)
-    }
-    .scaleEffect(isLogged || reduceMotion ? 1 : 0.6)
-    .frame(width: Tokens.loggerTapTarget, height: Tokens.loggerTapTarget)
-    .background {
-      KnurlPattern(opacity: 0.08)
-        .clipShape(Circle())
-    }
-    .opacity(isLogged ? 1 : 0)
+    Image(systemName: "checkmark.circle.fill")
+      .font(Self.glyphFont)
+      .foregroundStyle(Tokens.Color.plateGreen)
+      .scaleEffect(isLogged || reduceMotion ? 1 : 0.6)
+      .opacity(isLogged ? 1 : 0)
   }
 
-  /// A logged set has no key face: its seal sits straight on the row's logged tint.
-  private var fill: Color {
+  /// The words beside the glyph at accessibility sizes, in chalk: the colour belongs to the glyph.
+  private var labelColor: Color {
     switch state {
-    case .logged: .clear
-    case .nextUp: Tokens.Color.plateBlueFill
-    case .incomplete, .ready: Tokens.Color.steelRaised
-    }
-  }
-
-  @ViewBuilder
-  private func outline(_ shape: RoundedRectangle) -> some View {
-    switch state {
-    case .logged, .nextUp:
-      EmptyView()
-    case .ready:
-      shape.strokeBorder(Tokens.Color.plateBlue, lineWidth: Tokens.Stroke.selected)
-    case .incomplete:
-      shape.strokeBorder(
-        Tokens.Color.controlEdge,
-        style: StrokeStyle(lineWidth: Tokens.Stroke.hairline, dash: [4, 3])
-      )
-    }
-  }
-
-  private var symbolColor: Color {
-    // `onPlateBlue` is dark on the dark-mode plate blue fill and white on the light-mode one,
-    // which is the pairing that clears 7:1 on it.
-    switch state {
-    case .nextUp: Tokens.Color.onPlateBlue
-    case .ready: Tokens.Color.plateBlue
-    case .incomplete, .logged: Tokens.Color.chalkDim
+    case .incomplete: Tokens.Color.chalkDim
+    case .ready, .nextUp, .logged: Tokens.Color.chalk
     }
   }
 }
 
-/// The log control's button style. Saved rows retain measured text contrast; only actions are
-/// disabled, and the incomplete control's explicit 0.6 lives in `SetLogControlFace`.
+/// The log control's button style. Saved rows retain measured contrast; only actions are
+/// disabled, and the incomplete control is drawn faint by its own colour in `SetLogControlFace`.
 ///
 /// Pressed, the check sinks to 0.97 and dims to 80%, as every control that draws its own fill and
 /// shape does: the most frequent tap in the app gave no touch-down feedback at all. The press is

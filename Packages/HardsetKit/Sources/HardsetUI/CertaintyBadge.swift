@@ -8,52 +8,122 @@ import SwiftUI
 /// than a paragraph in a settings screen -- means it cannot drift away from the value it
 /// describes, because the same view renders both.
 ///
-/// Drawn as a compact capsule on the level's own tint. The symbol, the word and the hue identify
-/// it, and it wears no outline by default; under Increase Contrast or Button Shapes it is outlined
-/// in the level's hue, so it still reads as something that can be opened. At accessibility sizes,
-/// where the word can wrap, the capsule takes the control radius (see `CertaintyCapsule`). The
-/// capsule stays small enough to sit beside a figure, but the tappable region is the full 44 pt
-/// floor, laid out inside the button's label: a frame applied outside a plain button reserves
-/// space without reliably extending what can be tapped.
+/// Two styles, one control. `.capsule` is a compact capsule on the level's own tint: the symbol, the
+/// word and the hue identify it, and it wears no outline by default; under Increase Contrast or
+/// Button Shapes it is outlined in the level's hue, so it still reads as something that can be
+/// opened. At accessibility sizes, where the word can wrap, the capsule takes the control radius
+/// (see `CertaintyCapsule`). `.language` is the same claim as a phrase in the quiet label style, in
+/// `chalkDim`, with a small info glyph that says it opens: no tint, no hue, no capsule. The words
+/// carry the level, which is better for the product's claim than a badge, because the app is
+/// saying what it knows in a sentence. Both open the same disclosure.
+///
+/// Either way the visible part stays small enough to sit beside a figure, but the tappable region is
+/// the full 44 pt floor, laid out inside the button's label: a frame applied outside a plain button
+/// reserves space without reliably extending what can be tapped.
 public struct CertaintyBadge: View {
+  /// How the badge is drawn. The disclosure it opens is the same in both.
+  public enum Style: Sendable, Hashable {
+    /// A tinted capsule with the level's symbol and word.
+    case capsule
+    /// A quiet phrase, "Moderate confidence", with an info glyph, and no tint or hue.
+    case language
+  }
+
   private let level: CertaintyLevel
   private let methodology: String
   private let citation: String?
+  private let context: String?
+  private let style: Style
   @State private var isShowingDetail = false
   @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
-  public init(level: CertaintyLevel, methodology: String, citation: String? = nil) {
+  /// - Parameter context: What the level is about, said before it in a `.language` badge:
+  ///   "From another machine · Low confidence". Ignored by `.capsule`.
+  public init(
+    level: CertaintyLevel, methodology: String, citation: String? = nil, context: String? = nil,
+    style: Style = .capsule
+  ) {
     self.level = level
     self.methodology = methodology
     self.citation = citation
+    self.context = context
+    self.style = style
   }
 
   public var body: some View {
-    Button {
-      isShowingDetail = true
-    } label: {
-      CertaintyCapsule(level: level, isInteractive: true)
-        .frame(
-          minWidth: Tokens.minimumTapTarget,
-          minHeight: Tokens.minimumTapTarget,
-          alignment: .leading
+    trigger
+      .accessibilityLabel(accessibilityName)
+      .popover(isPresented: $isShowingDetail) {
+        CertaintyDetail(
+          level: level, methodology: methodology, citation: citation,
+          isLargeText: Self.needsSheet(dynamicTypeSize), style: style
         )
-        .contentShape(Rectangle())
+      }
+  }
+
+  @ViewBuilder private var trigger: some View {
+    switch style {
+    case .capsule:
+      Button {
+        isShowingDetail = true
+      } label: {
+        CertaintyCapsule(level: level, isInteractive: true)
+          .frame(
+            minWidth: Tokens.minimumTapTarget,
+            minHeight: Tokens.minimumTapTarget,
+            alignment: .leading
+          )
+          .contentShape(Rectangle())
+      }
+      .buttonStyle(HardsetPressStyle())
+    case .language:
+      Button {
+        isShowingDetail = true
+      } label: {
+        CertaintyPhrase(level: level, context: context)
+      }
+      .buttonStyle(InlineControlStyle(minHeight: Tokens.minimumTapTarget, alignment: .leading))
     }
-    .buttonStyle(HardsetPressStyle())
-    .accessibilityLabel("\(level.label). How this was calculated.")
-    .popover(isPresented: $isShowingDetail) {
-      CertaintyDetail(
-        level: level, methodology: methodology, citation: citation,
-        isLargeText: Self.needsSheet(dynamicTypeSize)
-      )
-    }
+  }
+
+  /// Begins with the words the badge shows, so Voice Control can say what it sees; a `.language`
+  /// badge says its context first, as it does on screen.
+  private var accessibilityName: String {
+    guard style == .language, let context else { return "\(level.label). How this was calculated." }
+    return "\(context). \(level.label). How this was calculated."
   }
 
   /// From Extra Extra Extra Large up, the longest methodologies run taller than an iPhone screen
   /// in the popover's reading column, so the disclosure opens as a scrolling sheet instead.
   static func needsSheet(_ size: DynamicTypeSize) -> Bool {
     size >= .xxxLarge
+  }
+}
+
+/// A certainty level as a phrase: the level's word, with what it is about before it, in the quiet
+/// label style and `chalkDim`, and a small info glyph after it. There is no fill, no hue and no
+/// outline; the words say the level, and the glyph says that it opens. The phrase wraps rather than
+/// truncating, so the word that qualifies a claim is never cut.
+struct CertaintyPhrase: View {
+  let level: CertaintyLevel
+  let context: String?
+
+  private var phrase: String {
+    [context, level.label].compactMap { $0 }.joined(separator: " · ")
+  }
+
+  var body: some View {
+    HStack(alignment: .firstTextBaseline, spacing: Tokens.Spacing.tight) {
+      Text(phrase)
+        .hardsetText(.provenance)
+        .foregroundStyle(Tokens.Color.chalkDim)
+        .multilineTextAlignment(.leading)
+        .fixedSize(horizontal: false, vertical: true)
+      Image(systemName: "info.circle")
+        .hardsetText(.caption)
+        .foregroundStyle(Tokens.Color.chalkDim)
+        .accessibilityHidden(true)
+    }
   }
 }
 
@@ -84,6 +154,7 @@ struct CertaintyDetail: View {
   let methodology: String
   let citation: String?
   let isLargeText: Bool
+  let style: CertaintyBadge.Style
 
   @Environment(\.dismiss) private var dismiss
 
@@ -93,11 +164,15 @@ struct CertaintyDetail: View {
 
   /// Explicit, because the private environment property above would otherwise make the memberwise
   /// initialiser private, and the honesty catalogue draws the detail from another file.
-  init(level: CertaintyLevel, methodology: String, citation: String?, isLargeText: Bool) {
+  init(
+    level: CertaintyLevel, methodology: String, citation: String?, isLargeText: Bool,
+    style: CertaintyBadge.Style = .capsule
+  ) {
     self.level = level
     self.methodology = methodology
     self.citation = citation
     self.isLargeText = isLargeText
+    self.style = style
   }
 
   var body: some View {
@@ -134,7 +209,8 @@ struct CertaintyDetail: View {
   }
 
   private var content: some View {
-    CertaintyDetailContent(level: level, methodology: methodology, citation: citation)
+    CertaintyDetailContent(
+      level: level, methodology: methodology, citation: citation, style: style)
   }
 }
 
@@ -146,10 +222,21 @@ struct CertaintyDetailContent: View {
   let level: CertaintyLevel
   let methodology: String
   let citation: String?
+  /// `.language` restates the level as a heading in chalk, so a disclosure opened from a phrase
+  /// does not bring the tinted capsule back.
+  var style: CertaintyBadge.Style = .capsule
 
   var body: some View {
     VStack(alignment: .leading, spacing: Tokens.Spacing.regular) {
-      CertaintyCapsule(level: level, isInteractive: false)
+      switch style {
+      case .capsule:
+        CertaintyCapsule(level: level, isInteractive: false)
+      case .language:
+        Text(level.label)
+          .font(Tokens.Text.title)
+          .foregroundStyle(Tokens.Color.chalk)
+          .fixedSize(horizontal: false, vertical: true)
+      }
       Text("How this is calculated")
         .font(Tokens.Text.headline)
         .foregroundStyle(Tokens.Color.chalk)

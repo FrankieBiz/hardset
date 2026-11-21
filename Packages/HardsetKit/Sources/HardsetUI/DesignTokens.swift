@@ -466,6 +466,29 @@ public struct HardsetCardModifier: ViewModifier {
   }
 }
 
+/// A raised panel for a message or a bar pinned over the list: `steelRaised` on a continuous `card`
+/// radius, no colour, no border. It is the one raised tone the live session uses, so the rest bar
+/// and a record notice stand on the same step off the canvas, and what a panel says is carried by
+/// its words and a small mark and never by its fill. Pinned over scrolling content, it takes
+/// `Elevation.floating`, which draws in light appearance only. Under Increase Contrast, where the
+/// fill step is gone, it wears a `hairline` border, as a card does.
+public struct HardsetPanelModifier: ViewModifier {
+  @Environment(\.colorSchemeContrast) private var contrast
+
+  public init() {}
+
+  public func body(content: Content) -> some View {
+    content
+      .background(Tokens.Color.steelRaised, in: Tokens.Shape.card)
+      .overlay {
+        if contrast == .increased {
+          Tokens.Shape.card.strokeBorder(Tokens.Color.hairline, lineWidth: Tokens.Stroke.hairline)
+        }
+      }
+      .hardsetFloating()
+  }
+}
+
 /// A sheet's background and chrome. The corner radius is the system's own, which is concentric
 /// with the device's corners; overriding it with a token only made it differ from every other
 /// sheet on the phone.
@@ -501,6 +524,11 @@ public extension View {
 
   func hardsetSheet() -> some View {
     modifier(HardsetSheetModifier())
+  }
+
+  /// Puts the view on the one raised panel tone. See `HardsetPanelModifier`.
+  func hardsetPanel() -> some View {
+    modifier(HardsetPanelModifier())
   }
 
   /// Lifts a pinned opaque surface off the content scrolling beneath it with a soft shadow, in
@@ -691,17 +719,14 @@ struct HardsetButtonFace<Label: View>: View {
   }
 }
 
-/// A keypad key: a flat `steelRaised` face on the keypad's `steel` panel, pressed in rather than
-/// highlighted.
+/// A keypad key: its figure or glyph in `chalk` over the keypad's `steel` panel, with no face and no
+/// fill, and no outline until one is asked for. A key is a 56 pt cell that is a third of the pad's width, and the numeral is
+/// what the lifter sees.
 ///
-/// Pressing it swaps to the pressed fill, so the key reads as having gone down. It keeps the
-/// measured `controlEdge` outline in both states, so the boundary never disappears under a finger.
-///
-/// The outline is the one stroke of the old rule that this phase leaves in place. Dropping it from
-/// a key reverses the note this style used to carry, "a key identified only by a fill one shade
-/// off the pad is a key the lifter has to look for", and gym glare and sweaty hands cannot be
-/// judged from a render, so it is its own step with its own device check. It is one argument,
-/// `outline:` in `HardsetKeyFace`, and reverts alone: change `.always` to `.onRequest`.
+/// Pressed, the key sinks to 0.96 and dims to 80% on `Motion.press`, as every control with no face
+/// of its own does, and Reduce Motion drops the scale. Where the lifter has asked for boundaries,
+/// through Increase Contrast or Button Shapes, each key wears the 3:1 `controlEdge` outline around
+/// its whole cell, so the boundary comes back exactly where it was asked for.
 public struct HardsetKeyStyle: ButtonStyle {
   public init() {}
 
@@ -728,17 +753,17 @@ private struct HardsetKeyBody: View {
   }
 }
 
-/// A key's face in a given state: chalk label, logger-height frame, the flat face on `steel`, and
-/// the disabled opacity. Shared by `HardsetKeyStyle` and the token catalogue's pressed keys, for
-/// the same reason as `HardsetButtonFace`. One modifier whose pressed state changes, so the label
-/// keeps its identity across a press instead of being rebuilt in a different branch.
-///
-/// Keys always sit on the keypad's `steel` panel, so the face says so itself and needs nothing
-/// from its caller.
+/// A key in a given state: the chalk label in a logger-height cell the width of its column, dimmed
+/// while pressed or disabled, and outlined only where Increase Contrast or Button Shapes asks.
+/// Shared by `HardsetKeyStyle` and the token catalogue's pressed keys, because a `ButtonStyle`
+/// cannot be forced pressed in a render.
 struct HardsetKeyFace<Label: View>: View {
   private let isPressed: Bool
   private let isEnabled: Bool
   private let label: Label
+
+  @Environment(\.colorSchemeContrast) private var contrast
+  @Environment(\.accessibilityShowButtonShapes) private var showsButtonShapes
 
   init(isPressed: Bool, isEnabled: Bool, @ViewBuilder label: () -> Label) {
     self.isPressed = isPressed
@@ -747,13 +772,17 @@ struct HardsetKeyFace<Label: View>: View {
   }
 
   var body: some View {
+    let request = ControlEdgeRequest(contrast: contrast, showsButtonShapes: showsButtonShapes)
     label
       .foregroundStyle(Tokens.Color.chalk)
       .frame(maxWidth: .infinity, minHeight: Tokens.loggerTapTarget)
-      .modifier(
-        ControlFaceModifier(shape: Tokens.Shape.control, isPressed: isPressed, outline: .always)
-      )
-      .hardsetControlSurface(.steel)
-      .opacity(isEnabled ? 1 : 0.4)
+      .overlay {
+        if request.isRequested {
+          Tokens.Shape.control
+            .strokeBorder(Tokens.Color.controlEdge, lineWidth: Tokens.Stroke.hairline)
+        }
+      }
+      .contentShape(Rectangle())
+      .opacity(isEnabled ? (isPressed ? 0.8 : 1) : 0.4)
   }
 }

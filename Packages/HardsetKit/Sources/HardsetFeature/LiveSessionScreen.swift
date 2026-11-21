@@ -174,6 +174,11 @@ public struct LiveSessionScreen: View {
         begin(.undoSet)
         return noteOutcome(coordinator.undoSet(slotID: slot.id, inExercise: exerciseStateID))
       },
+      onCorrectSet: { exerciseStateID, slot, draft in
+        begin(.correctSet)
+        return noteOutcome(
+          coordinator.correctSet(slotID: slot.id, inExercise: exerciseStateID, to: draft))
+      },
       onRemoveSet: { exerciseStateID, slot in
         begin(.removeSet)
         noteOutcome(coordinator.removeSlot(slotID: slot.id, inExercise: exerciseStateID))
@@ -655,6 +660,7 @@ public struct LiveSessionScreen: View {
     case .some(.addExercise): .addMovement
     case .some(.logSet): .log
     case .some(.undoSet): .undoSet
+    case .some(.correctSet): .correctSet
     case .some(.addSet): .addSet
     case .some(.removeSlot): .removeSet
     case .some(.removeExercise): .removeMovement
@@ -703,6 +709,8 @@ public struct LiveSessionScreen: View {
       switch coordinatorError {
       case .slotIsLogged:
         return "That set is already saved. Undo it first to change or remove it."
+      case .slotIsNotLogged:
+        return "That set is not saved yet, so there is nothing to correct. Log it first."
       case .gymChangeConflictsWithMachines:
         return "Movements in this workout already have machines recorded, so the gym was not "
           + "changed. Set them to “Not recorded” first."
@@ -810,6 +818,7 @@ private enum SessionOperation {
   case addSet
   case changeMachine
   case undoSet
+  case correctSet
   case removeSet
   case removeMovement
   case moveMovement
@@ -832,6 +841,8 @@ private enum SessionOperation {
       "The machine could not be changed. The movement keeps its previous machine."
     case .undoSet:
       "That set could not be undone. It is still saved."
+    case .correctSet:
+      "That correction could not be saved. The set keeps the numbers it was logged with."
     case .removeSet:
       "That row could not be removed."
     case .removeMovement:

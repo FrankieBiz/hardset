@@ -445,6 +445,37 @@ public nonisolated struct LoggerStore: Sendable {
     }
   }
 
+  /// Corrects the weight and reps of a saved set in the open workout, in place.
+  ///
+  /// Only the two figures change. The set keeps its id, the machine it was saved on, its plan row,
+  /// its ordinal, its warm-up flag, its save time and its RPE, so the correction cannot move a set
+  /// between machines, between blocks of the same movement, or in time. The figures go through the
+  /// same completeness rule as writing a set: a draft without a usable weight and reps throws
+  /// `incompleteSet` and nothing is written. Zero added load is accepted, as it is when logging.
+  ///
+  /// Refused, with nothing written, for a finished or missing workout, and for a set that is not
+  /// in this workout, including one already removed on another device: there is nothing here to
+  /// correct, and reporting success would let the screen show a number that is not saved. A
+  /// finished workout's sets are never edited; its corrections are removals, in the receipt.
+  public func correctLoggedSet(
+    _ id: SetID, in sessionID: SessionID, to draft: SetEntryDraft
+  ) throws {
+    guard let resolved = draft.resolved() else { throw LoggerStoreError.incompleteSet }
+    try database.write { db in
+      _ = try Self.requireOpenSession(sessionID, in: db)
+      let owner = try LoggedSet.where { $0.id.eq(id.rawValue) }.select(\.sessionID).fetchOne(db)
+      guard owner == sessionID.rawValue else { throw LoggerStoreError.writeNotApplied }
+      try LoggedSet
+        .where { $0.id.eq(id.rawValue) && $0.sessionID.eq(sessionID.rawValue) }
+        .update {
+          $0.weightKg = #bind(resolved.weightKg)
+          $0.reps = #bind(resolved.reps)
+        }
+        .execute(db)
+      try Self.requireSingleChange(in: db)
+    }
+  }
+
   /// Removes a movement from the open workout: its plan row and this workout's sets for it, in
   /// one transaction, then closes the gap in the remaining positions.
   ///

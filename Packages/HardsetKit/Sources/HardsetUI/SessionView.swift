@@ -45,6 +45,7 @@ public struct SessionView: View {
   private let onShowSettings: (() -> Void)?
   private let onChangeGym: (() -> Void)?
   private let onUndoSet: ((UUID, SetSlot) -> Bool)?
+  private let onCorrectSet: ((UUID, SetSlot, SetEntryDraft) -> Bool)?
   private let onRemoveSet: ((UUID, SetSlot) -> Void)?
   private let onRemoveExercise: ((UUID) -> Void)?
   private let onMoveExercise: ((UUID, Int) -> Void)?
@@ -116,6 +117,9 @@ public struct SessionView: View {
   /// - Parameter onShowSettings: Puts a settings button in the header.
   /// - Parameter onChangeGym: Makes the header's gym a chip that sets or changes it.
   /// - Parameter onUndoSet: Returns a logged set to unlogged. `true` when it was undone.
+  /// - Parameter onCorrectSet: Writes a corrected weight and reps to a saved set, and is `true` when
+  ///   it was saved. With it, a saved figure opens the keypad, and what is typed is written when the
+  ///   keypad leaves that figure; without it saved figures are plain text.
   /// - Parameter onFinishAt: Finishes at a given instant; offered with the last set's time when
   ///   the workout is stale.
   /// - Parameter onDiscard: Deletes the workout. Always behind a confirmation.
@@ -148,6 +152,7 @@ public struct SessionView: View {
     onShowSettings: (() -> Void)? = nil,
     onChangeGym: (() -> Void)? = nil,
     onUndoSet: ((UUID, SetSlot) -> Bool)? = nil,
+    onCorrectSet: ((UUID, SetSlot, SetEntryDraft) -> Bool)? = nil,
     onRemoveSet: ((UUID, SetSlot) -> Void)? = nil,
     onRemoveExercise: ((UUID) -> Void)? = nil,
     onMoveExercise: ((UUID, Int) -> Void)? = nil,
@@ -185,6 +190,7 @@ public struct SessionView: View {
     self.onShowSettings = onShowSettings
     self.onChangeGym = onChangeGym
     self.onUndoSet = onUndoSet
+    self.onCorrectSet = onCorrectSet
     self.onRemoveSet = onRemoveSet
     self.onRemoveExercise = onRemoveExercise
     self.onMoveExercise = onMoveExercise
@@ -198,7 +204,9 @@ public struct SessionView: View {
   public var body: some View {
     ScrollViewReader { proxy in
       ScrollView {
-        LazyVStack(alignment: .leading, spacing: Tokens.Spacing.regular) {
+        // No container around a movement: the page margin is the only inset, and movements are
+        // separated by space. Each owns the space above it, so the gap is one rule in one place.
+        LazyVStack(alignment: .leading, spacing: 0) {
           if let title {
             header(title: title)
               .padding(.bottom, Tokens.Spacing.snug)
@@ -208,18 +216,20 @@ public struct SessionView: View {
           // screen opens, so it moves nothing under a thumb, and it is the first thing to read.
           if showsStaleNotice {
             staleNotice
-              .padding(.horizontal, Tokens.Spacing.regular)
+              .padding(.horizontal, Tokens.Spacing.loose)
+              .padding(.top, Tokens.Spacing.regular)
               .hardsetArrival()
           }
 
           ForEach($exercises) { $exercise in
             card(for: $exercise)
-              .padding(.horizontal, Tokens.Spacing.regular)
+              .padding(.horizontal, Tokens.Spacing.loose)
+              .padding(.top, Tokens.Spacing.block)
           }
 
           // An empty workout says so, and says what to do about it, rather than rendering a bare
           // "Finish" button under nothing. When it is empty, the empty state carries the add
-          // action, so the dashed slot below is not drawn twice.
+          // action, so the add row below is not drawn twice.
           if exercises.isEmpty {
             HardsetEmptyState(
               title: "Nothing added yet",
@@ -228,14 +238,16 @@ public struct SessionView: View {
               actionTitle: onAddExercise == nil ? nil : "Add movement",
               action: onAddExercise.map { add in { closeKeypad(then: add) } }
             )
+            .padding(.top, Tokens.Spacing.block)
           } else if let onAddExercise {
             addMovementSlot { closeKeypad(then: onAddExercise) }
-              .padding(.horizontal, Tokens.Spacing.regular)
+              .padding(.horizontal, Tokens.Spacing.loose)
+              .padding(.top, Tokens.Spacing.section)
           }
 
           summary
-            .padding(.horizontal, Tokens.Spacing.regular)
-            .padding(.top, Tokens.Spacing.section)
+            .padding(.horizontal, Tokens.Spacing.loose)
+            .padding(.top, Tokens.Spacing.block)
             .id(Self.finishAnchor)
         }
         .padding(.bottom, Tokens.Spacing.section)
@@ -305,6 +317,12 @@ public struct SessionView: View {
     // new value reseeds it, so the keypad never shows a number the row does not hold.
     .onChange(of: targetedSlot) { _, slot in
       guard let target = keypad else { return }
+      // A saved figure's keystrokes live in the keypad's buffer until they are written, so the
+      // row is not reseeded from under them. Only the row going away, or being undone, ends it.
+      if target.isCorrection {
+        if slot?.isLogged != true { keypad = nil }
+        return
+      }
       guard let slot, !slot.isLogged else {
         keypad = nil
         return
@@ -354,7 +372,7 @@ public struct SessionView: View {
             workoutMenu
           }
           if let onShowSettings {
-            HeaderIconButton(systemImage: "gearshape", accessibilityLabel: "Settings") {
+            HeaderIconButton(systemImage: "gearshape", accessibilityLabel: "Settings", style: .bare) {
               closeKeypad(then: onShowSettings)
             }
           }
@@ -386,7 +404,7 @@ public struct SessionView: View {
   /// The things done to the workout as a whole. Finish is here as well as at the end of the list,
   /// so a long workout can be ended without scrolling past every card.
   private var workoutMenu: some View {
-    HeaderIconMenu(accessibilityLabel: "Workout options") {
+    HeaderIconMenu(accessibilityLabel: "Workout options", style: .bare) {
       if let onChangeGym {
         Button {
           closeKeypad(then: onChangeGym)
@@ -410,38 +428,30 @@ public struct SessionView: View {
     }
   }
 
-  /// The workout's gym, as the machine chip on each card shows its machine: an invitation in the
-  /// accent when none is set, the name with a chevron when one is. Setting it is what makes the
-  /// machine chips appear.
+  /// The workout's gym, as the machine line on each card shows its machine: a line of type with a
+  /// chevron, and no capsule. Unset it reads "Set gym" in full chalk, an invitation to say where
+  /// the lifter is; set, it reads the name in `chalkDim` with the pin that says what the name is.
+  /// Setting it is what makes the machine lines appear.
   private func gymChip(action: @escaping () -> Void) -> some View {
     let isSet = gymName != nil
     return Button(action: action) {
       HStack(spacing: Tokens.Spacing.snug) {
         Image(systemName: isSet ? "mappin.and.ellipse" : "plus")
-          .font(Tokens.Text.caption.weight(.semibold))
+          .font(Tokens.Text.provenance.weight(.medium))
+          .accessibilityHidden(true)
         Text(gymName ?? "Set gym")
-          .font(Tokens.Text.caption.weight(.semibold))
+          .font(Tokens.Text.provenance.weight(.medium))
           .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 1)
+          .multilineTextAlignment(.leading)
         if isSet {
           Image(systemName: "chevron.down")
             .font(Tokens.Text.caption.weight(.semibold))
-            .foregroundStyle(Tokens.Color.chalkDim)
+            .accessibilityHidden(true)
         }
       }
-      .foregroundStyle(isSet ? Tokens.Color.chalk : Tokens.Color.plateBlue)
-      .padding(.horizontal, Tokens.Spacing.regular)
-      .padding(.vertical, Tokens.Spacing.snug)
-      .background(isSet ? Tokens.Color.steelRaised : Tokens.Color.plateBlueSurface, in: Capsule())
-      .overlay(
-        Capsule().strokeBorder(
-          isSet ? Tokens.Color.controlEdge : Tokens.Color.plateBlue,
-          lineWidth: Tokens.Stroke.hairline
-        )
-      )
-      .frame(minHeight: Tokens.minimumTapTarget)
-      .contentShape(Rectangle())
+      .foregroundStyle(isSet ? Tokens.Color.chalkDim : Tokens.Color.chalk)
     }
-    .buttonStyle(HardsetPressStyle())
+    .buttonStyle(InlineControlStyle(minHeight: Tokens.minimumTapTarget, alignment: .leading))
     // Begins with the words on the chip, so a Voice Control user can say what they see.
     .accessibilityLabel(
       gymName.map { "\($0). Change gym." }
@@ -462,6 +472,8 @@ public struct SessionView: View {
   private var staleNotice: some View {
     VStack(alignment: .leading, spacing: Tokens.Spacing.regular) {
       HStack(alignment: .firstTextBaseline, spacing: Tokens.Spacing.regular) {
+        // The one mark of the caveat: a small `warning` glyph. The headline is chalk and the card
+        // is neutral, so nothing but the glyph is coloured.
         Image(systemName: "clock.badge.exclamationmark")
           .font(Tokens.Text.headline)
           .foregroundStyle(Tokens.Color.warning)
@@ -469,7 +481,7 @@ public struct SessionView: View {
         VStack(alignment: .leading, spacing: Tokens.Spacing.tight) {
           Text(startedAt.map { "Started \(Self.moment($0))" } ?? "Started earlier")
             .font(Tokens.Text.headline)
-            .foregroundStyle(Tokens.Color.warning)
+            .foregroundStyle(Tokens.Color.chalk)
           Text(staleDetail)
             .font(Tokens.Text.provenance)
             .foregroundStyle(Tokens.Color.chalk)
@@ -502,11 +514,7 @@ public struct SessionView: View {
       }
     }
     .padding(Tokens.Spacing.regular)
-    .background(Tokens.Color.warningSurface, in: RoundedRectangle(cornerRadius: Tokens.Radius.card))
-    .overlay(
-      RoundedRectangle(cornerRadius: Tokens.Radius.card)
-        .strokeBorder(Tokens.Color.warning.opacity(0.35), lineWidth: Tokens.Stroke.hairline)
-    )
+    .hardsetCard()
   }
 
   private var staleDetail: String {
@@ -537,6 +545,11 @@ public struct SessionView: View {
         { closeKeypad { show(id) } }
       },
       lastRest: lastRest[id],
+      // The one accent on the screen is the workout's primary action; every other row is drawn
+      // as ready, in chalk.
+      decidesAccent: true,
+      accentedSlotID: accentSlotID,
+      allowsCorrection: onCorrectSet != nil,
       editingSlotID: editsThisCard ? keypad?.slotID : nil,
       editingField: editsThisCard ? keypad?.field : nil,
       editingText: editsThisCard ? keypadBuffer.displayText : nil,
@@ -556,9 +569,15 @@ public struct SessionView: View {
     )
   }
 
-  /// Editing a saved set is undoing it and logging it again: the numbers stay in the row, the
-  /// keypad opens on them, and the set is saved anew only when the lifter logs it.
+  /// "Edit set" on a saved row. Where the screen can write a correction the keypad opens on the
+  /// weight and the set stays saved while it is corrected. Where it cannot, editing is the older
+  /// path: the set is undone, the numbers stay in the row, the keypad opens on them, and the set is
+  /// saved anew only when the lifter logs it.
   private func editSet(_ slot: SetSlot, inExercise id: UUID) {
+    if onCorrectSet != nil {
+      beginEditing(exerciseID: id, slotID: slot.id, field: .weight)
+      return
+    }
     guard let onUndoSet, onUndoSet(id, slot) else { return }
     beginEditing(exerciseID: id, slotID: slot.id, field: .weight)
   }
@@ -589,23 +608,17 @@ public struct SessionView: View {
     Binding(get: { removal != nil }, set: { if !$0 { removal = nil } })
   }
 
-  /// The place the next movement goes. Dashed, like every empty slot in the app.
+  /// The place the next movement goes: a line of type with a plus, across the width of the list,
+  /// with no dashed outline. It is a 56 pt row because it is a logger control.
   private func addMovementSlot(action: @escaping () -> Void) -> some View {
-    let shape = RoundedRectangle(cornerRadius: Tokens.Radius.card)
-    return Button(action: action) {
+    Button(action: action) {
       Label("Add movement", systemImage: "plus")
         .font(Tokens.Text.headline)
-        .foregroundStyle(Tokens.Color.plateBlue)
-        .frame(maxWidth: .infinity, minHeight: Tokens.loggerTapTarget)
-        .contentShape(shape)
-        .overlay(
-          shape.strokeBorder(
-            Tokens.Color.controlEdge,
-            style: StrokeStyle(lineWidth: Tokens.Stroke.hairline, dash: [5, 4])
-          )
-        )
+        .foregroundStyle(Tokens.Color.chalk)
     }
-    .buttonStyle(HardsetPressStyle())
+    .buttonStyle(
+      InlineControlStyle(minHeight: Tokens.loggerTapTarget, alignment: .leading, fullWidth: true)
+    )
   }
 
   // MARK: - Feedback beside the thumb
@@ -716,6 +729,9 @@ public struct SessionView: View {
   /// Records from the set just logged, under the movement's name. Each one names what it beat, so
   /// the claim is checkable rather than a bare "PR!", and an estimated maximum carries its
   /// certainty beside it. One line per record, because it shares the bottom with the rest bar.
+  ///
+  /// A record is marked by the trophy in `plateYellow` and nothing else: the panel is the same
+  /// neutral raised tone as the rest bar, the title is chalk, and no yellow fills or outlines it.
   private var recordsCard: some View {
     VStack(alignment: .leading, spacing: Tokens.Spacing.snug) {
       HStack(alignment: .firstTextBaseline, spacing: Tokens.Spacing.regular) {
@@ -725,7 +741,7 @@ public struct SessionView: View {
           .accessibilityHidden(true)
         Text(recordsTitle)
           .font(Tokens.Text.headline)
-          .foregroundStyle(Tokens.Color.plateYellow)
+          .foregroundStyle(Tokens.Color.chalk)
           .frame(maxWidth: .infinity, alignment: .leading)
         if let onDismissRecords {
           DismissGlyphButton(action: onDismissRecords)
@@ -750,7 +766,8 @@ public struct SessionView: View {
             CertaintyBadge(
               level: Self.estimateCertainty(record),
               methodology: ProgressionAnalyzer.source.methodology,
-              citation: ProgressionAnalyzer.source.validRange
+              citation: ProgressionAnalyzer.source.validRange,
+              style: .language
             )
           }
         }
@@ -760,11 +777,7 @@ public struct SessionView: View {
       }
     }
     .padding(Tokens.Spacing.regular)
-    .background(Tokens.Color.plateYellowSurface, in: RoundedRectangle(cornerRadius: Tokens.Radius.card))
-    .overlay(
-      RoundedRectangle(cornerRadius: Tokens.Radius.card)
-        .strokeBorder(Tokens.Color.plateYellow.opacity(0.35), lineWidth: Tokens.Stroke.hairline)
-    )
+    .hardsetPanel()
   }
 
   private var recordsTitle: String {
@@ -837,6 +850,12 @@ public struct SessionView: View {
     let volume = SessionVolume(exercises: exercises)
     return VStack(alignment: .leading, spacing: Tokens.Spacing.loose) {
       VStack(alignment: .leading, spacing: Tokens.Spacing.regular) {
+        // The one hairline on the screen that is not between two set rows: it separates the
+        // workout's totals from the movements above them.
+        Rectangle()
+          .fill(Tokens.Color.hairline)
+          .frame(height: Tokens.Stroke.hairline)
+          .accessibilityHidden(true)
         SectionLabel("This workout")
         if volume.isEmpty {
           Text("No sets logged yet")
@@ -846,9 +865,7 @@ public struct SessionView: View {
           StatLedger(ledgerItems(volume))
         }
       }
-      .padding(Tokens.Spacing.regular)
       .frame(maxWidth: .infinity, alignment: .leading)
-      .hardsetCard()
       .accessibilityElement(children: .combine)
       .accessibilityLabel(volumeDescription)
 
@@ -1005,7 +1022,7 @@ public struct SessionView: View {
   // MARK: - Keypad
 
   private var isKeypadPresented: Binding<Bool> {
-    Binding(get: { keypad != nil }, set: { if !$0 { keypad = nil } })
+    Binding(get: { keypad != nil }, set: { if !$0 { dismissKeypad() } })
   }
 
   private var targetedSlot: SetSlot? {
@@ -1023,6 +1040,13 @@ public struct SessionView: View {
     return nil
   }
 
+  /// The row whose log control wears the screen's one accent: the workout's primary action, the
+  /// first row that is not logged and can be (`ExerciseLogState.primarySlotID`). While the keypad is
+  /// up its own primary action, Next or Log set, is the accent, and no row has it.
+  private var accentSlotID: UUID? {
+    keypad == nil ? ExerciseLogState.primarySlotID(in: exercises) : nil
+  }
+
   private func slot(exerciseID: UUID, slotID: UUID) -> SetSlot? {
     exercises.first { $0.id == exerciseID }?.slots.first { $0.id == slotID }
   }
@@ -1030,15 +1054,58 @@ public struct SessionView: View {
   /// Puts the keypad on a field, or moves it there if it is already up. A field that already
   /// holds a value is armed to be replaced by the first digit typed, so retyping a prefilled
   /// weight does not mean deleting it first.
+  ///
+  /// A saved row's field opens the keypad as a correction, where the screen can write one. Leaving a
+  /// field that has a correction typed into it writes that correction first, and stays put if the
+  /// write fails, so the lifter sees why before anything else moves.
   private func beginEditing(exerciseID: UUID, slotID: UUID, field: SetRowField) {
-    guard let slot = slot(exerciseID: exerciseID, slotID: slotID), !slot.isLogged else { return }
-    let target = KeypadTarget(exerciseID: exerciseID, slotID: slotID, field: field)
+    guard let opened = slot(exerciseID: exerciseID, slotID: slotID) else { return }
+    let isCorrection = opened.isLogged
+    guard !isCorrection || onCorrectSet != nil else { return }
+    let target = KeypadTarget(
+      exerciseID: exerciseID, slotID: slotID, field: field, isCorrection: isCorrection)
     if keypad != target {
-      keypadBuffer = Self.buffer(for: slot.draft, field: field, unit: unit)
+      guard commitCorrection() else { return }
+      // Read again: writing the correction changed the row it came from.
+      guard let current = slot(exerciseID: exerciseID, slotID: slotID) else { return }
+      keypadBuffer = Self.buffer(for: current.draft, field: field, unit: unit)
     }
     keypadBuffer.replaceOnFirstEntry = !keypadBuffer.isEmpty
     keypad = target
     shownKeypad = target
+  }
+
+  /// Writes the correction typed into a saved figure, if one was typed. `true` when there was
+  /// nothing to write or it was saved; `false` when the write failed, with the error on screen.
+  ///
+  /// There is nothing to write for an unsaved row, whose keystrokes already go to its draft, for a
+  /// field left empty or typed back to what it held, or for figures that are not a complete set.
+  /// Those leave the saved figures as they were. The typed text never touches the row's draft:
+  /// the figure on screen is the saved one until the write has succeeded.
+  @discardableResult
+  private func commitCorrection() -> Bool {
+    guard let target = keypad, target.isCorrection, let onCorrectSet,
+      let saved = slot(exerciseID: target.exerciseID, slotID: target.slotID), saved.isLogged,
+      !Self.buffer(keypadBuffer, agreesWith: saved.draft, field: target.field, unit: unit)
+    else { return true }
+    var corrected = saved.draft
+    switch target.field {
+    case .weight:
+      guard let typed = keypadBuffer.value else { return true }
+      corrected.weightKg = unit.toKilograms(typed)
+    case .reps:
+      guard let typed = keypadBuffer.value.flatMap({ Int(exactly: $0) }) else { return true }
+      corrected.reps = typed
+    }
+    guard corrected.isLoggable else { return true }
+    return onCorrectSet(target.exerciseID, saved, corrected)
+  }
+
+  /// Closes the keypad, writing a correction typed into a saved figure first. A failed write still
+  /// closes it: the row reads what it was saved with and the banner says the correction was not.
+  private func dismissKeypad() {
+    commitCorrection()
+    keypad = nil
   }
 
   /// "Next" on the weight field: the same keypad, retargeted in place. Dismissing and presenting
@@ -1070,7 +1137,7 @@ public struct SessionView: View {
   /// canonical load through a rounded pounds display. There is no `?? 0` here: an empty
   /// buffer stays nil and cannot make a row loggable.
   private func writeKeypadValue() {
-    guard let target = keypad,
+    guard let target = keypad, !target.isCorrection,
       let exerciseIndex = exercises.firstIndex(where: { $0.id == target.exerciseID }),
       let slotIndex = exercises[exerciseIndex].slots.firstIndex(where: { $0.id == target.slotID }),
       !exercises[exerciseIndex].slots[slotIndex].isLogged
@@ -1090,7 +1157,7 @@ public struct SessionView: View {
       return
     }
     afterKeypadCloses = action
-    keypad = nil
+    dismissKeypad()
   }
 
   private func keypadDidDismiss() {
@@ -1106,7 +1173,8 @@ public struct SessionView: View {
     else { return nil }
     let slot = exercise.slots[index]
     let set = slot.isWarmup ? "Warm-up" : "Set \(exercise.slots[..<index].count { !$0.isWarmup } + 1)"
-    return "\(exercise.exerciseName) · \(set)"
+    // A saved set says so, so the lifter knows the digits correct something already written.
+    return "\(exercise.exerciseName) · \(set)" + (target.isCorrection ? " · Correcting" : "")
   }
 
   private var keypadSheet: some View {
@@ -1127,9 +1195,10 @@ public struct SessionView: View {
           context: target.flatMap { keypadContext(for: $0) },
           unit: field == .weight ? unit.abbreviation : "reps",
           restEndsAt: runningRestEnd,
-          onDone: { keypad = nil },
+          onDone: { dismissKeypad() },
           onNext: field == .weight ? { advanceToReps() } : nil,
-          onLog: field == .reps ? { logFromKeypad() } : nil,
+          // A correction has no "Log set": the set is already logged, and Done writes the change.
+          onLog: field == .reps && target?.isCorrection != true ? { logFromKeypad() } : nil,
           canLog: targetedSlot?.draft.isLoggable ?? false
         )
         .tourTarget(.keypad)
@@ -1238,6 +1307,8 @@ private struct KeypadTarget: Hashable {
   let exerciseID: UUID
   let slotID: UUID
   let field: SetRowField
+  /// The keypad is on a saved set's figure, correcting it, and not on an unsaved row's draft.
+  var isCorrection = false
 }
 
 /// A failure message together with the event that produced it, so two failures with the same

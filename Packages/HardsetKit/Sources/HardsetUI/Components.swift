@@ -66,26 +66,51 @@ extension ScreenHeader where Trailing == EmptyView {
   }
 }
 
+/// How a header icon control is drawn.
+public enum HeaderIconStyle: Sendable, Hashable {
+  /// A round flat fill behind the glyph. Every tab screen's header uses it.
+  case circle
+  /// The glyph alone, in the same 44 pt region, for a screen that has dropped its containers. It
+  /// wears the `controlEdge` outline only where Increase Contrast or Button Shapes asks.
+  case bare
+}
+
 /// A round icon button on a flat fill for a screen header's single action, such as Settings.
 ///
 /// It sits on the canvas, so it takes `controlFillOnCanvas`; inside a card it takes `steelRaised`.
-/// It wears no outline until Increase Contrast or Button Shapes asks for one.
+/// It wears no outline until Increase Contrast or Button Shapes asks for one. `style: .bare` draws
+/// the glyph without the circle.
 public struct HeaderIconButton: View {
   private let systemImage: String
   private let accessibilityLabel: String
+  private let style: HeaderIconStyle
   private let action: () -> Void
 
-  public init(systemImage: String, accessibilityLabel: String, action: @escaping () -> Void) {
+  public init(
+    systemImage: String, accessibilityLabel: String, style: HeaderIconStyle = .circle,
+    action: @escaping () -> Void
+  ) {
     self.systemImage = systemImage
     self.accessibilityLabel = accessibilityLabel
+    self.style = style
     self.action = action
   }
 
   public var body: some View {
-    Button(action: action) {
-      HeaderIconGlyphFace(systemImage: systemImage)
+    Group {
+      switch style {
+      case .circle:
+        Button(action: action) {
+          HeaderIconGlyphFace(systemImage: systemImage)
+        }
+        .buttonStyle(ControlPressStyle(shape: Circle(), outline: .onRequest))
+      case .bare:
+        Button(action: action) {
+          HeaderIconGlyphFace(systemImage: systemImage)
+        }
+        .buttonStyle(InlineControlStyle(alignment: .center))
+      }
     }
-    .buttonStyle(ControlPressStyle(shape: Circle(), outline: .onRequest))
     // Applied outside the style, so the face wraps a label that is already framed to the capped
     // diameter. The label is the bare glyph face, never `HeaderIconGlyph`, which would draw a
     // second circle.
@@ -107,15 +132,18 @@ public struct HeaderIconButton: View {
 public struct HeaderIconMenu<Content: View>: View {
   private let systemImage: String
   private let accessibilityLabel: String
+  private let style: HeaderIconStyle
   private let content: Content
 
   public init(
     systemImage: String = "ellipsis",
     accessibilityLabel: String,
+    style: HeaderIconStyle = .circle,
     @ViewBuilder content: () -> Content
   ) {
     self.systemImage = systemImage
     self.accessibilityLabel = accessibilityLabel
+    self.style = style
     self.content = content()
   }
 
@@ -123,7 +151,7 @@ public struct HeaderIconMenu<Content: View>: View {
     Menu {
       content
     } label: {
-      HeaderIconGlyph(systemImage: systemImage)
+      HeaderIconGlyph(systemImage: systemImage, style: style)
     }
     .buttonStyle(.plain)
     .accessibilityLabel(accessibilityLabel)
@@ -140,7 +168,8 @@ public struct HeaderIconMenu<Content: View>: View {
 /// control border when Increase Contrast or Button Shapes asks for it. The button draws the bare
 /// `HeaderIconGlyphFace` inside its own press style; this view draws the face and the circle
 /// together for the menu, whose label receives no pressed state, and for the catalogue, which
-/// forces `isPressed`.
+/// forces `isPressed`. In the `.bare` style it draws no circle: the glyph, its 44 pt region, and
+/// the outline only where the lifter has asked for one.
 ///
 /// It grows with text up to the largest ordinary size and stops there, about 60 pt across. Grown
 /// linearly to the largest accessibility size it reached about 137 pt and squeezed the screen
@@ -149,19 +178,38 @@ public struct HeaderIconMenu<Content: View>: View {
 struct HeaderIconGlyph: View {
   let systemImage: String
   let isPressed: Bool
+  let style: HeaderIconStyle
 
-  init(systemImage: String, isPressed: Bool = false) {
+  @Environment(\.colorSchemeContrast) private var contrast
+  @Environment(\.accessibilityShowButtonShapes) private var showsButtonShapes
+
+  init(systemImage: String, isPressed: Bool = false, style: HeaderIconStyle = .circle) {
     self.systemImage = systemImage
     self.isPressed = isPressed
+    self.style = style
   }
 
   var body: some View {
-    ControlPressFace(
-      shape: Circle(), outline: .onRequest, isPressed: isPressed, reduceMotion: false
-    ) {
+    switch style {
+    case .circle:
+      ControlPressFace(
+        shape: Circle(), outline: .onRequest, isPressed: isPressed, reduceMotion: false
+      ) {
+        HeaderIconGlyphFace(systemImage: systemImage)
+      }
+      .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
+    case .bare:
+      let request = ControlEdgeRequest(contrast: contrast, showsButtonShapes: showsButtonShapes)
       HeaderIconGlyphFace(systemImage: systemImage)
+        .overlay {
+          if request.isRequested {
+            Tokens.Shape.control
+              .strokeBorder(Tokens.Color.controlEdge, lineWidth: Tokens.Stroke.hairline)
+          }
+        }
+        .contentShape(Rectangle())
+        .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
     }
-    .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
   }
 }
 
