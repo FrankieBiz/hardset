@@ -16,6 +16,10 @@ from time import perf_counter
 ROOT = Path(__file__).resolve().parents[1]
 MIGRATIONS = ROOT / "Packages/HardsetKit/Sources/HardsetStore/Migrations.swift"
 
+# The one rule for a session that counts as a workout done, as `Session.TableColumns.isCounted` writes
+# it: the rotation, "Repeat last workout" and Apple Health all use it.
+COUNTED = "EXISTS (SELECT * FROM loggedSets WHERE loggedSets.sessionID = sessions.id AND NOT loggedSets.isWarmup)"
+
 # Same predicates and ordering as VolumeStore, ProgressionStore and LoggerStore.
 QUERIES = {
     "open workout (absent)": (
@@ -35,7 +39,8 @@ QUERIES = {
         ("exercise-3",),
     ),
     "last finished workout": (
-        'SELECT id, gymID, title, notes, startedAt, finishedAt FROM sessions WHERE finishedAt IS NOT NULL AND notes NOT LIKE ? ORDER BY finishedAt DESC LIMIT 1',
+        # A workout the lifter did: finished, and holding a working set (`Session.isCounted`).
+        'SELECT id, gymID, title, notes, startedAt, finishedAt FROM sessions WHERE (finishedAt IS NOT NULL AND %s) AND notes NOT LIKE ? ORDER BY finishedAt DESC LIMIT 1' % COUNTED,
         ("Imported from %",),
     ),
     "session recovery": (
@@ -108,11 +113,11 @@ def is_unbounded(name, plan):
 # compare them with before it. They are held to the same plan gate: no scan and no sort.
 UPGRADED_QUERIES = {
     "template last done": (
-        'SELECT templateID, max(startedAt) FROM sessions WHERE templateID IS NOT NULL AND finishedAt IS NOT NULL GROUP BY templateID',
+        'SELECT templateID, max(startedAt) FROM sessions WHERE templateID IS NOT NULL AND (finishedAt IS NOT NULL AND %s) GROUP BY templateID' % COUNTED,
         (),
     ),
     "template last session": (
-        'SELECT id FROM sessions WHERE templateID = ? AND finishedAt IS NOT NULL ORDER BY startedAt DESC LIMIT 1',
+        'SELECT id FROM sessions WHERE templateID = ? AND (finishedAt IS NOT NULL AND %s) ORDER BY startedAt DESC LIMIT 1' % COUNTED,
         ("template-1",),
     ),
     "template movements": (

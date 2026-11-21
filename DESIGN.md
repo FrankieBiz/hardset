@@ -255,8 +255,11 @@ Selection rows, the unit switch and pickers stay silent.
   and "Repeat last workout" are `secondary` buttons below them, the second only when a finished workout
   of the lifter's own exists (an imported one does not count). Nothing is claimed that was not measured:
   "beat 4 of 6" appears only when something was compared, and only on the workout it belongs to. The
-  order is the rotation, never a schedule or a streak. At accessibility sizes the buttons stack. It adds
-  no token and no motion.
+  order is the rotation, never a schedule or a streak. A workout counts as done, for the rotation, the
+  last-done day, "last time" and "Repeat last workout", and for Apple Health alike, only when it
+  finished with a working set: an accidental Start finished with nothing logged, or with warm-ups only,
+  leaves all of them where they were. At accessibility sizes the buttons stack. It adds no token and no
+  motion.
 - **Workout editor** (`WorkoutEditorView`, `WorkoutEditorScreen`, `WorkoutDraft`): a name field in
   `entryFieldChrome` and a card per movement. Each card has Sets and, once added, a rep range as large
   44 pt minus and plus controls around a `figure` value, so a plan made sitting down cannot hold a number

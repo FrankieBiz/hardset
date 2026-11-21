@@ -374,6 +374,14 @@ struct WorkoutRootModelTests {
     )
   }
 
+  /// One saved working set in the open workout's first movement: what makes a finished workout one
+  /// the lifter did.
+  @MainActor
+  private func logOneWorkingSet(_ live: SessionCoordinator) {
+    live.exercises[0].slots[0].draft = SetEntryDraft(weightKg: 40, reps: 10)
+    #expect(live.logSet(slotID: live.exercises[0].slots[0].id, inExercise: live.exercises[0].id))
+  }
+
   @MainActor
   private func scratchRest() -> RestPreferences {
     RestPreferences(defaults: UserDefaults(suiteName: UUID().uuidString)!)
@@ -679,6 +687,12 @@ struct WorkoutRootModelTests {
             id: UUID(), sessionID: id, exerciseID: f.press.rawValue, position: 0, plannedSets: 3)
         }
         .execute(db)
+        try LoggedSet.insert {
+          LoggedSet.Draft(
+            sessionID: id, exerciseID: f.press.rawValue, weightKg: 40, reps: 10,
+            completedAt: self.now.addingTimeInterval(began + 60))
+        }
+        .execute(db)
       }
     }
 
@@ -713,6 +727,7 @@ struct WorkoutRootModelTests {
     try f.model.startWorkout(from: upperA, unit: .kilograms, rest: scratchRest())
     // Started but not finished: an open workout is not done, so A is still first.
     #expect(try await upNext() == "Upper A")
+    logOneWorkingSet(try #require(f.model.coordinator))
     clock.withLock { $0 = start.addingTimeInterval(3_600) }
     try #require(f.model.coordinator).finish()
     f.model.clearFinishedWorkout()
@@ -720,6 +735,7 @@ struct WorkoutRootModelTests {
 
     clock.withLock { $0 = start.addingTimeInterval(86_400) }
     try f.model.startWorkout(from: upperB, unit: .kilograms, rest: scratchRest())
+    logOneWorkingSet(try #require(f.model.coordinator))
     clock.withLock { $0 = start.addingTimeInterval(90_000) }
     try #require(f.model.coordinator).finish()
     f.model.clearFinishedWorkout()
@@ -735,6 +751,7 @@ struct WorkoutRootModelTests {
     let f = try await savedWorkoutFixture()
     try f.model.startWorkout(
       from: plan(press: f.press, machine: nil), unit: .kilograms, rest: scratchRest())
+    logOneWorkingSet(try #require(f.model.coordinator))
     try #require(f.model.coordinator).finish()
     f.model.clearFinishedWorkout()
     let csv = "Date,Workout Name,Duration,Exercise Name,Weight,Reps\n2026-11-01 10:00:00,Push,3600,Press,100,8\n"
@@ -747,6 +764,72 @@ struct WorkoutRootModelTests {
     #expect(canRepeat)
     let live = try #require(f.model.coordinator)
     #expect(live.exercises.map(\.exerciseID) == [f.press])
+  }
+
+  /// The same rule the rotation and Apple Health use: a workout the lifter did holds a working set.
+  /// An accidental Start finished empty must not become "Repeat last workout", which would start
+  /// the lifter on nothing in place of the workout they last trained.
+  @Test("Repeat last workout skips a workout finished with no working set")
+  @MainActor
+  func repeatLastWorkoutSkipsAnEmptyOne() async throws {
+    let clock = Mutex(now)
+    let f = try await savedWorkoutFixture(clock: { clock.withLock { $0 } })
+    try f.model.startWorkout(
+      from: plan("Upper A", press: f.press, machine: nil), unit: .kilograms, rest: scratchRest())
+    logOneWorkingSet(try #require(f.model.coordinator))
+    let real = try #require(f.model.coordinator).sessionID
+    clock.withLock { $0 = self.now.addingTimeInterval(3_600) }
+    try #require(f.model.coordinator).finish()
+    f.model.clearFinishedWorkout()
+    // A second Start, finished at once with nothing trained, and a third with warm-ups only.
+    clock.withLock { $0 = self.now.addingTimeInterval(7_200) }
+    try f.model.startWorkout(
+      from: plan("Upper B", press: f.press, machine: nil), unit: .kilograms, rest: scratchRest())
+    clock.withLock { $0 = self.now.addingTimeInterval(7_300) }
+    try #require(f.model.coordinator).finish()
+    f.model.clearFinishedWorkout()
+    clock.withLock { $0 = self.now.addingTimeInterval(8_000) }
+    try f.model.startWorkout(
+      from: plan("Upper C", press: f.press, machine: nil), unit: .kilograms, rest: scratchRest())
+    let warmUpOnly = try #require(f.model.coordinator)
+    warmUpOnly.exercises[0].appendSlot(isWarmup: true)
+    let warmUpIndex = try #require(warmUpOnly.exercises[0].slots.firstIndex { $0.isWarmup })
+    warmUpOnly.exercises[0].slots[warmUpIndex].draft = SetEntryDraft(weightKg: 20, reps: 10)
+    // The warm-up is the only row logged: the planned working rows stay open.
+    #expect(warmUpOnly.logSet(
+      slotID: warmUpOnly.exercises[0].slots[warmUpIndex].id, inExercise: warmUpOnly.exercises[0].id))
+    #expect(warmUpOnly.loggedSetCount == 1)
+    clock.withLock { $0 = self.now.addingTimeInterval(8_100) }
+    try warmUpOnly.finish()
+    f.model.clearFinishedWorkout()
+
+    let canRepeat = try f.logger.hasRepeatableWorkout()
+    try f.model.repeatLastWorkout(unit: .kilograms)
+
+    #expect(canRepeat)
+    let repeatedID = try #require(f.model.coordinator).sessionID.rawValue
+    let title = try await f.database.read { db in
+      try Session.where { $0.id.eq(repeatedID) }.select(\.title).fetchOne(db)
+    }
+    #expect(title == "Upper A")
+    #expect(repeatedID != real.rawValue)
+  }
+
+  @Test("With only a workout finished empty there is nothing to repeat")
+  @MainActor
+  func onlyAnEmptyWorkoutMeansNothingToRepeat() async throws {
+    let f = try await savedWorkoutFixture()
+    try f.model.startWorkout(
+      from: plan(press: f.press, machine: nil), unit: .kilograms, rest: scratchRest())
+    try #require(f.model.coordinator).finish()
+    f.model.clearFinishedWorkout()
+
+    let canRepeat = try f.logger.hasRepeatableWorkout()
+
+    #expect(!canRepeat)
+    #expect(throws: WorkoutRootError.nothingToRepeat) {
+      try f.model.repeatLastWorkout(unit: .kilograms)
+    }
   }
 
   @Test("With only imported workouts there is nothing to repeat")

@@ -654,13 +654,14 @@ public nonisolated struct LoggerStore: Sendable {
   /// so it matches literally. Receipts use the same marker to withhold records and the scorecard.
   private static let importedSessionPattern = "Imported from %"
 
-  /// Whether "Repeat last workout" has anything to repeat: a finished workout of the lifter's own.
-  /// An imported workout never counts: its equipment was not recorded, so repeating its plan
-  /// cannot vouch for the machines today's workout would use.
+  /// Whether "Repeat last workout" has anything to repeat: a finished workout of the lifter's own
+  /// that held a working set (`Session.TableColumns.isCounted`). One finished with nothing logged
+  /// is not a workout to repeat. An imported workout never counts: its equipment was not recorded,
+  /// so repeating its plan cannot vouch for the machines today's workout would use.
   public func hasRepeatableWorkout() throws -> Bool {
     try database.read { db in
       let found = try Session
-        .where { $0.finishedAt.isNot(nil) && !$0.notes.like(Self.importedSessionPattern) }
+        .where { $0.isCounted && !$0.notes.like(Self.importedSessionPattern) }
         .order { $0.finishedAt.desc() }
         .limit(1)
         .select(\.id)
@@ -672,14 +673,15 @@ public nonisolated struct LoggerStore: Sendable {
   /// The plan of the workout finished most recently, for "Repeat last workout".
   ///
   /// Movements keep that workout's order, machines and rep ranges, and `workingSets` is how many
-  /// working sets were logged for each, never counting warm-ups. Nil when no workout is finished.
+  /// working sets were logged for each, never counting warm-ups. Nil when no workout counts: none is
+  /// finished, or those that are held no working set.
   /// Ordered by finish time alone, which is the order of the index that finds it: the last workout
   /// is the one you ended last, and two ending in the same millisecond is not something a lifter can
   /// do, so there is no tie-break to pay a sort for.
   func lastFinishedPlan() throws -> RepeatablePlan? {
     try database.read { db in
       let latest = try Session
-        .where { $0.finishedAt.isNot(nil) && !$0.notes.like(Self.importedSessionPattern) }
+        .where { $0.isCounted && !$0.notes.like(Self.importedSessionPattern) }
         .order { $0.finishedAt.desc() }
         .limit(1)
         .fetchOne(db)
