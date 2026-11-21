@@ -115,6 +115,17 @@
       }
     }
 
+    /// The list with nothing pinned over it, so every row can be seen. The first row not yet written
+    /// is a blank warm-up, which cannot be logged, so the one blue control is the working set behind
+    /// it: the primary action owns the accent wherever its row sits.
+    @Test func liveSessionPrimaryAction() async throws {
+      let tall = CGSize(width: Snapshot.phone.width, height: 1200)
+      try await Snapshot.capture("session-dark-primary", size: tall) { Fixtures.session(pinned: false) }
+      try await Snapshot.capture("session-light-primary", size: tall, style: .light) {
+        Fixtures.session(pinned: false)
+      }
+    }
+
     @Test func setRowsAndCard() async throws {
       try await Snapshot.capture("exercise-card-dark", size: Snapshot.short) {
         ScrollView {
@@ -494,7 +505,9 @@
       return state
     }
 
-    static func session() -> some View {
+    /// - Parameter pinned: Draws the rest bar and a record notice over the list, as the live screen
+    ///   does just after a set; `false` leaves the list clear, so every row can be looked at.
+    static func session(pinned: Bool = true) -> some View {
       SessionView(
         exercises: .constant([
           legPress(),
@@ -507,14 +520,16 @@
         unit: .kilograms,
         title: "Workout",
         gymName: "Metroflex Gym",
-        restState: .running(endsAt: Date().addingTimeInterval(96)),
+        restState: pinned ? .running(endsAt: Date().addingTimeInterval(96)) : .idle,
         restMetadata: RestMetadata(
           exerciseName: "Leg Press", setOrdinal: 1, plannedSets: 3, machineName: "Hammer Strength"
         ),
-        records: [
-          PersonalRecord(kind: .heaviestLoad, weightKg: 105, reps: 8, previousWeightKg: 100),
-          PersonalRecord(kind: .estimatedOneRepMax, weightKg: 128, reps: 8, previousWeightKg: 122),
-        ],
+        records: pinned
+          ? [
+            PersonalRecord(kind: .heaviestLoad, weightKg: 105, reps: 8, previousWeightKg: 100),
+            PersonalRecord(
+              kind: .estimatedOneRepMax, weightKg: 128, reps: 8, previousWeightKg: 122),
+          ] : [],
         onLogSet: { _, _ in },
         onAddExercise: {},
         onSelectMachine: { _ in },

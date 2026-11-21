@@ -100,6 +100,25 @@
       }
     }
 
+    /// A saved set's reps, being corrected: the context line says so, and with the set already
+    /// logged the last field offers Done as the primary action and no "Log set".
+    @Test func correctingASavedSet() async throws {
+      try await Snapshot.capture("kit-keypad-correction-reps-dark", size: Self.padSize) {
+        NumericPad(
+          buffer: .constant(Self.reps), title: "Reps", context: "Leg Press · Set 1 · Correcting",
+          unit: "reps", onDone: {}
+        )
+      }
+      try await Snapshot.capture(
+        "kit-keypad-correction-reps-light", size: Self.padSize, style: .light
+      ) {
+        NumericPad(
+          buffer: .constant(Self.reps), title: "Reps", context: "Leg Press · Set 1 · Correcting",
+          unit: "reps", onDone: {}
+        )
+      }
+    }
+
     @Test func integerFieldWithHiddenDecimalSlot() async throws {
       try await Snapshot.capture("kit-keypad-integer-dark", size: Self.padSize) {
         NumericPad(
