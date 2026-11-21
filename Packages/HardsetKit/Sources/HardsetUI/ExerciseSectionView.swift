@@ -16,6 +16,7 @@ public struct ExerciseSectionView: View {
   private let onLogSet: (SetSlot) -> Void
   private let onStartRest: ((Duration) -> Void)?
   private let onSelectMachine: (() -> Void)?
+  private let machineNeedsGym: Bool
   private let onShowHistory: (() -> Void)?
   private let lastRest: Duration?
   private let accentedSlotID: UUID?
@@ -38,8 +39,13 @@ public struct ExerciseSectionView: View {
   /// Rest durations offered on every card, written the way the rest bar writes time.
   static let restChoices: [Duration] = [.seconds(60), .seconds(90), .seconds(120), .seconds(180)]
 
-  /// - Parameter onSelectMachine: Opens the machine picker. Passing `nil` hides the chip, which is
-  ///   correct when no gym is known — an affordance that opens an empty list is worse than none.
+  /// - Parameter onSelectMachine: Opens the machine picker, or, with `machineNeedsGym`, the choice of
+  ///   a gym. Passing `nil` hides the chip, which is right only when the card can lead nowhere: an
+  ///   affordance that opens an empty list is worse than none.
+  /// - Parameter machineNeedsGym: The workout has no gym, so there are no machines to list yet.
+  ///   The chip is still drawn: it says no machine is recorded and that a gym comes first, and
+  ///   `onSelectMachine` leads to choosing one. Without it a lifter who left the gym blank at setup
+  ///   never meets the app's per-machine history until the receipt says no machine was recorded.
   /// - Parameter onShowHistory: Opens this movement's load history. `nil` leaves the name inert.
   /// - Parameter lastRest: The rest the lifter last chose for this movement. When known, it is
   ///   offered as one tap; it is never a default the app made up, so with none the card asks.
@@ -62,6 +68,7 @@ public struct ExerciseSectionView: View {
     onLogSet: @escaping (SetSlot) -> Void,
     onStartRest: ((Duration) -> Void)? = nil,
     onSelectMachine: (() -> Void)? = nil,
+    machineNeedsGym: Bool = false,
     onShowHistory: (() -> Void)? = nil,
     lastRest: Duration? = nil,
     decidesAccent: Bool = false,
@@ -83,6 +90,7 @@ public struct ExerciseSectionView: View {
     self.onLogSet = onLogSet
     self.onStartRest = onStartRest
     self.onSelectMachine = onSelectMachine
+    self.machineNeedsGym = machineNeedsGym
     self.onShowHistory = onShowHistory
     self.lastRest = lastRest
     self.decidesAccent = decidesAccent
@@ -371,6 +379,12 @@ public struct ExerciseSectionView: View {
           .hardsetText(.caption)
           .foregroundStyle(Tokens.Color.chalkDim)
           .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 1)
+      } else if machineNeedsGym, state.machineName == nil {
+        // Why tapping goes to a gym and not a list of machines: machines belong to a gym.
+        Text("Set a gym first")
+          .hardsetText(.caption)
+          .foregroundStyle(Tokens.Color.chalkDim)
+          .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 1)
       }
       Image(systemName: "chevron.down")
         .hardsetText(.caption, weight: .semibold)
@@ -381,7 +395,11 @@ public struct ExerciseSectionView: View {
   }
 
   private var machineChipLabel: String {
-    guard let name = state.machineName else { return "Choose machine. No machine recorded." }
+    guard let name = state.machineName else {
+      return machineNeedsGym
+        ? "Choose machine. No machine recorded. Set a gym first."
+        : "Choose machine. No machine recorded."
+    }
     guard let increment = state.machineIncrementKg else { return "\(name). Change machine." }
     let step = "\(LoadFigure.text(unit.fromKilograms(increment))) \(unit.abbreviation) steps"
     return "\(name), \(step). Change machine."

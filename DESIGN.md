@@ -285,7 +285,10 @@ Selection rows, the unit switch and pickers stay silent.
   line, "Add set", "Warm-up", rest, "Add movement", load-step and rest-bar controls are inline
   controls, and `HeaderIconStyle.bare` is the same idea for the header's glyphs. An unset gym or
   machine ("Set gym", "Choose machine") reads in full `chalk`, an invitation; a set one reads in
-  `chalkDim` with a chevron.
+  `chalkDim` with a chevron. With no gym there are no machines to list, but the card's machine line
+  is still drawn: "Choose machine" with "Set a gym first" in `chalkDim` beside it, spoken as "No
+  machine recorded", and a tap opens the choice of gym. Hiding it would leave a lifter who left the
+  gym blank at setup never meeting per-machine history until the receipt says none was recorded.
 - **Tags** (`HardsetTag`): the public name of the non-interactive label on a row (modality,
   "Recent", "Custom"). Flat `steelRaised`, no outline, no edge light. It stays on one line at
   ordinary sizes and wraps at accessibility sizes, never truncating the word it carries.

@@ -84,7 +84,8 @@
       unit: WeightUnit = .kilograms,
       history: Bool = true,
       rest: Rest = .absent,
-      menu: Bool = false
+      menu: Bool = false,
+      needsGym: Bool = false
     ) -> some View {
       let showHistory: (() -> Void)? = history ? {} : nil
       let startRest: ((Duration) -> Void)? = rest == .absent ? nil : { _ in }
@@ -98,6 +99,7 @@
           onLogSet: { _ in },
           onStartRest: startRest,
           onSelectMachine: {},
+          machineNeedsGym: needsGym,
           onShowHistory: showHistory,
           lastRest: lastRest,
           onMoveDown: moveDown,
@@ -138,6 +140,25 @@
       }
       try await Snapshot.capture("kit-exercise-chip-step-pounds-dark", size: Self.size) {
         Self.card(Self.state(), unit: .pounds)
+      }
+    }
+
+    /// A workout with no gym: the chip is still drawn, says no machine is recorded and that a gym
+    /// comes first, so a lifter who left the gym blank at setup still meets machines.
+    @Test func machineChipWithNoGym() async throws {
+      try await Snapshot.capture("kit-exercise-chip-needs-gym-dark", size: Self.size) {
+        Self.card(Self.state(machine: .unset), needsGym: true)
+      }
+      try await Snapshot.capture(
+        "kit-exercise-chip-needs-gym-light", size: Self.size, style: .light
+      ) {
+        Self.card(Self.state(machine: .unset), needsGym: true)
+      }
+      try await Snapshot.capture(
+        "kit-exercise-chip-needs-gym-dark-ax3", size: CGSize(width: 402, height: 3200),
+        typeSize: .accessibility3
+      ) {
+        Self.card(Self.state(machine: .unset), needsGym: true)
       }
     }
 
