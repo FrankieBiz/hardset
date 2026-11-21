@@ -53,14 +53,15 @@ public nonisolated struct ReceiptStore: Sendable {
         let records = imported || unknownMachine || !establishedKeys.contains(key) ? [] : PersonalRecordDetector.records(
           for: .init(weightKg: set.weightKg, reps: set.reps, isWarmup: set.isWarmup),
           history: history[key] ?? [], increment: machine?.stackIncrementKg,
-          estimatesOneRepMax: (modalities[set.exerciseID] ?? nil)?.estimatesOneRepMax ?? true)
+          estimatesOneRepMax: (modalities[set.exerciseID] ?? nil)?.estimatesOneRepMax ?? false)
         let machineName = machine.map { [$0.brand, $0.name].filter { !$0.isEmpty }.joined(separator: " ") }
         lines.append(.init(id: SetID(rawValue: set.id), exerciseID: ExerciseID(rawValue: set.exerciseID),
           exerciseName: names[set.exerciseID] ?? "Unknown movement",
           equipment: unknownMachine
             ? .unrecorded
             : WorkoutReceipt.Equipment(machineName: machineName, modality: modalities[set.exerciseID] ?? nil),
-          weightKg: set.weightKg, reps: set.reps, isWarmup: set.isWarmup, records: records, isImported: imported))
+          weightKg: set.weightKg, reps: set.reps, isWarmup: set.isWarmup, records: records, isImported: imported,
+          loadAssumption: (modalities[set.exerciseID] ?? nil) == nil ? ExerciseModality.unknownLoadAssumption : nil))
         if !set.isWarmup {
           history[key, default: []].append(.init(weightKg: set.weightKg, reps: set.reps, completedAt: set.completedAt))
         }
@@ -130,7 +131,8 @@ public nonisolated struct ReceiptStore: Sendable {
           row.repRangeLower.flatMap { lower in row.repRangeUpper.flatMap { RepRange(lower: lower, upper: $0) } }
         },
         setRecord: recorded.contains(movement),
-        estimatesOneRepMax: (modalities[movement.exerciseID.rawValue] ?? nil)?.estimatesOneRepMax ?? true
+        estimatesOneRepMax: (modalities[movement.exerciseID.rawValue] ?? nil)?.estimatesOneRepMax ?? false,
+        assumesAddedLoad: (modalities[movement.exerciseID.rawValue] ?? nil) == nil
       )
     }
     let card = WorkoutScorecard.make(inputs)

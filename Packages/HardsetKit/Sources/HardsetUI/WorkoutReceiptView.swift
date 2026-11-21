@@ -111,6 +111,12 @@ public struct WorkoutReceiptView: View {
             .fixedSize(horizontal: false, vertical: true)
           // An estimate never stands without its certainty. Not a control: the receipt is rendered
           // into the shared image, so the capsule is the badge's face and does nothing when tapped.
+          if let assumption = card.biggestGain?.loadAssumption {
+            Text(assumption)
+              .font(Tokens.Text.provenance)
+              .foregroundStyle(Tokens.Color.chalkDim)
+              .fixedSize(horizontal: false, vertical: true)
+          }
           if let certainty = card.biggestGain?.certainty {
             CertaintyCapsule(level: MethodologySheet.level(for: certainty), isInteractive: false)
           }
@@ -191,6 +197,12 @@ public struct WorkoutReceiptView: View {
               .foregroundStyle(Tokens.Color.chalkDim)
           }
           Spacer(minLength: 0)
+        }
+        if let assumption = line.loadAssumption {
+          Text("Low confidence · " + assumption)
+            .font(Tokens.Text.provenance)
+            .foregroundStyle(Tokens.Color.chalkDim)
+            .fixedSize(horizontal: false, vertical: true)
         }
         ForEach(line.records) { record in
           // The trophy, as the live session marks records. The seal is the high-certainty

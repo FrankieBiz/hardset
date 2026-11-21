@@ -11,6 +11,7 @@ public struct ScorecardInput: Hashable, Sendable {
   public let repRange: RepRange?
   public let setRecord: Bool
   public let estimatesOneRepMax: Bool
+  public let assumesAddedLoad: Bool
 
   public init(
     key: ProgressionKey,
@@ -19,7 +20,8 @@ public struct ScorecardInput: Hashable, Sendable {
     previousSets: [PriorSetRecord],
     repRange: RepRange? = nil,
     setRecord: Bool = false,
-    estimatesOneRepMax: Bool = true
+    estimatesOneRepMax: Bool = true,
+    assumesAddedLoad: Bool = false
   ) {
     self.key = key
     self.exerciseName = exerciseName
@@ -28,6 +30,7 @@ public struct ScorecardInput: Hashable, Sendable {
     self.repRange = repRange
     self.setRecord = setRecord
     self.estimatesOneRepMax = estimatesOneRepMax
+    self.assumesAddedLoad = assumesAddedLoad
   }
 }
 
@@ -77,16 +80,18 @@ public struct WorkoutScorecard: Hashable, Sendable {
     /// How far to trust the figure. An estimated gain is a ratio of two estimates, so it carries the
     /// weaker of their certainties; a gain in the heaviest load is measured, and has none.
     public let certainty: Certainty?
+    public let loadAssumption: String?
 
     public init(
       key: ProgressionKey, exerciseName: String, fraction: Double, metric: TrendMetric,
-      certainty: Certainty? = nil
+      certainty: Certainty? = nil, loadAssumption: String? = nil
     ) {
       self.key = key
       self.exerciseName = exerciseName
       self.fraction = fraction
       self.metric = metric
       self.certainty = certainty
+      self.loadAssumption = loadAssumption
     }
   }
 
@@ -109,7 +114,7 @@ public struct WorkoutScorecard: Hashable, Sendable {
     var beaten = 0
     var compared = 0
     var recordMovements = 0
-    var biggestGain: Gain?
+    var gains: [Gain] = []
 
     for input in inputs {
       guard !input.currentSets.isEmpty else { continue }
@@ -155,19 +160,20 @@ public struct WorkoutScorecard: Hashable, Sendable {
       }
       entries.append(Entry(key: input.key, exerciseName: input.exerciseName, outcome: outcome))
 
-      if let gain = gain(for: input),
-        biggestGain == nil || gain.fraction > biggestGain!.fraction
-      {
-        biggestGain = gain
-      }
+      if let gain = gain(for: input) { gains.append(gain) }
     }
 
+    // Keep added-load ratios in their own comparison group. Preserve the existing ranking of
+    // known-load metrics; unknown-load gains are a fallback, grouped by added load or reps.
+    let knownGains = gains.filter { $0.loadAssumption == nil }
+    let addedMetric: TrendMetric = gains.contains { $0.metric == .addedLoad } ? .addedLoad : .repsAtTopLoad
+    let comparableGains = knownGains.isEmpty ? gains.filter { $0.metric == addedMetric } : knownGains
     return WorkoutScorecard(
       entries: entries,
       beatenCount: beaten,
       comparedCount: compared,
       recordMovementCount: recordMovements,
-      biggestGain: biggestGain
+      biggestGain: comparableGains.max { $0.fraction < $1.fraction }
     )
   }
 
@@ -179,7 +185,7 @@ public struct WorkoutScorecard: Hashable, Sendable {
     let current: Double
     let previous: Double
     var certainty: Certainty?
-    if input.estimatesOneRepMax,
+    if input.estimatesOneRepMax, !input.assumesAddedLoad,
       let currentEstimate = bestEstimate(input.currentSets),
       let previousEstimate = bestEstimate(input.previousSets),
       let currentValue = currentEstimate.value,
@@ -190,10 +196,17 @@ public struct WorkoutScorecard: Hashable, Sendable {
       current = currentValue
       previous = previousValue
       certainty = Certainty.combine([currentEstimate.certainty, previousEstimate.certainty])
+    } else if input.assumesAddedLoad, currentHeaviest == 0, previousHeaviest == 0 {
+      metric = .repsAtTopLoad
+      current = Double(input.currentSets.map(\.reps).max() ?? 0)
+      previous = Double(input.previousSets.map(\.reps).max() ?? 0)
+      guard previous > 0 else { return nil }
+      certainty = .low
     } else {
-      // A bodyweight movement has no heaviest load to compare.
+      // A load percentage requires a nonzero baseline.
       guard previousHeaviest > 0 else { return nil }
-      metric = .heaviestLoad
+      metric = input.assumesAddedLoad ? .addedLoad : .heaviestLoad
+      certainty = input.assumesAddedLoad ? .low : nil
       current = currentHeaviest
       previous = previousHeaviest
     }
@@ -202,7 +215,8 @@ public struct WorkoutScorecard: Hashable, Sendable {
     guard fraction > 0 else { return nil }
     return Gain(
       key: input.key, exerciseName: input.exerciseName, fraction: fraction, metric: metric,
-      certainty: certainty
+      certainty: certainty,
+      loadAssumption: input.assumesAddedLoad ? ExerciseModality.unknownLoadAssumption : nil
     )
   }
 

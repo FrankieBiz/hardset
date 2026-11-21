@@ -115,4 +115,26 @@ struct WorkoutScorecardTests {
     let scorecard = WorkoutScorecard.make([empty, firstTime])
     #expect(scorecard.entries.map(\.exerciseName) == ["First"])
   }
+  @Test("An added-load percentage never outranks an estimated-max percentage")
+  func addedLoadAndEstimatedGainsStaySeparate() {
+    let bench = input(ProgressionKey(exerciseID: ExerciseID()), "Bench",
+      current: [(110, 5)], previous: [(100, 5)])
+    let dip = ScorecardInput(key: ProgressionKey(exerciseID: ExerciseID()), exerciseName: "Dip",
+      currentSets: [set(30, 5)], previousSets: [set(20, 5)],
+      estimatesOneRepMax: false, assumesAddedLoad: true)
+    let card = WorkoutScorecard.make([dip, bench])
+    #expect(card.biggestGain?.key == bench.key)
+    let added = WorkoutScorecard.make([dip])
+    #expect(added.biggestGain?.metric == .addedLoad)
+    #expect(added.biggestGain?.certainty == .low)
+    #expect(ScorecardCopy.gainShareText(added)?.contains("body's own load is unknown") == true)
+    let pull = ScorecardInput(key: ProgressionKey(exerciseID: ExerciseID()), exerciseName: "Pull-up",
+      currentSets: [set(0, 13)], previousSets: [set(0, 8)],
+      estimatesOneRepMax: false, assumesAddedLoad: true)
+    let reps = WorkoutScorecard.make([pull])
+    #expect(reps.biggestGain?.metric == .repsAtTopLoad)
+    #expect(reps.biggestGain?.certainty == .low)
+    #expect(ScorecardCopy.gainShareText(reps)?.contains("body's own load is unknown") == true)
+  }
+
 }

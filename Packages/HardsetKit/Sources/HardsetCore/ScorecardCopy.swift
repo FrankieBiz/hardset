@@ -30,7 +30,8 @@ public enum ScorecardCopy {
   public static func gainShareText(_ card: WorkoutScorecard) -> String? {
     guard let line = gainText(card) else { return nil }
     guard let certainty = card.biggestGain?.certainty else { return line }
-    return "\(line) · \(confidenceWords(certainty))"
+    let assumption = card.biggestGain?.loadAssumption.map { " · " + $0 } ?? ""
+    return "\(line) · \(confidenceWords(certainty))\(assumption)"
   }
 
   /// Held in step with `CertaintyLevel.label` in HardsetUI, which Core cannot see.

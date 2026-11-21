@@ -6,6 +6,8 @@ public enum TrendMetric: String, Hashable, Sendable {
   case estimatedMax
   /// The heaviest load in each session, used when no estimate is possible.
   case heaviestLoad
+  /// Logged added load when the movement's modality is unknown. Never ranked with estimated max.
+  case addedLoad
   /// The most reps at the session's heaviest load, used for bodyweight work.
   case repsAtTopLoad
 }
@@ -26,8 +28,10 @@ public struct MovementTrend: Hashable, Sendable, Identifiable {
   public let latestDate: Date
   /// How far to trust the displayed estimate/change. A six-week ratio carries the weaker of
   /// its two estimates, using the same combination rule as the scorecard. Without a comparison
-  /// window this is the latest estimate's certainty. Non-estimate metrics have none.
+  /// window this is the latest estimate's certainty. Unknown-modality metrics are low; other
+  /// observed metrics have none.
   public let certainty: Certainty?
+  public let loadAssumption: String?
 
   public var id: ProgressionKey { key }
 
@@ -39,7 +43,8 @@ public struct MovementTrend: Hashable, Sendable, Identifiable {
     sessionCount: Int,
     stalledSessions: Int?,
     latestDate: Date,
-    certainty: Certainty? = nil
+    certainty: Certainty? = nil,
+    loadAssumption: String? = nil
   ) {
     self.key = key
     self.metric = metric
@@ -49,6 +54,7 @@ public struct MovementTrend: Hashable, Sendable, Identifiable {
     self.stalledSessions = stalledSessions
     self.latestDate = latestDate
     self.certainty = certainty
+    self.loadAssumption = loadAssumption
   }
 }
 
@@ -64,13 +70,16 @@ public enum ProgressTrendAnalyzer {
     key: ProgressionKey,
     samples: [ProgressionSample],
     incrementKg: Double?,
-    estimatesOneRepMax: Bool
+    estimatesOneRepMax: Bool,
+    assumesAddedLoad: Bool = false
   ) -> MovementTrend? {
     let sessions = sessions(from: samples)
     guard let latestSession = sessions.last else { return nil }
 
     let metric: TrendMetric
-    if !estimatesOneRepMax {
+    if assumesAddedLoad {
+      metric = latestSession.samples.contains { $0.weightKg > 0 } ? .addedLoad : .repsAtTopLoad
+    } else if !estimatesOneRepMax {
       metric = .repsAtTopLoad
     } else if bestEstimate(in: latestSession.samples) != nil {
       metric = .estimatedMax
@@ -115,7 +124,7 @@ public enum ProgressTrendAnalyzer {
       let recordSessions = recordSessionIDs(
         samples: samples,
         incrementKg: incrementKg,
-        estimatesOneRepMax: estimatesOneRepMax,
+        estimatesOneRepMax: estimatesOneRepMax && !assumesAddedLoad,
         lastSessions: stallRun
       )
       let setARecord = sessions.suffix(stallRun).contains { recordSessions.contains($0.id) }
@@ -130,9 +139,10 @@ public enum ProgressTrendAnalyzer {
       sessionCount: sessions.count,
       stalledSessions: stalled,
       latestDate: latestSession.date,
-      certainty: metric == .estimatedMax
+      certainty: assumesAddedLoad ? .low : metric == .estimatedMax
         ? Certainty.combine([latest.certainty, change == nil ? nil : base?.certainty].compactMap { $0 })
-        : nil
+        : nil,
+      loadAssumption: assumesAddedLoad ? ExerciseModality.unknownLoadAssumption : nil
     )
   }
 
@@ -179,10 +189,13 @@ public enum ProgressTrendAnalyzer {
   /// alongside percentages of estimated max. Other metrics remain visible in body-part sections.
   public static let mostImprovedMetric: TrendMetric = .estimatedMax
 
-  /// The three largest positive six-week estimated-max gains, largest first.
-  public static func mostImproved(_ trends: [MovementTrend], limit: Int = 3) -> [MovementTrend] {
-    trends
-      .filter { $0.metric == mostImprovedMetric && ($0.sixWeekChange ?? 0) > 0 }
+  /// The largest positive six-week gains within one metric, largest first.
+  public static func mostImproved(
+    _ trends: [MovementTrend], metric: TrendMetric = mostImprovedMetric, limit: Int = 3
+  ) -> [MovementTrend] {
+    guard metric == .estimatedMax || metric == .addedLoad else { return [] }
+    return trends
+      .filter { $0.metric == metric && ($0.sixWeekChange ?? 0) > 0 }
       .sorted { lhs, rhs in
         let left = lhs.sixWeekChange ?? 0
         let right = rhs.sixWeekChange ?? 0
@@ -242,7 +255,7 @@ public enum ProgressTrendAnalyzer {
     switch metric {
     case .estimatedMax:
       return bestEstimate(in: samples)
-    case .heaviestLoad:
+    case .heaviestLoad, .addedLoad:
       return samples.map(\.weightKg).max()
     case .repsAtTopLoad:
       guard let heaviest = samples.map(\.weightKg).max() else { return nil }

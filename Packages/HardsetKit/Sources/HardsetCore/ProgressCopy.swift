@@ -19,6 +19,7 @@ public enum ProgressCopy {
     switch metric {
     case .estimatedMax: "Estimated max"
     case .heaviestLoad: "Heaviest weight"
+    case .addedLoad: "Added load"
     case .repsAtTopLoad: "Reps at the top weight"
     }
   }
@@ -50,8 +51,11 @@ public enum ProgressCopy {
   /// A row as VoiceOver reads it: the movement and machine, the change, and any stall.
   public static func spokenRow(_ row: ProgressBoard.Row) -> String {
     var sentences = [[row.exerciseName, row.machineName].compactMap { $0 }.joined(separator: ", ")]
-    sentences.append(changeText(for: row.trend) ?? notEnoughHistory)
+    let noHistory = row.trend.loadAssumption == nil
+      ? notEnoughHistory : "\(metricName(row.trend.metric)) · \(notEnoughHistory)"
+    sentences.append(changeText(for: row.trend) ?? noHistory)
+    if let assumption = row.trend.loadAssumption { sentences.append(assumption) }
     if let stalled = stalledText(for: row.trend) { sentences.append(stalled) }
-    return sentences.map { $0 + "." }.joined(separator: " ")
+    return sentences.map { $0.hasSuffix(".") ? $0 : $0 + "." }.joined(separator: " ")
   }
 }

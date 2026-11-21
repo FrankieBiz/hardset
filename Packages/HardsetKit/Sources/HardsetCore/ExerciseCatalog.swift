@@ -74,8 +74,11 @@ public enum ExerciseModality: String, Sendable, CaseIterable, Codable {
   /// A bodyweight set records added load only, and body mass is not recorded with each set, so
   /// an estimate from the added load measures nothing: across rep counts it can rise while the
   /// load actually moved falls. Such estimates are unevaluated rather than guessed. An unknown
-  /// modality is not assumed to be bodyweight.
+  /// modality must also withhold estimates until the load basis is known.
   public var estimatesOneRepMax: Bool { self != .bodyweight }
+
+  public static let unknownLoadAssumption =
+    "Logged load is assumed to be added load; the body's own load is unknown."
 }
 
 /// The v1 seed catalogue.
