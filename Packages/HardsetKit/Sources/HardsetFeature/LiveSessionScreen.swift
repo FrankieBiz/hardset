@@ -174,6 +174,11 @@ public struct LiveSessionScreen: View {
         begin(.undoSet)
         return noteOutcome(coordinator.undoSet(slotID: slot.id, inExercise: exerciseStateID))
       },
+      onCorrectSet: { exerciseStateID, slot, draft in
+        begin(.correctSet)
+        return noteOutcome(
+          coordinator.correctSet(slotID: slot.id, inExercise: exerciseStateID, to: draft))
+      },
       onRemoveSet: { exerciseStateID, slot in
         begin(.removeSet)
         noteOutcome(coordinator.removeSlot(slotID: slot.id, inExercise: exerciseStateID))

@@ -47,6 +47,7 @@ public struct SetRowView: View {
   private let isLogged: Bool
   private let isNext: Bool
   private let accentsNext: Bool
+  private let allowsCorrection: Bool
   private let isSeparated: Bool
   private let showsInlineLabels: Bool
   private let unit: WeightUnit
@@ -69,6 +70,9 @@ public struct SetRowView: View {
   ///   the host passes `false` for every movement but the one holding it; the other next rows draw
   ///   as ready. It changes colour only: `isNext` still drives the spoken "next to log", the bare
   ///   Voice Control command and the −/+ steps.
+  /// - Parameter allowsCorrection: Lets a saved row's figures open the keypad, so a wrong weight or
+  ///   rep count is corrected where it is written. The host decides what a correction does and
+  ///   whether it can; without it a saved figure is plain text, as it was.
   /// - Parameter isSeparated: Draws a hairline across the top of the row, inset from the leading
   ///   edge, because it meets another row there. The first row of a movement passes `false`, so a
   ///   hairline exists only where two rows meet.
@@ -97,6 +101,7 @@ public struct SetRowView: View {
     isLogged: Bool = false,
     isNext: Bool = false,
     accentsNext: Bool = true,
+    allowsCorrection: Bool = false,
     isSeparated: Bool = false,
     showsInlineLabels: Bool = true,
     unit: WeightUnit,
@@ -118,6 +123,7 @@ public struct SetRowView: View {
     self.isLogged = isLogged
     self.isNext = isNext
     self.accentsNext = accentsNext
+    self.allowsCorrection = allowsCorrection
     self.isSeparated = isSeparated
     self.showsInlineLabels = showsInlineLabels
     self.unit = unit
@@ -136,6 +142,12 @@ public struct SetRowView: View {
 
   /// True at accessibility text sizes, where five columns cannot share one line legibly.
   private var isStacked: Bool { dynamicTypeSize.isAccessibilitySize }
+
+  /// Whether the figures take a tap. An unsaved row's always do, with a host to open the keypad; a
+  /// saved row's do only where the host can write a correction.
+  private var canEditFigures: Bool {
+    onBeginEditing != nil && (!isLogged || allowsCorrection)
+  }
 
   public var body: some View {
     Group {
@@ -197,6 +209,10 @@ public struct SetRowView: View {
     .accessibilityActions {
       if isLogged {
         if let onEdit { Button("Edit set", action: onEdit) }
+        if canEditFigures, let onBeginEditing {
+          Button("Edit weight") { onBeginEditing(.weight) }
+          Button("Edit reps") { onBeginEditing(.reps) }
+        }
         if let onUndo { Button("Undo log", action: onUndo) }
       } else {
         Button("Log set") { if draft.isLoggable { onLog() } }
@@ -276,7 +292,7 @@ public struct SetRowView: View {
     }
     .frame(minHeight: Tokens.loggerTapTarget)
     .contentShape(Rectangle())
-    if isLogged || onBeginEditing == nil {
+    if !canEditFigures {
       columns
     } else {
       Button {
@@ -481,7 +497,7 @@ public struct SetRowView: View {
     _ field: SetRowField, suffix: String?, alignment: Alignment = .center
   ) -> some View {
     let isEditing = editingField == field
-    let isReadOnly = isLogged || onBeginEditing == nil
+    let isReadOnly = !canEditFigures
     let shown: SetRowFieldState = isEditing ? .editing : (isReadOnly ? .readOnly : .rest)
     return Button {
       onBeginEditing?(field)

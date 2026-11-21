@@ -489,8 +489,18 @@ Selection rows, the unit switch and pickers stay silent.
   not blink. Each field's hit region is the logger's 56 pt tall and its whole half of the row wide,
   and the ordinal and last time are a button into the weight, so no part of the row left of the
   check is dead. Increase Contrast and Button Shapes bring the `controlEdge` outline back around an
-  editable field, so a boundary appears exactly where it was asked for; a saved figure is never
-  outlined, because it is a fact and not a control.
+  editable figure, so a boundary appears exactly where it was asked for.
+  A saved figure is tappable too, and does what a figure that looks tappable should: it opens the
+  keypad to correct it. The set stays saved while it is corrected: the figure on screen is the saved
+  one until the correction has been written, the keypad says "Correcting" beside the set's name, and
+  its last field offers Done and no "Log set", because there is nothing left to log. The correction
+  is written when the keypad leaves that figure (Next, Done, another figure, the sheet going away),
+  through the coordinator, which persists first and changes the row only after the write succeeds;
+  a failed write leaves the saved figures and shows the failure. A field left empty, or typed back to
+  what it held, writes nothing. A correction keeps the set's machine, its place and its save time,
+  starts no rest and claims no record. A finished workout's sets are never edited; its corrections
+  are removals, in the receipt. "Edit set" in the long-press menu and for VoiceOver does the same
+  thing as tapping the weight, and "Undo log" still takes a set back.
 - **Set log control**: four states, never confused, each one SF Symbol of one weight and one size,
   about 30 pt inside the logger's whole 56 pt region: incomplete is an empty square in `controlEdge`
   (faint, and above the 3:1 floor for a graphic), ready is a checked square in `chalkDim`, next up is
@@ -517,9 +527,9 @@ Selection rows, the unit switch and pickers stay silent.
   - The set log control draws its own fill and shape: the log control (ready and next up) dims and
     scales like other self-drawn controls; incomplete and logged show no press. Next up keeps its
     `plateBlueFill` while pressed.
-  - Static surfaces take no press: tags, the empty-state socket, entry fields, banners, cards, a
-    logged row's values and the rest bar's panel. Tags never take a control's face, so a tag never
-    imitates a control.
+  - Static surfaces take no press: tags, the empty-state socket, entry fields, banners, cards, the
+    rest bar's panel, and a saved row's figures where the screen cannot correct a set. Tags never
+    take a control's face, so a tag never imitates a control.
   - Reduce Motion drops the scale and keeps only the fill or opacity change. Disabled controls are
     never dimmed by a press style, so saved rows and inert titles keep full contrast.
 - **Target line** (set row): when a movement has a rep range and history on this exact machine, an

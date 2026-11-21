@@ -45,6 +45,7 @@ public struct SessionView: View {
   private let onShowSettings: (() -> Void)?
   private let onChangeGym: (() -> Void)?
   private let onUndoSet: ((UUID, SetSlot) -> Bool)?
+  private let onCorrectSet: ((UUID, SetSlot, SetEntryDraft) -> Bool)?
   private let onRemoveSet: ((UUID, SetSlot) -> Void)?
   private let onRemoveExercise: ((UUID) -> Void)?
   private let onMoveExercise: ((UUID, Int) -> Void)?
@@ -116,6 +117,9 @@ public struct SessionView: View {
   /// - Parameter onShowSettings: Puts a settings button in the header.
   /// - Parameter onChangeGym: Makes the header's gym a chip that sets or changes it.
   /// - Parameter onUndoSet: Returns a logged set to unlogged. `true` when it was undone.
+  /// - Parameter onCorrectSet: Writes a corrected weight and reps to a saved set, and is `true` when
+  ///   it was saved. With it, a saved figure opens the keypad, and what is typed is written when the
+  ///   keypad leaves that figure; without it saved figures are plain text.
   /// - Parameter onFinishAt: Finishes at a given instant; offered with the last set's time when
   ///   the workout is stale.
   /// - Parameter onDiscard: Deletes the workout. Always behind a confirmation.
@@ -148,6 +152,7 @@ public struct SessionView: View {
     onShowSettings: (() -> Void)? = nil,
     onChangeGym: (() -> Void)? = nil,
     onUndoSet: ((UUID, SetSlot) -> Bool)? = nil,
+    onCorrectSet: ((UUID, SetSlot, SetEntryDraft) -> Bool)? = nil,
     onRemoveSet: ((UUID, SetSlot) -> Void)? = nil,
     onRemoveExercise: ((UUID) -> Void)? = nil,
     onMoveExercise: ((UUID, Int) -> Void)? = nil,
@@ -185,6 +190,7 @@ public struct SessionView: View {
     self.onShowSettings = onShowSettings
     self.onChangeGym = onChangeGym
     self.onUndoSet = onUndoSet
+    self.onCorrectSet = onCorrectSet
     self.onRemoveSet = onRemoveSet
     self.onRemoveExercise = onRemoveExercise
     self.onMoveExercise = onMoveExercise
@@ -311,6 +317,12 @@ public struct SessionView: View {
     // new value reseeds it, so the keypad never shows a number the row does not hold.
     .onChange(of: targetedSlot) { _, slot in
       guard let target = keypad else { return }
+      // A saved figure's keystrokes live in the keypad's buffer until they are written, so the
+      // row is not reseeded from under them. Only the row going away, or being undone, ends it.
+      if target.isCorrection {
+        if slot?.isLogged != true { keypad = nil }
+        return
+      }
       guard let slot, !slot.isLogged else {
         keypad = nil
         return
@@ -536,6 +548,7 @@ public struct SessionView: View {
       // The one accent on the screen is the workout's next set: the first movement with a set
       // still to log. Every other movement's next row is drawn as ready, in chalk.
       accentsNext: id == exercises.first(where: { $0.nextUnloggedSlotID != nil })?.id,
+      allowsCorrection: onCorrectSet != nil,
       editingSlotID: editsThisCard ? keypad?.slotID : nil,
       editingField: editsThisCard ? keypad?.field : nil,
       editingText: editsThisCard ? keypadBuffer.displayText : nil,
@@ -555,9 +568,15 @@ public struct SessionView: View {
     )
   }
 
-  /// Editing a saved set is undoing it and logging it again: the numbers stay in the row, the
-  /// keypad opens on them, and the set is saved anew only when the lifter logs it.
+  /// "Edit set" on a saved row. Where the screen can write a correction the keypad opens on the
+  /// weight and the set stays saved while it is corrected. Where it cannot, editing is the older
+  /// path: the set is undone, the numbers stay in the row, the keypad opens on them, and the set is
+  /// saved anew only when the lifter logs it.
   private func editSet(_ slot: SetSlot, inExercise id: UUID) {
+    if onCorrectSet != nil {
+      beginEditing(exerciseID: id, slotID: slot.id, field: .weight)
+      return
+    }
     guard let onUndoSet, onUndoSet(id, slot) else { return }
     beginEditing(exerciseID: id, slotID: slot.id, field: .weight)
   }
@@ -1002,7 +1021,7 @@ public struct SessionView: View {
   // MARK: - Keypad
 
   private var isKeypadPresented: Binding<Bool> {
-    Binding(get: { keypad != nil }, set: { if !$0 { keypad = nil } })
+    Binding(get: { keypad != nil }, set: { if !$0 { dismissKeypad() } })
   }
 
   private var targetedSlot: SetSlot? {
@@ -1027,15 +1046,58 @@ public struct SessionView: View {
   /// Puts the keypad on a field, or moves it there if it is already up. A field that already
   /// holds a value is armed to be replaced by the first digit typed, so retyping a prefilled
   /// weight does not mean deleting it first.
+  ///
+  /// A saved row's field opens the keypad as a correction, where the screen can write one. Leaving a
+  /// field that has a correction typed into it writes that correction first, and stays put if the
+  /// write fails, so the lifter sees why before anything else moves.
   private func beginEditing(exerciseID: UUID, slotID: UUID, field: SetRowField) {
-    guard let slot = slot(exerciseID: exerciseID, slotID: slotID), !slot.isLogged else { return }
-    let target = KeypadTarget(exerciseID: exerciseID, slotID: slotID, field: field)
+    guard let opened = slot(exerciseID: exerciseID, slotID: slotID) else { return }
+    let isCorrection = opened.isLogged
+    guard !isCorrection || onCorrectSet != nil else { return }
+    let target = KeypadTarget(
+      exerciseID: exerciseID, slotID: slotID, field: field, isCorrection: isCorrection)
     if keypad != target {
-      keypadBuffer = Self.buffer(for: slot.draft, field: field, unit: unit)
+      guard commitCorrection() else { return }
+      // Read again: writing the correction changed the row it came from.
+      guard let current = slot(exerciseID: exerciseID, slotID: slotID) else { return }
+      keypadBuffer = Self.buffer(for: current.draft, field: field, unit: unit)
     }
     keypadBuffer.replaceOnFirstEntry = !keypadBuffer.isEmpty
     keypad = target
     shownKeypad = target
+  }
+
+  /// Writes the correction typed into a saved figure, if one was typed. `true` when there was
+  /// nothing to write or it was saved; `false` when the write failed, with the error on screen.
+  ///
+  /// There is nothing to write for an unsaved row, whose keystrokes already go to its draft, for a
+  /// field left empty or typed back to what it held, or for figures that are not a complete set.
+  /// Those leave the saved figures as they were. The typed text never touches the row's draft:
+  /// the figure on screen is the saved one until the write has succeeded.
+  @discardableResult
+  private func commitCorrection() -> Bool {
+    guard let target = keypad, target.isCorrection, let onCorrectSet,
+      let saved = slot(exerciseID: target.exerciseID, slotID: target.slotID), saved.isLogged,
+      !Self.buffer(keypadBuffer, agreesWith: saved.draft, field: target.field, unit: unit)
+    else { return true }
+    var corrected = saved.draft
+    switch target.field {
+    case .weight:
+      guard let typed = keypadBuffer.value else { return true }
+      corrected.weightKg = unit.toKilograms(typed)
+    case .reps:
+      guard let typed = keypadBuffer.value.flatMap({ Int(exactly: $0) }) else { return true }
+      corrected.reps = typed
+    }
+    guard corrected.isLoggable else { return true }
+    return onCorrectSet(target.exerciseID, saved, corrected)
+  }
+
+  /// Closes the keypad, writing a correction typed into a saved figure first. A failed write still
+  /// closes it: the row reads what it was saved with and the banner says the correction was not.
+  private func dismissKeypad() {
+    commitCorrection()
+    keypad = nil
   }
 
   /// "Next" on the weight field: the same keypad, retargeted in place. Dismissing and presenting
@@ -1067,7 +1129,7 @@ public struct SessionView: View {
   /// canonical load through a rounded pounds display. There is no `?? 0` here: an empty
   /// buffer stays nil and cannot make a row loggable.
   private func writeKeypadValue() {
-    guard let target = keypad,
+    guard let target = keypad, !target.isCorrection,
       let exerciseIndex = exercises.firstIndex(where: { $0.id == target.exerciseID }),
       let slotIndex = exercises[exerciseIndex].slots.firstIndex(where: { $0.id == target.slotID }),
       !exercises[exerciseIndex].slots[slotIndex].isLogged
@@ -1087,7 +1149,7 @@ public struct SessionView: View {
       return
     }
     afterKeypadCloses = action
-    keypad = nil
+    dismissKeypad()
   }
 
   private func keypadDidDismiss() {
@@ -1103,7 +1165,8 @@ public struct SessionView: View {
     else { return nil }
     let slot = exercise.slots[index]
     let set = slot.isWarmup ? "Warm-up" : "Set \(exercise.slots[..<index].count { !$0.isWarmup } + 1)"
-    return "\(exercise.exerciseName) · \(set)"
+    // A saved set says so, so the lifter knows the digits correct something already written.
+    return "\(exercise.exerciseName) · \(set)" + (target.isCorrection ? " · Correcting" : "")
   }
 
   private var keypadSheet: some View {
@@ -1124,9 +1187,10 @@ public struct SessionView: View {
           context: target.flatMap { keypadContext(for: $0) },
           unit: field == .weight ? unit.abbreviation : "reps",
           restEndsAt: runningRestEnd,
-          onDone: { keypad = nil },
+          onDone: { dismissKeypad() },
           onNext: field == .weight ? { advanceToReps() } : nil,
-          onLog: field == .reps ? { logFromKeypad() } : nil,
+          // A correction has no "Log set": the set is already logged, and Done writes the change.
+          onLog: field == .reps && target?.isCorrection != true ? { logFromKeypad() } : nil,
           canLog: targetedSlot?.draft.isLoggable ?? false
         )
         .tourTarget(.keypad)
@@ -1235,6 +1299,8 @@ private struct KeypadTarget: Hashable {
   let exerciseID: UUID
   let slotID: UUID
   let field: SetRowField
+  /// The keypad is on a saved set's figure, correcting it, and not on an unsaved row's draft.
+  var isCorrection = false
 }
 
 /// A failure message together with the event that produced it, so two failures with the same

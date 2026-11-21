@@ -19,6 +19,7 @@ public struct ExerciseSectionView: View {
   private let onShowHistory: (() -> Void)?
   private let lastRest: Duration?
   private let accentsNext: Bool
+  private let allowsCorrection: Bool
   private let editingSlotID: UUID?
   private let editingField: SetRowField?
   private let editingText: String?
@@ -44,6 +45,8 @@ public struct ExerciseSectionView: View {
   /// - Parameter accentsNext: Draws this card's next-up control in plate blue. The screen's one
   ///   accent belongs to the workout's next set, so a session passes `false` for every card but the
   ///   first with a set still to log; a card shown alone keeps the default.
+  /// - Parameter allowsCorrection: Lets a saved row's figures open the keypad. The session passes
+  ///   `true` when it can write a correction to a saved set.
   /// - Parameter editingSlotID: The row the session's keypad is on, if it is on this card.
   /// - Parameter onMoveUp: Moves the card up the workout. `nil` for the first card, which shows
   ///   the action disabled rather than absent, so the menu keeps its shape.
@@ -58,6 +61,7 @@ public struct ExerciseSectionView: View {
     onShowHistory: (() -> Void)? = nil,
     lastRest: Duration? = nil,
     accentsNext: Bool = true,
+    allowsCorrection: Bool = false,
     editingSlotID: UUID? = nil,
     editingField: SetRowField? = nil,
     editingText: String? = nil,
@@ -77,6 +81,7 @@ public struct ExerciseSectionView: View {
     self.onShowHistory = onShowHistory
     self.lastRest = lastRest
     self.accentsNext = accentsNext
+    self.allowsCorrection = allowsCorrection
     self.editingSlotID = editingSlotID
     self.editingField = editingField
     self.editingText = editingText
@@ -110,6 +115,7 @@ public struct ExerciseSectionView: View {
             isLogged: slot.isLogged,
             isNext: slot.id == state.nextUnloggedSlotID,
             accentsNext: accentsNext,
+            allowsCorrection: allowsCorrection,
             // A hairline only where two rows meet, never above the first.
             isSeparated: slot.id != state.slots.first?.id,
             showsInlineLabels: false,
