@@ -30,4 +30,16 @@ public nonisolated enum DataSafetyCopy {
   public static let beforeExporting =
     "Your history is saved on this iPhone only. Export a JSON or CSV copy to keep it, "
     + "and install new builds over the old app; deleting it first deletes your history."
+
+  /// One quiet line for where a lifter meets their history early, under a finished workout. Settings
+  /// holds the whole warning, but a lifter who never opens Settings would never learn that their
+  /// history has no copy off this phone, so the receipt says the two facts that matter and where to
+  /// act on them.
+  ///
+  /// `nil` unless the build is known to have no iCloud sync: a build that syncs does not say its
+  /// history is on one phone, and a surface that does not know says nothing rather than guess.
+  public static func receiptNote(for sync: SyncStatus?) -> String? {
+    guard sync == .localOnly else { return nil }
+    return "Saved on this iPhone only. Deleting Hardset deletes your history, and Settings can export a copy."
+  }
 }

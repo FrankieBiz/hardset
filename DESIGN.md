@@ -414,6 +414,14 @@ Selection rows, the unit switch and pickers stay silent.
   name in `NameEntrySheet`, builds the plan from the workout's movements in their order with the number
   of working sets logged, never counting warm-ups, and opens the workout editor on it as a new workout.
   Once saved, a neutral `info` banner says where it is. It adds no token and no motion.
+- **Where the history lives** (receipt): a lifter who never opens Settings would never learn that a
+  build with no iCloud sync keeps their history on one phone, so the receipt says it in one quiet
+  line, in `caption` and `chalkDim`, under the share and save buttons: "Saved on this iPhone only.
+  Deleting Hardset deletes your history, and Settings can export a copy." It is not a banner and not a
+  modal. It appears only where it is true (`DataSafetyCopy.receiptNote(for:)` is `nil` for a build that
+  syncs, and for a screen that does not know), it is drawn outside the receipt view so the shared image
+  never carries it, and Settings still holds the whole warning. The launch view hands the sync status
+  down through the environment. It adds no token and no motion.
 - **Selection** (`SelectionRow`, `SelectionCardButtonStyle`, `SelectionIndicator`): selected choices
   take the plate blue ring and `plateBlueSurface`, and the trailing indicator swaps an empty ring
   for a filled check, so the choice is carried by shape as well as colour. A pressed selection
