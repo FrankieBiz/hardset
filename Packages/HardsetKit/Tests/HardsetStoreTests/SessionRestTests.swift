@@ -381,6 +381,36 @@ struct SessionRestTests {
     #expect(spy.cancels == 1)
   }
 
+  // MARK: - Finishing before the last set
+
+  @Test("A clock that reads earlier than the last set cannot end the workout before its own work")
+  func finishNowIsFlooredAtTheLastSet() throws {
+    let database = try migratedDatabase()
+    let press = try seedExercise(database)
+    let spy = TimerSpy()
+    let clock = ClockBox(Date(timeIntervalSince1970: 7_000_600))
+    let live = try liveWorkout(
+      restPreferences: scratchRest(), spy: spy, database: database, exercise: press,
+      now: { clock.value })
+    // The set is saved a few minutes in.
+    clock.value = Date(timeIntervalSince1970: 7_001_000)
+    #expect(log(live))
+    let lastSet = try #require(live.lastLoggedAt)
+    // NTP or a manual change steps the clock back across the set just logged, though not past the
+    // workout's own start.
+    clock.value = lastSet.addingTimeInterval(-30)
+
+    try live.finish()
+
+    let id = live.sessionID.rawValue
+    let stored = try database.read { db in
+      try Session.where { $0.id.eq(id) }.fetchOne(db)?.finishedAt
+    }
+    let finishedAt = try #require(stored)
+    #expect(finishedAt >= lastSet)
+    #expect(live.isFinished)
+  }
+
   private final class ClockBox: @unchecked Sendable {
     var value: Date
     init(_ value: Date) { self.value = value }

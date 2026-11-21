@@ -782,8 +782,16 @@ public final class SessionCoordinator {
   /// A workout the store reports as already finished (on another device, or by a finish that
   /// raced a recovery) is not an error here: the stored instant stands and `isFinished` becomes
   /// true, so the root can let go of it. Any other failure leaves the workout open and throws.
+  ///
+  /// "Now" is never earlier than the newest saved set. A clock stepped back across a set just logged
+  /// would otherwise end the workout before work it contains, which `finish(at:)` refuses when it is
+  /// asked for explicitly; the instant is raised to that set instead, so the timeline stays whole
+  /// and the lifter is not stranded in a workout they cannot close. A clock that reads earlier than
+  /// the workout's own start is not adjusted: that is the store's to refuse, and the lifter is told to
+  /// check the device's date and time.
   public func finish() throws {
-    try close(at: now())
+    let current = now()
+    try close(at: current >= startedAt ? max(current, lastLoggedAt ?? current) : current)
   }
 
   /// Closes the session at a chosen instant, for a workout left open after training ended.
