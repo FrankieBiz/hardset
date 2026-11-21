@@ -107,6 +107,12 @@
       try await Snapshot.capture("session-dark-ax3", typeSize: .accessibility3) {
         Fixtures.session()
       }
+      // Increase Contrast brings back the outlines that the monochrome session draws without: the
+      // editable figures, the inline controls and the panels.
+      try await Snapshot.capture("session-dark-contrast", contrast: .high) { Fixtures.session() }
+      try await Snapshot.capture("session-light-ax3", style: .light, typeSize: .accessibility3) {
+        Fixtures.session()
+      }
     }
 
     @Test func setRowsAndCard() async throws {
