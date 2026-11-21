@@ -8,7 +8,7 @@
   /// Renders the token catalogue so the design system can be reviewed from images alone.
   ///
   /// The development machine cannot compile SwiftUI, so the catalogue is how the palette, type,
-  /// machined surfaces and controls are seen in every appearance the app supports: dark, light,
+  /// surfaces and controls are seen in every appearance the app supports: dark, light,
   /// Increase Contrast and an accessibility text size. Each section is captured on
   /// its own, in a window as tall as that section, because one tall image of the whole page would
   /// crop its lower sections. Like the screen suite it is inert unless `HARDSET_SNAPSHOT_DIR` is
@@ -21,9 +21,9 @@
     private static func height(_ section: TokenCatalogView.Section) -> CGFloat {
       switch section {
       case .palette: 1700
-      case .machined: 600
+      case .surfaces: 700
       case .type: 1100
-      case .buttons: 1200
+      case .buttons: 1320
       case .certainty: 500
       case .motion: 700
       }
@@ -56,7 +56,7 @@
       }
       try await Snapshot.capture(
         "tokens-buttons-dark-ax3",
-        size: CGSize(width: Self.width, height: 2000),
+        size: CGSize(width: Self.width, height: 2300),
         typeSize: .accessibility3
       ) {
         TokenCatalogView(section: .buttons)

@@ -113,7 +113,8 @@
                 .init(label: history.label(for: $0.key), points: $0.points,
                   recordSessionIDs: history.recordSessionIDs[$0.key] ?? [],
                   bestAtWeight: history.bestAtWeight[$0.key] ?? [])
-              }, unit: .kilograms, onExplain: {})
+              }, unit: .kilograms, estimatesOneRepMax: history.estimatesOneRepMax,
+                assumesAddedLoad: history.assumesAddedLoad, onExplain: {})
               .padding(Tokens.Spacing.loose)
             }
             .background(Tokens.Color.canvas)
@@ -130,7 +131,8 @@
               .init(label: history.label(for: $0.key), points: $0.points,
                 recordSessionIDs: history.recordSessionIDs[$0.key] ?? [],
                 bestAtWeight: history.bestAtWeight[$0.key] ?? [])
-            }, unit: .kilograms, onExplain: {})
+            }, unit: .kilograms, estimatesOneRepMax: history.estimatesOneRepMax,
+                assumesAddedLoad: history.assumesAddedLoad, onExplain: {})
             .padding(Tokens.Spacing.loose)
           }
           .background(Tokens.Color.canvas)
@@ -197,7 +199,8 @@
             ScrollView {
               ProgressionChartView(series: history.series.map {
                 .init(label: history.label(for: $0.key), points: $0.points)
-              }, unit: .kilograms, onExplain: {})
+              }, unit: .kilograms, estimatesOneRepMax: history.estimatesOneRepMax,
+                assumesAddedLoad: history.assumesAddedLoad, onExplain: {})
               .padding(Tokens.Spacing.loose)
             }
             .background(Tokens.Color.canvas)

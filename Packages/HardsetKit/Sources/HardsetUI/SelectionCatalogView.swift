@@ -95,7 +95,7 @@ private struct FieldStates: View {
   private var focusedSample: some View {
     HStack(spacing: Tokens.Spacing.snug) {
       Image(systemName: "magnifyingglass")
-        .font(Tokens.Text.labelEmphasis)
+        .font(Tokens.Text.headline)
         .foregroundStyle(Tokens.Color.plateBlue)
         .accessibilityHidden(true)
       Text("Focused, ring drawn")

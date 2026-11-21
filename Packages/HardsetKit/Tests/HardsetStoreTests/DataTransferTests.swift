@@ -430,6 +430,254 @@ struct DataTransferTests {
 
   // MARK: - Corrections and order
 
+  @Test("Each new import records exact session, plan and set identities for an honest undo")
+  func newImportRecordsItsRows() async throws {
+    let db = try database()
+    _ = try await DataTransferStore(database: db).commit(WorkoutCSVImport.preview(csv, strongUnit: .kilograms))
+    try await db.read { db in
+      let batch = try #require(try Row.fetchOne(db, sql: "SELECT undoRows, undoOrder FROM deviceImportBatches"))
+      let json: String = batch["undoRows"]
+      let rows = try JSONDecoder().decode([String: [UUID]].self, from: Data(json.utf8))
+      #expect(Set(rows["sessions"] ?? []) == Set(try Session.fetchAll(db).map(\.id)))
+      #expect(Set(rows["plans"] ?? []) == Set(try SessionExercise.fetchAll(db).map(\.id)))
+      #expect(Set(rows["sets"] ?? []) == Set(try LoggedSet.fetchAll(db).map(\.id)))
+      #expect((batch["undoOrder"] as Int) == 1)
+    }
+  }
+
+  @Test("Undoing a wrong-unit import allows the same CSV to be imported with the correct unit")
+  func undoRepairsWrongUnitImport() async throws {
+    let db = try database()
+    let store = DataTransferStore(database: db)
+    let wrong = try WorkoutCSVImport.preview(csv, strongUnit: .kilograms)
+    _ = try await store.commit(wrong)
+    let corrected = try WorkoutCSVImport.preview(csv, strongUnit: .pounds)
+    await #expect(throws: WorkoutImportError.alreadyImported) { try await store.commit(corrected) }
+    let undo = try #require(try await store.lastImportUndo())
+    #expect(undo.sessionCount == 1 && undo.setCount == 2)
+    #expect(undo.confirmationMessage.contains("1 session and 2 sets"))
+    try await store.undoLastImport(undo)
+    #expect(try await db.read { try Session.fetchAll($0).isEmpty })
+    #expect(try await db.read { try LoggedSet.fetchAll($0).isEmpty })
+    #expect(try await store.lastImportUndo() == nil)
+    #expect(try await store.commit(corrected).importedSets == 2)
+    #expect(try await db.read { try LoggedSet.fetchAll($0).allSatisfy {
+      abs($0.weightKg - WeightUnit.pounds.toKilograms(100)) < 0.00001
+    } })
+    #expect(try await db.read { try Exercise.fetchAll($0).count } == 1)
+  }
+
+  @Test("Undo removes only newly created workouts, preserving skipped imports and native history")
+  func undoPreservesEarlierAndNativeWorkouts() async throws {
+    let db = try database()
+    let store = DataTransferStore(database: db)
+    _ = try await store.commit(WorkoutCSVImport.preview(csv, strongUnit: .kilograms))
+    let native = UUID()
+    try await db.write { db in
+      let exercise = try #require(try Exercise.fetchAll(db).first)
+      try Session.insert { Session.Draft(id: native, title: "Native") }.execute(db)
+      try LoggedSet.insert { LoggedSet.Draft(id: UUID(), sessionID: native, exerciseID: exercise.id,
+        weightKg: 80, reps: 5, completedAt: Date()) }.execute(db)
+    }
+    let original = try await db.read { db in
+      (Set(try Session.fetchAll(db).map(\.id)), Set(try LoggedSet.fetchAll(db).map(\.id)),
+        Set(try SessionExercise.fetchAll(db).map(\.id)))
+    }
+    let additional = csv.split(separator: "\n").dropFirst().joined(separator: "\n")
+      .replacingOccurrences(of: "2026-11-01", with: "2026-11-08")
+    let result = try await store.commit(WorkoutCSVImport.preview(csv + additional, strongUnit: .kilograms))
+    #expect(result.importedWorkouts == 1 && result.skippedWorkouts == 1)
+    let undo = try #require(try await store.lastImportUndo())
+    #expect(undo.sessionCount == 1 && undo.setCount == 2)
+    try await store.undoLastImport(undo)
+    try await db.read { db in
+      let sessions = Set(try Session.fetchAll(db).map(\.id))
+      let sets = Set(try LoggedSet.fetchAll(db).map(\.id))
+      let plans = Set(try SessionExercise.fetchAll(db).map(\.id))
+      #expect(sessions == original.0)
+      #expect(sets == original.1)
+      #expect(plans == original.2)
+    }
+    #expect(try await store.lastImportUndo()?.setCount == 2)
+  }
+
+  @Test("A confirmation cannot undo a newer import or silently change its deletion counts")
+  func staleUndoConfirmationIsRejected() async throws {
+    let db = try database()
+    let store = DataTransferStore(database: db)
+    _ = try await store.commit(WorkoutCSVImport.preview(csv, strongUnit: .kilograms))
+    let first = try #require(try await store.lastImportUndo())
+    _ = try await store.commit(WorkoutCSVImport.preview(
+      csv.replacingOccurrences(of: "2026-11-01", with: "2026-11-08"), strongUnit: .kilograms))
+    await #expect(throws: WorkoutImportUndoError.changed) { try await store.undoLastImport(first) }
+    let second = try #require(try await store.lastImportUndo())
+    try await db.write { db in
+      let json = try #require(try String.fetchOne(db,
+        sql: "SELECT undoRows FROM deviceImportBatches WHERE id = ?", arguments: [second.id.uuidString.lowercased()]))
+      let ids = try JSONDecoder().decode([String: [UUID]].self, from: Data(json.utf8))
+      let set = try #require(ids["sets"]?.first)
+      try db.execute(sql: "DELETE FROM loggedSets WHERE id = ?", arguments: [set.uuidString.lowercased()])
+    }
+    await #expect(throws: WorkoutImportUndoError.changed) { try await store.undoLastImport(second) }
+    let remaining = try #require(try await store.lastImportUndo())
+    #expect(remaining.setCount == 1)
+    try await store.undoLastImport(remaining)
+    #expect(try await db.read { try Session.fetchAll($0).count } == 1)
+  }
+
+  @Test("A partial reimport retains the original identities of its surviving workouts")
+  func partialReimportPreservesEarlierUndoIdentities() async throws {
+    let db = try database()
+    let store = DataTransferStore(database: db)
+    let additional = csv.split(separator: "\n").dropFirst().joined(separator: "\n")
+      .replacingOccurrences(of: "2026-11-01", with: "2026-11-08")
+    let preview = try WorkoutCSVImport.preview(csv + additional, strongUnit: .kilograms)
+    _ = try await store.commit(preview)
+    try await db.write { db in
+      let session = try #require(try Session.fetchAll(db).first)
+      try db.execute(sql: "DELETE FROM sessions WHERE id = ?", arguments: [session.id.uuidString.lowercased()])
+    }
+    let result = try await store.commit(preview)
+    #expect(result.importedWorkouts == 1 && result.skippedWorkouts == 1)
+    try await store.undoLastImport(try #require(try await store.lastImportUndo()))
+    let earlier = try #require(try await store.lastImportUndo())
+    #expect(earlier.sessionCount == 1 && earlier.setCount == 2)
+    try await store.undoLastImport(earlier)
+    #expect(try await db.read { try Session.fetchAll($0).isEmpty })
+  }
+
+  @Test("Later sets or plan rows are never removed by an import undo", arguments: [false, true])
+  func undoRefusesLaterAdditions(plan: Bool) async throws {
+    let db = try database()
+    let store = DataTransferStore(database: db)
+    _ = try await store.commit(WorkoutCSVImport.preview(csv, strongUnit: .kilograms))
+    let undo = try #require(try await store.lastImportUndo())
+    try await db.write { db in
+      let session = try #require(try Session.fetchAll(db).first)
+      let exercise = try #require(try Exercise.fetchAll(db).first)
+      if plan {
+        try SessionExercise.insert { SessionExercise.Draft(id: UUID(), sessionID: session.id,
+          exerciseID: exercise.id, position: 9) }.execute(db)
+      } else {
+        try LoggedSet.insert { LoggedSet.Draft(id: UUID(), sessionID: session.id, exerciseID: exercise.id,
+          weightKg: 60, reps: 10, completedAt: Date()) }.execute(db)
+      }
+    }
+    await #expect(throws: WorkoutImportUndoError.containsLaterChanges) { try await store.undoLastImport(undo) }
+    await #expect(throws: WorkoutImportUndoError.containsLaterChanges) { try await store.lastImportUndo() }
+    #expect(try await db.read { try Session.fetchAll($0).count } == 1)
+    #expect(try await db.read { try LoggedSet.fetchAll($0).count } == (plan ? 2 : 3))
+    #expect(try await db.read { try SessionExercise.fetchAll($0).count } == (plan ? 2 : 1))
+  }
+
+  @Test("Moving an imported row into another workout prevents an undo from deleting it")
+  func movedImportRowsAreProtected() async throws {
+    let db = try database()
+    let store = DataTransferStore(database: db)
+    _ = try await store.commit(WorkoutCSVImport.preview(csv, strongUnit: .kilograms))
+    let undo = try #require(try await store.lastImportUndo())
+    try await db.write { db in
+      let native = UUID()
+      let set = try #require(try LoggedSet.fetchAll(db).first)
+      try Session.insert { Session.Draft(id: native, title: "Native") }.execute(db)
+      try db.execute(sql: "UPDATE loggedSets SET sessionID = ? WHERE id = ?",
+        arguments: [native.uuidString.lowercased(), set.id.uuidString.lowercased()])
+    }
+    await #expect(throws: WorkoutImportUndoError.containsLaterChanges) { try await store.undoLastImport(undo) }
+    #expect(try await db.read { try Session.fetchAll($0).count } == 2)
+    #expect(try await db.read { try LoggedSet.fetchAll($0).count } == 2)
+  }
+
+  @Test("A damaged undo ledger never falls back to guessing row identities")
+  func corruptUndoLedgerIsRefused() async throws {
+    let db = try database()
+    let store = DataTransferStore(database: db)
+    _ = try await store.commit(WorkoutCSVImport.preview(csv, strongUnit: .kilograms))
+    let undo = try #require(try await store.lastImportUndo())
+    try await db.write { try $0.execute(sql: "UPDATE deviceImportBatches SET undoRows = '{}'") }
+    await #expect(throws: WorkoutImportUndoError.unidentified) { try await store.undoLastImport(undo) }
+    #expect(try await db.read { try LoggedSet.fetchAll($0).count } == 2)
+  }
+
+  @Test("A failed undo rolls back every deletion and retains its replay ledger")
+  func failedUndoRollsBack() async throws {
+    let db = try database()
+    let store = DataTransferStore(database: db)
+    _ = try await store.commit(WorkoutCSVImport.preview(csv, strongUnit: .kilograms))
+    let undo = try #require(try await store.lastImportUndo())
+    try await db.write { db in
+      try db.execute(sql: """
+        CREATE TEMP TRIGGER reject_import_undo BEFORE DELETE ON loggedSets BEGIN
+          SELECT RAISE(ABORT, 'injected undo failure');
+        END
+        """)
+    }
+    await #expect(throws: (any Error).self) { try await store.undoLastImport(undo) }
+    #expect(try await store.lastImportUndo() == undo)
+    #expect(try await db.read { try LoggedSet.fetchAll($0).count } == 2)
+    #expect(try await db.read { try SessionExercise.fetchAll($0).count } == 1)
+    try await db.write { try $0.execute(sql: "DROP TRIGGER reject_import_undo") }
+    try await store.undoLastImport(undo)
+    #expect(try await store.lastImportUndo() == nil)
+  }
+
+  @Test("The upgrade preserves legacy imports without inventing undo identities")
+  func legacyImportsAreNotBackfilled() async throws {
+    let db = try DatabaseQueue()
+    try HardsetMigrations.migrator().migrate(db, upTo: "v12_finishedWorkoutLookup")
+    let legacy = UUID()
+    try await db.write { db in
+      try db.execute(sql: "INSERT INTO deviceImportBatches(id, sourceCSV, sourceDigest, byteCount) VALUES (?, '', 'legacy', 10)",
+        arguments: [legacy.uuidString.lowercased()])
+      try Session.insert { Session.Draft(id: legacy, title: "Legacy import",
+        notes: "Imported from Strong", startedAt: .distantPast, finishedAt: .distantPast) }.execute(db)
+    }
+    try HardsetMigrations.migrator().migrate(db)
+    let store = DataTransferStore(database: db)
+    #expect(try await store.lastImportUndo() == nil)
+    try await db.read { db in
+      let row = try #require(try Row.fetchOne(db, sql: "SELECT * FROM deviceImportBatches"))
+      #expect((row["sourceDigest"] as String) == "legacy")
+      #expect((row["undoRows"] as String?) == nil)
+      #expect((row["undoOrder"] as Int?) == nil)
+    }
+    _ = try await store.commit(WorkoutCSVImport.preview(csv, strongUnit: .kilograms))
+    try await store.undoLastImport(try #require(try await store.lastImportUndo()))
+    #expect(try await db.read { try Session.fetchAll($0).map(\.id) } == [legacy])
+    #expect(try await db.read { try Int.fetchOne($0, sql: "SELECT count(*) FROM deviceImportBatches") } == 1)
+  }
+
+  @Test("Import undo selects rows through indexes, even when the identity list exceeds SQL bind limits")
+  func undoQueriesUseIndexes() async throws {
+    let db = try database()
+    let store = DataTransferStore(database: db)
+    let large = "Date,Workout Name,Duration,Exercise Name,Set Order,Weight,Reps\n"
+      + (1...1100).map { "2026-11-01 10:00:00,Push,1h,Press,\($0),100,8" }.joined(separator: "\n")
+    _ = try await store.commit(WorkoutCSVImport.preview(large, strongUnit: .kilograms))
+    let queries: [(String, String)] = [
+      ("deviceImportBatches", "SELECT id, undoRows FROM deviceImportBatches WHERE undoOrder IS NOT NULL ORDER BY undoOrder DESC LIMIT 1"),
+      ("deviceImportBatches", "SELECT id, undoRows FROM deviceImportBatches WHERE sourceDigest = ? AND byteCount = 10"),
+      ("sessions", "SELECT id FROM sessions WHERE id IN (SELECT value FROM json_each(?))"),
+      ("loggedSets", "SELECT id, sessionID FROM loggedSets WHERE id IN (SELECT value FROM json_each(?))"),
+      ("sessionExercises", "SELECT id, sessionID FROM sessionExercises WHERE id IN (SELECT value FROM json_each(?))"),
+      ("loggedSets", "SELECT id FROM loggedSets WHERE sessionID IN (SELECT value FROM json_each(?))"),
+      ("sessionExercises", "SELECT id FROM sessionExercises WHERE sessionID IN (SELECT value FROM json_each(?))"),
+      ("sessions", "DELETE FROM sessions WHERE id IN (SELECT value FROM json_each(?))"),
+    ]
+    try await db.read { db in
+      for (table, sql) in queries {
+        let plan = try Row.fetchAll(db, sql: "EXPLAIN QUERY PLAN " + sql, arguments: sql.contains("?") ? ["[]"] : [])
+          .map { $0["detail"] as String }.joined(separator: "; ")
+        #expect(plan.contains("SEARCH \(table) USING"), Comment(rawValue: plan))
+        #expect(!plan.contains("TEMP B-TREE"), Comment(rawValue: plan))
+      }
+    }
+    let undo = try #require(try await store.lastImportUndo())
+    #expect(undo.setCount == 1100)
+    try await store.undoLastImport(undo)
+    #expect(try await db.read { try LoggedSet.fetchAll($0).isEmpty })
+  }
+
   /// Deleting an import's workouts in History and choosing the same file again imports it again,
   /// rather than refusing a file whose workouts are no longer anywhere in the app.
   @Test("The same file imports again after its workouts were deleted")

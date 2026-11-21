@@ -183,7 +183,7 @@ public final class SessionCoordinator {
         plannedSets: planned.plannedSets,
         repRange: planned.repRange,
         weightUnit: weightUnit,
-        addsLoad: modalities[planned.exerciseID]?.estimatesOneRepMax ?? true
+        addsLoad: modalities[planned.exerciseID]?.estimatesOneRepMax ?? false
       )
       rowIDs[state.id] = saved.planRowIDs[position]
       states.append(state)
@@ -315,7 +315,7 @@ public final class SessionCoordinator {
         // without the saved workout, which may have been edited or archived since.
         repRange: entry.repRange,
         weightUnit: weightUnit,
-        addsLoad: entry.modality?.estimatesOneRepMax ?? true
+        addsLoad: entry.modality?.estimatesOneRepMax ?? false
       )
       rowIDs[state.id] = entry.id
       return state

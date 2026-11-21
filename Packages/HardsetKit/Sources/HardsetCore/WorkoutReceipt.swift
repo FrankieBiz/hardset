@@ -82,26 +82,28 @@ public struct WorkoutReceipt: Hashable, Sendable, Identifiable {
     public let reps: Int
     public let isWarmup: Bool
     public let records: [PersonalRecord]
+    public let loadAssumption: String?
     public let isImported: Bool
 
     public init(
       id: SetID, exerciseID: ExerciseID?, exerciseName: String, equipment: Equipment,
       weightKg: Double, reps: Int, isWarmup: Bool, records: [PersonalRecord] = [],
-      isImported: Bool = false
+      isImported: Bool = false, loadAssumption: String? = nil
     ) {
       self.id = id; self.exerciseID = exerciseID; self.exerciseName = exerciseName
       self.equipment = equipment; self.weightKg = weightKg; self.reps = reps
-      self.isWarmup = isWarmup; self.records = records; self.isImported = isImported
+      self.isWarmup = isWarmup; self.records = records
+      self.loadAssumption = loadAssumption; self.isImported = isImported
     }
 
     /// A line known only by its machine name, as previews build them. With no machine the
     /// equipment is treated as unrecorded, which never claims more than is known.
     public init(id: SetID, exerciseName: String, machineName: String?, weightKg: Double,
-      reps: Int, isWarmup: Bool, records: [PersonalRecord] = [], isImported: Bool = false) {
+      reps: Int, isWarmup: Bool, records: [PersonalRecord] = [], isImported: Bool = false, loadAssumption: String? = nil) {
       self.init(
         id: id, exerciseID: nil, exerciseName: exerciseName,
         equipment: machineName.map(Equipment.machine) ?? .unrecorded, weightKg: weightKg,
-        reps: reps, isWarmup: isWarmup, records: records, isImported: isImported)
+        reps: reps, isWarmup: isWarmup, records: records, isImported: isImported, loadAssumption: loadAssumption)
     }
 
     /// The recorded machine's name, or `nil` when the set has none.
@@ -196,11 +198,14 @@ public struct WorkoutReceipt: Hashable, Sendable, Identifiable {
       startedAt.formatted(date: .abbreviated, time: .shortened)]
     for block in blocks {
       rows.append("\(block.exerciseName) · \(block.equipmentLabel)")
+      if let assumption = block.lines.first?.loadAssumption {
+        rows.append("Low confidence · " + assumption)
+      }
       for line in block.lines {
         let load = LoadText.entered(line.weightKg, in: unit, locale: locale)
         rows.append("  \(load) \(unit.abbreviation) × \(line.reps)\(line.isWarmup ? " · Warm-up" : "")")
         for record in line.records {
-          rows.append("    \(record.kind.label) · \(line.equipment.recordScope)")
+          rows.append("    \(record.qualifiedLabel) · \(line.equipment.recordScope)")
         }
       }
     }

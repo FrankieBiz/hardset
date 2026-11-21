@@ -115,4 +115,46 @@ struct WorkoutScorecardTests {
     let scorecard = WorkoutScorecard.make([empty, firstTime])
     #expect(scorecard.entries.map(\.exerciseName) == ["First"])
   }
+  @Test("An added-load percentage never outranks an estimated-max percentage")
+  func addedLoadAndEstimatedGainsStaySeparate() {
+    let bench = input(ProgressionKey(exerciseID: ExerciseID()), "Bench",
+      current: [(110, 5)], previous: [(100, 5)])
+    let dip = ScorecardInput(key: ProgressionKey(exerciseID: ExerciseID()), exerciseName: "Dip",
+      currentSets: [set(30, 5)], previousSets: [set(20, 5)],
+      estimatesOneRepMax: false, assumesAddedLoad: true)
+    let card = WorkoutScorecard.make([dip, bench])
+    #expect(card.biggestGain?.key == bench.key)
+    let added = WorkoutScorecard.make([dip])
+    #expect(added.biggestGain?.metric == .addedLoad)
+    #expect(added.biggestGain?.certainty == .low)
+    #expect(ScorecardCopy.gainShareText(added)?.contains("body's own load is unknown") == true)
+    let pull = ScorecardInput(key: ProgressionKey(exerciseID: ExerciseID()), exerciseName: "Pull-up",
+      currentSets: [set(0, 13)], previousSets: [set(0, 8)],
+      estimatesOneRepMax: false, assumesAddedLoad: true)
+    let reps = WorkoutScorecard.make([pull])
+    #expect(reps.biggestGain?.metric == .repsAtTopLoad)
+    #expect(reps.biggestGain?.certainty == .low)
+    #expect(ScorecardCopy.gainShareText(reps)?.contains("body's own load is unknown") == true)
+  }
+
+  @Test("Only movements with exclusively estimated records receive the estimate-only qualifier")
+  func estimateOnlyAndObservedRecordsStayDistinct() {
+    func scored(_ kinds: Set<PersonalRecordKind>) -> WorkoutScorecard {
+      WorkoutScorecard.make([ScorecardInput(key: ProgressionKey(exerciseID: ExerciseID()),
+        exerciseName: "Press", currentSets: [set(97.5, 8)], previousSets: [set(100, 5)],
+        recordKinds: kinds)])
+    }
+    let estimated = scored([.estimatedOneRepMax])
+    #expect(estimated.estimateOnlyRecordMovementCount == 1)
+    #expect(estimated.headline == "Beat last time on 1 of 1 · 1 estimate-only record")
+    #expect(ScorecardCopy.recordsText(estimated) == "An estimated record on 1 movement")
+    let observed = scored([.estimatedOneRepMax, .repsAtLoad])
+    #expect(observed.estimateOnlyRecordMovementCount == 0)
+    #expect(observed.headline == "Beat last time on 1 of 1")
+    #expect(ScorecardCopy.recordsText(observed) == "A record on 1 movement")
+    let mixed = WorkoutScorecard(entries: estimated.entries + observed.entries,
+      beatenCount: 2, comparedCount: 2, recordMovementCount: 2, biggestGain: nil)
+    #expect(ScorecardCopy.recordsText(mixed) == "A record on 1 movement · An estimated record on 1 movement")
+  }
+
 }

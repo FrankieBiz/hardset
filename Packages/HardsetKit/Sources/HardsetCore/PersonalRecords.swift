@@ -38,6 +38,13 @@ public struct PersonalRecord: Sendable, Hashable, Identifiable {
 
   public var id: PersonalRecordKind { kind }
 
+  /// The estimate qualifier and its certainty travel with the record into receipts and shares.
+  public var qualifiedLabel: String {
+    guard kind == .estimatedOneRepMax else { return kind.label }
+    let certainty = StrengthMath.estimatedOneRepMax(weightKg: weightKg, reps: reps).certainty
+    return "\(kind.label) · \(ScorecardCopy.confidenceWords(certainty))"
+  }
+
   public init(
     kind: PersonalRecordKind,
     weightKg: Double,

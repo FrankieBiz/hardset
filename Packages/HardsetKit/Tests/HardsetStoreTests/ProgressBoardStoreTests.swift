@@ -258,4 +258,57 @@ struct ProgressBoardStoreTests {
 
     #expect(board == ProgressBoard.empty)
   }
+  @Test("Unknown imported modality shows added load or unloaded reps without an estimated max")
+  func unknownImportDoesNotInventTotalLoad() async throws {
+    let database = try migratedDatabase()
+    let csv = "Date,Workout Name,Duration,Exercise Name,Set Order,Weight,Reps\n"
+      + "2026-09-01 10:00:00,Push,1h,Weighted Dip,1,20,5\n"
+      + "2026-10-13 10:00:00,Push,1h,Weighted Dip,1,30,5\n"
+      + "2026-09-01 10:00:00,Pull,1h,Pull Up,1,0,8\n"
+      + "2026-10-13 10:00:00,Pull,1h,Pull Up,1,0,13\n"
+    let preview = try WorkoutCSVImport.preview(csv, strongUnit: .kilograms)
+    _ = try await DataTransferStore(database: database).importWorkouts(preview)
+    let board = try await ProgressBoardStore(database: database).loadBoard()
+    let rows = board.sections.flatMap(\.rows)
+    let dip = try #require(rows.first { $0.exerciseName.hasPrefix("Weighted Dip") })
+    let pull = try #require(rows.first { $0.exerciseName.hasPrefix("Pull Up") })
+    #expect(dip.trend.metric.rawValue == "addedLoad")
+    #expect(dip.trend.sparkline == [20, 30])
+    #expect(dip.trend.certainty == .low)
+    #expect(ProgressCopy.spokenRow(dip).contains("body's own load is unknown"))
+    #expect(pull.trend.metric == .repsAtTopLoad)
+    #expect(pull.trend.sparkline == [8, 13])
+    #expect(pull.trend.certainty == .low)
+    #expect(board.mostImproved.allSatisfy { $0.trend.metric == .estimatedMax })
+    #expect(board.mostImprovedAddedLoad.map(\.id) == [dip.id])
+    for row in rows {
+      let chart = try await ProgressionStore(database: database).loadHistory(for: row.id.exerciseID)
+      #expect(!chart.estimatesOneRepMax)
+      #expect(chart.assumesAddedLoad)
+      if row.id == pull.id { #expect(chart.series.first?.points.map(\.repsAtTopLoad) == [8, 13]) }
+      #expect(chart.series.flatMap(\.points).allSatisfy { $0.bestEstimatedOneRepMaxKg == nil })
+    }
+  }
+
+  @Test("Unknown native modality cannot claim an estimated record in the logger or receipt")
+  func unknownNativeLoadIsNotEstimated() async throws {
+    let database = try migratedDatabase()
+    let lift = try exercise(database, "Weighted dip", modality: "unknown")
+    try train(database, lift, sets: [(20, 5)], daysAgo: 42)
+    let logger = LoggerStore(database: database)
+    let current = try logger.startSession(at: now)
+    let result = try logger.logSet(sessionID: current, exerciseID: lift,
+      draft: SetEntryDraft(weightKg: 30, reps: 5), recordIncrement: nil, at: now)
+    #expect(!result.records.contains { $0.kind == .estimatedOneRepMax })
+    try logger.finishSession(current, at: now.addingTimeInterval(3600))
+    let receipt = try await ReceiptStore(database: database).load(current)
+    #expect(!receipt.lines.flatMap(\.records).contains { $0.kind == .estimatedOneRepMax })
+    let chart = try await ProgressionStore(database: database).loadHistory(for: lift)
+    #expect(chart.assumesAddedLoad)
+    #expect(chart.label(for: .init(exerciseID: lift)) == ProgressCopy.noMachineRecorded)
+    #expect(receipt.scorecard?.biggestGain?.metric.rawValue == "addedLoad")
+    #expect(receipt.scorecard?.biggestGain?.certainty == .low)
+    #expect(receipt.text(unit: .kilograms).contains("body's own load is unknown"))
+  }
+
 }

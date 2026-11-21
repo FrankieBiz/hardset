@@ -15,7 +15,7 @@ import SwiftUI
 /// a backdrop for body text, values or labels: even at low opacity it costs contrast the palette
 /// guarantees, and the contrast checker gates only `chalk` on the 8% backing, so no other colour
 /// is placed on it. `.knurl()` is the overlay form and is not used on product UI text; the token
-/// catalogue keeps one labelled knurl sample on a machined face, drawn with that overlay form.
+/// catalogue keeps one labelled knurl sample on a flat raised face, drawn with that overlay form.
 public struct KnurlPattern: View {
   public let pitch: CGFloat
   public let opacity: Double

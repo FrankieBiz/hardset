@@ -167,10 +167,7 @@ private struct BarHalf: View {
   private var shaft: some View {
     let shape = RoundedRectangle(cornerRadius: 5)
     return ZStack {
-      shape.fill(
-        LinearGradient(
-          colors: [Tokens.Color.edgeLight, Tokens.Color.controlEdge, Tokens.Color.edgeShadow],
-          startPoint: .top, endPoint: .bottom))
+      shape.fill(Tokens.Color.controlEdge)
       KnurlPattern(opacity: 0.08).clipShape(shape)
     }
     .frame(height: 10)

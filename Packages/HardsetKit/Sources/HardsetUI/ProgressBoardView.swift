@@ -58,7 +58,10 @@ public struct ProgressBoardView: View {
           .padding(.top, Tokens.Spacing.section)
         } else {
           if !board.mostImproved.isEmpty {
-            mostImprovedStrip
+            mostImprovedStrip(board.mostImproved, metric: .estimatedMax)
+          }
+          if !board.mostImprovedAddedLoad.isEmpty {
+            mostImprovedStrip(board.mostImprovedAddedLoad, metric: .addedLoad)
           }
           ForEach(board.sections) { section in
             Section {
@@ -93,10 +96,10 @@ public struct ProgressBoardView: View {
 
   // MARK: - Most improved
 
-  private var mostImprovedStrip: some View {
+  private func mostImprovedStrip(_ rows: [ProgressBoard.Row], metric: TrendMetric) -> some View {
     VStack(alignment: .leading, spacing: Tokens.Spacing.snug) {
-      SectionLabel(ProgressCopy.mostImprovedTitle)
-      ForEach(board.mostImproved) { row in
+      SectionLabel("Most improved · " + ProgressCopy.metricName(metric).lowercased())
+      ForEach(rows) { row in
         rowCard(row, showsSparkline: false)
       }
     }
@@ -176,9 +179,15 @@ public struct ProgressBoardView: View {
             .foregroundStyle(Tokens.Color.chalk)
             .fixedSize(horizontal: false, vertical: true)
         } else {
-          Text(ProgressCopy.notEnoughHistory)
+          Text(ProgressCopy.metricName(row.trend.metric) + " · " + ProgressCopy.notEnoughHistory)
             .font(Tokens.Text.provenance)
             .foregroundStyle(Tokens.Color.chalkDim)
+        }
+        if let assumption = row.trend.loadAssumption {
+          Text(assumption)
+            .font(Tokens.Text.provenance)
+            .foregroundStyle(Tokens.Color.chalkDim)
+            .fixedSize(horizontal: false, vertical: true)
         }
         if let stalled = ProgressCopy.stalledText(for: row.trend) {
           Label(stalled, systemImage: "pause.circle")
@@ -203,16 +212,16 @@ public struct ProgressBoardView: View {
   }
 
   private func showsBadge(_ row: ProgressBoard.Row) -> Bool {
-    row.trend.metric == .estimatedMax && row.trend.certainty != nil
+    row.trend.certainty != nil
   }
 
   /// Beside every estimated-max figure, the certainty of the estimate behind it.
   @ViewBuilder private func badge(for row: ProgressBoard.Row) -> some View {
-    if row.trend.metric == .estimatedMax, let certainty = row.trend.certainty {
+    if let certainty = row.trend.certainty {
       CertaintyBadge(
         level: MethodologySheet.level(for: certainty),
-        methodology: ProgressionAnalyzer.source.methodology,
-        citation: ProgressionAnalyzer.source.validRange
+        methodology: row.trend.loadAssumption ?? ProgressionAnalyzer.source.methodology,
+        citation: row.trend.loadAssumption == nil ? ProgressionAnalyzer.source.validRange : nil
       )
       .padding(.trailing, Tokens.Spacing.snug)
     }

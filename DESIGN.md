@@ -2,21 +2,46 @@
 
 Source of truth for every visual decision in the app. The implementation lives in
 `Packages/HardsetKit/Sources/HardsetUI/`: `DesignTokens.swift`, `Components.swift`,
-`Machined.swift`, `KnurlPattern.swift`, `TypeRole.swift` and `Haptic.swift`; this file explains
+`ControlFace.swift`, `PressStyle.swift`, `KnurlPattern.swift`, `TypeRole.swift` and `Haptic.swift`;
+this file explains
 the choices, and `Tools/check_contrast.py` verifies the palette numbers below against the
-Swift source so the two cannot drift.
+Swift source so the two cannot drift. The reasoning and the migration order for the sleeker pass
+are in `docs/design/2026-11-20-sleek-apple-spec.md`.
+
+## Status of the sleeker pass
+
+The direction is settled and lands in phases. This file states the target; this section says what
+the code does yet, so a reader does not look for a screen that has not moved.
+
+- In code: the palette steps and `controlFillOnCanvas`, continuous radii through `Tokens.Shape`,
+  `Elevation.floating`, the `display` role off condensed, `labelEmphasis` retired, and the shared
+  kit: the flat control face and its outline rule (`ControlFace.swift`), buttons, chips, the
+  segmented control, header buttons, text entry, cards, banners, tags and certainty badges.
+- Not yet in code, so the bullets below that name these describe where they are going: whatever a
+  screen draws for itself instead of through the kit. That is most of the live session (the set
+  row's field faces and logged state, its warning and record cards, the unset gym and machine
+  chips), the rest bar's panel and countdown, the Library's "Curated" tag, the Progress card's
+  layout, the Volume gauge ends, the scorecard headline's type role, and the onboarding and tour
+  surfaces. It also includes four private outlined-card button styles that each draw their own
+  stroke: the History row, the Settings disclosure row, the Train screen's gym row and the
+  receipt's link row, plus the methodology citation card. A screen that uses the kit picks up the new look with no change; one that draws its own
+  face or stroke keeps the old one until it is migrated.
+- The keypad keys keep their `controlEdge` outline until the keypad has had its device check; see
+  Keys. `ScaledPhoneFrame` still reads the retired `edgeLight`; see the palette notes.
 
 ## Point of view
 
 Hardset is a calibrated instrument for the gym floor. The product's claim is calibrated honesty,
 so the interface behaves like a measuring device rather than a lifestyle app.
 
-The visual idea is calibrated iron. Competition plates are colour-coded by mass, and the colours
-are a calibration standard, not decoration: red 25 kg, blue 20 kg, yellow 15 kg, green 10 kg,
-white 5 kg. So the app's colour is the colour of calibrated plates, its surfaces are the materials
-of a serious gym (machined steel, black rubber, chalk), and its typography is the stamped figure
-on a plate. The semantic colours (logged green, record gold, caveat amber, failure red, action
-blue) are not arbitrary; they carry a story the lifter already knows.
+The visual idea is calibrated iron, drawn quietly. Competition plates are colour-coded by mass, and
+the colours are a calibration standard, not decoration: red 25 kg, blue 20 kg, yellow 15 kg, green
+10 kg, white 5 kg. So the app's colour is the colour of calibrated plates, its surfaces are flat
+steps of graphite and chalk that separate by fill rather than by line, and its figures are the
+stamped numerals on a plate. The semantic colours (logged green, record gold, caveat amber, failure
+red, action blue) are not arbitrary; they carry a story the lifter already knows. The chrome that
+floats above the content, the tab bar, sheet toolbars and the tour callout, is the system's own
+glass; the content beneath it is never glass.
 
 - **Colour is evidence, never decoration.** Hue appears only when it says something, and it is a
   plate colour: an action you can take (plate blue), a set that is saved (plate green), a record
@@ -25,8 +50,11 @@ blue) are not arbitrary; they carry a story the lifter already knows.
 - **Numbers are the hero.** Weights, reps and rest are set in SF Pro Condensed with tabular
   figures: large, narrow and steady, like stamped plates or a scale readout. Condensed figures fit
   pound values such as `132.28` at full size, so nothing shrinks to fit.
-- **Every control looks like a control.** Tappable things have a fill or a 3:1 border; static text
-  never imitates a button. A lifter with an elevated heart rate should not have to guess.
+- **A control says what it does; structure comes from fill, not line.** Cards and groups separate by
+  a step of surface. A control is identified by a fill, a verb label or a standard glyph. A 3:1
+  outline is kept where those cannot carry it alone: an input that is empty or being typed into,
+  every control under Increase Contrast, and every control when Button Shapes is on. Static text and
+  a saved value never imitate a button.
 - **Restraint everywhere except the log tap.** The one memorable moment is logging a set: the
   check stamps in with a short spring and a success haptic, and the row settles into its logged
   state. Nothing else moves without being asked.
@@ -40,14 +68,13 @@ primary appearance; light is derived from the same roles and held to the same fl
 
 | Token | Dark | Light | Role |
 | --- | --- | --- | --- |
-| `canvas` | `#0C0D10` | `#F6F6F8` | Screen canvas: rubber-matting black, chalk white |
-| `steel` | `#17181D` | `#FFFFFF` | Cards, rows, sheets' content |
-| `steelRaised` | `#22242B` | `#EEEEF2` | Fields, keys, chips, secondary buttons |
-| `steelPressed` | `#1B1C22` | `#E6E6EB` | Momentary pressed fill, darker than `steelRaised` so a press sinks |
-| `edgeLight` | `#30333C` | `#FCFCFD` | Lit top edge of a raised face; decorative, never a boundary |
-| `edgeShadow` | `#111216` | `#DBDBDF` | Shaded bottom edge of a raised face; decorative |
-| `hairline` | `#2E3039` | `#DEDEE4` | Decorative hairline grouping only |
-| `controlEdge` | `#7B7E8C` | `#7E8190` | Boundaries that identify a control |
+| `canvas` | `#050608` | `#F2F2F7` | Screen canvas: rubber-matting black, grouped chalk white |
+| `steel` | `#1A1B21` | `#FFFFFF` | Cards, rows, sheets' content |
+| `steelRaised` | `#24262D` | `#EEEEF2` | Fields, keys, chips and secondary buttons that sit on `steel` |
+| `controlFillOnCanvas` | `#24262D` | `#FFFFFF` | Fill of a control that sits directly on `canvas`: header buttons, Train and Settings buttons |
+| `steelPressed` | `#111216` | `#E6E6EB` | Momentary pressed fill, darker than `steelRaised` so a press sinks, and distinct from both `steel` and `canvas` so a pressed control with no outline keeps a visible face |
+| `hairline` | `#2E3039` | `#DEDEE4` | Decorative separators inside a card; never a boundary |
+| `controlEdge` | `#7B7E8C` | `#7E8190` | The outline of an input, and of every control under Increase Contrast or Button Shapes |
 | `chalk` | `#F3F3F5` | `#141519` | Chalk / graphite body text and values |
 | `chalkDim` | `#B6B8C3` | `#4B4D58` | Supporting text, units, provenance |
 | `plateBlue` | `#6FB7FF` | `#084A95` | The 20 kg plate: actions, focus, selection, next up |
@@ -56,7 +83,7 @@ primary appearance; light is derived from the same roles and held to the same fl
 | `onPlateBlue` | `#0C0D10` | `#FFFFFF` | Text on `plateBlueFill` |
 | `plateBlueSurface` | `#10233A` | `#E3EFFC` | Selected / focused tint |
 | `plateGreen` | `#8FE3A3` | `#0F5A27` | The 10 kg plate: logged, high certainty |
-| `plateGreenSurface` | `#122A1A` | `#E5F5EA` | Logged row tint |
+| `plateGreenSurface` | `#122A1A` | `#E5F5EA` | The logged seal's inner disc, win marks, high-certainty capsule |
 | `plateYellow` | `#FFD86B` | `#604A00` | The 15 kg plate: records, moderate certainty |
 | `plateYellowSurface` | `#2B2410` | `#FBF3DA` | Record banner |
 | `plateRed` | `#FF9A9A` | `#9A1B24` | The 25 kg plate: failed writes |
@@ -64,10 +91,16 @@ primary appearance; light is derived from the same roles and held to the same fl
 | `warning` | `#FFB27A` | `#7A3A00` | Caveats, low certainty; not a plate, the colour of a flagged lift |
 | `warningSurface` | `#2C1D12` | `#FCEEE3` | Caveat banner |
 
-Edges: `edgeLight` and `edgeShadow` are opaque values, pre-blended over `steelRaised` (`edgeLight`
-is 60% `#3A3D47` in dark and 80% white in light; `edgeShadow` is 50% black in dark and 8% black in
-light). They stay opaque so an edge is the same colour wherever a face is drawn; do not turn them
-into alphas.
+Steps: surfaces separate by fill, not by line. Canvas to `steel` is 1.18:1 in dark and 1.12:1 in
+light; `steelRaised` on `steel` is 1.14:1 in dark and 1.16:1 in light. `steelRaised` cannot be
+brighter in dark: `plateBlue` text on it is 7.12:1 against the 7:1 floor. A control that sits
+directly on `canvas` takes `controlFillOnCanvas`, because light `steelRaised` on `canvas` is only
+1.04:1. `steelPressed` is below the original proposal in dark (`#111216`, not `#1B1C22`): with no outline, the
+proposed value was 1.01:1 against `steel`, so a pressed control inside a card lost its face; this one is 1.09:1
+against `steel`, 1.08:1 against `canvas` and still darker than `steelRaised`. The machined edge colours `edgeLight` and `edgeShadow` are retired with the raised face they
+drew. `edgeShadow` is deleted. `edgeLight` is still defined for one reader, the staged phone's rim in
+`ScaledPhoneFrame`, which was held out of the phase that retired the machined skin; that rim becomes
+`hairline` and the token is deleted when the file next changes. Nothing else uses it.
 
 The earlier names (`background`, `surface`, `surfaceRaised`, `surfacePressed`, `border`,
 `controlBorder`, `textPrimary`, `textSecondary`, `accent`, `accentFill`, `accentFillPressed`,
@@ -80,9 +113,10 @@ and `chalk` to pure black or white. It strengthens `steelPressed` (`#E6E6EA` / `
 `hairline` and `controlEdge` (both `#595964` / `#9B9BA5`), `chalkDim` (`#3B3D47` / `#DADCE4`),
 `plateBlue` and `plateBlueFill` (`#063A75` / `#9FD0FF`), `plateBlueFillPressed` (`#052E5E` /
 `#86C2FF`), `onPlateBlue` (white / black) and `plateBlueSurface` (`#D6E8FA` / `#0A1A2C`). The
-edges, the green, yellow and red plates, `warning` and their surfaces keep their normal values:
-they already clear the floor. Resolution happens live from the trait collection, in code, with no
-asset catalogue.
+green, yellow and red plates, `warning` and their surfaces keep their normal values: they already
+clear the floor. Under Increase Contrast `canvas`, `steel` and `steelRaised` are one colour, so the
+fill step is gone and every control wears its `controlEdge`. Resolution happens live from the trait
+collection, in code, with no asset catalogue.
 
 Certainty maps high → `plateGreen`, moderate → `plateYellow`, low → `warning`, unevaluated →
 `chalkDim`, always with its word and symbol so colour is never the only carrier.
@@ -96,11 +130,10 @@ System fonts only, so no resource bundle is needed. Every role is a Dynamic Type
 
 | Token | Style | Use |
 | --- | --- | --- |
-| `display` | Large Title, semibold, condensed | Tab screen headers |
-| `title` | Title 3, semibold | Sheet headers, hero card titles |
-| `headline` | Headline | Card and row titles, primary button labels |
+| `display` | Large Title, bold, standard width | Tab screen headers |
+| `title` | Title 3, semibold | Sheet headers, hero card titles, a sentence that holds figures |
+| `headline` | Headline | Card and row titles, primary button labels, emphasised labels |
 | `label` | Body | Ordinary text and control labels |
-| `labelEmphasis` | Body, semibold | Emphasised labels |
 | `provenance` | Callout | Certainty, borrowed-history notes, corrections |
 | `unit` | Callout, medium | Unit suffixes beside values |
 | `caption` | Footnote | Supplemental notes only |
@@ -110,8 +143,11 @@ System fonts only, so no resource bundle is needed. Every role is a Dynamic Type
 | `setEntry` | Title 2, semibold, condensed, tabular | Weight and reps in a set row, and the values in a `StatLedger` |
 | `figure` | Headline, condensed, tabular | Small figures inside rows and compact ledgers |
 
-Tracking is a ratio of the resolved size, so it follows Dynamic Type: `hero` and `display` -2%,
-`readout` -1%, `caption` and `unit` +1%, every other role 0. `hardsetText(_:)` applies a role's
+Condensed is for figures only; a sentence that holds figures is `title` with tabular digits. The
+system font chooses its own optical size and tracking, so `display` adds none.
+
+Tracking is a ratio of the resolved size, so it follows Dynamic Type: `hero` -2%, `readout` -1%,
+`caption` and `unit` +1%, every other role 0. `hardsetText(_:)` applies a role's
 font and tracking together from `Tokens.Text.Role`; the static fonts carry no tracking.
 `hardsetText(_:weight:)` applies a weighted variant of a role with the same tracking, so a
 semibold caption keeps its +1%; a static weighted font cannot carry tracking, and no modifier
@@ -121,10 +157,27 @@ chained after `hardsetText(_:)` is used to change its weight.
 
 - Spacing: `hairline 2`, `tight 4`, `snug 8`, `regular 12`, `loose 16`, `section 24`, `block 32`.
   Page margin is `loose` (16).
-- Radius: `control 10` for fields, keys, buttons and rows; `card 16` for cards and sheets.
-  Capsules are reserved for chips and badges.
-- Stroke: `hairline 1` for borders, `selected 2` for selection and focus rings.
-- Targets: 44 pt general minimum, 56 pt in the logger (set rows, keypad, rest controls).
+- Radius, all continuous, drawn through `Tokens.Shape`: `control 12` for fields, keys, buttons and
+  rows; `card 24` for cards; `bar 4` for the ends of a gauge.
+  Inner radius is outer radius minus the padding between them, so a card of 24 with 12 of padding
+  holds controls of 12. Capsules are reserved for chips and badges. Sheets take the system's own
+  corner radius.
+- Stroke: `hairline 1` for separators and the conditional outline, `selected 2` for selection and
+  focus rings, the editing field and the ready log key.
+- Targets: 44 pt general minimum, 56 pt in the logger (set rows, keypad, rest controls). A control
+  that has no visible face keeps its frame and hit region.
+
+## Materials and elevation
+
+- System glass is for the chrome the system draws and the one floating callout: the tab bar, sheet
+  toolbars and the tour callout. It is never `.interactive()`.
+- Everything the lifter reads to do the work is opaque: rows, cards, figures, and the rest bar,
+  whose countdown is the one number read at arm's length under gym glare. Text on glass cannot be
+  gated by `Tools/check_contrast.py`, which measures opaque pairs and could only model glass, so a
+  gym-floor tool does not stake its most-read number on a material it cannot certify.
+- `Elevation.floating` (`hardsetFloating()`): a soft shadow for a pinned opaque surface, in light
+  only, about y 2, blur 12 and 12% black, to be tuned on a device. In dark the 1.34:1 step to
+  `canvas` does the separating. It animates nothing.
 
 ## Motion
 
@@ -147,8 +200,8 @@ spring are dropped and only the fill or opacity changes, instantly or with `Moti
 
 In practice: a message or inline confirmation arrives with an insertion-only opacity transition
 carrying `Motion.reveal`, and no animated transaction, so what it displaces moves at once and it
-leaves at once. A logged row's tint is a layer whose opacity fades on `Motion.state`; the row's
-height is never animated.
+leaves at once. A logged row's field faces are layers whose opacity fades on `Motion.state`; the
+row's height is never animated.
 
 Haptics follow the same restraint, and each has a name in `Tokens.Haptic`: `clank`, `success`,
 `error`, `selection` and `warning`. `clank` is the weighty tap of a plate meeting a bar: a CoreHaptics
@@ -164,35 +217,40 @@ Selection rows, the unit switch and pickers stay silent.
 
 ## Components and states
 
-- **Buttons** (`HardsetButtonStyle`): `primary` (plate blue fill), `secondary` (raised steel),
-  `quiet` (plate blue text, no fill), `destructive` (red text on the error surface, dimmed to 60%
-  while pressed). Sizes `logger` (56 pt) and `regular` (44 pt). States: default, pressed, disabled
-  (40% opacity), focused (system focus ring). The look is machined: a secondary button is raised
-  steel with the control edge at its boundary and, one hairline inside it, a light top edge and a
-  shadowed bottom edge. Pressed, it keeps the control edge, so the 3:1 boundary never disappears,
-  loses the edge light, and sinks to `steelPressed`, which in dark is darker than `steelRaised`.
-  Primary is a solid plate blue fill, swapping to its pressed fill, with no edge gradient: the edge
-  colours are pre-blended for steel and read wrong on plate blue.
-- **Keys** (`HardsetKeyStyle`): the same machined face as a secondary button: raised steel with the
-  control edge and the edge light inside it, and pressed, the control edge kept, the edge light
-  dropped and the darker pressed fill, plus a 0.96 scale.
+- **Buttons** (`HardsetButtonStyle`): `primary` (plate blue fill), `secondary` (`steelRaised` on a
+  card, `controlFillOnCanvas` on canvas), `quiet` (plate blue text, no fill), `destructive` (red text
+  on the error surface, dimmed to 60% while pressed). Sizes `logger` (56 pt) and `regular` (44 pt).
+  States: default, pressed, disabled (40% opacity), focused (system focus ring). One `primary` per
+  state: the thing the lifter came here to do. A secondary button is a flat fill with a `chalk`
+  label and no stroke; pressed, it swaps to `steelPressed` and scales to 0.97. Under Increase
+  Contrast or Button Shapes every role but `primary` (a fill of about 8:1 needs none), `quiet` and
+  `destructive` included, wears the `controlEdge` outline, in both states, so the 3:1 boundary
+  never disappears under a finger. A button takes the fill of the surface it sits on, through
+  `ControlSurface`: `hardsetCard()` sets `steel` for everything inside it, a steel panel that is not
+  a card (the keypad) sets it with `hardsetControlSurface(_:)`, and anything else is on the canvas.
+- **Keys** (`HardsetKeyStyle`): a flat `steelRaised` face on the keypad's `steel` panel, with no
+  edge light; pressed, the darker pressed fill and a 0.96 scale. Keys keep their `controlEdge`
+  outline in every setting for now: dropping it reverses the note this style used to carry, that a
+  key identified only by a fill one shade off its pad is a key the lifter has to look for, and
+  glare and sweaty hands cannot be judged from a render. That is the keypad pass, with its own
+  device check, and it reverts alone: it is one argument in `HardsetKeyFace`. When it lands, a key
+  wears the outline only under Increase Contrast or Button Shapes, like every other control.
 - **Knurl** (`KnurlPattern`, `.knurl(opacity:)`): a `Canvas` crosshatch at 8% opacity, the
   `KnurlPattern` default. It fills rectangular bounds, so callers with rounded shapes clip it
-  themselves. Phase 2 allows it in two places and nowhere else in the product UI (the token
-  catalogue keeps one labelled knurl sample on a machined face, drawn with the overlay form): behind
-  the rest bar's `hero` countdown, and as the logged-set seal's rim. In the product UI it is always
-  a backing layer, `KnurlPattern` inside a `.background { }` clipped to the backing shape; the
-  `.knurl(opacity:)` overlay is never used on text, the rest panel or the seal. The countdown is
-  drawn in `chalk` in both running and paused states, because `chalk` is the only text colour on the
-  knurl, and `Tools/check_contrast.py` gates that pair with the knurl blended in. The seal's
-  `checkmark.circle.fill` glyph is never over knurl: the knurl fills only an annulus around an
-  opaque `plateGreenSurface` inner disc that holds the glyph, because `plateGreen` on
-  `plateGreenSurface` loses contrast with knurl under it. The welcome bar's use belongs to the
-  onboarding phase.
-- **Cards** (`hardsetCard`): `steel` fill, decorative `hairline` border; selected uses a 2 pt
-  `plateBlue` ring and `plateBlueSurface` fill.
-- **Chips** (`HardsetChip`): capsule, raised fill; selected uses `plateBlueFill` with `onPlateBlue`
-  text.
+  themselves. It is allowed in one place in the product UI, as the logged-set seal's rim, because
+  the stamp is the one theatrical moment; it is retired from behind the rest bar's countdown, which
+  is drawn directly on the panel in `chalk`. The welcome bar's shaft, in onboarding, is the one
+  other place. The knurl is always a backing layer, `KnurlPattern` inside a `.background { }`
+  clipped to the backing shape. The seal's `checkmark.circle.fill` glyph is never over knurl: the
+  knurl fills only an annulus around an opaque `plateGreenSurface` inner disc that holds the glyph,
+  because `plateGreen` on `plateGreenSurface` loses contrast with knurl under it.
+- **Cards** (`hardsetCard`): `steel` fill, continuous `card` radius, no border. Separation is the
+  step to `canvas`; inside a card, rows separate by `hairline` only where they need to. Selected
+  uses a 2 pt `plateBlue` ring and `plateBlueSurface` fill, because selection is state. Under
+  Increase Contrast, where the fill step is gone, a card wears a `hairline` border.
+- **Chips** (`HardsetChip`): capsule, raised fill, no stroke; selected uses `plateBlueFill` with
+  `onPlateBlue` text. An unset gym or machine chip ("Set gym", "Choose machine") is `plateBlueSurface`
+  with `plateBlue` text and no outline.
 - **Tags** (`HardsetTag`): the public name of the non-interactive label on a row (modality,
   "Recent", "Custom"). Flat `steelRaised`, no outline, no edge light. It stays on one line at
   ordinary sizes and wraps at accessibility sizes, never truncating the word it carries.
@@ -203,11 +261,10 @@ Selection rows, the unit switch and pickers stay silent.
 - **Screen header** (`ScreenHeader`): display title, one context line, optional trailing action.
 - **Banner** (`HardsetBanner`): record, caveat, and error messages on their tinted surfaces. The
   `info` kind stays as a neutral note and is listed for deletion in the final phase if nothing
-  uses it. A banner's stroke, `hue.opacity(0.35)`, the same stroke on the session screen's
-  warning and record cards, and the 0.35 outline on a non-interactive `CertaintyCapsule`,
-  `certainty(level).opacity(0.35)`, are decorative strokes that never carry meaning: the words,
-  the symbol and the tinted surface identify the kind or level, so they are exempt from the 3:1
-  boundary rule that applies to controls. A message-only banner speaks only its message to
+  uses it. A banner, the session screen's warning and record cards, and a non-interactive
+  `CertaintyCapsule` carry no stroke: the words, the symbol and the tinted surface identify the
+  kind or level. An interactive `CertaintyBadge` is identified by its symbol and word, and wears
+  an outline only under Increase Contrast or Button Shapes. A message-only banner speaks only its message to
   VoiceOver, as it does today; speaking the kind is recorded for the accessibility pass. A
   picker's error banner (gym, machine and exercise pickers) is pinned above the list at ordinary
   sizes and moves into the scrolling content at accessibility sizes, so a tall banner can never
@@ -222,16 +279,18 @@ Selection rows, the unit switch and pickers stay silent.
   of text, not a spinner. An empty slot is drawn with a dashed outline, the app's one mark for
   "nothing here yet": the empty-state socket, the "Add movement" slot, a warm-up's ordinal, an
   incomplete set's log control, and the rule under "Not evaluated".
-- **Tags versus chips**: a chip can be tapped and wears the control border; a tag (modality,
-  "Recent", "Custom", an untrained muscle) is filled only, so it never imitates a control. At
+- **Tags versus chips**: a chip can be tapped and is a raised fill with an action label; a tag
+  (modality, "Recent", "Custom", an untrained muscle) is flat `steelRaised`, so it never imitates a
+  control. At
   accessibility sizes a wrapping tag, assumption chip or certainty capsule takes the control radius
   instead of a capsule, so wrapped text stays inside its outline.
 - **Library** (`LibraryView`, `LibraryScreen`): every selectable movement grouped by body part, with a
   ledger of the count in each at the bottom. Movements with no body part come first under a `warning`
   header with its `exclamationmark.triangle` symbol, "Needs a body part", because until one is tagged its
   sets count toward no muscle. A row is a 56 pt `SelectionCardButtonStyle` button for the lifter's own
-  movement and opens the editor; a curated movement is a flat card with a "Curated" `HardsetTag` and does
-  not open it, so nothing that looks tappable does nothing. The footer lists every body part, zeros
+  movement, marked "Custom", and opens the editor; a curated movement is a flat card with no tag, because
+  a tag repeated on every row says nothing, and its spoken label still says "Curated". It does
+  not open the editor, so nothing that looks tappable does nothing. The footer lists every body part, zeros
   included, in `figure` against `chalkDim` for a zero, each row under a `hairline`. It reads what is
   there: loading is a quiet line, a failed read says so in `HardsetEmptyState`, and neither draws an empty
   library. It adds no token and no motion.
@@ -317,7 +376,11 @@ Selection rows, the unit switch and pickers stay silent.
   dims to 0.4, as a disabled control does; saved logger values are never dimmed.
 - **Rest bar** (`RestBarView`): keeps its `ViewThatFits`: the countdown and the four controls (−15,
   +15, pause, skip) share one row when they fit, and otherwise the controls drop to their own
-  single row under the countdown; the four controls never split across rows.
+  single row under the countdown; the four controls never split across rows. The countdown is drawn
+  directly on the panel in `chalk`, with no knurl tile. The panel is opaque `steelRaised` at the
+  card radius with `Elevation.floating` and no stroke, in every appearance and setting: glass was
+  considered and refused, because the contrast gate cannot certify text on it. Controls are 56 pt
+  targets identified by their label or glyph.
 - **Navigation titles** (`hardsetNavigationTitle`): the one title that may shrink, with
   `minimumScaleFactor(0.8)`, so a long exercise name stays on a single line in a bar. It is a
   documented exception to "adaptive layouts in place of shrinking text".
@@ -357,43 +420,48 @@ Selection rows, the unit switch and pickers stay silent.
   transform and opacity animate". Touches outside the hole are swallowed, and only step two, the
   staged set's check, lets one through. A system sheet always presents over the whole window, so
   inside the staged phone the keypad, machine picker and Settings draw inline (`stagedSheet`): the
-  sheet's content is the real content, on a `steel` surface with the card radius and the lit top
-  edge. The callout is the one floating element on system glass besides the toolbars, and sits in
+  sheet's content is the real content, on a `steel` surface with the card radius and a `hairline`
+  rim. The callout is the one floating element on system glass besides the toolbars, and sits in
   the half of the phone the target is not in. Both Reduce Motion paths drop the hole's travel.
 - **Setup** (`SetupPage`): "Before your first set." Two selection rows for the unit, which edit the
   stored preference in place, and the gym: existing gyms as selection rows with one preselected, or
   for a new lifter one name field that may stay blank. A failed save stays on the page with the
   reason and the typed name kept.
 - **Text entry** (`entryFieldChrome`): raised fill, control border, and a 2 pt plate blue ring that
-  fades in on focus. Used by the search field and the name entry sheet.
+  fades in on focus. Used by the search field and the name entry sheet. An input keeps its outline,
+  because it is identified by its box.
+- **Set row**: the ordinal is a plain numeral in a fixed-width column; a warm-up's is the dashed "W".
+  An unlogged row's weight and reps are filled, outlined fields, because a container means the value
+  can be changed. A logged row shows plain `setEntry` values on the card with the same frames, no
+  field faces and no tint, and its green seal; the field faces fade out on `Motion.state`, and with
+  Reduce Motion the swap is instant, so nothing reflows when a set is logged.
 - **Set log control**: four states, never confused: incomplete (dashed, disabled), ready (plate blue
   outline), next up (plate blue fill), logged (the stamp). The first three are square key faces with
   a check; a logged set loses its key face and wears a round `plateGreen` seal
-  (`checkmark.circle.fill`) with a knurled rim, on the row's `plateGreenSurface` tint, so logged and
+  (`checkmark.circle.fill`) with a knurled rim, on the card's own surface, so logged and
   next up differ by shape, not only by hue. At accessibility sizes the control also reads "Log set"
   or "Logged", and VoiceOver hears "next to log" on the next-up row. Voice Control answers to
   "Set 2", "Log set 2", and, on the next-up row, "Log set".
-- **Press feedback on self-drawn controls** (`HardsetPressStyle`, `MachinedPressStyle` and the set
-  row's own styles): steel faces sink, everything else dims, and no press moves layout.
-  - Machined faces (raised steel with the control edge and the edge light: unselected chips,
-    `AssumptionChip`, the header icon button, the set machine chip, the set row's value fields, keys
-    and secondary buttons) sink to `steelPressed`, lose the edge light, keep the control edge and
-    scale to 0.97 (keys 0.96) on `Motion.press`. They never dim, so the 3:1 boundary survives a
-    press. The header icon menu is the one exception: `HeaderIconMenu` is a `Menu`, not a `Button`,
-    so it keeps its resting machined face, and its press feel is a device check. A selected chip
-    swaps `plateBlueFill` to `plateBlueFillPressed`. An editing set-row field is `plateBlueSurface`
-    with a 2 pt `plateBlue` ring and no edge light. A machined control's hit region is at least 44
-    by 44 pt, however compact its face.
+- **Press feedback on self-drawn controls** (`HardsetPressStyle` and the set row's own styles): flat
+  faces sink, everything else dims, and no press moves layout.
+  - Flat faces (a raised fill: unselected chips, `AssumptionChip`, the header icon button, the set
+    machine chip, the set row's unlogged value fields, keys and secondary buttons) sink to
+    `steelPressed` and scale to 0.97 (keys 0.96) on `Motion.press`. They never dim, so a
+    boundary that is drawn survives a press. The header icon menu is the one exception:
+    `HeaderIconMenu` is a `Menu`, not a `Button`, so it keeps its resting face, and its press feel is
+    a device check. A selected chip swaps `plateBlueFill` to `plateBlueFillPressed`. An editing
+    set-row field is `plateBlueSurface` with a 2 pt `plateBlue` ring. A control's hit region is at
+    least 44 by 44 pt, however compact its face.
   - Controls that draw their own fill and shape with no steel face (segments, the dashed "Add
     movement" slot, the exercise-name link, an unset machine chip, the dismiss glyph, the "Clear
     search" glyph and the certainty badge) sink to 0.97 and drop to 80% opacity on `Motion.press`,
     in place of a pressed fill.
-  - The set log control draws its own fill and shape: the set row's value fields sink as machined
-    faces; the log control (ready and next up) dims and scales like other self-drawn controls;
+  - The set log control draws its own fill and shape: the set row's unlogged value fields sink as
+    flat faces; the log control (ready and next up) dims and scales like other self-drawn controls;
     incomplete and logged show no press. Next up keeps its `plateBlueFill` while pressed.
-  - Flat surfaces take no machined press and carry no edge light: tags, the empty-state socket,
-    entry fields, banners, cards and the rest bar's panel. Tags are filled only and never take the
-    machined face, so a tag never imitates a control.
+  - Static surfaces take no press: tags, the empty-state socket, entry fields, banners, cards, a
+    logged row's values and the rest bar's panel. Tags never take a control's face, so a tag never
+    imitates a control.
   - Reduce Motion drops the scale and keeps only the fill or opacity change. Disabled controls are
     never dimmed by a press style, so saved rows and inert titles keep full contrast.
 - **Target line** (set row): when a movement has a rep range and history on this exact machine, an
@@ -406,8 +474,7 @@ Selection rows, the unit switch and pickers stay silent.
   with the same set last time on this machine, in the figures of the set: "+1 rep", "+2.5 kg", "+5 lb · +1
   rep", never a bare "Beat". A win is `plateGreen` on `plateGreenSurface` with an up arrow; a match is
   "Matched" in `chalkDim` on `steelRaised` with an equals sign, so neither is carried by colour alone. It
-  wears a 0.35 hue outline, a decorative stroke like a banner's that never carries meaning and is exempt
-  from the 3:1 boundary rule, because the capsule's own fill vanishes on the logged row's tint. At
+  carries no stroke: a logged row has no tint, so the capsule's own fill is visible on the card. At
   accessibility sizes, where its words can wrap, it takes the control radius instead of a capsule. A
   set that fell short, a warm-up, a set with no partner and a set done on another machine show nothing.
   It arrives through `hardsetArrival()`, the insertion-only opacity reveal on `Motion.reveal`, so the row's
@@ -416,9 +483,10 @@ Selection rows, the unit switch and pickers stay silent.
 - **Replaceable prefill**: when the keypad opens on a value the next key will replace, its display
   draws that value on `plateBlueSurface` with a hairline `plateBlue` ring, as selected text, until
   the first edit. Static; no motion.
-- **Button Shapes**: with the system setting on, `quiet` buttons wear the `secondary` control border
-  and the exercise name (the load-history link) is underlined.
-- **Volume bars**: square-ended gauges scaled to the week's own maximum, never to a target. Modelled
+- **Button Shapes**: with the system setting on, every stroke-free control, `quiet` buttons
+  included, wears the `controlEdge` outline, and the exercise name (the load-history link) is
+  underlined.
+- **Volume bars**: round-ended gauges, 4 pt continuous, scaled to the week's own maximum, never to a target. Modelled
   muscles are solid plate blue; muscles that are counted but not modelled are hollow (plate blue
   outline on `plateBlueSurface`) and say so in words beside the bar.
 - **Charts**: one series per machine with its own colour and point symbol, a custom legend in app
@@ -433,7 +501,8 @@ Selection rows, the unit switch and pickers stay silent.
 
 ## Accessibility floor
 
-7:1 text contrast, 3:1 control boundaries, Dynamic Type through every role, adaptive layouts in
+7:1 text contrast, a 3:1 boundary on every input and, under Increase Contrast or Button Shapes, on
+every control, Dynamic Type through every role, adaptive layouts in
 place of shrinking text, one combined accessibility element per set row with named actions, and
 Reduce Motion honoured in every animation. At accessibility sizes screen headers put their
 action on its own line above the title, exercise headers put progress and menu below the name,

@@ -49,6 +49,7 @@ public struct ExerciseProgressScreen: View {
             machineChanges: history.machineChanges,
             unit: unit,
             estimatesOneRepMax: history.estimatesOneRepMax,
+            assumesAddedLoad: history.assumesAddedLoad,
             onExplain: { isShowingMethodology = true }
           )
         } else {

@@ -25,47 +25,64 @@ public enum Tokens {
     // write access to its own output when the package sits under a symlinked path. A handful of
     // colours are not worth a resource bundle, and this version has no build step to fail.
 
-    // MARK: Steel: canvas, surfaces and edges
+    // MARK: Steel: canvas and surfaces
+    //
+    // Surfaces separate by fill, not by line. Canvas to `steel` is 1.18:1 in dark and 1.12:1 in
+    // light, and `steelRaised` on `steel` is 1.14:1 in dark and 1.16:1 in light, so a card needs
+    // no border. `steelRaised` cannot be brighter in dark: `plateBlue` text on it is 7.12:1
+    // against the 7:1 floor. `Tools/check_contrast.py` gates the steps as well as the text.
 
-    /// The screen canvas: the deepest graphite in dark, a faint chalk-white in light.
+    /// The screen canvas: the deepest graphite in dark, Apple's grouped background in light.
     public static let canvas = swatch(
-      light: 0xF6F6F8, dark: 0x0C0D10, highLight: 0xFFFFFF, highDark: 0x000000
+      light: 0xF2F2F7, dark: 0x050608, highLight: 0xFFFFFF, highDark: 0x000000
     )
     /// Cards, rows and the content of sheets.
     public static let steel = swatch(
-      light: 0xFFFFFF, dark: 0x17181D, highLight: 0xFFFFFF, highDark: 0x000000
+      light: 0xFFFFFF, dark: 0x1A1B21, highLight: 0xFFFFFF, highDark: 0x000000
     )
-    /// Elevated or pressed surface fill, one step above `steel`: fields, keys, chips and
-    /// secondary buttons.
+    /// One step above `steel`: fields, keys, chips and secondary buttons that sit on `steel`.
     public static let steelRaised = swatch(
-      light: 0xEEEEF2, dark: 0x22242B, highLight: 0xFFFFFF, highDark: 0x000000
+      light: 0xEEEEF2, dark: 0x24262D, highLight: 0xFFFFFF, highDark: 0x000000
+    )
+    /// The fill of a control that sits directly on `canvas`: header buttons, and the secondary
+    /// buttons of a screen with no card around them.
+    ///
+    /// Light `steelRaised` on `canvas` is only 1.04:1, so on canvas a control is white, 1.12:1.
+    /// In dark it is the same colour as `steelRaised`. Under Increase Contrast it collapses to
+    /// pure white or black with the rest of the steps, and the outline comes back.
+    public static let controlFillOnCanvas = swatch(
+      light: 0xFFFFFF, dark: 0x24262D, highLight: 0xFFFFFF, highDark: 0x000000
     )
     /// The momentary fill of a pressed key or secondary button. In both normal appearances it is
     /// darker than `steelRaised`, so a press sinks rather than lights up. Opaque, so text on it
     /// stays measurable rather than depending on what happens to be underneath.
+    ///
+    /// Dark is `#111216`, below the first sleeker-pass spec's `#1B1C22`. With no outline to hold the
+    /// boundary, that value was 1.01:1 against the new dark `steel`, so a pressed button or chip
+    /// inside a card lost its face entirely. `#111216` is 1.09:1 against `steel`, 1.08:1 against
+    /// `canvas` and 1.24:1 below `steelRaised`, so it reads as sunk on every surface it is pressed
+    /// on. `Tools/check_contrast.py` gates both steps.
     public static let steelPressed = swatch(
-      light: 0xE6E6EB, dark: 0x1B1C22, highLight: 0xE6E6EA, highDark: 0x26262B
+      light: 0xE6E6EB, dark: 0x111216, highLight: 0xE6E6EA, highDark: 0x26262B
     )
-    /// The lit top edge of a raised face, written as an opaque value rather than an alpha.
+    /// Retired with the machined face it lit. Nothing draws a raised edge any more.
     ///
-    /// Pre-blended over `steelRaised`: 60% `#3A3D47` in dark, 80% white in light. It stays opaque
-    /// so the edge is the same colour wherever the face is drawn; do not turn it into an alpha.
+    /// Kept for one reader only: `ScaledPhoneFrame`, which was held out of the phase that retired
+    /// the machined skin and still draws its rim with this value. When that file is next edited
+    /// its rim becomes `hairline` and this token is deleted. Do not use it anywhere else.
     public static let edgeLight = swatch(light: 0xFCFCFD, dark: 0x30333C)
-    /// The shaded bottom edge of a raised face, written as an opaque value rather than an alpha.
+    /// Subtle charcoal hairline for separators inside a card or grouped rows, and the card's
+    /// outline under Increase Contrast.
     ///
-    /// Pre-blended over `steelRaised`: 50% black in dark, 8% black in light. It stays opaque so
-    /// the edge is the same colour wherever the face is drawn; do not turn it into an alpha.
-    public static let edgeShadow = swatch(light: 0xDBDBDF, dark: 0x111216)
-    /// Subtle charcoal hairline for cards, rows, and dividers.
-    ///
-    /// Decorative grouping only. Anything whose boundary is the thing that tells the lifter "this
-    /// is tappable" uses `controlEdge`, which is measured at 3:1.
+    /// Decorative grouping only. It is never what tells the lifter something is tappable.
     public static let hairline = swatch(
       light: 0xDEDEE4, dark: 0x2E3039, highLight: 0x595964, highDark: 0x9B9BA5
     )
-    /// The boundary that identifies a control: fields, keys, chips, secondary buttons. At least
-    /// 3:1 against `canvas`, `steel`, `steelRaised` and `steelPressed`, since a pressed face keeps
-    /// it.
+    /// The outline of an input, and of every control under Increase Contrast or Button Shapes.
+    /// At least 3:1 against `canvas`, `steel`, `steelRaised`, `controlFillOnCanvas` and
+    /// `steelPressed`, since a pressed face keeps it. A labelled button, key, chip or header
+    /// button on a normal appearance is identified by its fill and its label instead, and does
+    /// not draw it; see `ControlOutline`.
     public static let controlEdge = swatch(
       light: 0x7E8190, dark: 0x7B7E8C, highLight: 0x595964, highDark: 0x9B9BA5
     )
@@ -240,9 +257,34 @@ public enum Tokens {
     public static let block: CGFloat = 32
   }
 
+  /// Corner radii. Every one is drawn continuous, through `Tokens.Shape`, so a corner is the
+  /// system's own curve and not a circular arc.
+  ///
+  /// Concentric: inner radius is outer radius minus the padding between them. A card of 24 with
+  /// 12 of padding holds controls of 12. Capsules and circles are reserved for chips, badges and
+  /// the logged seal, and sheets take the system's own corner radius.
   public enum Radius {
-    public static let control: CGFloat = 10
-    public static let card: CGFloat = 16
+    public static let control: CGFloat = 12
+    public static let card: CGFloat = 24
+    /// The ends of a gauge bar. Skin only: the bar's scale is unchanged.
+    public static let bar: CGFloat = 4
+  }
+
+  /// The continuous rounded rectangles the radii describe, in one place so a radius change or a
+  /// corner-style change is one edit and not one per call site.
+  ///
+  /// `RoundedRectangle(cornerRadius:)` alone draws a circular arc, which is not what the system
+  /// draws; every new use names one of these instead.
+  public enum Shape {
+    public static let card = RoundedRectangle(cornerRadius: Radius.card, style: .continuous)
+    public static let control = RoundedRectangle(cornerRadius: Radius.control, style: .continuous)
+    public static let bar = RoundedRectangle(cornerRadius: Radius.bar, style: .continuous)
+
+    /// A continuous rounded rectangle of any radius, for the one place a token radius is
+    /// adjusted, such as an indicator inset inside its track.
+    public static func rounded(_ radius: CGFloat) -> RoundedRectangle {
+      RoundedRectangle(cornerRadius: radius, style: .continuous)
+    }
   }
 
   public enum Stroke {
@@ -250,21 +292,34 @@ public enum Tokens {
     public static let selected: CGFloat = 2
   }
 
+  /// A soft shadow for a surface that is pinned over scrolling content and so cannot be told from
+  /// the cards beneath it by fill alone: the rest bar.
+  ///
+  /// Material-free by decision. Glass would put the most-read number in the app on a surface the
+  /// contrast gate can only model, so pinned chrome stays opaque and is separated by a fill step
+  /// and this shadow. Light appearance only: in dark the 1.34:1 step to `canvas` does the
+  /// separating and a black shadow on near-black adds nothing. The values are a starting point to
+  /// be tuned on a device. It animates nothing.
+  public enum Elevation {
+    public static let floatingOpacity: Double = 0.12
+    public static let floatingRadius: CGFloat = 12
+    public static let floatingOffset: CGFloat = 2
+  }
+
   /// Type roles. Every one is a Dynamic Type text style, so all of them scale.
   ///
   /// Figures use SF Pro Condensed with tabular digits. Condensed is the functional choice, not a
   /// flourish: a pound value such as "132.28" fits a set-row field at full size, where the rounded
-  /// face had to shrink it to 60% -- about 12 pt -- to avoid wrapping.
+  /// face had to shrink it to 60% -- about 12 pt -- to avoid wrapping. Condensed is for figures
+  /// only: a sentence that happens to hold figures is `title` with tabular digits.
   public enum Text {
-    /// Tab screen headers. A stamped plate face in the family of the figures: condensed and
-    /// semibold, so a header reads as the same engraved lettering as the numbers beneath it.
-    /// Expanded width is retired.
-    public static let display = Font.system(.largeTitle, design: .default, weight: .semibold)
-      .width(.condensed)
-    /// Sheet headers and hero card titles. Standard width: expanded width is retired, and the
-    /// condensed face is kept for display and figures.
+    /// Tab screen headers. Bold, in the system's standard width: the system font applies its own
+    /// optical size and tracking, so none is added. Condensed is kept for the figures beneath it.
+    public static let display = Font.system(.largeTitle, design: .default, weight: .bold)
+    /// Sheet headers, hero card titles, and a sentence that holds figures. Standard width:
+    /// expanded width is retired, and the condensed face is kept for figures.
     public static let title = Font.system(.title3, design: .default, weight: .semibold)
-    /// Card and row titles, and primary button labels.
+    /// Card and row titles, primary button labels, and emphasised labels.
     public static let headline = Font.headline
 
     /// The rest countdown and the keypad's display. The biggest figure on any screen.
@@ -280,7 +335,6 @@ public enum Tokens {
       .width(.condensed).monospacedDigit()
 
     public static let label = Font.body
-    public static let labelEmphasis = Font.body.weight(.semibold)
     /// Certainty, borrowed-history notes and corrections. Larger than a caption because these
     /// are the caveats the app exists to state, and they are read at arm's length.
     public static let provenance = Font.callout
@@ -374,9 +428,20 @@ public enum CertaintyLevel: String, Sendable, CaseIterable {
 
 // MARK: - View Modifiers
 
+/// A card: a `steel` fill on a continuous corner, and no border.
+///
+/// Separation is the step from `steel` to `canvas`. Selected, the card takes `plateBlueSurface`
+/// and a 2 pt `plateBlue` ring, because selection is state and not structure. Under Increase
+/// Contrast, where `canvas` and `steel` are one colour and the step is gone, an unselected card
+/// wears a `hairline` border instead.
+///
+/// Everything inside a card is drawn on `steel`, so a button, chip or header button in it takes
+/// `steelRaised` and not the canvas fill.
 public struct HardsetCardModifier: ViewModifier {
   public let isSelected: Bool
   public let cornerRadius: CGFloat
+
+  @Environment(\.colorSchemeContrast) private var contrast
 
   public init(isSelected: Bool = false, cornerRadius: CGFloat = Tokens.Radius.card) {
     self.isSelected = isSelected
@@ -384,37 +449,48 @@ public struct HardsetCardModifier: ViewModifier {
   }
 
   public func body(content: Content) -> some View {
+    let shape = Tokens.Shape.rounded(cornerRadius)
     content
+      .hardsetControlSurface(.steel)
       .background(
         isSelected ? Tokens.Color.plateBlueSurface : Tokens.Color.steel,
-        in: RoundedRectangle(cornerRadius: cornerRadius)
+        in: shape
       )
-      .overlay(
-        RoundedRectangle(cornerRadius: cornerRadius)
-          .strokeBorder(
-            isSelected ? Tokens.Color.plateBlue : Tokens.Color.hairline,
-            lineWidth: isSelected ? Tokens.Stroke.selected : Tokens.Stroke.hairline
-          )
-      )
+      .overlay {
+        if isSelected {
+          shape.strokeBorder(Tokens.Color.plateBlue, lineWidth: Tokens.Stroke.selected)
+        } else if contrast == .increased {
+          shape.strokeBorder(Tokens.Color.hairline, lineWidth: Tokens.Stroke.hairline)
+        }
+      }
   }
 }
 
+/// A sheet's background and chrome. The corner radius is the system's own, which is concentric
+/// with the device's corners; overriding it with a token only made it differ from every other
+/// sheet on the phone.
 public struct HardsetSheetModifier: ViewModifier {
   public init() {}
 
   public func body(content: Content) -> some View {
-    #if os(iOS)
-      content
-        .presentationBackground(Tokens.Color.canvas)
-        .presentationDragIndicator(.visible)
-        .presentationCornerRadius(Tokens.Radius.card)
-        .tint(Tokens.Color.plateBlue)
-    #else
-      content
-        .presentationBackground(Tokens.Color.canvas)
-        .presentationDragIndicator(.visible)
-        .tint(Tokens.Color.plateBlue)
-    #endif
+    content
+      .presentationBackground(Tokens.Color.canvas)
+      .presentationDragIndicator(.visible)
+      .tint(Tokens.Color.plateBlue)
+  }
+}
+
+/// The soft shadow of a pinned opaque surface. See `Tokens.Elevation`.
+struct HardsetFloatingModifier: ViewModifier {
+  @Environment(\.colorScheme) private var colorScheme
+
+  func body(content: Content) -> some View {
+    content.shadow(
+      color: colorScheme == .light ? .black.opacity(Tokens.Elevation.floatingOpacity) : .clear,
+      radius: Tokens.Elevation.floatingRadius,
+      x: 0,
+      y: Tokens.Elevation.floatingOffset
+    )
   }
 }
 
@@ -425,6 +501,12 @@ public extension View {
 
   func hardsetSheet() -> some View {
     modifier(HardsetSheetModifier())
+  }
+
+  /// Lifts a pinned opaque surface off the content scrolling beneath it with a soft shadow, in
+  /// light appearance only. The fill step does the separating in dark.
+  func hardsetFloating() -> some View {
+    modifier(HardsetFloatingModifier())
   }
 }
 
@@ -439,7 +521,8 @@ public struct HardsetButtonStyle: ButtonStyle {
   public enum Role: Sendable, Hashable {
     /// Accent fill. One per screen: the thing the lifter came here to do.
     case primary
-    /// Machined raised face with a control edge.
+    /// A flat fill that steps off its surface, with no outline. For the actions of a state that
+    /// are not the one thing the lifter came to do.
     case secondary
     /// Accent text with no fill, for low-emphasis actions beside content.
     case quiet
@@ -477,10 +560,6 @@ private struct HardsetButtonBody: View {
 
   @Environment(\.isEnabled) private var isEnabled
   @Environment(\.accessibilityReduceMotion) private var reduceMotion
-  /// Button Shapes. A custom style bypasses the system's own rendering of it, so a quiet button,
-  /// accent text with no fill, stayed indistinguishable from coloured text for exactly the people
-  /// who asked to see the difference. With it on, a quiet button wears the secondary outline.
-  @Environment(\.accessibilityShowButtonShapes) private var showsButtonShapes
 
   var body: some View {
     HardsetButtonFace(
@@ -488,8 +567,7 @@ private struct HardsetButtonBody: View {
       size: size,
       fullWidth: fullWidth,
       isPressed: configuration.isPressed,
-      isEnabled: isEnabled,
-      showsButtonShapes: showsButtonShapes
+      isEnabled: isEnabled
     ) {
       configuration.label
     }
@@ -508,14 +586,22 @@ private struct HardsetButtonBody: View {
 /// samples with it, because a `ButtonStyle` cannot be forced pressed in a render. Sharing the face
 /// keeps the catalogue honest: a sample cannot drift from what a press actually shows. The press
 /// scale and its animation stay in the style, since they are motion rather than a face.
+///
+/// No role is outlined by default: a button is identified by its fill and its verb. Under Increase
+/// Contrast or Button Shapes every role but `primary`, whose fill is already about 8:1 against its
+/// surface, wears the `controlEdge` outline, in both states, so the boundary is there exactly
+/// where the lifter asked for it and never disappears under a finger. The face reads both settings
+/// itself, so a catalogue render under either shows the outline without being told.
 struct HardsetButtonFace<Label: View>: View {
   private let role: HardsetButtonStyle.Role
   private let size: HardsetButtonStyle.Size
   private let fullWidth: Bool
   private let isPressed: Bool
   private let isEnabled: Bool
-  private let showsButtonShapes: Bool
   private let label: Label
+
+  @Environment(\.colorSchemeContrast) private var contrast
+  @Environment(\.accessibilityShowButtonShapes) private var showsButtonShapes
 
   init(
     role: HardsetButtonStyle.Role,
@@ -523,7 +609,6 @@ struct HardsetButtonFace<Label: View>: View {
     fullWidth: Bool,
     isPressed: Bool,
     isEnabled: Bool,
-    showsButtonShapes: Bool,
     @ViewBuilder label: () -> Label
   ) {
     self.role = role
@@ -531,15 +616,14 @@ struct HardsetButtonFace<Label: View>: View {
     self.fullWidth = fullWidth
     self.isPressed = isPressed
     self.isEnabled = isEnabled
-    self.showsButtonShapes = showsButtonShapes
     self.label = label()
   }
 
   var body: some View {
-    let shape = RoundedRectangle(cornerRadius: Tokens.Radius.control)
+    let shape = Tokens.Shape.control
     surface(
       label
-        .font(size == .logger ? Tokens.Text.headline : Tokens.Text.labelEmphasis)
+        .font(Tokens.Text.headline)
         .foregroundStyle(foreground)
         .multilineTextAlignment(.center)
         .padding(.horizontal, role == .quiet ? Tokens.Spacing.snug : Tokens.Spacing.loose)
@@ -561,14 +645,16 @@ struct HardsetButtonFace<Label: View>: View {
     return (role == .quiet || role == .destructive) && isPressed ? 0.6 : 1
   }
 
-  /// Draws the role's face behind the label. Secondary is a machined face that keeps its control
-  /// edge and loses its edge light when pressed. Primary is a solid plate-blue fill with no edge
-  /// gradient: the edge colours are pre-blended for steel and read wrong on plate blue. The role
-  /// never changes across a press, so each branch is one view whose pressed state only changes
-  /// its arguments, and the label keeps its identity. A modifier that returns `some View` cannot
-  /// be applied conditionally inline, so the choice is made here.
+  /// Draws the role's face behind the label. The tiers, from most to least weight: `primary` is a
+  /// solid plate-blue fill, one per state, swapping to its pressed fill; `secondary` is a flat
+  /// fill that steps off its surface and sinks to `steelPressed`; `quiet` is plate-blue text with
+  /// no fill; `destructive` is red text on the error surface. The role never changes across a
+  /// press, so each branch is one view whose pressed state only changes its arguments, and the
+  /// label keeps its identity. A modifier that returns `some View` cannot be applied
+  /// conditionally inline, so the choice is made here.
   @ViewBuilder
   private func surface<Content: View>(_ content: Content, shape: RoundedRectangle) -> some View {
+    let request = ControlEdgeRequest(contrast: contrast, showsButtonShapes: showsButtonShapes)
     switch role {
     case .primary:
       content.background(
@@ -576,16 +662,22 @@ struct HardsetButtonFace<Label: View>: View {
         in: shape
       )
     case .secondary:
-      content.modifier(MachinedModifier(shape: shape, isPressed: isPressed, outlined: true))
+      content.modifier(ControlFaceModifier(shape: shape, isPressed: isPressed, outline: .onRequest))
     case .quiet:
       content
         .overlay {
-          if showsButtonShapes {
+          if request.isRequested {
             shape.strokeBorder(Tokens.Color.controlEdge, lineWidth: Tokens.Stroke.hairline)
           }
         }
     case .destructive:
-      content.background(Tokens.Color.plateRedSurface, in: shape)
+      content
+        .background(Tokens.Color.plateRedSurface, in: shape)
+        .overlay {
+          if request.isRequested {
+            shape.strokeBorder(Tokens.Color.controlEdge, lineWidth: Tokens.Stroke.hairline)
+          }
+        }
     }
   }
 
@@ -599,12 +691,17 @@ struct HardsetButtonFace<Label: View>: View {
   }
 }
 
-/// A keypad key: a machined raised face, outlined, and pressed in rather than highlighted.
+/// A keypad key: a flat `steelRaised` face on the keypad's `steel` panel, pressed in rather than
+/// highlighted.
 ///
-/// Pressing it drops the edge light and swaps to the pressed fill, so the key reads as having gone
-/// down. It wears the measured `controlEdge` outline in both states, so the boundary never
-/// disappears under a finger. A key identified only by a fill one shade off the pad is a key the
-/// lifter has to look for.
+/// Pressing it swaps to the pressed fill, so the key reads as having gone down. It keeps the
+/// measured `controlEdge` outline in both states, so the boundary never disappears under a finger.
+///
+/// The outline is the one stroke of the old rule that this phase leaves in place. Dropping it from
+/// a key reverses the note this style used to carry, "a key identified only by a fill one shade
+/// off the pad is a key the lifter has to look for", and gym glare and sweaty hands cannot be
+/// judged from a render, so it is its own step with its own device check. It is one argument,
+/// `outline:` in `HardsetKeyFace`, and reverts alone: change `.always` to `.onRequest`.
 public struct HardsetKeyStyle: ButtonStyle {
   public init() {}
 
@@ -631,10 +728,13 @@ private struct HardsetKeyBody: View {
   }
 }
 
-/// A key's face in a given state: chalk label, logger-height frame, the outlined machined face,
-/// and the disabled opacity. Shared by `HardsetKeyStyle` and the token catalogue's pressed keys,
-/// for the same reason as `HardsetButtonFace`. One modifier whose pressed state changes, so the
-/// label keeps its identity across a press instead of being rebuilt in a different branch.
+/// A key's face in a given state: chalk label, logger-height frame, the flat face on `steel`, and
+/// the disabled opacity. Shared by `HardsetKeyStyle` and the token catalogue's pressed keys, for
+/// the same reason as `HardsetButtonFace`. One modifier whose pressed state changes, so the label
+/// keeps its identity across a press instead of being rebuilt in a different branch.
+///
+/// Keys always sit on the keypad's `steel` panel, so the face says so itself and needs nothing
+/// from its caller.
 struct HardsetKeyFace<Label: View>: View {
   private let isPressed: Bool
   private let isEnabled: Bool
@@ -651,12 +751,9 @@ struct HardsetKeyFace<Label: View>: View {
       .foregroundStyle(Tokens.Color.chalk)
       .frame(maxWidth: .infinity, minHeight: Tokens.loggerTapTarget)
       .modifier(
-        MachinedModifier(
-          shape: RoundedRectangle(cornerRadius: Tokens.Radius.control),
-          isPressed: isPressed,
-          outlined: true
-        )
+        ControlFaceModifier(shape: Tokens.Shape.control, isPressed: isPressed, outline: .always)
       )
+      .hardsetControlSurface(.steel)
       .opacity(isEnabled ? 1 : 0.4)
   }
 }

@@ -111,8 +111,8 @@ private struct FieldStates: View {
     CatalogSection("Value fields") {
       VStack(alignment: .leading, spacing: Tokens.Spacing.loose) {
         setRowNote(
-          "Machined raised faces with the control edge. Pressed sinks to steelPressed and loses "
-            + "its edge light. Editing is plateBlueSurface in a 2 pt plateBlue ring."
+          "Raised flat faces with the control edge. Pressed sinks to steelPressed. "
+            + "Editing is plateBlueSurface in a 2 pt plateBlue ring."
         )
         setRowSample("Rest: weight and reps") {
           pair(.rest, weight: "100", reps: "8")

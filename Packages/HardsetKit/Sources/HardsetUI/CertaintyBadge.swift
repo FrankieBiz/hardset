@@ -8,12 +8,13 @@ import SwiftUI
 /// than a paragraph in a settings screen -- means it cannot drift away from the value it
 /// describes, because the same view renders both.
 ///
-/// Drawn as a compact capsule on the level's own tint, outlined in the level's hue so it reads as
-/// something that can be opened; at accessibility sizes, where the word can wrap, the capsule takes
-/// the control radius (see `CertaintyCapsule`). The capsule stays small enough to sit beside a
-/// figure, but the tappable region is the full 44 pt floor, laid out inside the button's label: a
-/// frame applied outside a plain button reserves space without reliably extending what can be
-/// tapped.
+/// Drawn as a compact capsule on the level's own tint. The symbol, the word and the hue identify
+/// it, and it wears no outline by default; under Increase Contrast or Button Shapes it is outlined
+/// in the level's hue, so it still reads as something that can be opened. At accessibility sizes,
+/// where the word can wrap, the capsule takes the control radius (see `CertaintyCapsule`). The
+/// capsule stays small enough to sit beside a figure, but the tappable region is the full 44 pt
+/// floor, laid out inside the button's label: a frame applied outside a plain button reserves
+/// space without reliably extending what can be tapped.
 public struct CertaintyBadge: View {
   private let level: CertaintyLevel
   private let methodology: String
@@ -174,9 +175,11 @@ struct CertaintyDetailContent: View {
 
 /// The capsule itself: symbol, word and hue together, on the level's tint.
 ///
-/// Shared with `MethodologySheet`, which states the same level at the top of its disclosure. Only
-/// the interactive version carries a full-strength outline, because an outline at 3:1 is what tells
-/// the lifter something is tappable, and a static chip must not imitate a control.
+/// Shared with `MethodologySheet`, which states the same level at the top of its disclosure. The
+/// fill, symbol and word are the whole of it: no capsule draws a decorative outline. Only the
+/// interactive version has one to give, a full-strength outline in the level's hue that appears
+/// under Increase Contrast or Button Shapes, because those settings ask every control to show its
+/// edge, and a static chip must never imitate a control.
 ///
 /// A capsule at ordinary sizes. At accessibility sizes the word can wrap to a second line, and a
 /// capsule's corner radius, half its height, then pushes the wrapped text across the outline, so
@@ -187,10 +190,12 @@ struct CertaintyCapsule: View {
   let isInteractive: Bool
 
   @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+  @Environment(\.colorSchemeContrast) private var contrast
+  @Environment(\.accessibilityShowButtonShapes) private var showsButtonShapes
 
-  /// Explicit, because the private environment property above would otherwise make the memberwise
-  /// initialiser private, and `MethodologySheet` and the honesty catalogue draw the capsule from
-  /// other files.
+  /// Explicit, because the private environment properties above would otherwise make the
+  /// memberwise initialiser private, and `MethodologySheet` and the honesty catalogue draw the
+  /// capsule from other files.
   init(level: CertaintyLevel, isInteractive: Bool) {
     self.level = level
     self.isInteractive = isInteractive
@@ -198,7 +203,8 @@ struct CertaintyCapsule: View {
 
   var body: some View {
     let isLarge = dynamicTypeSize.isAccessibilitySize
-    let outline = Tokens.Color.certainty(level).opacity(isInteractive ? 1 : 0.35)
+    let request = ControlEdgeRequest(contrast: contrast, showsButtonShapes: showsButtonShapes)
+    let outline = Tokens.Color.certainty(level)
     HStack(spacing: Tokens.Spacing.tight) {
       Image(systemName: level.symbolName)
         .accessibilityHidden(true)
@@ -212,18 +218,18 @@ struct CertaintyCapsule: View {
     .padding(.vertical, Tokens.Spacing.tight)
     .background {
       if isLarge {
-        RoundedRectangle(cornerRadius: Tokens.Radius.control)
-          .fill(Tokens.Color.certaintySurface(level))
+        Tokens.Shape.control.fill(Tokens.Color.certaintySurface(level))
       } else {
         Capsule().fill(Tokens.Color.certaintySurface(level))
       }
     }
     .overlay {
-      if isLarge {
-        RoundedRectangle(cornerRadius: Tokens.Radius.control)
-          .strokeBorder(outline, lineWidth: Tokens.Stroke.hairline)
-      } else {
-        Capsule().strokeBorder(outline, lineWidth: Tokens.Stroke.hairline)
+      if isInteractive && request.isRequested {
+        if isLarge {
+          Tokens.Shape.control.strokeBorder(outline, lineWidth: Tokens.Stroke.hairline)
+        } else {
+          Capsule().strokeBorder(outline, lineWidth: Tokens.Stroke.hairline)
+        }
       }
     }
   }
@@ -234,13 +240,14 @@ struct CertaintyCapsule: View {
 /// Required wherever an inferred experience level moved a number the user sees: the guess is
 /// stated, and correcting it is a single tap away.
 ///
-/// Outlined as a control, with the pencil in plate blue because it is the part that acts. Its 44 pt
-/// hit region is applied by `MachinedPressFace` after the capsule (R40).
+/// A flat raised fill, with the pencil in plate blue because it is the part that acts; it is
+/// outlined when Increase Contrast or Button Shapes asks every control to be. Its 44 pt hit region
+/// is applied by `ControlPressFace` after the capsule (R40).
 ///
 /// A capsule at ordinary sizes. At accessibility sizes a long label wraps to several lines, and a
 /// capsule's corner radius, half its height, then pushes the wrapped text across the outline, so
-/// there the machined face takes the control radius instead. Only the shape changes: the press,
-/// the outline, the hit region and the spoken label are the same at every size.
+/// there the face takes the control radius instead. Only the shape changes: the press, the
+/// outline, the hit region and the spoken label are the same at every size.
 public struct AssumptionChip: View {
   private let label: String
   private let correctionPrompt: String
@@ -259,16 +266,14 @@ public struct AssumptionChip: View {
       .accessibilityLabel("\(label). \(correctionPrompt).")
   }
 
-  /// The chip in its machined press style, on the capsule or, at accessibility sizes, on the
-  /// control radius.
+  /// The chip in its flat press style, on the capsule or, at accessibility sizes, on the control
+  /// radius.
   @ViewBuilder
   private var styledChip: some View {
     if dynamicTypeSize.isAccessibilitySize {
-      chip.buttonStyle(
-        MachinedPressStyle(
-          shape: RoundedRectangle(cornerRadius: Tokens.Radius.control), outlined: true))
+      chip.buttonStyle(ControlPressStyle(shape: Tokens.Shape.control, outline: .onRequest))
     } else {
-      chip.buttonStyle(MachinedPressStyle(shape: Capsule(), outlined: true))
+      chip.buttonStyle(ControlPressStyle(shape: Capsule(), outline: .onRequest))
     }
   }
 

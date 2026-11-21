@@ -127,6 +127,9 @@ public struct NumericPad: View {
     // Opaque, not glass. Glass cannot sample glass, and a translucent keypad over a dense set
     // grid is unreadable in a bright gym besides.
     .background(Tokens.Color.steel)
+    // The pad is a steel panel, not a card, so its Done and Next buttons say what they sit on: in
+    // light a canvas-fill button would be white on white here.
+    .hardsetControlSurface(.steel)
     .onChange(of: title) {
       if voiceOverEnabled { isDisplayFocused = true }
     }

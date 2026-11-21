@@ -31,6 +31,12 @@ struct DataPortabilitySection: View {
   @State private var exportFailed = false
   @State private var importMessage: String?
   @State private var importFailed = false
+  @State private var lastImportUndo: WorkoutImportUndo?
+  @State private var undoToConfirm: WorkoutImportUndo?
+  @State private var undoMessage: String?
+  @State private var isUndoing = false
+
+  private var isBusy: Bool { isExporting || isImporting || isUndoing }
 
   var body: some View {
     VStack(alignment: .leading, spacing: Tokens.Spacing.regular) {
@@ -41,7 +47,7 @@ struct DataPortabilitySection: View {
       ForEach(DataTransferStore.Format.allCases, id: \.self) { format in
         Button("Export \(format.displayName)") { export(format) }
           .buttonStyle(HardsetButtonStyle(.secondary))
-          .disabled(isExporting || isImporting)
+          .disabled(isBusy)
       }
       if isExporting { ProgressView().accessibilityLabel("Preparing your export") }
       if let exportURL {
@@ -68,7 +74,23 @@ struct DataPortabilitySection: View {
         .fixedSize(horizontal: false, vertical: true)
       Button("Choose workout CSV") { isChoosingFile = true }
         .buttonStyle(HardsetButtonStyle(.secondary))
-        .disabled(isImporting || isExporting)
+        .disabled(isBusy)
+      if let lastImportUndo {
+        Button("Undo last import", role: .destructive) { undoToConfirm = lastImportUndo }
+          .buttonStyle(HardsetButtonStyle(.secondary))
+          .disabled(isBusy)
+      }
+      Text("Undo is available for imports made from this version onward. Earlier imports cannot be undone here.")
+        .font(Tokens.Text.caption)
+        .foregroundStyle(Tokens.Color.chalkDim)
+        .fixedSize(horizontal: false, vertical: true)
+      if let undoMessage {
+        Text(undoMessage)
+          .font(Tokens.Text.provenance)
+          .foregroundStyle(Tokens.Color.warning)
+          .fixedSize(horizontal: false, vertical: true)
+      }
+      if isUndoing { ProgressView().accessibilityLabel("Undoing the last import") }
       if let preview { previewCard(preview) }
       if isImporting { ProgressView().accessibilityLabel("Reading your workouts") }
       if let importMessage {
@@ -77,6 +99,15 @@ struct DataPortabilitySection: View {
           .foregroundStyle(importFailed ? Tokens.Color.plateRed : Tokens.Color.chalkDim)
           .fixedSize(horizontal: false, vertical: true)
       }
+    }
+    .task { await refreshUndo() }
+    .confirmationDialog("Undo last import?", isPresented: Binding(
+      get: { undoToConfirm != nil }, set: { if !$0 { undoToConfirm = nil } }
+    ), titleVisibility: .visible, presenting: undoToConfirm) { confirmed in
+      Button("Delete imported workouts", role: .destructive) { undo(confirmed) }
+      Button("Cancel", role: .cancel) { undoToConfirm = nil }
+    } message: { confirmed in
+      Text(confirmed.confirmationMessage)
     }
     .fileImporter(isPresented: $isChoosingFile, allowedContentTypes: [.commaSeparatedText, .plainText]) { result in
       switch result {
@@ -141,11 +172,11 @@ struct DataPortabilitySection: View {
           commit(preview)
         }
         .buttonStyle(HardsetButtonStyle())
-        .disabled(isImporting || alreadyImported == nil)
+        .disabled(isBusy || alreadyImported == nil)
       }
       Button(newWorkouts > 0 ? "Cancel import" : "Close preview") { dropPreview() }
         .buttonStyle(HardsetButtonStyle(.quiet))
-        .disabled(isImporting)
+        .disabled(isBusy)
     }
     .padding(Tokens.Spacing.loose)
     .frame(maxWidth: .infinity, alignment: .leading)
@@ -272,7 +303,34 @@ struct DataPortabilitySection: View {
         importFailed = false
         importMessage = Self.summary(result, preview: preview)
         if result.importedSets > 0 { onDataChanged() }
+        await refreshUndo()
       } catch { reportImport(error) }
+    }
+  }
+
+  private func refreshUndo() async {
+    do {
+      lastImportUndo = try await store.lastImportUndo()
+      undoMessage = nil
+    } catch {
+      lastImportUndo = nil
+      undoMessage = error.localizedDescription
+    }
+  }
+
+  private func undo(_ confirmed: WorkoutImportUndo) {
+    dropPreview()
+    isUndoing = true
+    importMessage = nil
+    Task {
+      defer { isUndoing = false }
+      do {
+        try await store.undoLastImport(confirmed)
+        importFailed = false
+        importMessage = "Removed \(confirmed.setCount) sets in \(confirmed.sessionCount) sessions from the last import. You can choose the CSV again with the correct unit."
+        onDataChanged()
+      } catch { reportImport(error) }
+      await refreshUndo()
     }
   }
 

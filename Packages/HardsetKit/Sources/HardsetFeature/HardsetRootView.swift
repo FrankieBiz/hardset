@@ -648,7 +648,7 @@ public struct HardsetRootView: View {
 
   private var changeLabel: some View {
     Text("Change")
-      .font(Tokens.Text.labelEmphasis)
+      .font(Tokens.Text.headline)
       .foregroundStyle(Tokens.Color.plateBlue)
   }
 

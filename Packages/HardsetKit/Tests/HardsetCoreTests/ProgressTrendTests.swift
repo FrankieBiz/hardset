@@ -337,4 +337,39 @@ struct ProgressTrendTests {
     #expect(ProgressTrendAnalyzer.mostImproved(trends).map(\.metric) == [.estimatedMax])
   }
 
+  @Test("Most improved ranks added-load changes separately from estimated-max changes")
+  func addedLoadRankingsNeverCompeteWithEstimates() throws {
+    func row(_ name: String, unknown: Bool, before: Double, after: Double) throws -> ProgressBoard.Entry {
+      let trend = try #require(ProgressTrendAnalyzer.trend(
+        key: ProgressionKey(exerciseID: ExerciseID()),
+        samples: [s(day: 0, session: 0, kg: before, reps: 5), s(day: 42, session: 1, kg: after, reps: 5)],
+        incrementKg: nil, estimatesOneRepMax: !unknown, assumesAddedLoad: unknown))
+      return .init(row: .init(trend: trend, exerciseName: name), bodyPart: nil)
+    }
+    let board = ProgressBoard.make(try [
+      row("Bench", unknown: false, before: 100, after: 110),
+      row("Dip", unknown: true, before: 20, after: 30),
+      row("Pull-up", unknown: true, before: 10, after: 12.5),
+    ])
+    #expect(board.mostImproved.map(\.exerciseName) == ["Bench"])
+    #expect(board.mostImprovedAddedLoad.map(\.exerciseName) == ["Dip", "Pull-up"])
+    #expect(board.mostImproved.allSatisfy { $0.trend.metric == .estimatedMax })
+    #expect(board.mostImprovedAddedLoad.allSatisfy { $0.trend.metric == .addedLoad && $0.trend.certainty == .low })
+  }
+
+  @Test("Unknown unloaded work uses reps and cannot turn a changed top weight into a rep gain")
+  func unknownUnloadedRepsRespectLoad() {
+    let unloaded = ProgressTrendAnalyzer.trend(key: key(),
+      samples: [s(day: 0, session: 0, kg: 0, reps: 8), s(day: 42, session: 1, kg: 0, reps: 13)],
+      incrementKg: nil, estimatesOneRepMax: true, assumesAddedLoad: true)
+    #expect(unloaded?.metric == .repsAtTopLoad)
+    #expect(unloaded?.sparkline == [8, 13])
+    #expect(unloaded?.sixWeekChange == 0.625)
+    #expect(unloaded?.certainty == .low)
+    let changed = ProgressTrendAnalyzer.trend(key: key(),
+      samples: [s(day: 0, session: 0, kg: 10, reps: 8), s(day: 42, session: 1, kg: 0, reps: 13)],
+      incrementKg: nil, estimatesOneRepMax: false, assumesAddedLoad: true)
+    #expect(changed?.sixWeekChange == nil)
+  }
+
 }

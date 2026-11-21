@@ -46,10 +46,10 @@ public struct HardsetEmptyState: View {
           .accessibilityHidden(true)
           .background(
             Tokens.Color.steelRaised,
-            in: RoundedRectangle(cornerRadius: Tokens.Radius.card)
+            in: Tokens.Shape.card
           )
           .overlay(
-            RoundedRectangle(cornerRadius: Tokens.Radius.card)
+            Tokens.Shape.card
               .strokeBorder(
                 Tokens.Color.controlEdge,
                 style: StrokeStyle(lineWidth: Tokens.Stroke.hairline, dash: [4, 3])

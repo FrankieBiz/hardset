@@ -2,13 +2,14 @@ import SwiftUI
 
 // MARK: - Chip
 
-/// A filter or tag chip. A capsule: unselected it is a raised machined face with the control edge
-/// at its boundary, and selected it is a flat `plateBlueFill`.
+/// A filter or tag chip. A capsule: unselected it is a flat raised fill with no outline, and
+/// selected it is a flat `plateBlueFill`. The fill steps off whatever the chip sits on, `canvas` or
+/// a card, and the outline comes back under Increase Contrast or Button Shapes.
 ///
 /// The visible capsule is compact so a rail of them reads as one control, but the tappable region
 /// is at least 44 by 44 pt, so a short chip such as "All" is as easy to hit as a long one.
 /// Unselected, a press sinks the face to `steelPressed`; selected, it swaps to
-/// `plateBlueFillPressed`. Neither dims, so the boundary never fades under a finger.
+/// `plateBlueFillPressed`. Neither dims, so a boundary that is drawn never fades under a finger.
 public struct HardsetChip: View {
   private let title: String
   private let isSelected: Bool
@@ -33,8 +34,8 @@ public struct HardsetChip: View {
 /// `ButtonStyle` cannot be forced pressed in a render. Each branch is one view whose pressed state
 /// only changes its arguments, so the label keeps its identity across a press.
 ///
-/// The selected face is a plain `plateBlueFill` with no edge gradient: the edge colours are
-/// pre-blended for steel and read wrong on plate blue.
+/// The selected face is a plain `plateBlueFill`, about 8:1 against either surface, so it needs no
+/// outline in any setting.
 ///
 /// The face owns the chip's hit region: after the surface it applies a frame of at least 44 by
 /// 44 pt and a rectangular content shape, so the compact capsule sits inside a full-size target.
@@ -70,15 +71,16 @@ struct HardsetChipFace<Label: View>: View {
         in: Capsule()
       )
     } else {
-      content.modifier(MachinedModifier(shape: Capsule(), isPressed: isPressed, outlined: true))
+      content.modifier(
+        ControlFaceModifier(shape: Capsule(), isPressed: isPressed, outline: .onRequest))
     }
   }
 }
 
 /// The chip's button style: feeds `configuration.isPressed` into `HardsetChipFace`, sinks to 0.97
 /// on `Motion.press` unless Reduce Motion is on, and never reads `isEnabled`, so a disabled chip is
-/// not dimmed. It is not `HardsetPressStyle`, which dims, nor `MachinedPressStyle`, which has no
-/// selected variant: a chip is a machined face when unselected and a flat fill when selected.
+/// not dimmed. It is not `HardsetPressStyle`, which dims, nor `ControlPressStyle`, which has no
+/// selected variant: a chip is a raised fill when unselected and a plate-blue fill when selected.
 private struct HardsetChipStyle: ButtonStyle {
   let isSelected: Bool
 
@@ -125,10 +127,11 @@ public nonisolated struct HardsetSegment<Value: Hashable>: Identifiable {
 /// Replaces the system segmented picker, which renders identically in every app and in a shade of
 /// grey that does not meet this app's contrast floor.
 ///
-/// The track is a static raised machined face with the control edge at its boundary. Each segment
-/// is a full-height 44 pt button with the selected trait, and the `plateBlueFill` indicator slides
-/// between them on `Motion.state` -- or simply moves, with Reduce Motion on. A segment draws its
-/// own fill, so a press dims it through `HardsetPressStyle` rather than sinking a steel face.
+/// The track is a static raised fill, outlined under Increase Contrast or Button Shapes. Each
+/// segment is a full-height 44 pt button with the selected trait, and the `plateBlueFill`
+/// indicator slides between them on `Motion.state` -- or simply moves, with Reduce Motion on. A
+/// segment draws its own fill, so a press dims it through `HardsetPressStyle` rather than sinking
+/// a flat face.
 public struct HardsetSegmentedControl<Value: Hashable>: View {
   @Binding private var selection: Value
   private let segments: [HardsetSegment<Value>]
@@ -210,7 +213,7 @@ struct HardsetSegmentFace<Label: View>: View {
 
   @ViewBuilder
   private var indicatorShape: some View {
-    let fill = RoundedRectangle(cornerRadius: Tokens.Radius.control - Tokens.Spacing.hairline)
+    let fill = Tokens.Shape.rounded(Tokens.Radius.control - Tokens.Spacing.hairline)
       .fill(Tokens.Color.plateBlueFill)
     if let indicator {
       fill.matchedGeometryEffect(id: "indicator", in: indicator)
@@ -221,17 +224,15 @@ struct HardsetSegmentFace<Label: View>: View {
 }
 
 extension View {
-  /// The segmented control's track: a static raised machined face whose boundary is the control
-  /// edge. Shared by `HardsetSegmentedControl` and the chip catalogue's pressed segments.
+  /// The segmented control's track: a static raised fill that steps off its surface, outlined
+  /// when the lifter has asked for boundaries. The indicator inside it is inset by the track's
+  /// padding, so its radius stays concentric with the track's. Shared by
+  /// `HardsetSegmentedControl` and the chip catalogue's pressed segments.
   func hardsetSegmentTrack() -> some View {
     fixedSize(horizontal: false, vertical: true)
       .padding(Tokens.Spacing.hairline)
       .modifier(
-        MachinedModifier(
-          shape: RoundedRectangle(cornerRadius: Tokens.Radius.control),
-          isPressed: false,
-          outlined: true
-        )
+        ControlFaceModifier(shape: Tokens.Shape.control, isPressed: false, outline: .onRequest)
       )
   }
 }

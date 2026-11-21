@@ -33,6 +33,7 @@ public struct ProgressionPoint: Hashable, Sendable, Identifiable {
   public let date: Date
   /// Always available: the heaviest load moved for at least one rep.
   public let heaviestLoadKg: Double
+  public let repsAtTopLoad: Int
   /// The best estimate in the session, or `nil` when nothing in it was estimable — a session of
   /// twenty-rep sets produces no estimate, and inventing one would be the ancestor's bug.
   public let bestEstimatedOneRepMaxKg: Double?
@@ -51,12 +52,14 @@ public struct ProgressionPoint: Hashable, Sendable, Identifiable {
     heaviestLoadKg: Double,
     bestEstimatedOneRepMaxKg: Double?,
     workingSets: Int,
-    bestEstimateCertainty: Certainty? = nil
+    bestEstimateCertainty: Certainty? = nil,
+    repsAtTopLoad: Int = 0
   ) {
     self.sessionID = sessionID
     self.machineID = machineID
     self.date = date
     self.heaviestLoadKg = heaviestLoadKg
+    self.repsAtTopLoad = repsAtTopLoad
     self.bestEstimatedOneRepMaxKg = bestEstimatedOneRepMaxKg
     self.workingSets = workingSets
     self.bestEstimateCertainty = bestEstimatedOneRepMaxKg == nil ? nil : bestEstimateCertainty
@@ -213,7 +216,10 @@ public enum ProgressionAnalyzer {
       heaviestLoadKg: heaviest,
       bestEstimatedOneRepMaxKg: best?.value,
       workingSets: samples.count,
-      bestEstimateCertainty: best?.certainty
+      bestEstimateCertainty: best?.certainty,
+      repsAtTopLoad: samples.filter {
+        abs($0.weightKg - heaviest) < PersonalRecordDetector.loadMatchingTolerance
+      }.map(\.reps).max() ?? 0
     )
   }
 

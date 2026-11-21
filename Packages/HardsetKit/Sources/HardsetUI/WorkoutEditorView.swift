@@ -155,7 +155,7 @@ public struct WorkoutEditorView: View {
     if let range = movement.repRange {
       VStack(alignment: .leading, spacing: Tokens.Spacing.snug) {
         Text("Rep range \(range.label)")
-          .font(Tokens.Text.labelEmphasis)
+          .font(Tokens.Text.headline)
           .foregroundStyle(Tokens.Color.chalk)
         stepperRow(
           "From", value: "\(range.lower)",
