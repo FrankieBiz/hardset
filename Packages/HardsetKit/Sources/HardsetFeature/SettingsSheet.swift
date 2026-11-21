@@ -36,9 +36,9 @@ public struct SettingsSheet: View {
   private let onDone: () -> Void
 
   /// - Parameters:
-  ///   - gyms: When given, Settings offers renaming and archiving gyms and machines.
+  ///   - gyms: When given, Settings offers renaming and removing gyms and machines.
   ///   - onDataChanged: Called after Settings changes saved data: an import that wrote workouts, or
-  ///     a gym or machine renamed or archived. Screens showing that data re-read it.
+  ///     a gym or machine renamed or removed. Screens showing that data re-read it.
   ///   - onShowTour: When given, Settings offers "Show the tour again" and calls this, which is
   ///     expected to close Settings and replay the first-launch sequence.
   public init(
@@ -224,10 +224,10 @@ public struct SettingsSheet: View {
       } label: {
         HStack(spacing: Tokens.Spacing.regular) {
           VStack(alignment: .leading, spacing: Tokens.Spacing.hairline) {
-            Text("Rename or archive")
+            Text("Rename or remove")
               .font(Tokens.Text.headline)
               .foregroundStyle(Tokens.Color.chalk)
-            Text("Fix a misspelt name, or retire a gym or machine. Logged sets stay in your history.")
+            Text("Fix a misspelt name, or take a gym or machine out of the pickers for good. Logged sets stay in your history.")
               .font(Tokens.Text.caption)
               .foregroundStyle(Tokens.Color.chalkDim)
           }
