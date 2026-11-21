@@ -83,7 +83,8 @@ public struct StatLedger: View {
 /// A message that belongs above content: a failed write, a caveat, a record.
 ///
 /// Each kind sits on its own tinted surface with its symbol and a title in its hue, so the kind is
-/// carried by shape, word and colour together.
+/// carried by shape, word and colour together. It draws no outline: the tint, the symbol and the
+/// words are what identify it, and a stroke that carried nothing is gone.
 public struct HardsetBanner: View {
   public enum Kind: Sendable, Hashable {
     case error
@@ -136,11 +137,7 @@ public struct HardsetBanner: View {
       }
     }
     .padding(Tokens.Spacing.regular)
-    .background(tint, in: RoundedRectangle(cornerRadius: Tokens.Radius.card))
-    .overlay(
-      RoundedRectangle(cornerRadius: Tokens.Radius.card)
-        .strokeBorder(hue.opacity(0.35), lineWidth: Tokens.Stroke.hairline)
-    )
+    .background(tint, in: Tokens.Shape.card)
     .accessibilityElement(children: .combine)
     .accessibilityActions {
       if let onDismiss {

@@ -90,7 +90,7 @@ public struct WorkoutReceiptView: View {
 
       if let records = ScorecardCopy.recordsText(card) {
         Label(records, systemImage: "trophy.fill")
-          .font(Tokens.Text.labelEmphasis)
+          .font(Tokens.Text.headline)
           .foregroundStyle(Tokens.Color.plateYellow)
           .padding(.horizontal, Tokens.Spacing.regular)
           .padding(.vertical, Tokens.Spacing.snug)

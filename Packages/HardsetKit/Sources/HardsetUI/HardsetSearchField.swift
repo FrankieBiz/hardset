@@ -26,7 +26,7 @@ public struct HardsetSearchField: View {
   public var body: some View {
     HStack(spacing: Tokens.Spacing.snug) {
       Image(systemName: "magnifyingglass")
-        .font(Tokens.Text.labelEmphasis)
+        .font(Tokens.Text.headline)
         .foregroundStyle(isFocused ? Tokens.Color.plateBlue : Tokens.Color.chalkDim)
         .accessibilityHidden(true)
 
@@ -77,9 +77,10 @@ public struct HardsetSearchField: View {
 // MARK: - Field chrome
 
 extension View {
-  /// The outline every text entry field in the app wears: a raised fill, the measured control
-  /// edge, and a 2 pt plate blue ring on top while the field has focus. Flat: a field never wears
-  /// the machined edge light.
+  /// The outline every text entry field in the app wears: a raised fill that steps off its
+  /// surface, the measured control edge, and a 2 pt plate blue ring on top while the field has
+  /// focus. An input keeps its outline in every setting, because it is identified by its box, and
+  /// it is the one control whose outline the affordance rule does not wait to be asked for.
   ///
   /// Internal so the search field and `NameEntrySheet` cannot drift apart. The ring fades in on
   /// `Motion.state` -- only its opacity changes, so nothing reflows -- and appears instantly with
@@ -95,10 +96,9 @@ private struct EntryFieldChrome: ViewModifier {
   @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
   func body(content: Content) -> some View {
-    let shape = RoundedRectangle(cornerRadius: Tokens.Radius.control)
+    let shape = Tokens.Shape.control
     return content
-      .background(Tokens.Color.steelRaised, in: shape)
-      .overlay(shape.strokeBorder(Tokens.Color.controlEdge, lineWidth: Tokens.Stroke.hairline))
+      .modifier(ControlFaceModifier(shape: shape, isPressed: false, outline: .always))
       .overlay(
         shape
           .strokeBorder(Tokens.Color.plateBlue, lineWidth: Tokens.Stroke.selected)

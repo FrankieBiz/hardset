@@ -2,7 +2,7 @@ import SwiftUI
 
 // MARK: - Press style
 
-/// Press feedback for a control that draws its own shape and fill and has no steel face: a
+/// Press feedback for a control that draws its own shape and fill and has no flat face: a
 /// segment, the dashed "Add movement" slot, the exercise-name link, the dismiss glyph, an unset
 /// machine chip, the "Clear search" glyph and the certainty badge capsule. The ready and next-up
 /// set log control takes the same press without this style: the set row's private
@@ -14,9 +14,9 @@ import SwiftUI
 /// dropped and only the opacity changes. It never dims a disabled control, so an inert title keeps
 /// its measured contrast.
 ///
-/// Steel faces do not use it. Chips, header circles, `AssumptionChip`, a set machine chip and the
-/// set-row value fields are machined faces that sink to `steelPressed`, through
-/// `MachinedPressStyle` or a style of their own, so a press never dims their boundary.
+/// Flat faces do not use it. Chips, header circles, `AssumptionChip`, a set machine chip and the
+/// set-row value fields are raised fills that sink to `steelPressed`, through `ControlPressStyle`
+/// or a style of their own, so a press never dims a boundary that is drawn.
 public struct HardsetPressStyle: ButtonStyle {
   public init() {}
 
@@ -65,32 +65,36 @@ struct HardsetPressFace<Label: View>: View {
   }
 }
 
-/// The machined press in a given state: the label on a raised steel face that sinks to
-/// `steelPressed` and loses its edge light when pressed, scaled to 0.97 unless Reduce Motion is
-/// on. Nothing dims, so a boundary drawn by `outlined` never fades under a finger.
+/// The flat press in a given state: the label on a raised fill that sinks to `steelPressed`,
+/// scaled to 0.97 unless Reduce Motion is on. Nothing dims, so a boundary drawn by `outline` never
+/// fades under a finger.
 ///
-/// The face owns its control's hit region. After the machined surface it applies the 44 pt
-/// minimum frame and a rectangular content shape, because a frame applied outside a `Button`
-/// reserves space without reliably extending what can be tapped. A compact capsule therefore sits
-/// inside a region of at least 44 by 44 pt, and a header circle, which starts at 44 pt, keeps its
-/// size. The surface is one modifier whose pressed state only changes its arguments, so the label
-/// keeps its identity across a press.
-struct MachinedPressFace<Label: View, S: InsettableShape>: View {
+/// The face owns its control's hit region. After the flat face it applies the 44 pt minimum frame
+/// and a rectangular content shape, because a frame applied outside a `Button` reserves space
+/// without reliably extending what can be tapped. A compact capsule therefore sits inside a region
+/// of at least 44 by 44 pt, and a header circle, which starts at 44 pt, keeps its size. The surface
+/// is one modifier whose pressed state only changes its arguments, so the label keeps its identity
+/// across a press.
+///
+/// The fill follows the surface the control sits on (see `ControlSurface`), and `outline` says
+/// whether it is drawn by default (`.always`, an input) or only when the lifter has asked for
+/// boundaries (`.onRequest`).
+struct ControlPressFace<Label: View, S: InsettableShape>: View {
   private let shape: S
-  private let outlined: Bool
+  private let outline: ControlOutline
   private let isPressed: Bool
   private let reduceMotion: Bool
   private let label: Label
 
   init(
     shape: S,
-    outlined: Bool,
+    outline: ControlOutline,
     isPressed: Bool,
     reduceMotion: Bool,
     @ViewBuilder label: () -> Label
   ) {
     self.shape = shape
-    self.outlined = outlined
+    self.outline = outline
     self.isPressed = isPressed
     self.reduceMotion = reduceMotion
     self.label = label()
@@ -98,42 +102,42 @@ struct MachinedPressFace<Label: View, S: InsettableShape>: View {
 
   var body: some View {
     label
-      .modifier(MachinedModifier(shape: shape, isPressed: isPressed, outlined: outlined))
+      .modifier(ControlFaceModifier(shape: shape, isPressed: isPressed, outline: outline))
       .frame(minWidth: Tokens.minimumTapTarget, minHeight: Tokens.minimumTapTarget)
       .contentShape(Rectangle())
       .scaleEffect(isPressed && !reduceMotion ? 0.97 : 1)
   }
 }
 
-/// The button style for a control with a machined steel face: header circles, `AssumptionChip` and
-/// a set machine chip. It feeds `configuration.isPressed` into `MachinedPressFace` and animates
-/// the press through `Motion.press`, which Reduce Motion replaces with an instant swap. It never
-/// reads `isEnabled`, so a disabled control is not dimmed.
-struct MachinedPressStyle<S: InsettableShape>: ButtonStyle {
+/// The button style for a control with a flat raised face: header circles, `AssumptionChip` and a
+/// set machine chip. It feeds `configuration.isPressed` into `ControlPressFace` and animates the
+/// press through `Motion.press`, which Reduce Motion replaces with an instant swap. It never reads
+/// `isEnabled`, so a disabled control is not dimmed.
+struct ControlPressStyle<S: InsettableShape>: ButtonStyle {
   private let shape: S
-  private let outlined: Bool
+  private let outline: ControlOutline
 
-  init(shape: S, outlined: Bool) {
+  init(shape: S, outline: ControlOutline) {
     self.shape = shape
-    self.outlined = outlined
+    self.outline = outline
   }
 
   func makeBody(configuration: Configuration) -> some View {
-    MachinedPressBody(configuration: configuration, shape: shape, outlined: outlined)
+    ControlPressBody(configuration: configuration, shape: shape, outline: outline)
   }
 }
 
-private struct MachinedPressBody<S: InsettableShape>: View {
+private struct ControlPressBody<S: InsettableShape>: View {
   let configuration: ButtonStyleConfiguration
   let shape: S
-  let outlined: Bool
+  let outline: ControlOutline
 
   @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
   var body: some View {
-    MachinedPressFace(
+    ControlPressFace(
       shape: shape,
-      outlined: outlined,
+      outline: outline,
       isPressed: configuration.isPressed,
       reduceMotion: reduceMotion
     ) {

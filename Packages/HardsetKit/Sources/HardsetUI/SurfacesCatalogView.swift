@@ -1,10 +1,10 @@
 import SwiftUI
 
 /// The shared surfaces and press faces of the component kit, for review from images: the opacity
-/// press and the machined press shown apart, the cards, and the weighted type comparison.
+/// press and the flat press shown apart, the cards, and the weighted type comparison.
 ///
 /// Static: no state, no I/O. A `ButtonStyle` cannot be forced pressed in a render, so each pressed
-/// sample is the style's own face, `HardsetPressFace` or `MachinedPressFace`, drawn with
+/// sample is the style's own face, `HardsetPressFace` or `ControlPressFace`, drawn with
 /// `isPressed: true`.
 public struct SurfacesCatalogView: View {
   public enum Section: String, CaseIterable, Sendable {
@@ -50,7 +50,7 @@ private struct PressStates: View {
     CatalogSection("Press feedback") {
       VStack(alignment: .leading, spacing: Tokens.Spacing.loose) {
         opacityPress
-        machinedPress
+        flatPress
         disabledSamples
       }
     }
@@ -71,21 +71,30 @@ private struct PressStates: View {
   }
 
   /// A circle and a capsule, rest then pressed. Only the sink shows: the face goes to
-  /// `steelPressed` and loses its edge light, and the control edge and label stay at full strength.
-  private var machinedPress: some View {
+  /// `steelPressed`, and the label stays at full strength. Under Increase Contrast or Button Shapes
+  /// the control edge is drawn in both states and stays at full strength too.
+  private var flatPress: some View {
     VStack(alignment: .leading, spacing: Tokens.Spacing.snug) {
-      note("Machined press: rest, then pressed. Sinks to steelPressed, never dims")
+      note("Flat press: rest, then pressed. Sinks to steelPressed, never dims")
       HStack(spacing: Tokens.Spacing.regular) {
-        MachinedPressFace(shape: Circle(), outlined: true, isPressed: false, reduceMotion: false) {
+        ControlPressFace(
+          shape: Circle(), outline: .onRequest, isPressed: false, reduceMotion: false
+        ) {
           circleGlyph
         }
-        MachinedPressFace(shape: Circle(), outlined: true, isPressed: true, reduceMotion: false) {
+        ControlPressFace(
+          shape: Circle(), outline: .onRequest, isPressed: true, reduceMotion: false
+        ) {
           circleGlyph
         }
-        MachinedPressFace(shape: Capsule(), outlined: true, isPressed: false, reduceMotion: false) {
+        ControlPressFace(
+          shape: Capsule(), outline: .onRequest, isPressed: false, reduceMotion: false
+        ) {
           capsuleLabel("Rest")
         }
-        MachinedPressFace(shape: Capsule(), outlined: true, isPressed: true, reduceMotion: false) {
+        ControlPressFace(
+          shape: Capsule(), outline: .onRequest, isPressed: true, reduceMotion: false
+        ) {
           capsuleLabel("Pressed")
         }
       }
@@ -106,9 +115,9 @@ private struct PressStates: View {
         .disabled(true)
         Button {
         } label: {
-          capsuleLabel("Machined")
+          capsuleLabel("Flat")
         }
-        .buttonStyle(MachinedPressStyle(shape: Capsule(), outlined: true))
+        .buttonStyle(ControlPressStyle(shape: Capsule(), outline: .onRequest))
         .disabled(true)
       }
     }
@@ -123,7 +132,7 @@ private struct PressStates: View {
 
   private func segmentLabel(_ title: String) -> some View {
     Text(title)
-      .font(Tokens.Text.labelEmphasis)
+      .font(Tokens.Text.headline)
       .foregroundStyle(Tokens.Color.chalk)
       .padding(.horizontal, Tokens.Spacing.loose)
       .frame(minHeight: Tokens.minimumTapTarget)
@@ -147,14 +156,14 @@ private struct PressStates: View {
 
   private var circleGlyph: some View {
     Image(systemName: "ellipsis")
-      .font(Tokens.Text.labelEmphasis)
+      .font(Tokens.Text.headline)
       .foregroundStyle(Tokens.Color.chalk)
       .frame(width: Tokens.minimumTapTarget, height: Tokens.minimumTapTarget)
   }
 
   private func capsuleLabel(_ title: String) -> some View {
     Text(title)
-      .font(Tokens.Text.labelEmphasis)
+      .font(Tokens.Text.headline)
       .foregroundStyle(Tokens.Color.chalk)
       .padding(.horizontal, Tokens.Spacing.regular)
       .padding(.vertical, Tokens.Spacing.snug)
@@ -167,7 +176,7 @@ private struct CardStates: View {
   var body: some View {
     CatalogSection("Cards") {
       VStack(alignment: .leading, spacing: Tokens.Spacing.regular) {
-        card("Unselected", note: "steel fill, 1 pt hairline", selected: false)
+        card("Unselected", note: "steel fill, no border; a hairline under Increase Contrast", selected: false)
         card("Selected", note: "plateBlueSurface fill, 2 pt plateBlue ring", selected: true)
         card(
           "Control radius", note: "the same card at the control radius", selected: false,

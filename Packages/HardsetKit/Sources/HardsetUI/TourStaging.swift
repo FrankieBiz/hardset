@@ -138,8 +138,12 @@ private struct StagedItemSheetModifier<Item: Identifiable & Hashable, Sheet: Vie
   }
 }
 
-/// The surface an inline sheet sits on: steel, with the card radius on its top corners and the lit
-/// top edge of a raised face, over whatever the screen shows behind it.
+/// The surface an inline sheet sits on: steel, with the card radius on its top corners and a
+/// hairline rim, over whatever the screen shows behind it.
+///
+/// A real sheet sits on `canvas`, so a control on its ground takes the canvas fill. This panel is
+/// steel and is not a card, so it says so: in light a canvas-fill control would be white on white
+/// here, and the staged screens would lose the faces the real ones have.
 private struct InlineSheetSurface<Content: View>: View {
   let height: CGFloat?
   @ViewBuilder let content: () -> Content
@@ -149,9 +153,10 @@ private struct InlineSheetSurface<Content: View>: View {
       topLeadingRadius: Tokens.Radius.card, bottomLeadingRadius: 0, bottomTrailingRadius: 0,
       topTrailingRadius: Tokens.Radius.card)
     content()
+      .hardsetControlSurface(.steel)
       .frame(maxWidth: .infinity, maxHeight: height == nil ? .infinity : height)
       .background(Tokens.Color.steel, in: shape)
-      .overlay { shape.strokeBorder(Tokens.Color.edgeLight, lineWidth: Tokens.Stroke.hairline) }
+      .overlay { shape.strokeBorder(Tokens.Color.hairline, lineWidth: Tokens.Stroke.hairline) }
       .clipShape(shape)
       .padding(.top, height == nil ? Tokens.Spacing.block * 2 : 0)
   }

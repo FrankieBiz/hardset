@@ -8,7 +8,7 @@ import SwiftUI
 /// The top of a tab screen: a display title, one line of context, and at most one action.
 ///
 /// Drawn in the content rather than as a navigation-bar large title, so every tab opens on the same
-/// expanded type instead of the stock bar, and so the context line -- which gym, which week -- sits
+/// display type instead of the stock bar, and so the context line -- which gym, which week -- sits
 /// with the title it qualifies.
 public struct ScreenHeader<Trailing: View>: View {
   private let title: String
@@ -25,7 +25,7 @@ public struct ScreenHeader<Trailing: View>: View {
 
   /// Title and action share a line at ordinary sizes. At accessibility sizes the action sits on
   /// its own line above the title, at the trailing edge: beside it, a one-word title such as
-  /// "Workout" in expanded display type had to break mid-word.
+  /// "Workout" in display type had to break mid-word.
   public var body: some View {
     Group {
       if dynamicTypeSize.isAccessibilitySize {
@@ -66,7 +66,10 @@ extension ScreenHeader where Trailing == EmptyView {
   }
 }
 
-/// A round, outlined icon button for a screen header's single action, such as Settings.
+/// A round icon button on a flat fill for a screen header's single action, such as Settings.
+///
+/// It sits on the canvas, so it takes `controlFillOnCanvas`; inside a card it takes `steelRaised`.
+/// It wears no outline until Increase Contrast or Button Shapes asks for one.
 public struct HeaderIconButton: View {
   private let systemImage: String
   private let accessibilityLabel: String
@@ -82,7 +85,7 @@ public struct HeaderIconButton: View {
     Button(action: action) {
       HeaderIconGlyphFace(systemImage: systemImage)
     }
-    .buttonStyle(MachinedPressStyle(shape: Circle(), outlined: true))
+    .buttonStyle(ControlPressStyle(shape: Circle(), outline: .onRequest))
     // Applied outside the style, so the face wraps a label that is already framed to the capped
     // diameter. The label is the bare glyph face, never `HeaderIconGlyph`, which would draw a
     // second circle.
@@ -97,7 +100,7 @@ public struct HeaderIconButton: View {
   }
 }
 
-/// The same round, outlined control as `HeaderIconButton`, opening a menu of actions instead.
+/// The same round control as `HeaderIconButton`, opening a menu of actions instead.
 ///
 /// For the handful of actions that belong to a whole thing -- a workout, a movement -- and are not
 /// used every set: they stay one tap away without each taking a full-width button.
@@ -133,10 +136,11 @@ public struct HeaderIconMenu<Content: View>: View {
   }
 }
 
-/// The circle both header controls draw: a machined raised face, measured control border, a 44 pt
-/// target. The button draws the bare `HeaderIconGlyphFace` inside its own press style; this view
-/// draws the face and the circle together for the menu, whose label receives no pressed state, and
-/// for the catalogue, which forces `isPressed`.
+/// The circle both header controls draw: a flat raised face, a 44 pt target, and the measured
+/// control border when Increase Contrast or Button Shapes asks for it. The button draws the bare
+/// `HeaderIconGlyphFace` inside its own press style; this view draws the face and the circle
+/// together for the menu, whose label receives no pressed state, and for the catalogue, which
+/// forces `isPressed`.
 ///
 /// It grows with text up to the largest ordinary size and stops there, about 60 pt across. Grown
 /// linearly to the largest accessibility size it reached about 137 pt and squeezed the screen
@@ -152,7 +156,9 @@ struct HeaderIconGlyph: View {
   }
 
   var body: some View {
-    MachinedPressFace(shape: Circle(), outlined: true, isPressed: isPressed, reduceMotion: false) {
+    ControlPressFace(
+      shape: Circle(), outline: .onRequest, isPressed: isPressed, reduceMotion: false
+    ) {
       HeaderIconGlyphFace(systemImage: systemImage)
     }
     .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
@@ -186,8 +192,8 @@ public extension View {
 
   /// For a pushed or presented screen that keeps a navigation bar for its Done or Cancel action.
   ///
-  /// Sets the accessible navigation title, and draws the visible one in the app's expanded title
-  /// type, inline, in place of the system's default bar title.
+  /// Sets the accessible navigation title, and draws the visible one in the app's `title` type,
+  /// inline, in place of the system's default bar title.
   func hardsetNavigationTitle(_ title: String) -> some View {
     modifier(NavigationTitleChrome(title: title))
   }

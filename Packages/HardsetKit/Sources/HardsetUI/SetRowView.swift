@@ -154,6 +154,9 @@ public struct SetRowView: View {
         Tokens.Motion.adaptive(Tokens.Motion.state, reduceMotion: reduceMotion), value: isLogged
       )
     }
+    // The row paints its own `steel`, so its fields take the fill for a control on steel wherever
+    // the row is drawn, in a card or not.
+    .hardsetControlSurface(.steel)
     // Corrections live behind a long press, the iOS convention for acting on one item in place:
     // deliberate enough that a hurried tap on the check can never undo or remove a set.
     // The preview shape is iOS-only; the macOS host build (tests only) uses the default.
@@ -441,7 +444,7 @@ public struct SetRowView: View {
     } label: {
       SetRowFieldValue(text: displayText(field), suffix: suffix)
     }
-    // Machined fields sink on press through their own style; neither `SetReadoutStyle` nor the
+    // Raised fields sink on press through their own style; neither `SetReadoutStyle` nor the
     // opacity press belongs on a steel face, because a dim would fade the boundary.
     .buttonStyle(SetFieldStyle(isEditing: isEditing, isReadOnly: isReadOnly))
     .disabled(isReadOnly)
@@ -624,12 +627,11 @@ struct SetRowFieldValue: View {
   }
 }
 
-/// A value field's face in a given state. At rest, pressed and read-only it is a raised machined
-/// face with the control edge, which sinks to `steelPressed` and loses its edge light when pressed,
-/// through `MachinedPressFace`: one modifier whose arguments change, so the label keeps its
-/// identity across a press. Under the keypad it is `plateBlueSurface` inside a 2 pt `plateBlue`
-/// ring, flat and without edge light. A read-only field never reports a press, and an editing one
-/// has nothing left to press, so both ignore it.
+/// A value field's face in a given state. At rest, pressed and read-only it is a raised flat face
+/// with the control edge, which sinks to `steelPressed` when pressed, through `ControlPressFace`:
+/// one modifier whose arguments change, so the label keeps its identity across a press. Under the
+/// keypad it is `plateBlueSurface` inside a 2 pt `plateBlue` ring. A read-only field never reports
+/// a press, and an editing one has nothing left to press, so both ignore it.
 struct SetRowFieldFace<Label: View>: View {
   private let state: SetRowFieldState
   private let reduceMotion: Bool
@@ -649,9 +651,9 @@ struct SetRowFieldFace<Label: View>: View {
         .overlay(shape.strokeBorder(Tokens.Color.plateBlue, lineWidth: Tokens.Stroke.selected))
         .contentShape(shape)
     } else {
-      MachinedPressFace(
+      ControlPressFace(
         shape: shape,
-        outlined: true,
+        outline: .always,
         isPressed: state == .pressed,
         reduceMotion: reduceMotion
       ) {
