@@ -272,8 +272,40 @@ struct RestoreJSONTests {
     }
     let destination = try RestoreFixture.freshInstall()
     let before = try await ["sessions", "loggedSets", "gyms", "workoutTemplates"].asyncMap { try await RestoreFixture.count(destination, $0) }
-    #expect(throws: WorkoutImportError.self) { try WorkoutCSVImport.preview(text, strongUnit: .kilograms) }
+    do {
+      _ = try WorkoutCSVImport.preview(text, strongUnit: .kilograms)
+      Issue.record("\(kind) should have been refused")
+    } catch let error as WorkoutImportError {
+      // Said to the lifter as written: a sentence, ending once, and saying nothing was imported.
+      let message = try #require(error.errorDescription)
+      #expect(!message.contains(".."), Comment(rawValue: message))
+      #expect(message.hasSuffix("No workouts were imported."), Comment(rawValue: message))
+    }
     #expect(try await ["sessions", "loggedSets", "gyms", "workoutTemplates"].asyncMap { try await RestoreFixture.count(destination, $0) } == before)
+  }
+
+  @Test("A file holding only a workout that was still open is refused with the reason, not an empty import")
+  func onlyAnOpenWorkoutIsRefused() async throws {
+    let source = try RestoreFixture.freshInstall()
+    let bench = try #require(ExerciseCatalog.v1[0].uuid)
+    try await source.write { db in
+      let open = UUID()
+      try Session.insert { Session.Draft(id: open, title: "Still going", startedAt: Date(timeIntervalSince1970: 1_730_000_000)) }.execute(db)
+      try LoggedSet.insert {
+        LoggedSet.Draft(id: UUID(), sessionID: open, exerciseID: bench, weightKg: 50, reps: 10,
+          completedAt: Date(timeIntervalSince1970: 1_730_000_100))
+      }.execute(db)
+    }
+    for text in [try await RestoreFixture.exportCSV(source), try await RestoreFixture.exportJSON(source)] {
+      do {
+        _ = try WorkoutCSVImport.preview(text, strongUnit: .kilograms)
+        Issue.record("an open workout alone should not preview")
+      } catch let error as WorkoutImportError {
+        let message = try #require(error.errorDescription)
+        #expect(message.contains("unfinished"), Comment(rawValue: message))
+        #expect(!message.contains(".."), Comment(rawValue: message))
+      }
+    }
   }
 
   @Test("A row that points at something the file does not hold stops the restore and writes nothing")

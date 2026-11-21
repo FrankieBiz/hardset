@@ -334,7 +334,7 @@ nonisolated struct HardsetRestorePlan: Sendable {
     guard !workouts.isEmpty else {
       throw unfinishedWorkouts > 0
         ? WorkoutImportError.unreadable(
-          "Every workout in this file was unfinished, and an unfinished workout is not restored. Finish it in Hardset and export again.")
+          "Every workout in this file was unfinished, and an unfinished workout is not restored. Finish it in Hardset and export again")
         : WorkoutImportError.empty
     }
     return WorkoutImportPreview(
