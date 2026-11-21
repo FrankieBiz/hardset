@@ -242,13 +242,16 @@ Selection rows, the unit switch and pickers stay silent.
   never disappears under a finger. A button takes the fill of the surface it sits on, through
   `ControlSurface`: `hardsetCard()` sets `steel` for everything inside it, a steel panel that is not
   a card (the keypad) sets it with `hardsetControlSurface(_:)`, and anything else is on the canvas.
-- **Keys** (`HardsetKeyStyle`): a flat `steelRaised` face on the keypad's `steel` panel, with no
-  edge light; pressed, the darker pressed fill and a 0.96 scale. Keys keep their `controlEdge`
-  outline in every setting for now: dropping it reverses the note this style used to carry, that a
-  key identified only by a fill one shade off its pad is a key the lifter has to look for, and
-  glare and sweaty hands cannot be judged from a render. That is the keypad pass, with its own
-  device check, and it reverts alone: it is one argument in `HardsetKeyFace`. When it lands, a key
-  wears the outline only under Increase Contrast or Button Shapes, like every other control.
+- **Keys** (`HardsetKeyStyle`): a key is its figure or glyph in `chalk` in a 56 pt cell a third of
+  the pad's width: no face, no fill and no outline. Pressed, it sinks to 0.96 and dims to 80% on
+  `Motion.press` (Reduce Motion drops the scale), as every control with no face of its own does;
+  disabled, it dims to 40%. Under Increase Contrast or Button Shapes each key wears the 3:1
+  `controlEdge` outline around its whole cell. The quick steps (−5, −2.5, +2.5, +5) are keys in
+  `chalk`, and Done is an inline control; the one filled control on the pad is its primary action,
+  Next or Log set, which owns the screen's accent while the pad is up (the rows give theirs up, see
+  the set log control). The keypad drops its keys' faces because the screen behind it has none; gym
+  glare and sweaty hands on a face-less key are a device check, and it reverts in one place,
+  `HardsetKeyFace`. The same pad serves the load-step editor.
 - **Knurl** (`KnurlPattern`, `.knurl(opacity:)`): a `Canvas` crosshatch at 8% opacity, the
   `KnurlPattern` default. It fills rectangular bounds, so callers with rounded shapes clip it
   themselves. It is retired from the live session: the rest bar's countdown is drawn directly on
@@ -548,8 +551,9 @@ Selection rows, the unit switch and pickers stay silent.
   changes at once and nothing animates layout. The row's spoken label says it in the same words
   ("plus 1 rep on last time"). It adds no token and no motion beyond `Motion.reveal`.
 - **Replaceable prefill**: when the keypad opens on a value the next key will replace, its display
-  draws that value on `plateBlueSurface` with a hairline `plateBlue` ring, as selected text, until
-  the first edit. Static; no motion.
+  draws that value as selected text, the figure in `steel` knocked out of a solid `chalk` block,
+  until the first edit. Once it is being typed the figure is `chalk` with a still caret after it,
+  as in the row. Static; no motion, and no hue.
 - **Button Shapes**: with the system setting on, every stroke-free control, `quiet` buttons
   included, wears the `controlEdge` outline, and the exercise name (the load-history link) is
   underlined.
