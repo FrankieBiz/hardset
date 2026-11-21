@@ -204,7 +204,8 @@ public struct PitchRestPage: View {
   public var body: some View {
     PitchPage(
       title: "Rest that keeps time.",
-      copy: "Rest runs as an alarm, so it finishes on time even if the phone is in your pocket."
+      copy:
+        "Choose a rest length for a movement and it runs as an alarm, so it finishes on time even if the phone is in your pocket. You choose it once for each movement; after that, logging a working set starts it."
     ) {
       PitchRestDemo(timer: timer)
     }
