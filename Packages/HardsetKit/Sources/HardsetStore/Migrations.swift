@@ -572,6 +572,31 @@ public nonisolated enum HardsetMigrations {
       .execute(db)
     }
 
+    // Legacy batches deliberately keep NULL identities: their digest cannot identify the rows
+    // they created. Only new imports can supply an exact, atomic undo ledger.
+    migrator.registerMigration("v13_preciseImportUndo") { db in
+      try #sql(
+        """
+        ALTER TABLE "deviceImportBatches" ADD COLUMN "undoRows" TEXT
+        """
+      ).execute(db)
+      try #sql(
+        """
+        ALTER TABLE "deviceImportBatches" ADD COLUMN "undoOrder" INTEGER
+        """
+      ).execute(db)
+      try #sql(
+        """
+        CREATE INDEX "deviceImportBatches_on_undoOrder" ON "deviceImportBatches"("undoOrder" DESC)
+        """
+      ).execute(db)
+      try #sql(
+        """
+        CREATE INDEX "deviceImportBatches_on_sourceFile" ON "deviceImportBatches"("sourceDigest", "byteCount")
+        """
+      ).execute(db)
+    }
+
     return migrator
   }
 }
