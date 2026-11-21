@@ -22,7 +22,9 @@ the code does yet, so a reader does not look for a screen that has not moved.
   row's field faces and logged state, its warning and record cards, the unset gym and machine
   chips), the rest bar's panel and countdown, the Library's "Curated" tag, the Progress card's
   layout, the Volume gauge ends, the scorecard headline's type role, and the onboarding and tour
-  surfaces. A screen that uses the kit picks up the new look with no change; one that draws its own
+  surfaces. It also includes four private outlined-card button styles that each draw their own
+  stroke: the History row, the Settings disclosure row, the Train screen's gym row and the
+  receipt's link row, plus the methodology citation card. A screen that uses the kit picks up the new look with no change; one that draws its own
   face or stroke keeps the old one until it is migrated.
 - The keypad keys keep their `controlEdge` outline until the keypad has had its device check; see
   Keys. `ScaledPhoneFrame` still reads the retired `edgeLight`; see the palette notes.
