@@ -584,6 +584,24 @@ public struct ExerciseLogState: Hashable, Sendable, Identifiable {
   }
 }
 
+extension ExerciseLogState {
+  /// The row that is the workout's primary action: the first row, in workout order, that is not
+  /// logged and can be, or `nil` when there is none.
+  ///
+  /// "Can be" is the predicate that gates writing a set, `SetEntryDraft.isLoggable`, so the answer
+  /// is always a row one tap will log. That is not the same as `nextUnloggedSlotID`, the first row
+  /// not yet written, which may be a blank warm-up with nothing to log; the primary action skips
+  /// it for the working set behind it. A screen with one accent gives it to this row.
+  public static func primarySlotID(in exercises: [ExerciseLogState]) -> UUID? {
+    for exercise in exercises {
+      if let slot = exercise.slots.first(where: { !$0.isLogged && $0.draft.isLoggable }) {
+        return slot.id
+      }
+    }
+    return nil
+  }
+}
+
 extension SetEntryDraft {
   /// Whether the lifter has put a number in this row that the app did not.
   ///

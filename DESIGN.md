@@ -48,9 +48,12 @@ glass; the content beneath it is never glass.
   plate colour: an action you can take (plate blue), a set that is saved (plate green), a record
   (plate yellow), a caveat (warning orange), a failure (plate red). Everything else is steel and
   chalk.
-- **On the live session, one accent, and colour only as a small mark.** The workout's next set's
-  log control, the first set still to log in the whole workout and not one per movement, is the
-  only saturated colour on the screen. A saved set is a small `plateGreen` seal, a record is
+- **On the live session, one accent, and colour only as a small mark.** The log control of the
+  workout's primary action is the only saturated colour on the screen: the first set, in workout
+  order, that is not logged and can be, not one per movement and not whatever row happens to be
+  next. A blank warm-up is next up but cannot be logged, so it does not hold the accent from the
+  working set behind it. While the keypad is up its own primary action, Next or Log set, is the
+  accent and no row has it. A saved set is a small `plateGreen` seal, a record is
   the `plateYellow` trophy, a caveat is a small `warning` glyph, and a failure is `plateRed`; none
   of them is ever a row fill, a tint, a capsule or a badge background, and no other control is blue.
   The machine, the gym, the history link, the rest lengths and every quiet action are `chalk` or
@@ -508,7 +511,7 @@ Selection rows, the unit switch and pickers stay silent.
   about 30 pt inside the logger's whole 56 pt region: incomplete is an empty square in `controlEdge`
   (faint, and above the 3:1 floor for a graphic), ready is a checked square in `chalkDim`, next up is
   that square filled with `plateBlueFill`, the one saturated colour on the screen and only on the
-  workout's next set (another movement's next row is drawn as ready), and logged is a
+  workout's primary action (every other loggable row is drawn as ready), and logged is a
   round `plateGreen` `checkmark.circle.fill`. A square logs a set and a circle is a set that is
   logged, so logged and next up differ by shape, not only by hue. Nothing is dashed, knurled or
   boxed, and a logged row has no tint. The stamp is the seal scaling in from 0.6 on `Motion.stamp`

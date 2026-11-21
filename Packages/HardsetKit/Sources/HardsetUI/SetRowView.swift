@@ -46,7 +46,7 @@ public struct SetRowView: View {
   private let isWarmup: Bool
   private let isLogged: Bool
   private let isNext: Bool
-  private let accentsNext: Bool
+  private let accentOverride: Bool?
   private let allowsCorrection: Bool
   private let isSeparated: Bool
   private let showsInlineLabels: Bool
@@ -65,11 +65,12 @@ public struct SetRowView: View {
 
   /// - Parameter isNext: The first unlogged set of its exercise. Its log control is filled rather
   ///   than outlined, so the eye lands on the one tap that matters between sets.
-  /// - Parameter accentsNext: Draws the next-up control in plate blue. A screen with several
-  ///   movements has several next rows, and its one accent belongs to the workout's next set, so
-  ///   the host passes `false` for every movement but the one holding it; the other next rows draw
-  ///   as ready. It changes colour only: `isNext` still drives the spoken "next to log", the bare
-  ///   Voice Control command and the −/+ steps.
+  /// - Parameter accentOverride: Whether this row's log control is drawn in plate blue, the screen's
+  ///   one accent, when the set can be logged. `nil` leaves it to the row: the accent is on the next
+  ///   row up. A host with several movements decides for them, because the accent belongs to the
+  ///   workout's next loggable set wherever that row sits, and a warm-up with nothing in it is next
+  ///   up without being loggable. It changes colour only: `isNext` still drives the spoken "next to
+  ///   log", the bare Voice Control command and the −/+ steps.
   /// - Parameter allowsCorrection: Lets a saved row's figures open the keypad, so a wrong weight or
   ///   rep count is corrected where it is written. The host decides what a correction does and
   ///   whether it can; without it a saved figure is plain text, as it was.
@@ -100,7 +101,7 @@ public struct SetRowView: View {
     isWarmup: Bool = false,
     isLogged: Bool = false,
     isNext: Bool = false,
-    accentsNext: Bool = true,
+    accentOverride: Bool? = nil,
     allowsCorrection: Bool = false,
     isSeparated: Bool = false,
     showsInlineLabels: Bool = true,
@@ -122,7 +123,7 @@ public struct SetRowView: View {
     self.isWarmup = isWarmup
     self.isLogged = isLogged
     self.isNext = isNext
-    self.accentsNext = accentsNext
+    self.accentOverride = accentOverride
     self.allowsCorrection = allowsCorrection
     self.isSeparated = isSeparated
     self.showsInlineLabels = showsInlineLabels
@@ -548,7 +549,7 @@ public struct SetRowView: View {
 
   private var logState: SetLogState {
     if isLogged { return .logged }
-    if draft.isLoggable { return isNext && accentsNext ? .nextUp : .ready }
+    if draft.isLoggable { return accentOverride ?? isNext ? .nextUp : .ready }
     return .incomplete
   }
 

@@ -181,6 +181,58 @@ struct ExerciseCorrectionTests {
     #expect(state.slots[1].draft.weightKg == nil)
   }
 
+  // MARK: - The primary action
+
+  @Test("The primary action skips a blank warm-up for the working set behind it")
+  func primarySkipsABlankWarmup() {
+    var state = ExerciseLogState.build(
+      exerciseID: exercise, machineID: machine, exerciseName: "Press",
+      snapshot: snapshot(prior([(100, 8), (100, 8)], machineID: machine))
+    )
+    state.markLogged(slotID: state.slots[0].id, setID: SetID(), completedAt: now)
+    state.appendSlot(isWarmup: true)
+    // The blank warm-up sits before the next working row, and is the first row not yet written.
+    let blankWarmup = state.nextUnloggedSlotID
+    #expect(state.slots.first { $0.id == blankWarmup }?.isWarmup == true)
+    #expect(state.slots.first { $0.id == blankWarmup }?.draft.isLoggable == false)
+
+    let primary = ExerciseLogState.primarySlotID(in: [state])
+    #expect(primary != blankWarmup)
+    #expect(state.slots.first { $0.id == primary }?.isWarmup == false)
+    #expect(state.slots.first { $0.id == primary }?.draft.isLoggable == true)
+  }
+
+  @Test("The primary action moves down the workout as movements are finished, and ends with none")
+  func primaryFollowsTheWorkout() {
+    var first = ExerciseLogState.build(
+      exerciseID: exercise, machineID: machine, exerciseName: "Press",
+      snapshot: snapshot(prior([(100, 8)], machineID: machine))
+    )
+    let secondExercise = ExerciseID()
+    let secondKey = ProgressionKey(exerciseID: secondExercise, machineID: nil)
+    let secondPrior = PriorPerformance(
+      key: secondKey, lastSets: [PriorSetRecord(weightKg: 50, reps: 12, completedAt: now)],
+      heaviestSet: nil)
+    var second = ExerciseLogState.build(
+      exerciseID: secondExercise, exerciseName: "Curl",
+      snapshot: PriorPerformanceSnapshot(entries: [secondKey: secondPrior], capturedAt: now)
+    )
+    #expect(ExerciseLogState.primarySlotID(in: [first, second]) == first.slots[0].id)
+
+    first.markLogged(slotID: first.slots[0].id, setID: SetID(), completedAt: now)
+    #expect(ExerciseLogState.primarySlotID(in: [first, second]) == second.slots[0].id)
+
+    second.markLogged(slotID: second.slots[0].id, setID: SetID(), completedAt: now + 60)
+    #expect(ExerciseLogState.primarySlotID(in: [first, second]) == nil)
+    #expect(ExerciseLogState.primarySlotID(in: []) == nil)
+  }
+
+  @Test("A row with nothing to log is never the primary action")
+  func primaryNeedsALoggableRow() {
+    let blank = empty(plannedSets: 2)
+    #expect(ExerciseLogState.primarySlotID(in: [blank]) == nil)
+  }
+
   // MARK: - Removing rows
 
   @Test("Only an unlogged row can be removed")

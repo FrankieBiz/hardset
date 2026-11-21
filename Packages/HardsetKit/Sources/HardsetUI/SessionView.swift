@@ -545,9 +545,10 @@ public struct SessionView: View {
         { closeKeypad { show(id) } }
       },
       lastRest: lastRest[id],
-      // The one accent on the screen is the workout's next set: the first movement with a set
-      // still to log. Every other movement's next row is drawn as ready, in chalk.
-      accentsNext: id == exercises.first(where: { $0.nextUnloggedSlotID != nil })?.id,
+      // The one accent on the screen is the workout's primary action; every other row is drawn
+      // as ready, in chalk.
+      decidesAccent: true,
+      accentedSlotID: accentSlotID,
       allowsCorrection: onCorrectSet != nil,
       editingSlotID: editsThisCard ? keypad?.slotID : nil,
       editingField: editsThisCard ? keypad?.field : nil,
@@ -1037,6 +1038,13 @@ public struct SessionView: View {
       }
     }
     return nil
+  }
+
+  /// The row whose log control wears the screen's one accent: the workout's primary action, the
+  /// first row that is not logged and can be (`ExerciseLogState.primarySlotID`). While the keypad is
+  /// up its own primary action, Next or Log set, is the accent, and no row has it.
+  private var accentSlotID: UUID? {
+    keypad == nil ? ExerciseLogState.primarySlotID(in: exercises) : nil
   }
 
   private func slot(exerciseID: UUID, slotID: UUID) -> SetSlot? {

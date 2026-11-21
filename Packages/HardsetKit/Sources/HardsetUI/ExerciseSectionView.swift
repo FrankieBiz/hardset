@@ -18,7 +18,8 @@ public struct ExerciseSectionView: View {
   private let onSelectMachine: (() -> Void)?
   private let onShowHistory: (() -> Void)?
   private let lastRest: Duration?
-  private let accentsNext: Bool
+  private let accentedSlotID: UUID?
+  private let decidesAccent: Bool
   private let allowsCorrection: Bool
   private let editingSlotID: UUID?
   private let editingField: SetRowField?
@@ -42,9 +43,12 @@ public struct ExerciseSectionView: View {
   /// - Parameter onShowHistory: Opens this movement's load history. `nil` leaves the name inert.
   /// - Parameter lastRest: The rest the lifter last chose for this movement. When known, it is
   ///   offered as one tap; it is never a default the app made up, so with none the card asks.
-  /// - Parameter accentsNext: Draws this card's next-up control in plate blue. The screen's one
-  ///   accent belongs to the workout's next set, so a session passes `false` for every card but the
-  ///   first with a set still to log; a card shown alone keeps the default.
+  /// - Parameter decidesAccent: Whether the host, not the card, says which row's log control is plate
+  ///   blue. A session passes `true`, because its one accent belongs to the workout's next loggable
+  ///   set, which may be on another card; a card shown alone leaves it `false`, and draws its next
+  ///   row blue.
+  /// - Parameter accentedSlotID: The row that wears the accent when `decidesAccent`; `nil` for none
+  ///   on this card.
   /// - Parameter allowsCorrection: Lets a saved row's figures open the keypad. The session passes
   ///   `true` when it can write a correction to a saved set.
   /// - Parameter editingSlotID: The row the session's keypad is on, if it is on this card.
@@ -60,7 +64,8 @@ public struct ExerciseSectionView: View {
     onSelectMachine: (() -> Void)? = nil,
     onShowHistory: (() -> Void)? = nil,
     lastRest: Duration? = nil,
-    accentsNext: Bool = true,
+    decidesAccent: Bool = false,
+    accentedSlotID: UUID? = nil,
     allowsCorrection: Bool = false,
     editingSlotID: UUID? = nil,
     editingField: SetRowField? = nil,
@@ -80,7 +85,8 @@ public struct ExerciseSectionView: View {
     self.onSelectMachine = onSelectMachine
     self.onShowHistory = onShowHistory
     self.lastRest = lastRest
-    self.accentsNext = accentsNext
+    self.decidesAccent = decidesAccent
+    self.accentedSlotID = accentedSlotID
     self.allowsCorrection = allowsCorrection
     self.editingSlotID = editingSlotID
     self.editingField = editingField
@@ -114,7 +120,7 @@ public struct ExerciseSectionView: View {
             isWarmup: slot.isWarmup,
             isLogged: slot.isLogged,
             isNext: slot.id == state.nextUnloggedSlotID,
-            accentsNext: accentsNext,
+            accentOverride: decidesAccent ? slot.id == accentedSlotID : nil,
             allowsCorrection: allowsCorrection,
             // A hairline only where two rows meet, never above the first.
             isSeparated: slot.id != state.slots.first?.id,
