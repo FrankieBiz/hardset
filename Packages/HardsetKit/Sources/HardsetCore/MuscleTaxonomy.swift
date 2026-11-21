@@ -471,15 +471,17 @@ public enum SetCounting {
       """
   )
 
-  /// Ceiling on the certainty of any weekly per-muscle total.
+  /// The certainty of any weekly per-muscle total.
   ///
-  /// Never `.high`: that would require a trial measuring this muscle's growth from these
-  /// movements, and an aggregate over many movements cannot qualify. `.moderate` at best for a
-  /// `modelled` muscle, `.low` for a `counted` one, and `.low` above roughly 25 fractional sets
-  /// because few studies explored that range. The ~25 cut point is Hardset's convention.
+  /// This is `VolumeAnalyzer.doseResponse`'s answer and nothing else, so the volume rows, the deep
+  /// muscle map and the counting disclosure, which all state a certainty for the same counts, read
+  /// it from one rule. Never `.high`: that would require a trial measuring this muscle's growth from
+  /// these movements, and an aggregate over many movements cannot qualify. `.moderate` for a
+  /// `modelled` muscle, `.low` above roughly 25 fractional sets because few studies explored that
+  /// range, and `.unevaluated` for a `counted` muscle, whose relationship was never fitted. The ~25
+  /// cut point is Hardset's convention.
   public static func certaintyCeiling(for muscle: Muscle, fractionalSets: Double) -> Certainty {
-    if fractionalSets > 25 { return .low }
-    return muscle.tier == .modelled ? .moderate : .low
+    VolumeAnalyzer.doseResponse(fractionalSets: fractionalSets, for: muscle).certainty
   }
 }
 

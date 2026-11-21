@@ -385,15 +385,21 @@ Selection rows, the unit switch and pickers stay silent.
   that have no body part last under the `warning` header. A row is a `SelectionCardButtonStyle` card: the
   movement in `headline`, its machine in `provenance`, a small `plateBlue` sparkline of the last dozen
   sessions (hidden from VoiceOver and dropped at accessibility sizes), and one sentence that names its
-  metric: "Estimated max +8% in 6 weeks", or "Not enough history" in `chalkDim` when no session sits six
-  weeks back. Beside every estimated-max figure sits its `CertaintyBadge`, drawn over the card's corner
+  metric: "Estimated max +8% in 6 weeks", or, in `chalkDim`, "Estimated max · no 6-week comparison" with
+  the history the movement does have ("4 sessions over 3 weeks. A comparison needs a session 5 to 7
+  weeks before the latest.") when no session sits in that band. It never says "Not enough history":
+  a movement trained every four weeks has plenty and only misses the band. The band is
+  `ProgressTrendAnalyzer.comparisonBandDays`, and the words are written from it. Beside every estimated-max figure sits its `CertaintyBadge`, drawn over the card's corner
   as its own control so it never nests inside the card's button. A six-week change uses the weaker
   certainty of its two estimates. Imported history has its own series and says "Imported · machine
   not recorded" in the same `provenance` role. Machine and cable movements whose sets have no
   machine say "No machine recorded" there and in the chart legend. A movement with no record in its last
   three sessions is flagged "Stalled · 3 sessions" in `warning` with `pause.circle`, and no advice. "Most
-  improved · estimated max" at the top repeats the three biggest estimated-max gains; load and rep
-  percentages stay in their own movement rows. Empty, it says "Log a workout and your progress
+  improved · estimated max" at the top repeats three estimated-max gains, ordered by the confidence of
+  the estimate first, then the size of the gain, with a stalled movement after one of the same
+  confidence that is not, and a `caption` under its label says so (`ProgressCopy.mostImprovedOrdering`),
+  so a Low-confidence gain that is also Stalled is never on top while a better-supported gain sits
+  below it; load and rep percentages stay in their own movement rows. Empty, it says "Log a workout and your progress
   shows up here"; loading is a quiet line and a failed read says so, never an empty board. It adds no
   token and no motion.
 - **Scorecard** (`WorkoutReceiptView`, `ScorecardCopy`): the block at the top of a finished workout's
@@ -414,6 +420,14 @@ Selection rows, the unit switch and pickers stay silent.
   name in `NameEntrySheet`, builds the plan from the workout's movements in their order with the number
   of working sets logged, never counting warm-ups, and opens the workout editor on it as a new workout.
   Once saved, a neutral `info` banner says where it is. It adds no token and no motion.
+- **Where the history lives** (receipt): a lifter who never opens Settings would never learn that a
+  build with no iCloud sync keeps their history on one phone, so the receipt says it in one quiet
+  line, in `caption` and `chalkDim`, under the share and save buttons: "Saved on this iPhone only.
+  Deleting Hardset deletes your history, and Settings can export a copy." It is not a banner and not a
+  modal. It appears only where it is true (`DataSafetyCopy.receiptNote(for:)` is `nil` for a build that
+  syncs, and for a screen that does not know), it is drawn outside the receipt view so the shared image
+  never carries it, and Settings still holds the whole warning. The launch view hands the sync status
+  down through the environment. It adds no token and no motion.
 - **Selection** (`SelectionRow`, `SelectionCardButtonStyle`, `SelectionIndicator`): selected choices
   take the plate blue ring and `plateBlueSurface`, and the trailing indicator swaps an empty ring
   for a filled check, so the choice is carried by shape as well as colour. A pressed selection
@@ -569,6 +583,25 @@ Selection rows, the unit switch and pickers stay silent.
 - **Volume bars**: round-ended gauges, 4 pt continuous, scaled to the week's own maximum, never to a target. Modelled
   muscles are solid plate blue; muscles that are counted but not modelled are hollow (plate blue
   outline on `plateBlueSurface`) and say so in words beside the bar.
+- **Certainty on a muscle's count**: the badge beside a weekly count is about the research, not the
+  count: whether published studies of weekly sets reach that muscle at that many sets. It is moderate
+  for the six modelled muscles up to about 25 fractional sets, low above that, and not evaluated for
+  every other muscle, whose count is still shown. The rule is `VolumeAnalyzer.doseResponse` and
+  nothing else: the volume rows and the deep muscle map draw the same `MuscleCertaintyBadge` from it,
+  so one count never carries two answers, and the map carries no badge of its own for the week.
+  `VolumeAnalyzer.certaintyMeaning` says what the badge is about, once, in words on the Volume screen,
+  on the map and at the top of the "How sets are counted" disclosure; the disclosure's capsule is the
+  best level a count can reach, `VolumeAnalyzer.bestCertainty`, and `certaintyScale` names where each
+  level applies. Settings opens the same disclosure. No new token, no motion.
+- **Lower bounds and muscles the catalogue cannot train yet**: the `caveat` banner "Counts below are
+  lower bounds" says the cause and the way out, and is shared by the Volume screen and the map: sets
+  on a movement with no muscles recorded count toward no muscle, a movement the lifter made gets its
+  muscles from a body part set in Library on the Train tab, and an imported movement cannot be given
+  one. The muscles no built-in movement trains directly (`ExerciseCatalog.unauthoredDirectTokens`) are
+  not listed under "Nothing logged for", where a zero would blame the lifter; the Volume screen names
+  the ones with nothing credited in their own section, "Not counted directly yet", with the reason
+  ("This is a gap in the catalogue, not in your training"), and a tile on the map with nothing
+  credited says the same. Tags, `caption` and the `caveat` banner; no new token, no motion.
 - **Charts**: one series per machine with its own colour and point symbol, a custom legend in app
   type, with equipment provenance allowed to wrap fully at accessibility sizes, and machine changes
   as 2 pt dashed `warning` rules. The chart opens on the estimated max,

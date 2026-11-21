@@ -36,9 +36,9 @@ public struct SettingsSheet: View {
   private let onDone: () -> Void
 
   /// - Parameters:
-  ///   - gyms: When given, Settings offers renaming and archiving gyms and machines.
+  ///   - gyms: When given, Settings offers renaming and removing gyms and machines.
   ///   - onDataChanged: Called after Settings changes saved data: an import that wrote workouts, or
-  ///     a gym or machine renamed or archived. Screens showing that data re-read it.
+  ///     a gym or machine renamed or removed. Screens showing that data re-read it.
   ///   - onShowTour: When given, Settings offers "Show the tour again" and calls this, which is
   ///     expected to close Settings and replay the first-launch sequence.
   public init(
@@ -98,9 +98,18 @@ public struct SettingsSheet: View {
       // Attached inside this sheet's own stack, so the disclosure presents over Settings rather
       // than competing with it for the presenting view.
       .sheet(item: $disclosure) { item in
-        MethodologySheet(source: item.source, certainty: item.certainty)
+        disclosureSheet(for: item)
           .hardsetSheet()
       }
+    }
+  }
+
+  /// The set-counting disclosure is the one the Volume screen opens, built in one place, so what
+  /// Settings says a certainty is about cannot differ from what the screen that shows it says.
+  @ViewBuilder private func disclosureSheet(for item: Disclosure) -> some View {
+    switch item {
+    case .setCounting: MethodologySheet.setCounting()
+    case .progression: MethodologySheet(source: item.source, certainty: item.certainty)
     }
   }
 
@@ -215,10 +224,10 @@ public struct SettingsSheet: View {
       } label: {
         HStack(spacing: Tokens.Spacing.regular) {
           VStack(alignment: .leading, spacing: Tokens.Spacing.hairline) {
-            Text("Rename or archive")
+            Text("Rename or remove")
               .font(Tokens.Text.headline)
               .foregroundStyle(Tokens.Color.chalk)
-            Text("Fix a misspelt name, or retire a gym or machine. Logged sets stay in your history.")
+            Text("Fix a misspelt name, or take a gym or machine out of the pickers for good. Logged sets stay in your history.")
               .font(Tokens.Text.caption)
               .foregroundStyle(Tokens.Color.chalkDim)
           }
@@ -333,11 +342,11 @@ private nonisolated enum Disclosure: Identifiable {
     }
   }
 
-  /// The same certainty the weekly volume screen states beside its own disclosure. Load history
-  /// states none there, so none is invented here.
+  /// The best certainty a weekly count can reach, from the engine's own rule rather than a value
+  /// written here. Load history states none, so none is invented.
   var certainty: Certainty? {
     switch self {
-    case .setCounting: return .moderate
+    case .setCounting: return VolumeAnalyzer.bestCertainty
     case .progression: return nil
     }
   }

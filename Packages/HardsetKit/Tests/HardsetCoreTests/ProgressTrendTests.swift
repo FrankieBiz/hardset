@@ -43,6 +43,43 @@ struct ProgressTrendTests {
     #expect(trend?.sixWeekChange == nil)
   }
 
+  @Test("The comparison band is inclusive at both ends and nothing outside it is borrowed")
+  func comparisonBandEdges() {
+    // Exact whole days, with no per-session offset, so the edges are tested at the edge.
+    func sample(session: Int, day dayNumber: Int, kg: Double) -> ProgressionSample {
+      ProgressionSample(
+        sessionID: SessionID(rawValue: sessionUUID(session)), machineID: nil, weightKg: kg, reps: 10,
+        completedAt: day(dayNumber))
+    }
+    func change(daysBack: Int) -> Double? {
+      ProgressTrendAnalyzer.trend(
+        key: key(),
+        samples: [sample(session: 0, day: 0, kg: 40), sample(session: 1, day: daysBack, kg: 45)],
+        incrementKg: 2.5, estimatesOneRepMax: true
+      )?.sixWeekChange
+    }
+    #expect(change(daysBack: ProgressTrendAnalyzer.comparisonBandDays.lowerBound) != nil)
+    #expect(change(daysBack: ProgressTrendAnalyzer.comparisonBandDays.upperBound) != nil)
+    #expect(change(daysBack: ProgressTrendAnalyzer.comparisonBandDays.lowerBound - 1) == nil)
+    #expect(change(daysBack: ProgressTrendAnalyzer.comparisonBandDays.upperBound + 1) == nil)
+  }
+
+  @Test("A trend carries when its first session was, so a missing change can say what history exists")
+  func trendCarriesItsFirstDate() {
+    let trend = ProgressTrendAnalyzer.trend(
+      key: key(),
+      samples: [
+        s(day: 3, session: 0, kg: 40, reps: 10), s(day: 10, session: 1, kg: 42.5, reps: 10),
+        s(day: 24, session: 2, kg: 45, reps: 10),
+      ],
+      incrementKg: 2.5, estimatesOneRepMax: true
+    )
+    #expect(trend?.firstDate == day(3).addingTimeInterval(0))
+    #expect(trend?.latestDate == day(24).addingTimeInterval(2))
+    #expect(trend?.sixWeekChange == nil)
+    #expect(trend?.sessionCount == 3)
+  }
+
   @Test func highRepWorkTrendsOnHeaviestLoad() {
     let trend = ProgressTrendAnalyzer.trend(
       key: key(), samples: [s(day: 0, session: 0, kg: 40, reps: 15), s(day: 7, session: 1, kg: 42.5, reps: 15)],
@@ -326,6 +363,44 @@ struct ProgressTrendTests {
       index.append(sample)
       full.append(PriorSetRecord(weightKg: sample.weightKg, reps: sample.reps, completedAt: sample.completedAt))
     }
+  }
+
+  @Test("Most improved ranks the better-supported gain first, and a stalled one after its peers")
+  func mostImprovedRanksByConfidenceBeforePercentage() {
+    func trend(_ change: Double, _ certainty: Certainty?, stalled: Int? = nil) -> MovementTrend {
+      MovementTrend(
+        key: ProgressionKey(exerciseID: ExerciseID()), metric: .estimatedMax, sparkline: [1, 2],
+        sixWeekChange: change, sessionCount: 6, stalledSessions: stalled, latestDate: day(42),
+        certainty: certainty)
+    }
+    // The card the review found on top: the biggest percentage, Low, and Stalled on one card.
+    let lowAndStalled = trend(0.12, .low, stalled: 3)
+    let moderate = trend(0.08, .moderate)
+    let high = trend(0.03, .high)
+    let moderateStalled = trend(0.09, .moderate, stalled: 3)
+    let lowSteady = trend(0.05, .low)
+
+    let ranked = ProgressTrendAnalyzer.mostImproved(
+      [lowAndStalled, lowSteady, moderateStalled, moderate, high], limit: 5)
+    #expect(ranked == [high, moderate, moderateStalled, lowSteady, lowAndStalled])
+    // The strip of three never leads with, or even contains, the Low and Stalled one here.
+    let top = ProgressTrendAnalyzer.mostImproved([lowAndStalled, moderate, high, lowSteady])
+    #expect(top.first?.certainty != .low)
+    #expect(!top.contains(lowAndStalled))
+  }
+
+  @Test("When every gain is equally sure, the bigger one is first and a stalled one follows")
+  func equalConfidenceFallsBackToSizeThenStall() {
+    func trend(_ change: Double, stalled: Int? = nil) -> MovementTrend {
+      MovementTrend(
+        key: ProgressionKey(exerciseID: ExerciseID()), metric: .estimatedMax, sparkline: [1, 2],
+        sixWeekChange: change, sessionCount: 6, stalledSessions: stalled, latestDate: day(42),
+        certainty: .moderate)
+    }
+    let big = trend(0.2, stalled: 3)
+    let mid = trend(0.1)
+    let small = trend(0.05)
+    #expect(ProgressTrendAnalyzer.mostImproved([big, small, mid], limit: 3) == [mid, small, big])
   }
 
   @Test("Most improved compares only estimated maxima, never load or rep percentages")

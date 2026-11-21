@@ -63,6 +63,7 @@ struct WorkoutReceiptScreen: View {
   @State private var pendingEditor: SavedWorkoutDraft?
   @State private var editor: SavedWorkoutDraft?
   @State private var didSaveWorkout = false
+  @Environment(\.syncStatus) private var syncStatus
   @Environment(\.displayScale) private var displayScale
   @Environment(\.dismiss) private var dismiss
   @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -206,6 +207,18 @@ struct WorkoutReceiptScreen: View {
             }
           }
           .padding(Tokens.Spacing.loose)
+
+          // Where a lifter first meets that their history has no copy off this phone: one quiet line
+          // under the buttons, only on a build with no iCloud sync. Outside the receipt view, so the
+          // shared image never carries it.
+          if let note = DataSafetyCopy.receiptNote(for: syncStatus) {
+            Text(note)
+              .font(Tokens.Text.caption)
+              .foregroundStyle(Tokens.Color.chalkDim)
+              .fixedSize(horizontal: false, vertical: true)
+              .padding(.horizontal, Tokens.Spacing.loose)
+              .padding(.bottom, Tokens.Spacing.section)
+          }
 
           if let progression, !receipt.movements.isEmpty {
             loadHistory(receipt.movements, store: progression)

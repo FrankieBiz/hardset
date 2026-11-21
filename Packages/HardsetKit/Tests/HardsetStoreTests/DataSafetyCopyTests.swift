@@ -39,6 +39,22 @@ struct DataSafetyCopyTests {
     #expect(beforeExporting.contains("install new builds over the old app"))
   }
 
+  @Test("The receipt line is said only where it is true, and says the two facts that matter")
+  func receiptNoteIsConditional() throws {
+    let note = try #require(DataSafetyCopy.receiptNote(for: .localOnly)).lowercased()
+    #expect(note.contains("saved on this iphone only"))
+    #expect(note.contains("deleting hardset deletes your history"))
+    #expect(note.contains("settings can export a copy"))
+    // A build that syncs does not claim its history is on one phone, and an unknown build says nothing.
+    #expect(DataSafetyCopy.receiptNote(for: .enabled(containerIdentifier: "iCloud.example")) == nil)
+    #expect(DataSafetyCopy.receiptNote(for: nil) == nil)
+    // One line, not a paragraph: two sentences at most.
+    #expect(note.split(separator: ".").count <= 2)
+    for word in ["might", "may ", "could", "should", "probably", "try to"] {
+      #expect(!note.contains(word), Comment(rawValue: word))
+    }
+  }
+
   @Test("Every sentence is plain: no hedging word where a fact is stated")
   func noHedging() {
     for word in ["might", "may ", "could", "should", "probably", "try to"] {

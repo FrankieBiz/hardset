@@ -40,10 +40,65 @@ struct ProgressCopyTests {
       == "Estimated max unchanged in 6 weeks")
   }
 
-  @Test("With no session six weeks back there is no change to state, and the row says so")
-  func noWindowMeansNotEnoughHistory() {
+  @Test("With no session in the comparison band there is no change to state, and the row says what is missing")
+  func noWindowSaysWhatIsMissing() {
     #expect(ProgressCopy.changeText(for: trend(.estimatedMax, change: nil)) == nil)
-    #expect(ProgressCopy.notEnoughHistory == "Not enough history")
+    #expect(ProgressCopy.noChangeText(for: trend(.estimatedMax, change: nil))
+      == "Estimated max · no 6-week comparison")
+    #expect(ProgressCopy.noChangeText(for: trend(.addedLoad, change: nil))
+      == "Added load · no 6-week comparison")
+    // "Not enough history" is gone: it was false for a long history that only misses the band.
+    #expect(!ProgressCopy.noChangeText(for: trend(.estimatedMax, change: nil)).contains("enough"))
+  }
+
+  @Test("The band the copy names is the band the change is read against")
+  func bandIsFromTheAnalyser() {
+    #expect(ProgressTrendAnalyzer.comparisonBandDays == 35...49)
+    #expect(ProgressCopy.comparisonBandText == "5 to 7 weeks")
+  }
+
+  private func history(sessions: Int, firstDay: Int, latestDay: Int) -> MovementTrend {
+    let epoch = Date(timeIntervalSince1970: 0)
+    return MovementTrend(
+      key: ProgressionKey(exerciseID: ExerciseID()), metric: .estimatedMax, sparkline: [1, 2],
+      sixWeekChange: nil, sessionCount: sessions, stalledSessions: nil,
+      latestDate: epoch.addingTimeInterval(Double(latestDay) * 86_400),
+      firstDate: epoch.addingTimeInterval(Double(firstDay) * 86_400))
+  }
+
+  @Test("A short history is stated as the span it has and what a comparison needs")
+  func shortHistoryNamesItsSpan() {
+    #expect(ProgressCopy.historyText(for: history(sessions: 4, firstDay: 0, latestDay: 21))
+      == "4 sessions over 3 weeks. A comparison needs a session 5 to 7 weeks before the latest.")
+    #expect(ProgressCopy.historyText(for: history(sessions: 3, firstDay: 0, latestDay: 6))
+      == "3 sessions over 6 days. A comparison needs a session 5 to 7 weeks before the latest.")
+    #expect(ProgressCopy.historyText(for: history(sessions: 2, firstDay: 0, latestDay: 0))
+      == "2 sessions on one day. A comparison needs a session 5 to 7 weeks before the latest.")
+    #expect(ProgressCopy.historyText(for: history(sessions: 1, firstDay: 0, latestDay: 0))
+      == "1 session so far. A comparison needs a session 5 to 7 weeks before the latest.")
+  }
+
+  @Test("A long history that misses the band says how long it is, never that it is too short")
+  func longHistoryIsNotCalledShort() {
+    let monthly = ProgressCopy.historyText(for: history(sessions: 12, firstDay: 0, latestDay: 336))
+    #expect(monthly.hasPrefix("12 sessions over 11 months."))
+    let years = ProgressCopy.historyText(for: history(sessions: 90, firstDay: 0, latestDay: 1_100))
+    #expect(years.hasPrefix("90 sessions over 3 years."))
+    #expect(!monthly.lowercased().contains("not enough"))
+    #expect(!years.lowercased().contains("not enough"))
+  }
+
+  @Test("Without a first date the count is still stated, with no span invented")
+  func unknownFirstDate() {
+    #expect(ProgressCopy.historyText(for: trend(.estimatedMax, change: nil))
+      == "5 sessions. A comparison needs a session 5 to 7 weeks before the latest.")
+  }
+
+  @Test("The Most improved order is stated on screen: confidence, then gain, stalled after")
+  func mostImprovedOrderingIsStated() {
+    #expect(ProgressCopy.mostImprovedOrdering.contains("confidence"))
+    #expect(ProgressCopy.mostImprovedOrdering.contains("gain"))
+    #expect(ProgressCopy.mostImprovedOrdering.contains("stalled"))
   }
 
   @Test("The short form is what the Most improved strip shows")
@@ -69,13 +124,15 @@ struct ProgressCopyTests {
       stalledSessions: 3, latestDate: Date(timeIntervalSince1970: 0), certainty: .moderate)
     let plain = MovementTrend(
       key: key, metric: .heaviestLoad, sparkline: [1], sixWeekChange: nil, sessionCount: 2,
-      stalledSessions: nil, latestDate: Date(timeIntervalSince1970: 0))
+      stalledSessions: nil, latestDate: Date(timeIntervalSince1970: 21 * 86_400),
+      firstDate: Date(timeIntervalSince1970: 0))
 
     #expect(ProgressCopy.spokenRow(
       ProgressBoard.Row(trend: stalled, exerciseName: "Chest press", machineName: "Hammer"))
       == "Chest press, Hammer. Estimated max +8% in 6 weeks. Stalled · 3 sessions.")
     #expect(ProgressCopy.spokenRow(ProgressBoard.Row(trend: plain, exerciseName: "Squat"))
-      == "Squat. Not enough history.")
+      == "Squat. Heaviest weight · no 6-week comparison. 2 sessions over 3 weeks. "
+      + "A comparison needs a session 5 to 7 weeks before the latest.")
   }
 
   @Test("Each metric has a name the lifter would use")

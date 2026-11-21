@@ -70,6 +70,9 @@ public struct HardsetLaunchView: View {
       }
     }
     .animation(Tokens.Motion.adaptive(Tokens.Motion.reveal, reduceMotion: reduceMotion), value: hasSeenOnboarding)
+    // Below the root view, so a screen far from Settings, such as a workout's receipt, can say where
+    // the history it shows is kept without the root view passing it through every screen.
+    .environment(\.syncStatus, environment.sync)
   }
 }
 

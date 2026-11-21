@@ -8,8 +8,10 @@ import SwiftUI
 ///
 /// Choosing stays in the recency-first pickers; this list is alphabetical because it is for
 /// finding a name, not for picking the machine in front of you. Renaming keeps the identity, so
-/// every logged set follows the new name. Archiving hides a gym or machine from the pickers and
-/// never deletes it, because logged sets reference it.
+/// every logged set follows the new name. Removing archives the row: it leaves the pickers and this
+/// list and is never deleted, because logged sets reference it. The word the lifter reads is
+/// "Remove", not "Archive", because nothing in the app lists archived equipment or brings it back,
+/// and "Archive" promises both. Adding the same name later makes a new row with a new identity.
 struct GymManagementScreen: View {
   let store: GymStore
   /// Called after a rename or archive is saved, so screens showing gym names can re-read them.
@@ -24,7 +26,7 @@ struct GymManagementScreen: View {
   var body: some View {
     ScrollView {
       VStack(alignment: .leading, spacing: Tokens.Spacing.section) {
-        Text("Renaming keeps every logged set attached. Archiving removes a gym or machine from the pickers; its logged sets stay in your history.")
+        Text("Renaming keeps every logged set attached. Removing takes a gym or machine out of the pickers for good: nothing lists removed ones or brings them back, and adding the same name starts a new one. Sets already logged stay in History and, for a machine, its load chart stays in Progress.")
           .font(Tokens.Text.provenance)
           .foregroundStyle(Tokens.Color.chalkDim)
           .fixedSize(horizontal: false, vertical: true)
@@ -73,7 +75,7 @@ struct GymManagementScreen: View {
       titleVisibility: .visible,
       presenting: archiving
     ) { request in
-      Button("Archive", role: .destructive) { archive(request) }
+      Button("Remove", role: .destructive) { archive(request) }
       Button("Cancel", role: .cancel) {}
     } message: { request in
       Text(request.message)
@@ -151,7 +153,7 @@ struct GymManagementScreen: View {
       return "A name cannot be blank."
     } catch {
       Task { await load() }
-      return "Could not save the new name. It may have been archived. Your changes are still here to retry."
+      return "Could not save the new name. It may have been removed. Your changes are still here to retry."
     }
   }
 
@@ -165,7 +167,7 @@ struct GymManagementScreen: View {
       failure = nil
       onChanged()
     } catch {
-      failure = "Could not archive it. Nothing was changed."
+      failure = "Could not remove it. Nothing was changed."
     }
     Task { await load() }
   }
@@ -190,24 +192,28 @@ private nonisolated enum EquipmentEdit: Identifiable {
   }
 }
 
-/// What the archive confirmation is about, with the words it asks in.
+/// What the removal confirmation is about, with the words it asks in.
+///
+/// It says what happens and what does not: the row leaves the pickers and the list, nothing brings
+/// it back, adding the same name starts a new one (a machine's load history with it), and the sets
+/// already logged stay where they were.
 private nonisolated enum EquipmentArchive {
   case gym(GymRecord)
   case machine(MachineRecord, gym: String)
 
   var title: String {
     switch self {
-    case .gym(let gym): "Archive \(gym.name)?"
-    case .machine(let machine, _): "Archive \(machine.displayName)?"
+    case .gym(let gym): "Remove \(gym.name)?"
+    case .machine(let machine, _): "Remove \(machine.displayName)?"
     }
   }
 
   var message: String {
     switch self {
     case .gym:
-      "It leaves the gym picker. Its machines and logged sets stay in your history."
+      "It leaves the gym picker and this list, and its machines go with it. Nothing in the app brings it back, and adding a gym with the same name starts a new one. Sets already logged there stay in History."
     case .machine(_, let gym):
-      "It leaves the machine picker at \(gym). Its logged sets and load chart stay in your history."
+      "It leaves the machine picker at \(gym) and this list. Nothing in the app brings it back, and adding a machine with the same name starts a new one with no load history of its own. Sets already logged on it stay in History, and its load chart stays in Progress."
     }
   }
 }
@@ -251,9 +257,9 @@ private struct ManagedRow: View {
     Button("Rename", action: onRename)
       .buttonStyle(HardsetButtonStyle(.secondary))
       .accessibilityLabel("Rename \(title)")
-    Button("Archive", action: onArchive)
+    Button("Remove", action: onArchive)
       .buttonStyle(HardsetButtonStyle(.destructive))
-      .accessibilityLabel("Archive \(title)")
+      .accessibilityLabel("Remove \(title) from the pickers")
   }
 }
 

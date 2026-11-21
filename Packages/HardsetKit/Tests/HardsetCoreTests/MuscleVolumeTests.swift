@@ -220,6 +220,38 @@ struct DoseResponseTests {
     #expect(outside.value?.isBeyondStudiedRange == true)
   }
 
+  @Test("The best a count can reach is the best any muscle is given, and never high")
+  func bestCertaintyIsDerived() {
+    let best = Muscle.allCases
+      .flatMap { muscle in [1.0, 12.0, 25.0, 40.0].map { VolumeAnalyzer.doseResponse(fractionalSets: $0, for: muscle) } }
+      .map(\.certainty)
+      .max()
+    #expect(VolumeAnalyzer.bestCertainty == best)
+    #expect(VolumeAnalyzer.bestCertainty == .moderate)
+    #expect(VolumeAnalyzer.bestCertainty != .high)
+  }
+
+  @Test("The scale names exactly the muscles that are placed, the boundary and what the rest read")
+  func certaintyScaleFollowsTheRule() {
+    let modelled = VolumeAnalyzer.modelledMuscles
+    #expect(Set(modelled) == Set(Muscle.allCases.filter { VolumeAnalyzer.doseResponse(fractionalSets: 12, for: $0).isEvaluated }))
+    let scale = VolumeAnalyzer.certaintyScale(name: { $0.rawValue })
+    for muscle in Muscle.allCases {
+      #expect(scale.contains(muscle.rawValue.lowercased()) == modelled.contains(muscle), "\(muscle.rawValue)")
+    }
+    #expect(scale.contains("about \(Int(VolumeAnalyzer.studiedRangeCeiling)) fractional sets a week"))
+    #expect(scale.contains("is low above that"))
+    #expect(scale.contains("not evaluated"))
+    #expect(scale.hasPrefix("Moderate is the most any count reaches"))
+  }
+
+  @Test("What the certainty is about is stated, and it is the research and not the count")
+  func certaintyMeaningStatesItsSubject() {
+    #expect(VolumeAnalyzer.certaintyMeaning.contains("about the research, not your count"))
+    #expect(VolumeAnalyzer.certaintyMeaning.contains("published studies of weekly sets"))
+    #expect(VolumeAnalyzer.certaintyMeaning.contains("Not evaluated means they do not; the count is still shown"))
+  }
+
   @Test("The disclosure says the ~25 boundary is ours and the range is limited")
   func disclosureIsHonest() {
     let range = VolumeAnalyzer.doseResponseSource.validRange ?? ""
