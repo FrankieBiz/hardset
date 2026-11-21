@@ -181,10 +181,10 @@ public struct SettingsSheet: View {
               ? "Workouts replicate to your private iCloud database while you are signed in "
                 + "to iCloud."
               // Sync, not backup, is what this build lacks; whether a device backup includes the
-              // database is iOS's to say. An export is a readable copy, not a restore point.
+              // database is iOS's to say. A CSV export is the copy Hardset itself can read back in.
               : "This build can't use iCloud sync, so workouts stay on this iPhone and don't reach "
-                + "your other devices. Deleting Hardset deletes them. An export below is a readable "
-                + "copy to keep elsewhere; Hardset can't restore from it."
+                + "your other devices. Deleting Hardset deletes them. A CSV export below is a copy "
+                + "Hardset can read back in; JSON and SQLite exports are for keeping and inspecting."
           )
           .font(Tokens.Text.caption)
           .foregroundStyle(Tokens.Color.chalkDim)

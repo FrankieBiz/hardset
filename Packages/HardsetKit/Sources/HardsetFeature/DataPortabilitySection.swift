@@ -44,10 +44,18 @@ struct DataPortabilitySection: View {
       Text("Logging, personal history and exports are always free.")
         .font(Tokens.Text.provenance)
         .foregroundStyle(Tokens.Color.chalkDim)
+      // Each format says what it is for beside its own button, so no format reads as a backup
+      // it is not. What each can do comes from `Format.restoresIntoHardset`.
       ForEach(DataTransferStore.Format.allCases, id: \.self) { format in
-        Button("Export \(format.displayName)") { export(format) }
-          .buttonStyle(HardsetButtonStyle(.secondary))
-          .disabled(isBusy)
+        VStack(alignment: .leading, spacing: Tokens.Spacing.tight) {
+          Button("Export \(format.displayName)") { export(format) }
+            .buttonStyle(HardsetButtonStyle(.secondary))
+            .disabled(isBusy)
+          Text(format.purpose)
+            .font(Tokens.Text.caption)
+            .foregroundStyle(Tokens.Color.chalkDim)
+            .fixedSize(horizontal: false, vertical: true)
+        }
       }
       if isExporting { ProgressView().accessibilityLabel("Preparing your export") }
       if let exportURL {
@@ -62,13 +70,17 @@ struct DataPortabilitySection: View {
           .foregroundStyle(exportFailed ? Tokens.Color.plateRed : Tokens.Color.chalkDim)
           .fixedSize(horizontal: false, vertical: true)
       }
-      Text("CSV includes every logged set and its machine IDs. JSON and SQLite include all training and device-local tables, including Apple Health data you chose to copy. An export is a readable copy; Hardset can't restore from it. Share only where you intend.")
+      Text("JSON and SQLite include every table, including Apple Health data you chose to copy. Share exports only where you intend.")
         .font(Tokens.Text.caption)
         .foregroundStyle(Tokens.Color.chalkDim)
         .fixedSize(horizontal: false, vertical: true)
 
-      SectionLabel("Move your workouts")
-      Text("Choose an English Strong or Hevy CSV. Unitless Strong loads are read as \(unit.abbreviation), the unit chosen above, and dates without an offset use this device’s time zone. Timed, distance and unweighted sets have no load and reps to record, so they are listed and left out. Workouts already imported from the same app are skipped.")
+      SectionLabel("Restore or bring in workouts")
+      Text("To restore, choose a CSV you exported from Hardset. It comes back as it was, and anything already on this iPhone is left alone.")
+        .font(Tokens.Text.provenance)
+        .foregroundStyle(Tokens.Color.chalkDim)
+        .fixedSize(horizontal: false, vertical: true)
+      Text("To bring in history from another app, choose an English Strong or Hevy CSV. Unitless Strong loads are read as \(unit.abbreviation), the unit chosen above, and dates without an offset use this device’s time zone. Timed, distance and unweighted sets have no load and reps to record, so they are listed and left out. Workouts already imported from the same app are skipped.")
         .font(Tokens.Text.provenance)
         .foregroundStyle(Tokens.Color.chalkDim)
         .fixedSize(horizontal: false, vertical: true)
@@ -321,7 +333,7 @@ struct DataPortabilitySection: View {
           directory: FileManager.default.temporaryDirectory.appendingPathComponent("HardsetExports"))
         exportURL = url
         exportFailed = false
-        exportMessage = "\(url.lastPathComponent) is ready. Save or share it to keep a copy off this iPhone."
+        exportMessage = format.readyMessage(fileName: url.lastPathComponent)
       } catch {
         exportFailed = true
         exportMessage = error.localizedDescription

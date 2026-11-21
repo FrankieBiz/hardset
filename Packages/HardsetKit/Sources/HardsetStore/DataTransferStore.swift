@@ -172,6 +172,39 @@ public nonisolated struct DataTransferStore: Sendable {
       case .sqlite: "SQLite"
       }
     }
+
+    /// Whether Hardset can read a file of this format back in. Every line of copy that says what a
+    /// format is for is written from this, and `ExportFormatPurposeTests` proves it against the
+    /// importer, so the app cannot promise a restore it cannot do.
+    public var restoresIntoHardset: Bool {
+      switch self {
+      case .csv: true
+      case .json, .sqlite: false
+      }
+    }
+
+    /// What the format is for, said beside its export button.
+    public var purpose: String {
+      switch self {
+      case .csv:
+        "Every finished workout, set by set, with the movements, gyms and machines it used. "
+          + "Hardset can read this file back in, so this is the one to keep. It leaves out saved "
+          + "workouts and body mass, and a workout still open when you export."
+      case .json:
+        "Every table, for inspecting your data or keeping a full copy. Hardset can't read it back in."
+      case .sqlite:
+        "The database itself, for inspecting your data or keeping a full copy. Hardset can't read it back in."
+      }
+    }
+
+    /// What to say once the file is made.
+    public func readyMessage(fileName: String) -> String {
+      restoresIntoHardset
+        ? "\(fileName) is ready. Save it somewhere off this iPhone. To restore, choose it under "
+          + "Restore or bring in workouts."
+        : "\(fileName) is ready. It is a copy to keep and inspect; Hardset can't restore from it. "
+          + "Export a CSV to keep a copy you can restore."
+    }
   }
 
   /// Every export gets its own directory, so overlapping shares cannot replace each other's file.
