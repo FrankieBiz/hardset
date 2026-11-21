@@ -160,7 +160,7 @@ struct WorkoutReceiptScreen: View {
           if isEditing {
             HardsetBanner(
               .caveat, title: "Removing sets",
-              message: "Tap − beside a mis-logged set to delete it. Saved sets are never edited, only removed."
+              message: "Tap − beside a mis-logged set to delete it. Saved sets are never edited, only removed, and a removed set cannot be added back."
             )
             .padding([.horizontal, .top], Tokens.Spacing.loose)
           }
@@ -300,7 +300,7 @@ struct WorkoutReceiptScreen: View {
   private func corrections(_ receipt: WorkoutReceipt, toggleEditing: @escaping () -> Void) -> some View {
     VStack(alignment: .leading, spacing: Tokens.Spacing.regular) {
       SectionLabel("Correct this workout")
-      Text("Saved sets are never edited. Remove a mis-logged set, or delete the whole workout if it was started by mistake.")
+      Text("Corrections are removals only: a finished workout feeds History, volume and record baselines, so its sets are never edited or added. Remove a mis-logged set, or delete the whole workout if it was started by mistake.")
         .font(Tokens.Text.caption)
         .foregroundStyle(Tokens.Color.chalkDim)
         .fixedSize(horizontal: false, vertical: true)

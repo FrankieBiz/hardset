@@ -638,7 +638,10 @@ components rather than native spinners.
 - History opens a static receipt of committed sets. It states equipment provenance,
   caveats and same-machine record definitions. Native share sheets handle text and a
   deliberately dark image; long sessions retain text sharing rather than render an
-  unbounded image. It adds no animation and responds to Dynamic Type.
+  unbounded image. It adds no animation and responds to Dynamic Type. Where it offers "Correct this
+  workout" it says in one sentence that corrections are removals only and why: a finished workout
+  feeds History, volume and record baselines, so its sets are never edited or added, and the
+  removal banner adds that a removed set cannot be added back.
 - The optional deep muscle map uses the existing palette and fractional-set method,
   with labelled values and comparative tracks, never target bands. It uses two
   columns at ordinary sizes and one at accessibility sizes. Unknown attribution
