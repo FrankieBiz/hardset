@@ -431,10 +431,14 @@ Selection rows, the unit switch and pickers stay silent.
   fades in on focus. Used by the search field and the name entry sheet. An input keeps its outline,
   because it is identified by its box.
 - **Set row**: the ordinal is a plain numeral in a fixed-width column; a warm-up's is the dashed "W".
-  An unlogged row's weight and reps are filled, outlined fields, because a container means the value
-  can be changed. A logged row shows plain `setEntry` values on the card with the same frames, no
-  field faces and no tint, and its green seal; the field faces fade out on `Motion.state`, and with
-  Reduce Motion the swap is instant, so nothing reflows when a set is logged.
+  Weight and reps are plain figures with no box around them, because the keypad is the input surface
+  and the row is never a form. A figure still to be logged is dimmed to `chalkDim`, which clears 7:1
+  on every surface; once the set is logged it reads in full `chalk`. While the keypad types into a
+  field its figure is `chalk` with a still caret after it and a 2 pt `chalk` underline, and nothing
+  else changes; the caret does not blink. Each field's hit region is still the logger's 56 pt tall
+  and the whole field wide. Increase Contrast and Button Shapes bring the `controlEdge` outline back
+  around an editable field, so a boundary appears exactly where it was asked for; a saved figure is
+  never outlined, because it is a fact and not a control.
 - **Set log control**: four states, never confused: incomplete (dashed, disabled), ready (plate blue
   outline), next up (plate blue fill), logged (the stamp). The first three are square key faces with
   a check; a logged set loses its key face and wears a round `plateGreen` seal
@@ -445,20 +449,18 @@ Selection rows, the unit switch and pickers stay silent.
 - **Press feedback on self-drawn controls** (`HardsetPressStyle` and the set row's own styles): flat
   faces sink, everything else dims, and no press moves layout.
   - Flat faces (a raised fill: unselected chips, `AssumptionChip`, the header icon button, the set
-    machine chip, the set row's unlogged value fields, keys and secondary buttons) sink to
-    `steelPressed` and scale to 0.97 (keys 0.96) on `Motion.press`. They never dim, so a
-    boundary that is drawn survives a press. The header icon menu is the one exception:
-    `HeaderIconMenu` is a `Menu`, not a `Button`, so it keeps its resting face, and its press feel is
-    a device check. A selected chip swaps `plateBlueFill` to `plateBlueFillPressed`. An editing
-    set-row field is `plateBlueSurface` with a 2 pt `plateBlue` ring. A control's hit region is at
-    least 44 by 44 pt, however compact its face.
+    machine chip, keys and secondary buttons) sink to `steelPressed` and scale to 0.97 (keys 0.96)
+    on `Motion.press`. They never dim, so a boundary that is drawn survives a press. The header icon
+    menu is the one exception: `HeaderIconMenu` is a `Menu`, not a `Button`, so it keeps its resting
+    face, and its press feel is a device check. A selected chip swaps `plateBlueFill` to
+    `plateBlueFillPressed`. A control's hit region is at least 44 by 44 pt, however compact its face.
   - Controls that draw their own fill and shape with no steel face (segments, the dashed "Add
     movement" slot, the exercise-name link, an unset machine chip, the dismiss glyph, the "Clear
-    search" glyph and the certainty badge) sink to 0.97 and drop to 80% opacity on `Motion.press`,
-    in place of a pressed fill.
-  - The set log control draws its own fill and shape: the set row's unlogged value fields sink as
-    flat faces; the log control (ready and next up) dims and scales like other self-drawn controls;
-    incomplete and logged show no press. Next up keeps its `plateBlueFill` while pressed.
+    search" glyph, the certainty badge and the set row's weight and reps figures) sink to 0.97 and
+    drop to 80% opacity on `Motion.press`, in place of a pressed fill.
+  - The set log control draws its own fill and shape: the log control (ready and next up) dims and
+    scales like other self-drawn controls; incomplete and logged show no press. Next up keeps its
+    `plateBlueFill` while pressed.
   - Static surfaces take no press: tags, the empty-state socket, entry fields, banners, cards, a
     logged row's values and the rest bar's panel. Tags never take a control's face, so a tag never
     imitates a control.

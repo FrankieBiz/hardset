@@ -111,8 +111,9 @@ private struct FieldStates: View {
     CatalogSection("Value fields") {
       VStack(alignment: .leading, spacing: Tokens.Spacing.loose) {
         setRowNote(
-          "Raised flat faces with the control edge. Pressed sinks to steelPressed. "
-            + "Editing is plateBlueSurface in a 2 pt plateBlue ring."
+          "Plain figures with no box. A figure still to be logged is dimmed; a saved one is full "
+            + "chalk. Pressed sinks to 0.97 and dims to 80%. Editing adds a caret and a 2 pt "
+            + "underline, drawn still. Increase Contrast and Button Shapes bring the outline back."
         )
         setRowSample("Rest: weight and reps") {
           pair(.rest, weight: "100", reps: "8")
@@ -152,7 +153,8 @@ private struct FieldStates: View {
 
   private func field(_ state: SetRowFieldState, text: String?, suffix: String) -> some View {
     SetRowFieldFace(state: state, reduceMotion: false) {
-      SetRowFieldValue(text: text, suffix: suffix)
+      // Only the read-only sample stands for a saved figure; every other state is still to log.
+      SetRowFieldValue(text: text, suffix: suffix, state: state, isLogged: state == .readOnly)
     }
   }
 }

@@ -64,8 +64,8 @@ public struct SetRowView: View {
   /// - Parameter comparison: How a logged set compares with the same set last time on this machine,
   ///   drawn as a small mark under the row: "+1 rep", "+2.5 kg · +1 rep", or "Matched". `nil` draws
   ///   nothing, which is the answer for a set that fell short, has no partner, or is a warm-up.
-  /// - Parameter editingField: The field the keypad is on, drawn with the focus ring. `nil` when
-  ///   the keypad is elsewhere or closed.
+  /// - Parameter editingField: The field the keypad is on, drawn with a caret and an underline.
+  ///   `nil` when the keypad is elsewhere or closed.
   /// - Parameter editingText: What has been typed into that field so far, exactly as typed, so
   ///   "100." reads "100." mid-entry rather than a reformatted number.
   /// - Parameter onBeginEditing: Asks the host to put its keypad on a field. `nil` leaves the
@@ -436,16 +436,20 @@ public struct SetRowView: View {
     }
   }
 
+  /// A value is plain text, with no box around it: dimmed until the set is logged, full chalk once
+  /// it is saved, and carrying a caret and an underline while the keypad is typing into it. The
+  /// whole field stays a 56 pt target, so removing the box removed nothing to tap.
   private func valueField(_ field: SetRowField, suffix: String?) -> some View {
     let isEditing = editingField == field
     let isReadOnly = isLogged || onBeginEditing == nil
+    let shown: SetRowFieldState = isEditing ? .editing : (isReadOnly ? .readOnly : .rest)
     return Button {
       onBeginEditing?(field)
     } label: {
-      SetRowFieldValue(text: displayText(field), suffix: suffix)
+      SetRowFieldValue(text: displayText(field), suffix: suffix, state: shown, isLogged: isLogged)
     }
-    // Raised fields sink on press through their own style; neither `SetReadoutStyle` nor the
-    // opacity press belongs on a steel face, because a dim would fade the boundary.
+    // Presses dim and sink through the field's own style: with no face to darken, the figure
+    // itself takes the press, as every control that draws no fill of its own does.
     .buttonStyle(SetFieldStyle(isEditing: isEditing, isReadOnly: isReadOnly))
     .disabled(isReadOnly)
   }
@@ -601,21 +605,64 @@ enum SetRowFieldState: Sendable {
 
 /// A value field's content: the figure, or an em dash when empty, and its unit beside it. The live
 /// field and the catalogue draw the same view, so a sample cannot drift from the row.
+///
+/// There is no box. A figure that has not been logged is dimmed to `chalkDim`, which still clears
+/// 7:1 on every surface it sits on; a saved figure is full `chalk`. While the keypad types into the
+/// field the figure is `chalk`, a caret follows it and a 2 pt rule sits beneath it, and nothing
+/// else changes: the keypad is the input surface, so the row never becomes a form. The caret is
+/// drawn still. It does not blink, so the field adds no motion.
 struct SetRowFieldValue: View {
   let text: String?
   let suffix: String?
+  let state: SetRowFieldState
+  /// A logged set is saved, so its figures read in full chalk; before that they are only
+  /// proposed, and read dimmed.
+  let isLogged: Bool
+
+  private var isEditing: Bool { state == .editing }
+
+  /// An empty field shows an em dash, never "0": a zero on screen reads as a value. While typing,
+  /// an empty field shows only its caret, so the first digit is plainly the first character.
+  private var shown: String {
+    if isEditing { return text ?? "" }
+    return text ?? "—"
+  }
+
+  private var figureColor: Color {
+    guard text != nil else { return Tokens.Color.chalkDim }
+    return isEditing || isLogged ? Tokens.Color.chalk : Tokens.Color.chalkDim
+  }
 
   var body: some View {
     HStack(alignment: .firstTextBaseline, spacing: Tokens.Spacing.tight) {
-      // An empty field shows an em dash, never "0" — a zero on screen reads as a value.
-      Text(text ?? "—")
-        .font(Tokens.Text.setEntry)
-        .foregroundStyle(text == nil ? Tokens.Color.chalkDim : Tokens.Color.chalk)
-        // Condensed tabular figures fit a pound value such as "132.28" at full size on a 375 pt
-        // phone. The mild floor below exists only so an extreme value shrinks a little rather
-        // than truncating: a number cut to "132.…" is worse than one drawn slightly smaller.
-        .lineLimit(1)
-        .minimumScaleFactor(0.85)
+      HStack(alignment: .firstTextBaseline, spacing: 0) {
+        Text(shown)
+          .font(Tokens.Text.setEntry)
+          .foregroundStyle(figureColor)
+          // Condensed tabular figures fit a pound value such as "132.28" at full size on a 375 pt
+          // phone. The mild floor below exists only so an extreme value shrinks a little rather
+          // than truncating: a number cut to "132.…" is worse than one drawn slightly smaller.
+          .lineLimit(1)
+          .minimumScaleFactor(0.85)
+        if isEditing {
+          // The caret is the vertical bar glyph at the figure's own size, so it is as tall as the
+          // digits at every Dynamic Type size without a measured frame.
+          Text("|")
+            .font(Tokens.Text.setEntry.weight(.light))
+            .foregroundStyle(Tokens.Color.chalk)
+            .accessibilityHidden(true)
+        }
+      }
+      .frame(minWidth: isEditing ? Self.minimumRuleWidth : nil)
+      .overlay(alignment: .bottom) {
+        if isEditing {
+          Rectangle()
+            .fill(Tokens.Color.chalk)
+            .frame(height: Tokens.Stroke.selected)
+            .offset(y: Tokens.Spacing.tight)
+            .accessibilityHidden(true)
+        }
+      }
       if let suffix {
         Text(suffix)
           .hardsetText(.unit)
@@ -625,17 +672,26 @@ struct SetRowFieldValue: View {
     .padding(.horizontal, Tokens.Spacing.tight)
     .frame(maxWidth: .infinity, minHeight: Tokens.loggerTapTarget)
   }
+
+  /// A rule under an empty field would be as wide as its caret; this keeps it a visible line.
+  private static let minimumRuleWidth: CGFloat = 32
 }
 
-/// A value field's face in a given state. At rest, pressed and read-only it is a raised flat face
-/// with the control edge, which sinks to `steelPressed` when pressed, through `ControlPressFace`:
-/// one modifier whose arguments change, so the label keeps its identity across a press. Under the
-/// keypad it is `plateBlueSurface` inside a 2 pt `plateBlue` ring. A read-only field never reports
-/// a press, and an editing one has nothing left to press, so both ignore it.
+/// A value field's chrome in a given state, which is almost none.
+///
+/// At rest and read-only the field is its figure and nothing else. Pressed, the figure sinks to
+/// 0.97 and dims to 80%, as every control with no fill of its own does, and Reduce Motion drops the
+/// scale. Where the lifter has asked for boundaries, through Increase Contrast or Button Shapes, an
+/// editable field wears the 3:1 `controlEdge` outline again, so the box comes back exactly where it
+/// was requested and nowhere else. A read-only field is never outlined: it is a saved fact, not a
+/// control. The hit region is the whole field, a rectangle, because there is no face to define it.
 struct SetRowFieldFace<Label: View>: View {
   private let state: SetRowFieldState
   private let reduceMotion: Bool
   private let label: Label
+
+  @Environment(\.colorSchemeContrast) private var contrast
+  @Environment(\.accessibilityShowButtonShapes) private var showsButtonShapes
 
   init(state: SetRowFieldState, reduceMotion: Bool, @ViewBuilder label: () -> Label) {
     self.state = state
@@ -644,22 +700,18 @@ struct SetRowFieldFace<Label: View>: View {
   }
 
   var body: some View {
-    let shape = RoundedRectangle(cornerRadius: Tokens.Radius.control)
-    if state == .editing {
-      label
-        .background(Tokens.Color.plateBlueSurface, in: shape)
-        .overlay(shape.strokeBorder(Tokens.Color.plateBlue, lineWidth: Tokens.Stroke.selected))
-        .contentShape(shape)
-    } else {
-      ControlPressFace(
-        shape: shape,
-        outline: .always,
-        isPressed: state == .pressed,
-        reduceMotion: reduceMotion
-      ) {
-        label
+    let request = ControlEdgeRequest(contrast: contrast, showsButtonShapes: showsButtonShapes)
+    let isEditable = state != .readOnly
+    label
+      .overlay {
+        if request.isRequested && isEditable {
+          Tokens.Shape.control
+            .strokeBorder(Tokens.Color.controlEdge, lineWidth: Tokens.Stroke.hairline)
+        }
       }
-    }
+      .contentShape(Rectangle())
+      .scaleEffect(state == .pressed && !reduceMotion ? 0.97 : 1)
+      .opacity(state == .pressed ? 0.8 : 1)
   }
 }
 
