@@ -115,6 +115,10 @@ public struct ProgressionChartView: View {
             .font(Tokens.Text.provenance)
             .foregroundStyle(Tokens.Color.chalkDim)
             .fixedSize(horizontal: false, vertical: true)
+          Text(ProgressCopy.equipmentNotSet)
+            .font(Tokens.Text.provenance)
+            .foregroundStyle(Tokens.Color.chalkDim)
+            .fixedSize(horizontal: false, vertical: true)
         }
         VStack(alignment: .leading, spacing: Tokens.Spacing.loose) {
           metricHeader

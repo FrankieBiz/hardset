@@ -44,14 +44,24 @@ public struct ExerciseProgressScreen: View {
             systemImage: "exclamationmark.triangle"
           )
         } else if let history = snapshot.value {
-          ProgressionChartView(
-            series: seriesInputs,
-            machineChanges: history.machineChanges,
-            unit: unit,
-            estimatesOneRepMax: history.estimatesOneRepMax,
-            assumesAddedLoad: history.assumesAddedLoad,
-            onExplain: { isShowingMethodology = true }
-          )
+          VStack(alignment: .leading, spacing: Tokens.Spacing.loose) {
+            ProgressionChartView(
+              series: seriesInputs,
+              machineChanges: history.machineChanges,
+              unit: unit,
+              estimatesOneRepMax: history.estimatesOneRepMax,
+              assumesAddedLoad: history.assumesAddedLoad,
+              onExplain: { isShowingMethodology = true }
+            )
+            // Imported history is a line of its own, never joined to a machine's. Said under the
+            // chart whenever one of its lines is imported, so the legend's label is not the only hint.
+            if history.series.contains(where: { $0.key.isImported }) {
+              Text(ProgressCopy.importedSeriesNote)
+                .font(Tokens.Text.caption)
+                .foregroundStyle(Tokens.Color.chalkDim)
+                .fixedSize(horizontal: false, vertical: true)
+            }
+          }
         } else {
           // Until the first read lands, say so. The chart's "No history yet" would be a claim
           // about the lifter's training made before the history was even read.

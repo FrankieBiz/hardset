@@ -135,6 +135,30 @@ struct ProgressCopyTests {
       + "A comparison needs a session 5 to 7 weeks before the latest.")
   }
 
+  @Test("A movement with no equipment on record says what is withheld and where it is set")
+  func equipmentNoteFollowsTheLoadAssumption() {
+    let key = ProgressionKey(exerciseID: ExerciseID())
+    let unknown = MovementTrend(
+      key: key, metric: .addedLoad, sparkline: [1], sixWeekChange: 0.13, sessionCount: 4,
+      stalledSessions: nil, latestDate: Date(timeIntervalSince1970: 0), certainty: .low,
+      loadAssumption: ExerciseModality.unknownLoadAssumption)
+    let known = MovementTrend(
+      key: key, metric: .estimatedMax, sparkline: [1], sixWeekChange: 0.13, sessionCount: 4,
+      stalledSessions: nil, latestDate: Date(timeIntervalSince1970: 0), certainty: .high)
+
+    #expect(ProgressCopy.equipmentNote(for: unknown) == ProgressCopy.equipmentNotSet)
+    #expect(ProgressCopy.equipmentNote(for: known) == nil)
+    #expect(ProgressCopy.equipmentNotSet.contains("no max is estimated"))
+    #expect(ProgressCopy.equipmentNotSet.contains("Library"))
+    // It states a fact and a place. It does not promise a max, which bodyweight never gets.
+    #expect(!ProgressCopy.equipmentNotSet.contains("will"))
+    let spoken = ProgressCopy.spokenRow(ProgressBoard.Row(trend: unknown, exerciseName: "Bench Press"))
+    #expect(spoken.contains(ExerciseModality.unknownLoadAssumption))
+    #expect(spoken.contains(ProgressCopy.equipmentNotSet))
+    #expect(!ProgressCopy.spokenRow(ProgressBoard.Row(trend: known, exerciseName: "Squat"))
+      .contains("Equipment not set"))
+  }
+
   @Test("Each metric has a name the lifter would use")
   func metricNames() {
     #expect(ProgressCopy.metricName(.estimatedMax) == "Estimated max")

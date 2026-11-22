@@ -163,16 +163,15 @@ public struct VolumeReportView: View {
   /// Says what is wrong, that it is not the lifter's miscount, and where the part that can be fixed
   /// is fixed. Shared with the deep muscle map, so the two screens give the same reason.
   ///
-  /// A movement the lifter made gets its muscles from a body part set in Library, on the Train tab.
-  /// An imported one cannot be given any, and the message says so rather than pointing at a fix that
-  /// is not there.
+  /// A movement the lifter made, or one a workout import created, gets its muscles from a body part
+  /// set in Library, on the Train tab. The message points at that one place for both.
   static func lowerBoundMessage(unattributed: Int) -> String {
     let lead =
       unattributed == 1
       ? "1 working set is on a movement with no muscles recorded, so it counts toward no muscle."
       : "\(unattributed) working sets are on movements with no muscles recorded, so they count toward no muscle."
     return lead + " Every count below is at least this much, not exactly this much. "
-      + "Set a body part for a movement you made in Library, on the Train tab; imported movements can't be given one."
+      + "Set a body part for these movements in Library, on the Train tab. Imported movements are listed there too."
   }
 
   // MARK: - Trained

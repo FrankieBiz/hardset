@@ -24,6 +24,10 @@ public struct CatalogEntry: Hashable, Sendable, Identifiable {
   /// What the decoder could not read. Carried rather than dropped: a tolerant decoder that hides
   /// its failures is worse than a strict one, so this travels with the value.
   public let unreadableEntryCount: Int
+  /// Created by a workout import, not by the catalogue or by the lifter. Its name is the one the
+  /// importing app used, with the app's name after it, and a later import finds it by that name, so
+  /// it keeps it. Its body part and equipment are still the lifter's to say.
+  public let isImported: Bool
 
   public init(
     id: ExerciseID,
@@ -33,7 +37,8 @@ public struct CatalogEntry: Hashable, Sendable, Identifiable {
     modality: ExerciseModality?,
     primaryMuscle: MuscleKey,
     contributions: [MuscleContribution],
-    unreadableEntryCount: Int = 0
+    unreadableEntryCount: Int = 0,
+    isImported: Bool = false
   ) {
     self.id = id
     self.name = name
@@ -43,6 +48,7 @@ public struct CatalogEntry: Hashable, Sendable, Identifiable {
     self.primaryMuscle = primaryMuscle
     self.contributions = contributions
     self.unreadableEntryCount = unreadableEntryCount
+    self.isImported = isImported
   }
 
   /// Muscles credited a nonzero share of a set, in vocabulary order. Excludes stabilisers, so a

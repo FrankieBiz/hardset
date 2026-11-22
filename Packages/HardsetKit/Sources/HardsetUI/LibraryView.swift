@@ -1,11 +1,13 @@
 import HardsetCore
 import SwiftUI
 
-/// Every movement the lifter can pick, grouped by body part, with how many there are in each.
+/// Every movement the app knows, grouped by body part, with how many there are in each.
 ///
 /// Movements with no body part come first under a warning header, because that is the gap worth
 /// closing: until one is tagged, its sets count toward no muscle and volume says so. Tapping one of
-/// the lifter's own movements opens the editor, tagged or not. A curated movement is the
+/// the lifter's own movements opens the editor, tagged or not. A movement a workout import created
+/// is listed here too, with an "Imported" tag, because this is the only place its body part and
+/// equipment can be set; it opens the same editor, with its name fixed. A curated movement is the
 /// catalogue's finding, shows a "Curated" tag and does not open it, so nothing that looks tappable
 /// does nothing and nothing that is not the lifter's can be retagged.
 ///
@@ -152,13 +154,23 @@ public struct LibraryView: View {
     }
     if entry.isCurated {
       HardsetTag("Curated")
+    } else if entry.isImported {
+      HardsetTag("Imported", systemImage: "square.and.arrow.down")
     } else {
       HardsetTag("Custom", systemImage: "person.crop.circle")
     }
   }
 
-  /// "Lats, also biceps", or the plain fact that nothing says what it trains.
+  /// "Lats, also biceps", or the plain fact that nothing says what it trains. A movement of the
+  /// lifter's with no equipment on record says so too: an imported one has none until they say, and
+  /// no max is estimated for it, which the tag row cannot say by leaving something out.
   static func detail(for entry: CatalogEntry) -> String {
+    let muscles = muscleDetail(for: entry)
+    guard entry.modality == nil, !entry.isCurated else { return muscles }
+    return muscles + " · Equipment not set"
+  }
+
+  private static func muscleDetail(for entry: CatalogEntry) -> String {
     guard entry.primaryMuscle.isAttributed else { return "No body part yet" }
     let primary = ExercisePickerView.displayName(entry.primaryMuscle)
     let others = entry.creditedMuscles.filter { $0.key != entry.primaryMuscle }

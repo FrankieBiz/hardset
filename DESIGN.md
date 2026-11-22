@@ -326,12 +326,18 @@ Selection rows, the unit switch and pickers stay silent.
   control. At
   accessibility sizes a wrapping tag, assumption chip or certainty capsule takes the control radius
   instead of a capsule, so wrapped text stays inside its outline.
-- **Library** (`LibraryView`, `LibraryScreen`): every selectable movement grouped by body part, with a
-  ledger of the count in each at the bottom. Movements with no body part come first under a `warning`
-  header with its `exclamationmark.triangle` symbol, "Needs a body part", because until one is tagged its
-  sets count toward no muscle. A row is a 56 pt `SelectionCardButtonStyle` button for the lifter's own
-  movement, marked "Custom", and opens the editor; a curated movement is a flat card with no tag, because
-  a tag repeated on every row says nothing, and its spoken label still says "Curated". It does
+- **Library** (`LibraryView`, `LibraryScreen`): every movement grouped by body part, with a
+  ledger of the count in each at the bottom. The list is the picker's movements and the ones a workout
+  import created (`CatalogSeeder.libraryExercises`), because the Library is the only place an imported
+  movement's body part and equipment can be set; the picker, search and recent list still leave imported
+  movements out, however they are tagged, so nobody logs today's sets against an imported copy.
+  Movements with no body part come first under a `warning` header with its `exclamationmark.triangle`
+  symbol, "Needs a body part", because until one is tagged its sets count toward no muscle. A row is a
+  56 pt `SelectionCardButtonStyle` button for the lifter's own movement, marked "Custom", or "Imported"
+  for one a workout import created, and opens the editor; a curated movement is a flat card with no
+  tag, because a tag repeated on every row says nothing, and its spoken label still says "Curated". A
+  movement that is not curated and has no equipment on record says "Equipment not set" after its
+  muscles in `provenance`, so the absence of a tag is not the only sign. It does
   not open the editor, so nothing that looks tappable does nothing. The footer lists every body part, zeros
   included, in `figure` against `chalkDim` for a zero, each row under a `hairline`. It reads what is
   there: loading is a quiet line, a failed read says so in `HardsetEmptyState`, and neither draws an empty
@@ -346,6 +352,13 @@ Selection rows, the unit switch and pickers stay silent.
   top would be out of sight beside the button it answers; the sheet stays up with everything typed.
   Nothing is inferred from the name, and what is saved is the lifter's own attribution at moderate
   certainty. It adds no token and no motion.
+  An imported movement opens the same sheet with two differences. Its name is plain text with a
+  `caption` saying why it stays (a later import finds the movement by that name, so renaming it would
+  start a second one), and Save says its imported sets will count toward the muscles in Volume. Any
+  movement with no equipment on record, imported or not, opens with no equipment chip selected and a
+  `caption` under "Equipment" saying that no max is estimated until the lifter says what the load is.
+  Saving without choosing leaves the equipment as it was, so naming a body part never declares
+  equipment; only a chip the lifter taps does.
 - **Workout cards** (`WorkoutCardsView`, `WorkoutCard`): the Train tab's saved workouts. The workout done
   longest ago, or never, is the up-next card, in `hardsetCard`, with its name in `title`, "3 movements" in
   `label` and a context line in `provenance`: "Up next · last done 4 days ago · beat 4 of 6 last time".
@@ -392,7 +405,24 @@ Selection rows, the unit switch and pickers stay silent.
   `ProgressTrendAnalyzer.comparisonBandDays`, and the words are written from it. Beside every estimated-max figure sits its `CertaintyBadge`, drawn over the card's corner
   as its own control so it never nests inside the card's button. A six-week change uses the weaker
   certainty of its two estimates. Imported history has its own series and says "Imported · machine
-  not recorded" in the same `provenance` role. Machine and cable movements whose sets have no
+  not recorded" in the same `provenance` role. A movement with no equipment on record, which is every
+  imported one until the lifter sets it in Library, shows its added-load reading with the sentence that
+  its body's own load is unknown and, under it, "Equipment not set, so no max is estimated. Set it in
+  Library, on the Train tab." (`ProgressCopy.equipmentNotSet`, also in the chart and spoken by VoiceOver).
+  The estimated max appears once the lifter has declared equipment that has one, never before, and
+  naming a body part declares nothing; a bodyweight movement gets none however it is declared.
+  Imported history is never merged into what the lifter logged, so a lift can have two rows, and the
+  split is stated rather than hidden (`ProgressBoard.sourceNotes`, in `provenance` and `chalkDim` as the
+  last line of a row): an imported row says "Not combined with sets you log in Hardset, even for the same
+  lift"; a movement with both an imported series and a logged one, which is what an import under the
+  catalogue's own name makes, says on each row that the other is on its own row; and a logged row with no
+  imported series of its own movement says nothing, because two names that look alike are not evidence
+  of one lift and the app does not guess. Above the rows, in `caption`, the board says once why a lift
+  can appear twice, whenever any row is imported. Under a movement's chart, one `caption` says an
+  imported line is kept as its own series because an imported set records no machine. No merge action is
+  offered: the two series would stay two rows either way, since an imported series has its own key, and
+  moving sets between movements would rewrite history to draw the same chart. Machine and cable
+  movements whose sets have no
   machine say "No machine recorded" there and in the chart legend. A movement with no record in its last
   three sessions is flagged "Stalled · 3 sessions" in `warning` with `pause.circle`, and no advice. "Most
   improved · estimated max" at the top repeats three estimated-max gains, ordered by the confidence of
@@ -595,9 +625,9 @@ Selection rows, the unit switch and pickers stay silent.
   level applies. Settings opens the same disclosure. No new token, no motion.
 - **Lower bounds and muscles the catalogue cannot train yet**: the `caveat` banner "Counts below are
   lower bounds" says the cause and the way out, and is shared by the Volume screen and the map: sets
-  on a movement with no muscles recorded count toward no muscle, a movement the lifter made gets its
-  muscles from a body part set in Library on the Train tab, and an imported movement cannot be given
-  one. The muscles no built-in movement trains directly (`ExerciseCatalog.unauthoredDirectTokens`) are
+  on a movement with no muscles recorded count toward no muscle, and a movement the lifter made, or one
+  a workout import created, gets its muscles from a body part set in Library on the Train tab. The
+  muscles no built-in movement trains directly (`ExerciseCatalog.unauthoredDirectTokens`) are
   not listed under "Nothing logged for", where a zero would blame the lifter; the Volume screen names
   the ones with nothing credited in their own section, "Not counted directly yet", with the reason
   ("This is a gap in the catalogue, not in your training"), and a tile on the map with nothing

@@ -541,7 +541,8 @@ public struct HardsetRootView: View {
     // A failure belongs to the visit it happened in; reopening the picker starts clean.
     .sheet(isPresented: $isChoosingGym, onDismiss: { gymError = nil }) { gymSheet.hardsetSheet() }
     .navigationDestination(isPresented: $isShowingLibrary) {
-      LibraryScreen(catalog: environment.catalog)
+      // A body part or equipment given in the Library changes what Progress and Volume read.
+      LibraryScreen(catalog: environment.catalog, onChanged: { dataRevision &+= 1 })
     }
   }
 

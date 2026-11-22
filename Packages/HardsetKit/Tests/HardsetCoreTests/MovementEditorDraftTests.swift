@@ -149,15 +149,70 @@ struct MovementEditorDraftTests {
     #expect(draft.canSave)
   }
 
-  @Test("An untagged movement opens with no body part, and equipment defaulting to machine")
+  @Test("An untagged movement opens with no body part, and with no equipment chosen for it")
   func prefillFromAnUntaggedEntry() {
     let draft = MovementEditorDraft(entry: entry(primary: nil, modality: nil))
 
     #expect(draft.bodyPart == nil)
     #expect(draft.primary == nil)
     #expect(draft.secondary.isEmpty)
-    #expect(draft.modality == .machine)
+    // Once defaulted to machine; saving a body part then declared equipment nobody had named.
+    #expect(draft.modality == nil)
+    #expect(draft.equipmentIsUnset)
     #expect(!draft.canSave)
+  }
+
+  @Test("Naming a body part for a movement with no equipment saves no equipment, so none is declared")
+  func savingABodyPartDoesNotDeclareEquipment() throws {
+    var draft = MovementEditorDraft(entry: entry(primary: nil, modality: nil))
+    draft.choose(bodyPart: .chest)
+
+    let attribution = try #require(draft.attribution)
+
+    #expect(draft.canSave)
+    #expect(attribution.primary == .chest)
+    #expect(attribution.modality == nil)
+  }
+
+  @Test("Equipment the lifter picks is what is saved, and the note about it goes away")
+  func pickingEquipmentIsADeclaration() throws {
+    var draft = MovementEditorDraft(entry: entry(primary: .chest, modality: nil))
+    #expect(draft.equipmentIsUnset)
+
+    draft.modality = .barbell
+
+    #expect(!draft.equipmentIsUnset)
+    #expect(try #require(draft.attribution).modality == .barbell)
+  }
+
+  @Test("A movement with equipment on record keeps it, and a new one still opens on machine")
+  func recordedEquipmentIsKept() {
+    #expect(MovementEditorDraft(entry: entry(primary: .lats, modality: .dumbbell)).modality == .dumbbell)
+    #expect(!MovementEditorDraft(entry: entry(primary: .lats, modality: .dumbbell)).equipmentIsUnset)
+    #expect(MovementEditorDraft().modality == .machine)
+  }
+
+  @Test("An imported movement's name is fixed, and a lifter's own is not")
+  func importedNameIsFixed() {
+    let imported = CatalogEntry(
+      id: ExerciseID(), name: "Bench Press (Barbell) (Imported • Strong)", slug: nil,
+      isCurated: false, modality: nil,
+      primaryMuscle: MuscleKey(stored: MuscleKey.notAttributedRawValue), contributions: [],
+      isImported: true)
+
+    let draft = MovementEditorDraft(entry: imported)
+
+    #expect(draft.nameIsFixed)
+    #expect(draft.name == "Bench Press (Barbell) (Imported • Strong)")
+    #expect(!MovementEditorDraft(entry: entry(primary: .lats)).nameIsFixed)
+    #expect(!MovementEditorDraft(name: "Pec fly").nameIsFixed)
+    #expect(draft.savedNote.contains("imported sets count"))
+    #expect(!MovementEditorDraft(name: "Pec fly").savedNote.contains("imported"))
+  }
+
+  @Test("A catalogue entry says it was not imported unless told otherwise")
+  func entriesAreNotImportedByDefault() {
+    #expect(!entry(primary: .lats).isImported)
   }
 
   @Test("Stabilisers and unknown tokens are not carried into the secondaries")
