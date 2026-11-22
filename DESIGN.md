@@ -524,9 +524,10 @@ Selection rows, the unit switch and pickers stay silent.
   through the coordinator, which persists first and changes the row only after the write succeeds;
   a failed write leaves the saved figures and shows the failure. A field left empty, or typed back to
   what it held, writes nothing. A correction keeps the set's machine, its place and its save time,
-  starts no rest and claims no record. A finished workout's sets are never edited; its corrections
-  are removals, in the receipt. "Edit set" in the long-press menu and for VoiceOver does the same
-  thing as tapping the weight, and "Undo log" still takes a set back.
+  starts no rest and claims no record. A finished workout's set is corrected through the receipt,
+  by the same operation and with downstream recomputed (see History). "Edit set" in the long-press
+  menu and for VoiceOver does the same thing as tapping the weight, and "Undo log" still takes a
+  set back.
   Nothing on a saved figure says it can be tapped, so two things say it in words. The movement's
   options menu, the visible "…" in the card's corner, opens with "Correct set": one entry when a
   single set is saved, a list naming each set by its figures ("Set 2 · 100 kg × 10") when several
@@ -683,10 +684,31 @@ components rather than native spinners.
 - History opens a static receipt of committed sets. It states equipment provenance,
   caveats and same-machine record definitions. Native share sheets handle text and a
   deliberately dark image; long sessions retain text sharing rather than render an
-  unbounded image. It adds no animation and responds to Dynamic Type. Where it offers "Correct this
-  workout" it says in one sentence that corrections are removals only and why: a finished workout
-  feeds History, volume and record baselines, so its sets are never edited or added, and the
-  removal banner adds that a removed set cannot be added back.
+  unbounded image. It adds no animation and responds to Dynamic Type. A finished set can be
+  corrected as well as removed (ruling D13). "Correct a set" is in the receipt's toolbar menu, at the
+  top where the receipt opens, and under "Correct this workout" at the bottom beside "Remove a
+  set"; either turns on a mode in which each set shows a plate-blue pencil, and one mode is on at a
+  time. The pencil opens `SetCorrectionSheet`: the movement and where it was done, one line saying
+  that only the weight and reps change and that History, volume, records and progress, including how
+  later workouts compare with this one, are recalculated from the corrected figures, both figures as
+  56 pt controls, the logger's own `NumericPad`, and "Next" then "Save correction" as the only
+  write. A figure the lifter did not touch is written back exactly as saved, so a lifter reading
+  pounds who corrects only the reps does not rewrite the weight through a rounded conversion.
+  The write keeps the set's id, machine, plan row, ordinal, warm-up flag, RPE and save time, and the
+  workout's own start and finish, and is one transaction that persists before the receipt claims it:
+  the receipt is re-read from storage, so what it shows is what is stored. Volume, records, load
+  history and the Progress stall flag are derived from the stored sets on every read and nothing is
+  cached beside them, so one write is the whole recomputation; the screens under the receipt
+  re-read on `dataRevision`. A correction that makes a record is recorded as one, on the receipt
+  and on the movement's chart, and one that takes a record away takes it off. Nothing celebrates: a
+  neutral `info` banner says what the set now is and, when it changed, that it is now recorded as a
+  best or no longer counts as a record, with no trophy, no tint and no haptic. A failed save keeps
+  the sheet up with the figures typed, and Cancel and a swipe-down are blocked while figures are
+  unsaved. Removing a set is unchanged, and its banner now says a removed set cannot be added back
+  and points to correcting when the figures were the problem. Because records are replayed, a
+  correction to an earlier workout can change a later workout's records when it changes the
+  baseline they were judged against; that is the ledger being true and not a bug. It adds no token
+  and no motion.
 - The optional deep muscle map uses the existing palette and fractional-set method,
   with labelled values and comparative tracks, never target bands. It uses two
   columns at ordinary sizes and one at accessibility sizes. Unknown attribution
