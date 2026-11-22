@@ -34,22 +34,23 @@ BUSY_FRONTBOARD_ONLY = (
 )
 
 PASSED = """\
-Test Case '-[HardsetUITests.AppScreensUITests testScreensInDarkMode]' started (Iteration 1 of 2).
+Test Case '-[HardsetUITests.AppScreensUITests testScreensInDarkMode]' started.
 Test Case '-[HardsetUITests.AppScreensUITests testScreensInDarkMode]' passed (41.200 seconds).
 \t Executed 1 test, with 0 failures (0 unexpected) in 41.200 (41.202) seconds
 ** TEST EXECUTE SUCCEEDED **
 """
 
 ASSERTION_FAILED = """\
-Test Case '-[HardsetUITests.AppScreensUITests testScreensInDarkMode]' started (Iteration 1 of 2).
+Test Case '-[HardsetUITests.AppScreensUITests testScreensInDarkMode]' started.
 /src/HardsetUITests/AppScreensUITests.swift:88: error: -[HardsetUITests.AppScreensUITests testScreensInDarkMode] : XCTAssertTrue failed
 Test Case '-[HardsetUITests.AppScreensUITests testScreensInDarkMode]' failed (12.000 seconds).
 \t Executed 1 test, with 1 failure (0 unexpected) in 12.000 (12.002) seconds
 ** TEST EXECUTE FAILED **
 """
 
-# Run 44210951420: iteration 1 ran five tests and one failed for a real reason, then xcodebuild's own
-# retry could not relaunch the runner. A test ran, so this harness leaves it alone.
+# Run 44210951420: five tests ran and one failed for a real reason, then the runner was refused when
+# xcodebuild tried to launch it again (that run still passed -retry-tests-on-failure; the workflow no
+# longer does). Tests ran, so this harness leaves it alone.
 DENIED_AFTER_FAILURE = "\n".join([
     "Test Case '-[HardsetUITests.AppScreensUITests testGymPickerDark]' started.",
     "Test Case '-[HardsetUITests.AppScreensUITests testGymPickerDark]' passed (27.525 seconds).",
@@ -64,7 +65,7 @@ DENIED_AFTER_FAILURE = "\n".join([
 ]) + "\n"
 
 # Run 44648846716: the app under test, not the runner, was refused mid-test. That is a test failure, and
-# xcodebuild's own -retry-tests-on-failure is what gives it a second iteration.
+# with -retry-tests-on-failure gone nothing reruns it: it fails the job with the denial in the log.
 APP_DENIED_IN_TEST = "\n".join([
     "Test Case '-[HardsetUITests.AppScreensUITests testCorrectionsAndDiscardDark]' started.",
     '} (error = Error Domain=FBSOpenApplicationServiceErrorDomain Code=1 "Simulator device failed to launch com.francisbisignano.hardset." UserInfo={NSLocalizedDescription=Simulator device failed to launch com.francisbisignano.hardset., NSUnderlyingError=0x7c8e18480 {Error Domain=FBSOpenApplicationServiceErrorDomain Code=1 "The request to open "com.francisbisignano.hardset" failed." UserInfo={BSErrorCodeDescription=RequestDenied, NSLocalizedDescription=The request to open "com.francisbisignano.hardset" failed., NSUnderlyingError=0x7c8e189f0 {Error Domain=FBSOpenApplicationErrorDomain Code=6 "Application "com.francisbisignano.hardset" is installing or uninstalling, and cannot be launched." UserInfo={BSErrorCodeDescription=Busy, NSLocalizedFailureReason=Application "com.francisbisignano.hardset" is installing or uninstalling, and cannot be launched.}}, FBSOpenApplicationRequestID=0xf8fc, NSLocalizedFailureReason=The request was denied by service delegate (SBMainWorkspace) for reason: Busy ("Application "com.francisbisignano.hardset" is installing or uninstalling, and cannot be launched").}}, NSLocalizedFailureReason=The request was denied by service delegate (SBMainWorkspace) for reason: Busy ("Application "com.francisbisignano.hardset" is installing or uninstalling, and cannot be launched")., FBSOpenApplicationRequestID=0xf8fc, SimCallingSelector=launchApplicationWithID:options:pid:error:, BSErrorCodeDescription=RequestDenied})',
@@ -276,7 +277,7 @@ class RetryTests(Harness):
         self.assertNotIn("TEST EXECUTE SUCCEEDED", (self.work / "ui-test.log").read_text())
 
     def test_a_denial_after_a_test_started_is_not_retried(self):
-        # Both shapes seen in CI: xcodebuild's own iteration-2 relaunch refused after a real failure
+        # Both shapes seen in CI: the runner refused after a real failure had already been logged
         # (44210951420), and the app under test refused inside a test (44648846716).
         for name, fixture in (("after a failure", DENIED_AFTER_FAILURE), ("app in a test", APP_DENIED_IN_TEST)):
             with self.subTest(name):
@@ -411,6 +412,15 @@ class WorkflowWiringTests(unittest.TestCase):
         for line in self.workflow.splitlines():
             if "test-without-building" in line and not line.lstrip().startswith("#"):
                 self.assertIn("ui_xcodebuild", line, line)
+
+    def test_no_test_is_rerun_by_xcodebuild(self):
+        # -retry-tests-on-failure let a test that failed its assertions go green on the rerun
+        # (runs 44969910828 and 44973199974). The only retry in the step is ui_xcodebuild's, and it
+        # is for a refusal to launch.
+        for line in self.workflow.splitlines():
+            if not line.lstrip().startswith("#"):
+                self.assertNotIn("-retry-tests-on-failure", line)
+                self.assertNotIn("-test-iterations", line)
 
     def test_the_harness_is_sourced_and_the_reverse_pass_and_timeout_remain(self):
         self.assertIn(". Tools/ui_launch.sh", self.workflow)

@@ -170,20 +170,21 @@ jobs:
           export UI_SIM_UDID="$UDID" UI_SIM_BUNDLES="$BUNDLE_ID $RUNNER_ID"
           # A launch can be denied with "Busy" while the simulator is still finishing the app's
           # install (run 44648846716: the first test of the dark pass, the same tree passed in
-          # 44618696304). Only a failing test is run once more, so a test that fails twice still
-          # fails the job and both attempts stay in the result bundle.
+          # 44618696304). No test is run a second time here. -retry-tests-on-failure was passed to
+          # cover that, and it also reran a test that had failed its assertions and let the job go
+          # green when the rerun passed (runs 44969910828 and 44973199974), so it is gone. A refusal
+          # to launch the runner is retried by ui_xcodebuild above; a refusal of the app inside a
+          # test fails that test, and the job, with the denial in the log.
           # Appearance is set on the device itself, around two passes: XCUIDevice.appearance did not
           # reach the system on this runner.
           xcrun simctl ui "$UDID" appearance dark
           ui_xcodebuild "dark pass" ui-test.log test-without-building $COMMON \
             -only-testing:HardsetUITests \
             -skip-testing:HardsetUITests/AppScreensUITests/testScreensInLightMode \
-            -retry-tests-on-failure -test-iterations 2 \
             -resultBundlePath app-screens/ui-dark.xcresult || true
           xcrun simctl ui "$UDID" appearance light
           ui_xcodebuild "light pass" ui-test-light.log test-without-building $COMMON \
             -only-testing:HardsetUITests/AppScreensUITests/testScreensInLightMode \
-            -retry-tests-on-failure -test-iterations 2 \
             -resultBundlePath app-screens/ui-light.xcresult || true
           # The same journeys once more, one launch each, in reverse of their normal order. Every
           # journey starts from an empty store (HARDSET_STORE=reset), so the order must not change what
@@ -200,7 +201,6 @@ jobs:
             TEST_RUNNER_HARDSET_UI_SHOT_DIR="$GITHUB_WORKSPACE/app-screens-reverse" \
               ui_xcodebuild "$TEST" "app-screens-reverse/$TEST.log" test-without-building $COMMON \
               -only-testing:HardsetUITests/AppScreensUITests/$TEST \
-              -retry-tests-on-failure -test-iterations 2 \
               -resultBundlePath "app-screens-reverse/$TEST.xcresult" || true
             grep -qE "TEST (EXECUTE )?SUCCEEDED" "app-screens-reverse/$TEST.log" || { echo "Reverse order: $TEST failed"; REVERSE_FAILED=1; }
           done

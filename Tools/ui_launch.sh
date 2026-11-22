@@ -15,8 +15,10 @@
 #
 # What is never retried here: a run in which any test case started. A test that ran and failed an
 # assertion, a crash, a compile error and a denial that lands mid-run all keep their one attempt, so a
-# real failure cannot be turned into a pass by this file. (xcodebuild's own -retry-tests-on-failure,
-# which the workflow passes separately, is not part of it.)
+# real failure cannot be turned into a pass by this file. The workflow passes no
+# -retry-tests-on-failure either: it reran tests that had failed their assertions and let the job go
+# green when the rerun passed, so a test gets one attempt and the only thing retried anywhere in the
+# UI step is a refusal to launch the runner.
 #
 # Environment, all optional:
 #   UI_SIM_UDID, UI_SIM_BUNDLES   device and the bundle identifiers whose install state is watched
