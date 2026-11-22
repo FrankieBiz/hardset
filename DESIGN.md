@@ -20,6 +20,10 @@ the code does yet, so a reader does not look for a screen that has not moved.
 - The live session is in code, rebuilt monochrome and type-led (ruling D12): see Set row, Set log
   control, Inline control, Panel and the live-session layout below. Its sibling screens have not
   moved.
+- The figure scale is in code (ruling D20): `figureXL`, `countdown` and `monument`, the 28 pt title,
+  the 64 pt set row, the estimate ceiling and its check. It is scale and hierarchy only: it adds no
+  glyph, rule, colour or motion. The onboarding demo and the catalogue's set rows keep the compact
+  row, and History's row figures, the keypad display and the welcome bar keep their sizes.
 - Not yet in code, so the bullets below that name these describe where they are going: whatever a
   screen draws for itself instead of through the kit. That is the Library's "Curated" tag, the
   Progress card's layout, the Volume gauge ends, the scorecard headline's type role, and the
@@ -60,9 +64,13 @@ glass; the content beneath it is never glass.
   `chalkDim`. Certainty is a phrase, not a coloured capsule (see `CertaintyBadge`). The finish
   confirmation's primary button is the one other plate-blue fill, and it exists only while the
   lifter is answering that question.
-- **Numbers are the hero.** Weights, reps and rest are set in SF Pro Condensed with tabular
-  figures: large, narrow and steady, like stamped plates or a scale readout. Condensed figures fit
-  pound values such as `132.28` at full size, so nothing shrinks to fit.
+- **Numbers are the hero, and size is earned by being a measurement.** Weights, reps and rest are
+  set in SF Pro Condensed with tabular figures: large, narrow and steady, like stamped plates or a
+  scale readout. A number the lifter typed or the app counted is large, up to an 88 pt monument; a
+  number a formula produced is never larger than `readout`, 28 pt, whatever it is and wherever it
+  sits (see Figure scale). The biggest figures on a screen are therefore the ones that need no
+  caveat, and a lifter can tell a measurement from an estimate across the room by its size before
+  reading a word.
 - **A control says what it does; structure comes from fill, not line.** Cards and groups separate by
   a step of surface. A control is identified by a fill, a verb label or a standard glyph. A 3:1
   outline is kept where those cannot carry it alone: an input that is empty or being typed into,
@@ -147,7 +155,7 @@ System fonts only, so no resource bundle is needed. Every role is a Dynamic Type
 
 | Token | Style | Use |
 | --- | --- | --- |
-| `display` | Large Title, bold, standard width | Tab screen headers |
+| `display` | Title, semibold, standard width, 28 pt | Tab screen headers; steps down so the figures outrank the word that names the screen |
 | `title` | Title 3, semibold | Sheet headers, hero card titles, a sentence that holds figures |
 | `headline` | Headline | Card and row titles, primary button labels, emphasised labels |
 | `label` | Body | Ordinary text and control labels |
@@ -155,20 +163,49 @@ System fonts only, so no resource bundle is needed. Every role is a Dynamic Type
 | `unit` | Callout, medium | Unit suffixes beside values |
 | `caption` | Footnote | Supplemental notes only |
 | `sectionHeader` | Subheadline, semibold | Sentence-case section labels; never all caps |
-| `hero` | Large Title, semibold, condensed, tabular | Rest countdown, keypad display |
-| `readout` | Title, semibold, condensed, tabular | Headline figures |
-| `setEntry` | Title 2, semibold, condensed, tabular | Weight and reps in a set row, and the values in a `StatLedger` |
+| `monument` | 88 pt, semibold, condensed, tabular | The one measured figure a screen leads with: at most one per screen |
+| `countdown` | 64 pt, semibold, condensed, tabular | The rest countdown |
+| `figureXL` | 44 pt, semibold, condensed, tabular | Measured figures in a set row, a `StatLedger` and a receipt's sets |
+| `hero` | Large Title, semibold, condensed, tabular | Keypad display, welcome bar's total |
+| `readout` | Title, semibold, condensed, tabular | Headline figures; the largest an estimate may be |
+| `setEntry` | Title 2, semibold, condensed, tabular | Keypad quick steps, history's day figure |
 | `figure` | Headline, condensed, tabular | Small figures inside rows and compact ledgers |
 
 Condensed is for figures only; a sentence that holds figures is `title` with tabular digits. The
 system font chooses its own optical size and tracking, so `display` adds none.
 
-Tracking is a ratio of the resolved size, so it follows Dynamic Type: `hero` -2%, `readout` -1%,
-`caption` and `unit` +1%, every other role 0. `hardsetText(_:)` applies a role's
+Tracking is a ratio of the resolved size, so it follows Dynamic Type: `hero`, `figureXL`,
+`countdown` and `monument` -2%, `readout` -1%, `caption` and `unit` +1%, every other role 0. `hardsetText(_:)` applies a role's
 font and tracking together from `Tokens.Text.Role`; the static fonts carry no tracking.
 `hardsetText(_:weight:)` applies a weighted variant of a role with the same tracking, so a
 semibold caption keeps its +1%; a static weighted font cannot carry tracking, and no modifier
 chained after `hardsetText(_:)` is used to change its weight.
+
+### Figure scale
+
+`monument`, `countdown` and `figureXL` are not text styles: each is a point size that scales along
+the curve of the style it is set against (`monument` and `countdown` Large Title, `figureXL`
+Title), and each stops at accessibility1. At 44 to 88 pt they are already larger than body text at
+the biggest setting, and growing further would push a figure wider than the row or card holding
+it; the words around a figure keep scaling to accessibility5. The stack and wrap layouts that
+accessibility sizes already use carry the rest.
+
+The rule is `Tokens.Text.estimateCeiling`, 28 pt at the default size, and it is the signature of the
+app, not a detail of it. A figure is a measurement if the lifter typed it or the app counted it: a
+set's weight and reps, a count of working sets, a sum of the loads and reps logged, a countdown to
+a deadline the lifter chose. Those may be `figureXL`, `countdown` or `monument`. A figure is an
+estimate if something was inferred: an Epley one-rep max, a fractional muscle credit, a percentage
+change in either, a trend. Those are `readout` at most, usually smaller, and always beside their
+certainty. `Role.mayCarryEstimate` is false for the three scale roles and for `hero`; the ledger
+draws an item marked `isEstimate` at `readout` whichever role was asked for; and
+`Tools/check_figure_cap.py`, part of `make check`, names the files that may use a large role, each
+with the reason its numbers are measurements, so that adding a use anywhere else is a visible
+edit to that list and not a drive-by. Progress is the proof: every figure on it is an estimate or a
+comparison of estimates, so none of them leaves the sentence it is in.
+
+One monument per screen and nowhere else: Volume's weekly working-set count and Train's last
+workout volume. A screen with no measured figure to lead with has none; Progress, Library, History
+and the live session have none, and the live session's own largest figure is the rest countdown.
 
 ## Spacing, radius, stroke
 
@@ -181,8 +218,9 @@ chained after `hardsetText(_:)` is used to change its weight.
   corner radius.
 - Stroke: `hairline 1` for separators and the conditional outline, `selected 2` for selection and
   focus rings, the editing field and the ready log key.
-- Targets: 44 pt general minimum, 56 pt in the logger (set rows, keypad, rest controls). A control
-  that has no visible face keeps its frame and hit region.
+- Targets: 44 pt general minimum, 56 pt in the logger (keypad, rest controls), and 64 pt for a set
+  row's fields, ordinal and log control, which hold the 44 pt figures. A control that has no visible
+  face keeps its frame and hit region.
 
 ## Materials and elevation
 
@@ -314,8 +352,14 @@ Selection rows, the unit switch and pickers stay silent.
   insertion-only opacity reveal on `Motion.reveal`, with no animated transaction. The pickers and
   the name entry sheet and the session use it; the root screens adopt it when they are rebuilt.
 - **Ledger** (`StatLedger`): a row of labelled figures separated by hairlines, used for session
-  totals. Its values stay in the `setEntry` role, a step larger than the `figure` used inside rows
-  and compact ledgers; a larger headline figure uses `readout`.
+  totals. Its values are `figureXL`, 44 pt, because each is a count or a sum of what was logged. The
+  columns are the width of their figures, so a five-digit volume has room; when the figures and
+  their dividers would be wider than the line, as a four-figure ledger with a large volume can be,
+  they wrap onto a second line with the dividers dropped, and at accessibility sizes each takes a
+  line. An item marked `isEstimate` is drawn at `readout`. A ledger may lead with one `monument`,
+  above the columns, when its screen has one: Train's last-workout card leads with its volume and
+  leaves sets and reps in the columns, and with no volume, as in a bodyweight session, it has no
+  monument.
 - **Empty and loading states**: explain what is missing and what to do next; loading is a quiet line
   of text, not a spinner. An empty slot is drawn with a dashed outline, the app's one mark for
   "nothing here yet": the empty-state socket, the workout editor's "Add movement" slot and the rule
@@ -413,8 +457,11 @@ Selection rows, the unit switch and pickers stay silent.
   movement. A movement with no earlier session on its machine is a first time and is left out of both
   numbers; one that fell short is carried by the count and never drawn as a failure. The same words open
   the share text, and the same view is rendered into the shared image. Finishing a workout opens its
-  receipt here; a discarded workout, and one finished with no sets, have none to open. It adds no token
-  and no motion.
+  receipt here; a discarded workout, and one finished with no sets, have none to open. The receipt's
+  own sets, the load and reps the lifter typed, are `figureXL` with the unit and the multiply sign
+  as the quiet words between them, because they are measurements; the scorecard's headline stays
+  `readout` and its estimated gain stays a sentence, so on the receipt too the estimates are the
+  smaller figures. It has no monument. It adds no token and no motion.
 - **Save as workout** (receipt): a `secondary` button under the share actions, offered for a workout with
   sets and not for an imported one, whose movements are kept apart from the catalogue's. It asks for a
   name in `NameEntrySheet`, builds the plan from the workout's movements in their order with the number
@@ -435,8 +482,9 @@ Selection rows, the unit switch and pickers stay silent.
   dims to 0.4, as a disabled control does; saved logger values are never dimmed.
 - **Rest bar** (`RestBarView`): keeps its `ViewThatFits`: the countdown and the four controls (−15,
   +15, pause, skip) share one row when they fit, and otherwise the controls drop to their own
-  single row under the countdown; the four controls never split across rows. The countdown is drawn
-  directly on the panel in `chalk`, with no knurl tile. The panel is opaque `steelRaised` at the
+  single row under the countdown; the four controls never split across rows. The countdown is
+  `countdown`, 64 pt, drawn directly on the panel in `chalk`, with no knurl tile; at accessibility
+  sizes the words under it stack beneath the figure instead of wrapping beside it. The panel is opaque `steelRaised` at the
   card radius with `Elevation.floating` and no stroke, except the `hairline` border Increase
   Contrast gives every panel because the fill step is gone: glass was considered and refused,
   because the contrast gate cannot certify text on it. Controls are 56 pt
@@ -500,10 +548,15 @@ Selection rows, the unit switch and pickers stay silent.
   record notice are panels. The screen's contents are, top to bottom: the header, the gym line,
   the movements, one "Add movement" inline control, the totals and the finish control; nothing
   on it is a card except the stale-workout notice, which holds buttons.
-- **Set row**: the figures are the content. Weight and reps are the `readout` role, the largest text
-  on the card, tabular and set tight, with a quiet multiply sign between them in `provenance` and
-  `chalkDim`: weight ends at the sign and reps begin after it, so the sign is one axis down the list
-  and the column header's unit and "Reps" sit over their figures. The ordinal is small and dim
+- **Set row**: the figures are the content. Weight and reps are the `figureXL` role, 44 pt, the
+  largest text on the card, tabular and set tight, in a 64 pt row, with a quiet multiply sign
+  between them in `provenance` and `chalkDim`: weight ends at the sign and reps begin after it, so
+  the sign is one axis down the list and the column header's unit and "Reps" sit over their figures.
+  Reps have a fixed 64 pt column and the weight takes the rest, because weight is the wider figure
+  and an equal split left "227.5" less than it needs; a long pound value such as `132.28` shrinks a
+  little (floor 0.7) on a 375 pt phone and not on a 402 pt one. A row that carries its own unit
+  labels, as the onboarding demo and the catalogue do, keeps the compact `readout` size and 56 pt
+  row, since it has no column header and its labels need the width. The ordinal is small and dim
   (`caption`, `chalkDim`) in a fixed column with no tile behind it; a warm-up's is a plain "W", and
   at accessibility sizes it is spelled "Set 2" or "Warm-up". Last time is a small dim pair in its own
   fixed column. Nothing is boxed, tinted or outlined: there is no wash on a logged row, and a
@@ -512,7 +565,7 @@ Selection rows, the unit switch and pickers stay silent.
   A figure still to be logged is dimmed to `chalkDim`, which clears 7:1 on every surface; once the
   set is logged it reads in full `chalk`. While the keypad types into a field its figure is `chalk`
   with a still caret after it and a 2 pt `chalk` underline, and nothing else changes; the caret does
-  not blink. Each field's hit region is the logger's 56 pt tall and its whole half of the row wide,
+  not blink. Each field's hit region is the row's 64 pt tall and its whole column wide,
   and the ordinal and last time are a button into the weight, so no part of the row left of the
   check is dead. Increase Contrast and Button Shapes bring the `controlEdge` outline back around an
   editable figure, so a boundary appears exactly where it was asked for.

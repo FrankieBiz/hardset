@@ -188,9 +188,7 @@ public struct WorkoutReceiptView: View {
       }
       VStack(alignment: .leading, spacing: Tokens.Spacing.tight) {
         HStack(alignment: .firstTextBaseline, spacing: Tokens.Spacing.snug) {
-          Text("\(LoadText.entered(line.weightKg, in: unit)) \(unit.abbreviation) × \(line.reps)")
-            .font(Tokens.Text.figure)
-            .monospacedDigit()
+          setFigures(line)
           if line.isWarmup {
             Text("Warm-up")
               .font(Tokens.Text.caption)
@@ -214,6 +212,32 @@ public struct WorkoutReceiptView: View {
       }
       .accessibilityElement(children: .combine)
     }
+  }
+
+  /// The set's load and reps, at the figure size the live session logged them in. They are what
+  /// the lifter typed, so they are measurements and earn 44 pt; the scorecard's estimates above
+  /// and the notes below are drawn smaller. The unit and the multiply sign are the quiet words
+  /// between them, and the line is read aloud as the one phrase it always was.
+  private func setFigures(_ line: WorkoutReceipt.Line) -> some View {
+    let weight = LoadText.entered(line.weightKg, in: unit)
+    return HStack(alignment: .firstTextBaseline, spacing: Tokens.Spacing.tight) {
+      Text(weight)
+        .hardsetText(.figureXL)
+        .lineLimit(1)
+        .minimumScaleFactor(0.5)
+      Text(unit.abbreviation)
+        .hardsetText(.unit)
+        .foregroundStyle(Tokens.Color.chalkDim)
+      Text("×")
+        .hardsetText(.provenance)
+        .foregroundStyle(Tokens.Color.chalkDim)
+      Text(String(line.reps))
+        .hardsetText(.figureXL)
+        .lineLimit(1)
+        .minimumScaleFactor(0.5)
+    }
+    .accessibilityElement(children: .ignore)
+    .accessibilityLabel("\(weight) \(unit.abbreviation) × \(line.reps)")
   }
 
   /// A set in words, for its delete control and for a confirmation that names what it removes.

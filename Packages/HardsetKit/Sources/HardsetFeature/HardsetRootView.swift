@@ -751,7 +751,12 @@ public struct HardsetRootView: View {
             .font(Tokens.Text.label)
             .foregroundStyle(Tokens.Color.chalkDim)
         } else {
-          StatLedger(ledgerItems(summary.volume))
+          // The volume leads at 88 pt when there is one, the screen's one monument: a sum of the
+          // loads and reps the lifter logged, so it is a measurement and earns the size. The counts
+          // sit under it at 44 pt. With no volume, as in a bodyweight session, there is nothing
+          // honest to lead with and the counts are the ledger.
+          let ledger = ledgerItems(summary.volume)
+          StatLedger(ledger.counts, monument: ledger.volume)
         }
 
         if !summary.exerciseNames.isEmpty {
@@ -774,26 +779,28 @@ public struct HardsetRootView: View {
       : AnyLayout(HStackLayout(alignment: .firstTextBaseline, spacing: Tokens.Spacing.regular))
   }
 
-  /// Working sets, reps, and volume in the unit the lifter reads, rounded to whole units.
+  /// Working sets and reps, and volume apart from them, in the unit the lifter reads, rounded to
+  /// whole units.
   ///
   /// Volume is left out when it rounds to zero rather than shown as "0 kg": bodyweight work has
   /// real sets and reps and no added load, and a zero there reads as a session that did nothing.
-  private func ledgerItems(_ volume: SessionVolume) -> [StatLedger.Item] {
-    var items: [StatLedger.Item] = [
+  private func ledgerItems(
+    _ volume: SessionVolume
+  ) -> (counts: [StatLedger.Item], volume: StatLedger.Item?) {
+    let counts: [StatLedger.Item] = [
       StatLedger.Item(label: "Working sets", value: volume.workingSets.formatted()),
       StatLedger.Item(label: "Reps", value: volume.reps.formatted()),
     ]
     let displayed = unit.fromKilograms(volume.volumeKg).rounded()
-    if displayed > 0 {
-      items.append(
-        StatLedger.Item(
-          label: "Volume",
-          value: displayed.formatted(.number.precision(.fractionLength(0))),
-          unit: unit.abbreviation
-        )
+    guard displayed > 0 else { return (counts, nil) }
+    return (
+      counts,
+      StatLedger.Item(
+        label: "Volume",
+        value: displayed.formatted(.number.precision(.fractionLength(0))),
+        unit: unit.abbreviation
       )
-    }
-    return items
+    )
   }
 
   /// "Thursday 5 November", with the year added only when it is not this year, so an old session

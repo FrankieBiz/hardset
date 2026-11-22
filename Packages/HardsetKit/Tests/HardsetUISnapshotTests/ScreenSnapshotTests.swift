@@ -174,6 +174,16 @@
         }
         .background(Tokens.Color.canvas)
       }
+      // The 64 pt countdown grows to its accessibility1 cap and the words drop under it.
+      try await Snapshot.capture(
+        "restbar-dark-ax3", size: CGSize(width: 402, height: 520), typeSize: .accessibility3
+      ) {
+        VStack {
+          Spacer()
+          Fixtures.restBar()
+        }
+        .background(Tokens.Color.canvas)
+      }
       // Paused shows static text, so this isolates the one-line layout from the live timer.
       try await Snapshot.capture("restbar-paused-440", size: CGSize(width: 440, height: 200)) {
         VStack {
@@ -189,6 +199,11 @@
     @Test func weeklyVolume() async throws {
       try await Snapshot.capture("volume-dark") { Fixtures.volume() }
       try await Snapshot.capture("volume-light", style: .light) { Fixtures.volume() }
+      // The monument is the one figure whose width is set by Dynamic Type, capped at accessibility1,
+      // so this is the capture that shows it stacked over its sentence at the largest setting.
+      try await Snapshot.capture(
+        "volume-dark-ax3", size: CGSize(width: 402, height: 2800), typeSize: .accessibility3
+      ) { Fixtures.volume() }
     }
 
     @Test func history() async throws {
@@ -316,6 +331,13 @@
         HardsetRootView(environment: environment, unit: .kilograms)
       }
       try await Snapshot.capture("root-start-light", style: .light) {
+        HardsetRootView(environment: environment, unit: .kilograms)
+      }
+      // The last-workout card leads with its volume at 88 pt; at accessibility3 the unit and the
+      // ledger stack, and the screen scrolls, so the window is tall enough to hold all of it.
+      try await Snapshot.capture(
+        "root-start-dark-ax3", size: CGSize(width: 402, height: 2600), typeSize: .accessibility3
+      ) {
         HardsetRootView(environment: environment, unit: .kilograms)
       }
     }

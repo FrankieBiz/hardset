@@ -1,6 +1,6 @@
 # Hardset Hypertrophy Logger — Multi-Model Orchestration & Verification Makefile
 .DEFAULT_GOAL := help
-.PHONY: check check-core check-store check-parse check-contrast project install mac-sync-check mac-test mac-install orchestrate-probe orchestrate-stats test help
+.PHONY: check check-core check-store check-parse check-contrast check-figure-cap project install mac-sync-check mac-test mac-install orchestrate-probe orchestrate-stats test help
 
 SWIFT := $(shell which swift)
 PY := python3
@@ -10,10 +10,11 @@ MAC_DIR ?= ~/hardset
 # what gets installed. `git pull origin main` built main whatever was being tested.
 BRANCH ?= $(shell git rev-parse --abbrev-ref HEAD)
 
-check: check-orchestration ## Run honest Linux checks across all targets (parse syntax, Core suite, Store suite, query indexes, palette contrast)
+check: check-orchestration ## Run honest Linux checks across all targets (parse syntax, Core suite, Store suite, query indexes, palette contrast, figure scale)
 	$(CHECK) all
 	$(PY) Tools/check_query_performance.py --require-indexes
 	$(PY) Tools/check_contrast.py
+	$(PY) Tools/check_figure_cap.py
 
 .PHONY: check-orchestration
 check-orchestration: ## Verify model launch contracts offline, without provider calls
@@ -43,6 +44,9 @@ check-parse: ## Parse Swift syntax across all repository files
 
 check-contrast: ## Verify the HardsetUI palette meets DESIGN.md's 7:1 text and 3:1 control floors
 	$(PY) Tools/check_contrast.py
+
+check-figure-cap: ## Verify estimates are never drawn above 28 pt: the large figure roles stay in files that draw measurements
+	$(PY) Tools/check_figure_cap.py
 
 project: ## Regenerate Hardset.xcodeproj from Tools/generate_project.py
 	$(PY) Tools/generate_project.py

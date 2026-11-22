@@ -6,64 +6,120 @@ import SwiftUI
 ///
 /// A ledger rather than a grid of stat tiles, because these are three facts about one thing and
 /// should read as one line.
+///
+/// Every figure is a measurement the lifter typed or the app counted, so each is drawn at
+/// `figureXL`, and `monument` may lead the ledger with one of them at 88 pt. An item that is an
+/// estimate is drawn at `readout`, the largest an estimate may be, whichever role it would
+/// otherwise have had: the ledger is the component that holds the scale's rule, so a caller cannot
+/// hand it a formula's output and get a headline back.
 public struct StatLedger: View {
   public struct Item: Identifiable, Hashable, Sendable {
     public let label: String
     public let value: String
     public let unit: String?
+    /// True when the figure is inferred and not counted or typed: an estimated max, a fractional
+    /// muscle credit, a change in either. Such a figure is never drawn above 28 pt.
+    public let isEstimate: Bool
     public var id: String { label }
 
-    public init(label: String, value: String, unit: String? = nil) {
+    public init(label: String, value: String, unit: String? = nil, isEstimate: Bool = false) {
       self.label = label
       self.value = value
       self.unit = unit
+      self.isEstimate = isEstimate
     }
   }
 
   private let items: [Item]
+  private let monument: Item?
   @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
-  public init(_ items: [Item]) {
+  /// - Parameter monument: A measured figure to lead the ledger at 88 pt, above the columns. It is
+  ///   the one monument its screen has, and it is left to the caller to have no more than one. An
+  ///   estimate passed here is drawn at `readout` like any other estimate.
+  public init(_ items: [Item], monument: Item? = nil) {
     self.items = items
+    self.monument = monument
+  }
+
+  /// The role a figure is drawn in. An estimate is capped at `readout` whatever was asked for.
+  public static func figureRole(for item: Item, isMonument: Bool) -> Tokens.Text.Role {
+    if item.isEstimate { return .readout }
+    return isMonument ? .monument : .figureXL
+  }
+
+  public var body: some View {
+    VStack(alignment: .leading, spacing: Tokens.Spacing.loose) {
+      if let monument {
+        figure(monument, isMonument: true)
+          .frame(maxWidth: .infinity, alignment: .leading)
+      }
+      if !items.isEmpty {
+        columns
+      }
+    }
   }
 
   /// A row of columns at ordinary sizes; at accessibility sizes, one figure per line. Three columns
   /// of large text left each figure a third of the width, and the running app's accessibility
   /// audit flagged "800" as clipping.
-  public var body: some View {
+  ///
+  /// At 44 pt the columns are the width of their figures and no wider, so a five-digit volume gets
+  /// the room it needs and a short count does not hold space it does not use. When the figures and
+  /// their dividers would be wider than the line, as a four-figure ledger with a large volume can
+  /// be, the figures wrap onto a second line with the dividers dropped, and none is clipped.
+  @ViewBuilder private var columns: some View {
     if dynamicTypeSize.isAccessibilitySize {
       VStack(alignment: .leading, spacing: Tokens.Spacing.regular) {
         ForEach(items) { item in
-          figure(item)
+          figure(item, isMonument: false)
             .frame(maxWidth: .infinity, alignment: .leading)
         }
       }
     } else {
-      HStack(spacing: 0) {
-        ForEach(items) { item in
-          figure(item)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.leading, item.id == items.first?.id ? 0 : Tokens.Spacing.regular)
-            .overlay(alignment: .leading) {
-              if item.id != items.first?.id {
-                Rectangle()
-                  .fill(Tokens.Color.hairline)
-                  .frame(width: Tokens.Stroke.hairline)
-              }
-            }
+      ViewThatFits(in: .horizontal) {
+        ruledRow
+        FlowLayout(spacing: Tokens.Spacing.loose) {
+          ForEach(items) { item in
+            figure(item, isMonument: false)
+          }
         }
       }
-      .fixedSize(horizontal: false, vertical: true)
     }
   }
 
-  private func figure(_ item: Item) -> some View {
+  private var ruledRow: some View {
+    HStack(alignment: .top, spacing: 0) {
+      ForEach(items) { item in
+        let isFirst = item.id == items.first?.id
+        let isLast = item.id == items.last?.id
+        figure(item, isMonument: false)
+          .padding(.leading, isFirst ? 0 : Tokens.Spacing.loose)
+          .padding(.trailing, isLast ? 0 : Tokens.Spacing.loose)
+          .overlay(alignment: .leading) {
+            if !isFirst {
+              Rectangle()
+                .fill(Tokens.Color.hairline)
+                .frame(width: Tokens.Stroke.hairline)
+            }
+          }
+      }
+    }
+    .frame(maxWidth: .infinity, alignment: .leading)
+    .fixedSize(horizontal: false, vertical: true)
+  }
+
+  private func figure(_ item: Item, isMonument: Bool) -> some View {
     VStack(alignment: .leading, spacing: Tokens.Spacing.hairline) {
       HStack(alignment: .firstTextBaseline, spacing: Tokens.Spacing.tight) {
         Text(item.value)
-          .font(Tokens.Text.setEntry)
+          .hardsetText(Self.figureRole(for: item, isMonument: isMonument))
           .foregroundStyle(Tokens.Color.chalk)
           .lineLimit(1)
+          // A figure must show the whole number. This floor is only for a value wider than the
+          // line at its full size, as the keypad's display allows; it does not take part in
+          // ordinary layout, which wraps or stacks instead.
+          .minimumScaleFactor(0.5)
         if let unit = item.unit {
           Text(unit)
             .hardsetText(.unit)

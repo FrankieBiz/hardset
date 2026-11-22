@@ -31,11 +31,19 @@ enum LoadFigure {
 /// Sized for the narrowest supported phone. The row's fixed parts are the 28 pt ordinal, the 60 pt
 /// last-time column, the 56 pt log control and three 8 pt gaps, 168 pt; a 375 pt screen leaves it
 /// 343 pt inside the session's page margins, and the remaining 175 pt is the weight, the multiply
-/// sign and the reps, which share it, the sign taking its own width and each figure half the rest.
+/// sign and the reps. The sign takes 24 pt and the reps a fixed 64 pt, which holds three digits at
+/// 44 pt, and the weight takes the rest: 87 pt on a 375 pt phone and 114 pt on a 402 pt one.
 enum SetRowMetrics {
   static let ordinalWidth: CGFloat = 28
   static let previousWidth: CGFloat = 60
   /// The multiply sign's column, and the gap the column header leaves between the unit and "Reps"
   /// so each label sits over its figures.
   static let multiplyWidth: CGFloat = 24
+  /// The reps column, fixed so the multiply sign sits on one axis down every row and under the
+  /// header. Three digits of the 44 pt figure take about 66 pt, which the value field's floor
+  /// absorbs; two, the usual rep count, take about 44.
+  static let repsWidth: CGFloat = 64
+  /// The height of a row's tap regions at the 44 pt figures: the fields, the ordinal and last time,
+  /// and the log control. The compact row keeps the logger's 56 pt.
+  static let rowHeight: CGFloat = 64
 }
