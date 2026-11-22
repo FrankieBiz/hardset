@@ -187,7 +187,7 @@ public struct WeeklyVolumeScreen: View {
   private func workingPresentation(for muscle: Muscle, in window: VolumeWindow) -> WorkedFromPresentation {
     let working = MuscleCountWorking.derive(
       muscle: muscle, sets: window.reading.sets, attribution: window.reading.attribution,
-      name: window.reading.name(for:))
+      imported: window.reading.importedMovements, name: window.reading.name(for:))
     return WorkedFromPresentation(
       working.account(
         muscleName: ExercisePickerView.displayName(MuscleKey(muscle)),

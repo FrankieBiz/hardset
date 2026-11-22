@@ -101,6 +101,47 @@ struct RecordWorkingTests {
     #expect(detail.hasPrefix("Beat your previous heaviest weight, 100 kg, by 10 kg (+10%)."))
   }
 
+  @Test("Each series says what its records were compared with, and imported history is never compared with logged sets")
+  func scopeFollowsTheSeries() throws {
+    let imported = ProgressionKey(exerciseID: exercise, machineID: nil, isImported: true)
+    let freeWeight = ProgressionKey(exerciseID: exercise, machineID: nil)
+    func set(_ session: SessionID, _ kg: Double, _ reps: Int, day: Int, imported: Bool = false, machine: MachineID? = nil)
+      -> ProgressionSample
+    {
+      ProgressionSample(
+        sessionID: session, machineID: machine, weightKg: kg, reps: reps,
+        completedAt: epoch.addingTimeInterval(Double(day) * 86_400), isImported: imported)
+    }
+    let first = SessionID(), second = SessionID(), loggedA = SessionID(), loggedB = SessionID()
+    let samples = [
+      set(first, 100, 5, day: 0, imported: true), set(second, 110, 5, day: 7, imported: true),
+      // Logged, heavier, with no machine: a different series, never the imported one's benchmark.
+      set(loggedA, 200, 5, day: 1), set(loggedB, 210, 5, day: 8),
+    ]
+    let working = RecordWorking.derive(
+      keys: [imported, freeWeight], samples: samples, estimatesOneRepMax: true,
+      incrementKg: { _ in nil },
+      label: { $0.isImported ? "Imported · machine not recorded" : "Free weight" })
+
+    let importedGroup = try #require(working.groups.first { $0.equipmentLabel == "Imported · machine not recorded" })
+    #expect(importedGroup.scope == "every earlier imported set of this movement. Imported history is never compared with sets you logged")
+    // The imported record beat the imported 100 kg, not the logged 200 kg.
+    #expect(importedGroup.entries.first?.beaten == PriorSetRecord(weightKg: 100, reps: 5, completedAt: epoch))
+    let loggedGroup = try #require(working.groups.first { $0.equipmentLabel == "Free weight" })
+    #expect(loggedGroup.scope == "every earlier working set of this movement with no machine recorded")
+
+    let account = working.account(title: "Records", caption: "", format: format)
+    #expect(account.sections.map(\.note).contains("Compared with every earlier imported set of this movement. Imported history is never compared with sets you logged."))
+    #expect(account.sections.map(\.note).contains("Compared with every earlier working set of this movement with no machine recorded."))
+    // The stars are the same series' stars: the replay per series is the one the store runs.
+    for key in [imported, freeWeight] {
+      let own = samples.filter { key.contains($0) }
+      let stars = ProgressTrendAnalyzer.recordSessionIDs(samples: own, incrementKg: nil, estimatesOneRepMax: true)
+      #expect(!stars.isEmpty)
+    }
+    #expect(working.groups.count == 2)
+  }
+
   @Test("A series with no record has no working and nothing is offered")
   func noRecords() {
     let first = SessionID()

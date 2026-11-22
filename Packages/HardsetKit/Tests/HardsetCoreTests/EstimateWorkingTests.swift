@@ -72,6 +72,8 @@ struct EstimateWorkingTests {
     #expect(account.rule.contains("weight × (1 + reps ÷ 30)"))
     #expect(account.rule.contains("Sets above 12 reps are not estimated."))
     #expect(account.rule.contains("nearest 0.5 kg"))
+    // A formula is never high: only a single, which is measured, is. The words come from the engine.
+    #expect(account.rule.hasSuffix("Confidence follows the set: 1 rep is high, 2 to 10 reps is moderate, 11 to 12 reps is low."))
 
     let fed = try #require(account.sections.first { $0.id == "fed" })
     #expect(fed.lines.map(\.headline) == ["100 kg × 5", "100 kg × 8"])
@@ -100,7 +102,7 @@ struct EstimateWorkingTests {
         ]))
 
     #expect(working.entries.count == 2)
-    #expect(working.entries[1].standing == .excluded(.otherSeries(label: "Cybex")))
+    #expect(working.entries[1].standing == .excluded(.otherSeries(label: "Cybex", isImported: false)))
     #expect(working.entries[1].seriesLabel == "Cybex")
     // The heavier set on the other machine did not move the figure.
     #expect(working.figureKg == StrengthMath.estimatedOneRepMax(weightKg: 100, reps: 5).value)
@@ -251,7 +253,74 @@ struct EstimateWorkingTests {
     let unknown = try #require(derive(key, session, sets, estimates: false, addedLoad: true))
     #expect(unknown.entries[0].standing == .excluded(.movementNotEstimated(assumesAddedLoad: true)))
     #expect(
-      unknown.account(format: format).sections[0].lines[0].detail.contains("this movement's type is unknown"))
+      unknown.account(format: format).sections[0].lines[0].detail
+        == "Left out: equipment not set, so no max is estimated. Set it in Library, on the Train tab.")
+  }
+
+  @Test("A formula's figure is never high, and the words that say so are the estimator's own ladder")
+  func confidenceIsTheCappedLadder() throws {
+    let ladder = EstimateWorking.confidenceLadder()
+    #expect(ladder == "Confidence follows the set: 1 rep is high, 2 to 10 reps is moderate, 11 to 12 reps is low.")
+    for reps in 1...StrengthMath.maximumEstimableReps {
+      let session = SessionID()
+      let key = ProgressionKey(exerciseID: exercise, machineID: hammer)
+      let working = try #require(derive(key, session, [sample(session, 100, reps, minute: 0, machine: hammer)]))
+      // Only a measured single is high; nothing a formula produced is.
+      #expect((working.certainty == .high) == (reps == 1), "\(reps) reps")
+      // The account's confidence is what the estimator says for that set, not a second ladder.
+      #expect(working.certainty == StrengthMath.estimatedOneRepMax(weightKg: 100, reps: reps).certainty)
+      // And the ladder text, read back, places this rep count at that level.
+      let phrases = ladder.dropFirst("Confidence follows the set: ".count).dropLast().components(separatedBy: ", ")
+      let level = try #require(phrases.first { phrase in
+        let numbers = phrase.split(whereSeparator: { !$0.isNumber }).compactMap { Int($0) }
+        guard let low = numbers.first, let high = numbers.last else { return false }
+        return (low...high).contains(reps)
+      })
+      #expect(level.hasSuffix("is \(working.certainty.rawValue)"), "\(reps) reps")
+    }
+  }
+
+  @Test("An imported set in the same session is left out as imported history, never as a machine")
+  func importedSetsAreNamedAsImported() throws {
+    let session = SessionID()
+    let key = ProgressionKey(exerciseID: exercise, machineID: hammer)
+    let working = try #require(
+      derive(
+        key, session,
+        [
+          sample(session, 100, 5, minute: 0, machine: hammer),
+          sample(session, 90, 5, minute: 5, imported: true),
+        ]))
+    #expect(
+      working.entries[1].standing == .excluded(.otherSeries(label: "Imported · machine not recorded", isImported: true)))
+    let left = try #require(working.account(format: format).sections.first { $0.id == "left" })
+    #expect(
+      left.lines[0].detail
+        == "Left out: imported history. It is a line of its own and is never joined to a machine's, so this set does not feed this one.")
+  }
+
+  @Test("Imported history has a working of its own, from its own sets, and a movement still unset is explained")
+  func importedSeriesHasItsOwnWorking() throws {
+    let session = SessionID()
+    let logged = SessionID()
+    let imported = ProgressionKey(exerciseID: exercise, machineID: nil, isImported: true)
+    let samples = [
+      sample(session, 110, 5, minute: 0, imported: true),
+      // Logged on another machine the same day: a different series, listed as left out.
+      sample(logged, 100, 5, minute: 30, machine: hammer),
+    ]
+    let working = try #require(derive(imported, session, samples))
+    #expect(working.seriesLabel == "Imported · machine not recorded")
+    #expect(working.figureKg == StrengthMath.estimatedOneRepMax(weightKg: 110, reps: 5).value)
+    #expect(working.setsOnOtherSeries == 1)
+    #expect(working.account(format: format).figureCaption.contains("Imported · machine not recorded"))
+
+    // Declared nothing yet: no estimate, and the way to end that is the one Progress gives.
+    let unset = try #require(derive(imported, session, samples, estimates: false, addedLoad: true))
+    #expect(unset.figureKg == nil)
+    #expect(
+      unset.account(format: format).sections[0].lines[0].detail
+        == "Left out: equipment not set, so no max is estimated. Set it in Library, on the Train tab.")
   }
 
   @Test("A session the series does not have has no working")

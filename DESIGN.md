@@ -479,7 +479,11 @@ Selection rows, the unit switch and pickers stay silent.
   `RecordWorking`), so the sheet does no arithmetic and cannot say what the figure did not do. The control is
   visible without a gesture: a glyph beside the figure, or a quiet "Worked from" button. It is never drawn on
   the shared receipt image. VoiceOver hears the account as one sentence on the header and each line as one
-  sentence. It adds no token and no motion.
+  sentence. Imported history keeps its split here as everywhere: an imported set is left out of a machine's
+  line as imported history, an imported series has a working of its own and says what its records were
+  compared with, and a movement a workout import created is marked as one on the lines that count it. Its
+  confidence is whatever the estimator gives, and the account states the ladder from the estimator itself,
+  so a formula's figure never reads higher than Moderate. It adds no token and no motion.
 - **Selection** (`SelectionRow`, `SelectionCardButtonStyle`, `SelectionIndicator`): selected choices
   take the plate blue ring and `plateBlueSurface`, and the trailing indicator swaps an empty ring
   for a filled check, so the choice is carried by shape as well as colour. A pressed selection
