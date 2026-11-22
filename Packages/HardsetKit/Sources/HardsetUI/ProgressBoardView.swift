@@ -9,8 +9,9 @@ import SwiftUI
 /// its certainty sits beside it, and a movement with no session five to seven weeks before its
 /// latest says it has no 6-week comparison and how much history it does have, rather than borrowing
 /// another window. At the top, the three best-supported estimated-max gains, in an order the strip
-/// states. A movement that has not set a record in its last three sessions is flagged "Stalled" in
-/// the warning colour, with no advice attached: it is a fact about the sessions, not a prescription.
+/// states. A movement that has not set a record in its last three sessions says "No record in 3
+/// sessions" in the warning colour, with no advice attached: it is a fact about the sessions, not a
+/// verdict on the lifter and not a prescription.
 ///
 /// Imported history is never merged into what the lifter logged here, so a lift can have two rows.
 /// Each imported row says it is not combined with the sets logged in Hardset, a movement with both

@@ -138,6 +138,12 @@ session certainty is language instead: a phrase in `provenance` and `chalkDim`, 
 confidence", with what it is about before it ("From another machine · Low confidence") and a small
 info glyph that says it opens. The words carry the level and no hue does; see `CertaintyBadge`.
 
+An estimate derived from a formula is never High: an estimated one-rep max tops out at Moderate,
+because the research behind it finds the formula overestimating from about five reps, and only a
+measured single, which estimates nothing, is High. `StrengthMath.estimatedOneRepMax` decides this
+beside the figure, and every badge, record line and disclosure beside an estimate reads it from
+there. This matches the Volume ladder, which never exceeds Moderate either.
+
 Chart series (one line per machine, never merged) use `plateBlue`, chalk `#E7E7EC`/`#3A3A42`,
 lilac `#B9A8FF`/`#5236B8` and rose `#FF9DD6`/`#9A1F66`, each paired with a distinct point symbol.
 
@@ -424,11 +430,14 @@ Selection rows, the unit switch and pickers stay silent.
   moving sets between movements would rewrite history to draw the same chart. Machine and cable
   movements whose sets have no
   machine say "No machine recorded" there and in the chart legend. A movement with no record in its last
-  three sessions is flagged "Stalled · 3 sessions" in `warning` with `pause.circle`, and no advice. "Most
+  three sessions says "No record in 3 sessions" in `warning` with `pause.circle`, and no advice: the rule
+  is only that none of those sessions set a record, and "stalled" would claim more about the lifter's
+  body than the data knows. "Most
   improved · estimated max" at the top repeats three estimated-max gains, ordered by the confidence of
-  the estimate first, then the size of the gain, with a stalled movement after one of the same
-  confidence that is not, and a `caption` under its label says so (`ProgressCopy.mostImprovedOrdering`),
-  so a Low-confidence gain that is also Stalled is never on top while a better-supported gain sits
+  the estimate first, then the size of the gain, with a movement that has no record in 3 sessions after
+  one of the same confidence that has, and a `caption` under its label says so
+  (`ProgressCopy.mostImprovedOrdering`), so a Low-confidence gain that also has no record in 3
+  sessions is never on top while a better-supported gain sits
   below it; load and rep percentages stay in their own movement rows. Empty, it says "Log a workout and your progress
   shows up here"; loading is a quiet line and a failed read says so, never an empty board. It adds no
   token and no motion.
@@ -498,8 +507,9 @@ Selection rows, the unit switch and pickers stay silent.
   pages with one anatomy, a `title` headline, two lines in `label` and one live element that is the
   real component, never a picture. "One tap per set" is a real set row prefilled from last time; its
   tap plays `clank` then the row's own `success`. "Honest numbers" is the engine's estimate for the
-  same 60 kg set at 3, 8, 12 and 15 reps, so the badge walks high, moderate, low and not evaluated
-  because `StrengthMath` says so. "Rest that keeps time" is the real rest bar over a `DemoRestTimer`,
+  same 60 kg set at 1, 3, 12 and 15 reps, so the badge walks high (the single, which is measured and
+  the only High), moderate, low and not evaluated because `StrengthMath` says so. "Rest that keeps
+  time" is the real rest bar over a `DemoRestTimer`,
   an in-memory timer with no alarm, whose controls give the selection haptic. The first-launch pager
   shows three short `hairline` segments above the primary button, the active one `plateBlue`,
   sliding on `Motion.state`; like the segmented control's indicator it is one shape moved between

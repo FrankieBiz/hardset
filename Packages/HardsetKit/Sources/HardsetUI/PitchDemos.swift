@@ -114,7 +114,7 @@ public struct PitchSetRowDemo: View {
 /// "Honest numbers." An estimated one-rep max from the same 60 kg set at four rep counts. The
 /// figure, the badge and the provenance line all come from the engine's own rule, so the four
 /// segments walk high, moderate, low and not evaluated because `StrengthMath` says so, not because
-/// the page does.
+/// the page does. High is reached only by the measured single: a formula's figure is never High.
 public struct PitchEstimatePage: View {
   private let unit: WeightUnit
   private let initialReps: Int
@@ -137,9 +137,10 @@ public struct PitchEstimatePage: View {
 }
 
 public struct PitchEstimateDemo: View {
-  /// The reps shown, chosen so the engine's rule reaches every level: high at three, moderate at
-  /// eight, low at twelve (low is only eleven and twelve), and not evaluated at fifteen.
-  public static let repOptions = [3, 8, 12, 15]
+  /// The reps shown, chosen so the engine's rule reaches every level: high at one (a measured
+  /// single, the only High), moderate at three, low at twelve (low is only eleven and twelve), and
+  /// not evaluated at fifteen.
+  public static let repOptions = [1, 3, 12, 15]
   /// The weight of the set every segment shows.
   public static let weightKg = 60.0
 
@@ -155,10 +156,19 @@ public struct PitchEstimateDemo: View {
     StrengthMath.estimatedOneRepMax(weightKg: Self.weightKg, reps: reps)
   }
 
+  /// "1 rep", "3 reps".
+  private static func repsLabel(_ reps: Int) -> String {
+    reps == 1 ? "1 rep" : "\(reps) reps"
+  }
+
   public var body: some View {
     let claim = claim
+    // A single is the observation itself, so it says "measured"; every other rep count is the
+    // formula's estimate.
+    let kind = claim.source.id == StrengthMath.measuredSource.id ? "measured" : "estimated"
+    let setReps = Self.repsLabel(reps)
     VStack(alignment: .leading, spacing: Tokens.Spacing.loose) {
-      Text("\(LoadText.entered(Self.weightKg, in: unit)) \(unit.abbreviation) for \(reps) reps")
+      Text("\(LoadText.entered(Self.weightKg, in: unit)) \(unit.abbreviation) for \(setReps)")
         .hardsetText(.provenance)
         .foregroundStyle(Tokens.Color.chalkDim)
       if let value = claim.value {
@@ -167,7 +177,7 @@ public struct PitchEstimateDemo: View {
             .hardsetText(.readout)
             .foregroundStyle(Tokens.Color.chalk)
             .contentTransition(.numericText())
-          Text("\(unit.abbreviation), estimated one-rep max")
+          Text("\(unit.abbreviation), \(kind) one-rep max")
             .hardsetText(.unit)
             .foregroundStyle(Tokens.Color.chalkDim)
         }
@@ -179,7 +189,7 @@ public struct PitchEstimateDemo: View {
         citation: claim.source.citation)
       HardsetSegmentedControl(
         selection: $reps,
-        segments: Self.repOptions.map { HardsetSegment("\($0) reps", value: $0) })
+        segments: Self.repOptions.map { HardsetSegment(Self.repsLabel($0), value: $0) })
       Text("\(claim.source.title). \(claim.source.validRange ?? "")")
         .hardsetText(.caption)
         .foregroundStyle(Tokens.Color.chalkDim)

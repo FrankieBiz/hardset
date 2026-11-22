@@ -19,6 +19,20 @@ struct PitchCertaintyTests {
     }
   }
 
+  /// D15: High is for what was measured. The one High segment is the single, and its source says
+  /// so; every segment that is a formula's estimate stops short of it.
+  @Test func onlyTheMeasuredSingleIsHigh() {
+    for reps in PitchEstimateDemo.repOptions {
+      let claim = StrengthMath.estimatedOneRepMax(weightKg: PitchEstimateDemo.weightKg, reps: reps)
+      if reps == 1 {
+        #expect(CertaintyLevel(claim.certainty) == .high)
+        #expect(claim.source.id == StrengthMath.measuredSource.id)
+      } else {
+        #expect(CertaintyLevel(claim.certainty) != .high, "\(reps) reps")
+      }
+    }
+  }
+
   @Test func theUnevaluatedSegmentShowsNoNumber() {
     let claim = StrengthMath.estimatedOneRepMax(
       weightKg: PitchEstimateDemo.weightKg, reps: PitchEstimateDemo.repOptions.last ?? 0)

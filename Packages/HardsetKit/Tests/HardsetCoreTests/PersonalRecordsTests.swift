@@ -163,6 +163,19 @@ struct PersonalRecordsTests {
     #expect(ExerciseModality.allCases.filter(\.estimatesOneRepMax).count == ExerciseModality.allCases.count - 1)
   }
 
+  /// The words beside a record come from `StrengthMath` itself, so a record can never be worded
+  /// more confidently than the engine that computed it.
+  @Test("An estimated-1RM record is worded with the engine's certainty, Moderate for a formula")
+  func recordLabelReadsTheEngine() {
+    for (reps, words) in [(3, "Moderate confidence"), (8, "Moderate confidence"),
+      (12, "Low confidence"), (1, "High confidence")] {
+      let record = PersonalRecord(kind: .estimatedOneRepMax, weightKg: 100, reps: reps)
+      let engine = StrengthMath.estimatedOneRepMax(weightKg: 100, reps: reps).certainty
+      #expect(record.qualifiedLabel == "Best estimated 1RM · \(ScorecardCopy.confidenceWords(engine))")
+      #expect(record.qualifiedLabel.hasSuffix(words), "\(reps) reps")
+    }
+  }
+
   @Test("A big jump can set all three records at once")
   func allThreeAtOnce() {
     let kinds = records(120, 10, history: [(100, 8), (120, 6)])

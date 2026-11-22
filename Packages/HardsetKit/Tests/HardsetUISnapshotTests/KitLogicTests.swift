@@ -8,13 +8,16 @@ import Testing
 @MainActor
 @Suite("Kit logic the screens depend on")
 struct KitLogicTests {
-  /// Ruling R11. The engine, not the design spec, decides which rep counts earn which word: high
-  /// from 2 to 6 reps, moderate from 7 to 10, low at 11 and 12, and unevaluated beyond 12. A
-  /// pitch that walks all four levels with reps 3, 8, 15 and 25 would show unevaluated twice and
-  /// low never, so the walk uses 3, 8, 12 and 15.
+  /// Ruling R11, as amended by D15. The engine, not the design spec, decides which rep counts earn
+  /// which word: a measured single is high, a formula's estimate is moderate up to 10 reps and
+  /// never high, low at 11 and 12, and unevaluated beyond 12. A pitch that walks all four levels
+  /// with reps 3, 8, 15 and 25 would show unevaluated twice and low never, so the walk uses 1, 3,
+  /// 12 and 15.
   @Test func engineWalksCertaintyByReps() {
     let expected: [(reps: Int, certainty: Certainty)] = [
-      (3, .high),
+      (1, .high),
+      (3, .moderate),
+      (6, .moderate),
       (8, .moderate),
       (11, .low),
       (12, .low),
