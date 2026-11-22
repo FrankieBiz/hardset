@@ -72,8 +72,7 @@ public struct RecordWorking: Hashable, Sendable {
         groups.append(
           Group(
             id: "\(label(key))-\(session)", date: found.map(\.sample.completedAt).min(),
-            equipmentLabel: label(key), setTitle: nil,
-            scope: "every earlier working set on this machine", entries: entries))
+            equipmentLabel: label(key), setTitle: nil, scope: scope(of: key), entries: entries))
       }
     }
     groups.sort {
@@ -81,6 +80,18 @@ public struct RecordWorking: Hashable, Sendable {
       return $0.id < $1.id
     }
     return RecordWorking(groups: groups)
+  }
+
+  /// What a series' records were compared with. Each series is its own history: a machine's, the
+  /// movement's with no machine recorded, or imported history, which records no machine and is kept
+  /// apart from logged sets, so no record on one is measured against the other.
+  static func scope(of key: ProgressionKey) -> String {
+    if key.isImported {
+      return "every earlier imported set of this movement. Imported history is never compared with sets you logged"
+    }
+    return key.machineID == nil
+      ? "every earlier working set of this movement with no machine recorded"
+      : "every earlier working set on this machine"
   }
 
   /// The records a receipt already carries, one group per set that earned any.

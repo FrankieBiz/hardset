@@ -85,24 +85,33 @@ public nonisolated struct VolumeStore: Sendable {
   /// screen and cannot be built from a window that changed after the count was made.
   public func loadWindow(in window: VolumeWindowRange) async throws -> VolumeWindowReading {
     try Task.checkCancellation()
-    let (sets, entries, names) = try await database.read { db in
+    let (sets, entries, movements) = try await database.read { db in
       (
         try Self.readCountableSets(from: window.start, to: window.end, in: db),
         try Self.readAttributionEntries(in: db),
-        try Self.readExerciseNames(in: db)
+        try Self.readMovements(in: db)
       )
     }
     try Task.checkCancellation()
     let attribution = AttributionIndex(entries: entries)
     return VolumeWindowReading(
       report: VolumeAnalyzer.report(sets: sets, attribution: attribution),
-      sets: sets, attribution: attribution, exerciseNames: names)
+      sets: sets, attribution: attribution, exerciseNames: movements.names,
+      importedMovements: movements.imported)
   }
 
-  private static func readExerciseNames(in db: Database) throws -> [ExerciseID: String] {
-    try Exercise.fetchAll(db).reduce(into: [ExerciseID: String]()) {
-      $0[ExerciseID(rawValue: $1.id)] = $1.name
+  /// Every movement's name, archived ones included, and which of them a workout import created.
+  private static func readMovements(in db: Database) throws
+    -> (names: [ExerciseID: String], imported: Set<ExerciseID>)
+  {
+    var names: [ExerciseID: String] = [:]
+    var imported = Set<ExerciseID>()
+    for row in try Exercise.fetchAll(db) {
+      let id = ExerciseID(rawValue: row.id)
+      names[id] = row.name
+      if CatalogSeeder.isImported(row) { imported.insert(id) }
     }
+    return (names, imported)
   }
 
   private static func readCountableSets(from: Date, to: Date, in db: Database) throws
@@ -139,15 +148,19 @@ public nonisolated struct VolumeWindowReading: Sendable {
   public let attribution: AttributionIndex
   /// Every movement's name, archived ones included: their sets are in the window too.
   public let exerciseNames: [ExerciseID: String]
+  /// The movements a workout import created. Their sets are counted like any other's, and the
+  /// account says which lines they are.
+  public let importedMovements: Set<ExerciseID>
 
   public init(
     report: MuscleVolumeReport, sets: [CountableSet], attribution: AttributionIndex,
-    exerciseNames: [ExerciseID: String]
+    exerciseNames: [ExerciseID: String], importedMovements: Set<ExerciseID> = []
   ) {
     self.report = report
     self.sets = sets
     self.attribution = attribution
     self.exerciseNames = exerciseNames
+    self.importedMovements = importedMovements
   }
 
   /// A movement's name, or the same words the history uses for one that no longer exists.

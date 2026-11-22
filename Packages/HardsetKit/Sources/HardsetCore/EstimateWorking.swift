@@ -27,8 +27,9 @@ public struct EstimateWorking: Hashable, Sendable {
     case implausibleLoad
     /// The movement logs a load that is not the load moved, so nothing is estimated from it.
     case movementNotEstimated(assumesAddedLoad: Bool)
-    /// A set from the same session on other equipment. Each machine is its own line.
-    case otherSeries(label: String)
+    /// A set from the same session on other equipment, or imported. Each machine is its own line, and
+    /// imported history is a line of its own that is never joined to a machine's.
+    case otherSeries(label: String, isImported: Bool)
   }
 
   public enum Standing: Hashable, Sendable {
@@ -143,7 +144,8 @@ public struct EstimateWorking: Hashable, Sendable {
     }
 
     for sample in samples where sample.sessionID == sessionID && !key.contains(sample) {
-      rows.append((sample, nil, .excluded(.otherSeries(label: label(series(of: sample)))), order))
+      let other = series(of: sample)
+      rows.append((sample, nil, .excluded(.otherSeries(label: label(other), isImported: other.isImported)), order))
       order += 1
     }
     for sample in warmups where sample.sessionID == sessionID {
@@ -210,7 +212,31 @@ public struct EstimateWorking: Hashable, Sendable {
     return "Each set is converted with the Epley formula: weight × (1 + reps ÷ \(divisor)). "
       + "One rep at a load is its own one-rep max, so a single is taken as measured. "
       + "Sets above \(limit) reps are not estimated. "
-      + "The session's figure is the highest estimate among its sets, shown to the nearest \(step)."
+      + "The session's figure is the highest estimate among its sets, shown to the nearest \(step). "
+      + confidenceLadder()
+  }
+
+  /// How confidence follows the set, read from the estimator itself, one run of rep counts per level,
+  /// so the words cannot say a level the estimator does not give: "1 rep is high, 2 to 10 reps is
+  /// moderate, 11 to 12 reps is low."
+  static func confidenceLadder() -> String {
+    var runs: [(certainty: Certainty, reps: ClosedRange<Int>)] = []
+    for reps in 1...StrengthMath.maximumEstimableReps {
+      // Any plausible load: the level depends on the reps, never on the weight.
+      let certainty = StrengthMath.estimatedOneRepMax(weightKg: 100, reps: reps).certainty
+      if let last = runs.last, last.certainty == certainty {
+        runs[runs.count - 1].reps = last.reps.lowerBound...reps
+      } else {
+        runs.append((certainty, reps...reps))
+      }
+    }
+    let phrases = runs.map { run -> String in
+      let span = run.reps.count == 1
+        ? "\(run.reps.lowerBound) \(run.reps.lowerBound == 1 ? "rep" : "reps")"
+        : "\(run.reps.lowerBound) to \(run.reps.upperBound) reps"
+      return "\(span) is \(run.certainty.rawValue)"
+    }
+    return "Confidence follows the set: \(phrases.joined(separator: ", "))."
   }
 
   /// What the account says, built from this derivation and nothing else.
@@ -331,11 +357,16 @@ public struct EstimateWorking: Hashable, Sendable {
       let ceiling = format.load(StrengthMath.implausibleWeightKg)
       return "Left out: a load of zero, or above \(ceiling), is not estimated."
     case .movementNotEstimated(let assumesAddedLoad):
+      // An unknown movement is one whose equipment is not set, and Progress says so in these words,
+      // from one place, with the one place the lifter can end it.
+      let notSet = ProgressCopy.equipmentNotSet
       return assumesAddedLoad
-        ? "Left out: this movement's type is unknown, so the logged load may be added load only and no one-rep max is estimated."
+        ? "Left out: " + notSet.prefix(1).lowercased() + notSet.dropFirst()
         : "Left out: body mass is not recorded with each set, so a one-rep max is not estimated for bodyweight movements."
-    case .otherSeries(let label):
-      return "Left out: logged on \(label). Each machine has its own line, so this set does not feed this one."
+    case .otherSeries(let label, let isImported):
+      return isImported
+        ? "Left out: imported history. It is a line of its own and is never joined to a machine's, so this set does not feed this one."
+        : "Left out: logged on \(label). Each machine has its own line, so this set does not feed this one."
     }
   }
 }

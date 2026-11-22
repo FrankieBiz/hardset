@@ -172,6 +172,53 @@ struct VolumeStoreTests {
     #expect(chest.unrelatedSets == 3)
   }
 
+  /// A workout import creates movements with no body part. Volume counts their sets once they have
+  /// one, and the working says which lines came from an import and how to count the rest.
+  @Test("An imported movement is left out with the way to count it, then counted, and labelled as imported")
+  func importedMovementsInTheWorking() async throws {
+    let database = try migratedDatabase()
+    let seeder = CatalogSeeder(database: database)
+    let csv = "Date,Workout Name,Duration,Exercise Name,Set Order,Weight,Reps\n"
+      + "2026-11-02 10:00:00,Push,1h,Bench Press (Barbell),1,100,5\n"
+      + "2026-11-03 10:00:00,Push,1h,Bench Press (Barbell),1,100,5\n"
+    let preview = try WorkoutCSVImport.preview(csv, strongUnit: .kilograms, timeZone: TimeZone(secondsFromGMT: 0)!)
+    _ = try await DataTransferStore(database: database).commit(preview)
+    let entry = try #require(try seeder.libraryExercises().first { $0.isImported })
+    let range = VolumeWindowRange(
+      endingAt: try #require(ISO8601DateFormatter().date(from: "2026-11-05T12:00:00Z")), weeksBack: 0)
+    let volume = VolumeStore(database: database)
+
+    func chest(_ reading: VolumeWindowReading) -> MuscleCountWorking {
+      MuscleCountWorking.derive(
+        muscle: .chest, sets: reading.sets, attribution: reading.attribution,
+        imported: reading.importedMovements, name: reading.name(for:))
+    }
+
+    // No body part yet: the sets are working sets that credit no muscle.
+    let before = try await volume.loadWindow(in: range)
+    #expect(before.importedMovements == [entry.id])
+    #expect(before.report.sets(for: .chest) == 0)
+    let unset = chest(before)
+    #expect(unset.credited.isEmpty)
+    #expect(unset.unattributed.map(\.isImported) == [true])
+    #expect(unset.unattributed.map(\.setCount) == [2])
+    #expect(unset.isLowerBound)
+
+    // Given a body part in Library, its sets count, by the same rule, and are still labelled.
+    _ = try seeder.updateCustomExercise(
+      entry.id, name: entry.name, attribution: try #require(CustomAttribution(primary: .chest)))
+    let after = try await volume.loadWindow(in: range)
+    let set = chest(after)
+    #expect(set.total == after.report.sets(for: .chest))
+    #expect(set.total == 2)
+    #expect(set.credited.map(\.isImported) == [true])
+    #expect(set.unattributed.isEmpty)
+    let line = try #require(
+      set.account(muscleName: "Chest", windowLabel: "x", format: WorkedFromFormat(unit: .kilograms))
+        .sections.first { $0.id == "credited" }?.lines.first)
+    #expect(line.context == "2 sets · direct · imported movement")
+  }
+
   /// Grip and bracing are stabilisers all the way through storage.
   @Test("Held grip credits nothing after a database round trip")
   func gripCreditsNothingEndToEnd() throws {

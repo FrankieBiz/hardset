@@ -23,6 +23,9 @@ public struct MuscleCountWorking: Hashable, Sendable {
     public let setCount: Int
     /// What all of its sets credited together.
     public let credit: Double
+    /// Created by a workout import. Its sets count toward the same muscles as a logged set's once it
+    /// has a body part, and the account says which lines came from an import.
+    public let isImported: Bool
 
     public var id: ExerciseID { exerciseID }
   }
@@ -32,6 +35,8 @@ public struct MuscleCountWorking: Hashable, Sendable {
     public let exerciseID: ExerciseID
     public let name: String
     public let setCount: Int
+    /// Created by a workout import, which cannot say what it trains until its owner does.
+    public let isImported: Bool
 
     public var id: ExerciseID { exerciseID }
   }
@@ -66,10 +71,13 @@ public struct MuscleCountWorking: Hashable, Sendable {
   /// - Parameters:
   ///   - sets: The window's sets, warm-ups included, as `VolumeAnalyzer.report` is given them.
   ///   - name: A movement's name, for the lines.
+  ///   - imported: The movements a workout import created. Their sets are counted by the same rule
+  ///     as any other, and only the lines say which they are.
   public static func derive(
     muscle: Muscle,
     sets: [CountableSet],
     attribution: AttributionIndex,
+    imported: Set<ExerciseID> = [],
     name: (ExerciseID) -> String
   ) -> MuscleCountWorking {
     struct Tally {
@@ -121,7 +129,7 @@ public struct MuscleCountWorking: Hashable, Sendable {
         .map { id, tally in
           Movement(
             exerciseID: id, name: name(id), role: tally.role, creditPerSet: tally.creditPerSet,
-            setCount: tally.setCount, credit: tally.credit)
+            setCount: tally.setCount, credit: tally.credit, isImported: imported.contains(id))
         }
         .sorted {
           if $0.credit != $1.credit { return $0.credit > $1.credit }
@@ -135,7 +143,11 @@ public struct MuscleCountWorking: Hashable, Sendable {
       muscle: muscle, total: total, credited: movements(credited),
       stabilizing: movements(stabilizing),
       unattributed: unattributed
-        .map { Unattributed(exerciseID: $0.key, name: name($0.key), setCount: $0.value) }
+        .map {
+          Unattributed(
+            exerciseID: $0.key, name: name($0.key), setCount: $0.value,
+            isImported: imported.contains($0.key))
+        }
         .sorted {
           if $0.setCount != $1.setCount { return $0.setCount > $1.setCount }
           if $0.name != $1.name { return $0.name < $1.name }
@@ -167,6 +179,15 @@ public struct MuscleCountWorking: Hashable, Sendable {
 
   private static func sets(_ count: Int) -> String { count == 1 ? "1 set" : "\(count) sets" }
 
+  /// Where a movement with no muscles recorded is given some, for one made by the lifter and one a
+  /// workout import created alike: the Library, which lists both.
+  static let unattributedWayOut = "Set its body part in Library, on the Train tab, to count it."
+
+  /// "6 sets · direct", with "imported movement" last when a workout import created it.
+  private static func context(_ count: Int, _ role: String, imported: Bool) -> String {
+    ([sets(count), role] + (imported ? ["imported movement"] : [])).joined(separator: " · ")
+  }
+
   /// What the account says, built from this derivation and nothing else.
   ///
   /// - Parameters:
@@ -183,10 +204,11 @@ public struct MuscleCountWorking: Hashable, Sendable {
       let each = format.credit(movement.creditPerSet)
       return WorkedFromAccount.Line(
         id: "credited-\(movement.exerciseID)", standing: .counted, headline: movement.name,
-        context: "\(Self.sets(movement.setCount)) · \(Self.roleWord(movement.role))",
+        context: Self.context(movement.setCount, Self.roleWord(movement.role), imported: movement.isImported),
         detail: "\(Self.sets(movement.setCount)) at \(each) each: \(format.sets(movement.credit)) "
           + "\(movement.credit == 1 ? "set" : "sets") credited to \(lowered).",
         spoken: "\(movement.name), \(Self.sets(movement.setCount)), \(Self.roleWord(movement.role)), "
+          + (movement.isImported ? "imported movement, " : "")
           + "\(each) each, \(format.sets(movement.credit)) \(movement.credit == 1 ? "set" : "sets") "
           + "credited to \(lowered).")
     }
@@ -196,22 +218,25 @@ public struct MuscleCountWorking: Hashable, Sendable {
       leftLines.append(
         WorkedFromAccount.Line(
           id: "stabilizing-\(movement.exerciseID)", standing: .excluded, headline: movement.name,
-          context: "\(Self.sets(movement.setCount)) · \(Self.roleWord(movement.role))",
+          context: Self.context(movement.setCount, Self.roleWord(movement.role), imported: movement.isImported),
           detail: "Left out: this movement only stabilises \(lowered), which credits \(format.sets(0)), "
             + "so these sets add nothing to it.",
-          spoken: "\(movement.name), \(Self.sets(movement.setCount)), stabilizing. Left out: it only "
+          spoken: "\(movement.name), \(Self.sets(movement.setCount)), stabilizing"
+            + (movement.isImported ? ", imported movement" : "") + ". Left out: it only "
             + "stabilises \(lowered), which credits nothing."))
     }
     for movement in unattributed {
       leftLines.append(
         WorkedFromAccount.Line(
           id: "unattributed-\(movement.exerciseID)", standing: .excluded, headline: movement.name,
-          context: "\(Self.sets(movement.setCount)) · no muscles recorded",
+          context: Self.context(movement.setCount, "no muscles recorded", imported: movement.isImported),
           detail: "Left out: no muscles are recorded for this movement, so its sets credit no muscle. "
-            + "It may have trained \(lowered), so the count is at least what is shown.",
-          spoken: "\(movement.name), \(Self.sets(movement.setCount)), no muscles recorded. Left out: "
+            + "It may have trained \(lowered), so the count is at least what is shown. "
+            + Self.unattributedWayOut,
+          spoken: "\(movement.name), \(Self.sets(movement.setCount)), no muscles recorded"
+            + (movement.isImported ? ", imported movement" : "") + ". Left out: "
             + "its sets credit no muscle, and it may have trained \(lowered), so the count is at "
-            + "least what is shown."))
+            + "least what is shown. " + Self.unattributedWayOut))
     }
     let warmupText = warmupSets == 1 ? "1 warm-up set" : "\(warmupSets) warm-up sets"
     if warmupSets > 0 {

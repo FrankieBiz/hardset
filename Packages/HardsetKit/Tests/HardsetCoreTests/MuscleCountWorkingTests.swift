@@ -97,7 +97,8 @@ struct MuscleCountWorkingTests {
     #expect(
       left.lines[0].detail
         == "Left out: no muscles are recorded for this movement, so its sets credit no muscle. "
-        + "It may have trained chest, so the count is at least what is shown.")
+        + "It may have trained chest, so the count is at least what is shown. "
+        + "Set its body part in Library, on the Train tab, to count it.")
     #expect(left.lines[1].detail == "Left out: warm-ups count toward no muscle.")
   }
 
@@ -155,6 +156,33 @@ struct MuscleCountWorkingTests {
     let line = try #require(account.sections.first { $0.id == "credited" }?.lines.first)
     #expect(line.context == "1 set · direct")
     #expect(line.detail == "1 set at 1.0 each: 1 set credited to chest.")
+  }
+
+  @Test("A movement a workout import created is counted by the same rule and says it was imported")
+  func importedMovementsAreLabelled() throws {
+    let imported = ExerciseID()
+    let index = AttributionIndex([
+      bench: [contribution(.chest, .direct)], imported: [contribution(.chest, .direct), contribution(.triceps, .indirect)],
+    ])
+    let data = sets(bench, 3) + sets(imported, 2) + sets(mystery, 1)
+    let working = MuscleCountWorking.derive(
+      muscle: .chest, sets: data, attribution: index, imported: [imported, mystery],
+      name: { $0 == imported ? "Bench Press (Imported)" : $0 == mystery ? "Cable Fly (Imported)" : self.name($0) })
+
+    // Counted exactly as a logged movement's sets are: the report knows nothing of imports.
+    #expect(working.total == VolumeAnalyzer.report(sets: data, attribution: index).sets(for: .chest))
+    #expect(working.total == 5)
+    #expect(working.credited.map(\.isImported) == [false, true])
+    #expect(working.unattributed.map(\.isImported) == [true])
+
+    let account = working.account(muscleName: "Chest", windowLabel: "Last 7 days", format: format)
+    let credited = try #require(account.sections.first { $0.id == "credited" })
+    #expect(credited.lines.map(\.context) == ["3 sets · direct", "2 sets · direct · imported movement"])
+    #expect(credited.lines[1].spoken.contains("direct, imported movement, 1.0 each"))
+    let left = try #require(account.sections.first { $0.id == "left" })
+    #expect(left.lines[0].context == "1 set · no muscles recorded · imported movement")
+    // The way out is the one the banner gives, for a movement the lifter made and an imported one.
+    #expect(left.lines[0].detail.hasSuffix("Set its body part in Library, on the Train tab, to count it."))
   }
 
   // MARK: - The same arithmetic as the report
