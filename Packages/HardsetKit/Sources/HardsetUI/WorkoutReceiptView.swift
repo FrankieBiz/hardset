@@ -9,19 +9,26 @@ import SwiftUI
 ///
 /// The same view is rendered into the shared image, so it holds no controls of its own. The one
 /// exception is `onDeleteLine`: a screen correcting a past workout passes it while editing, and
-/// each set then shows a delete control. The share renderer never passes it.
+/// each set then shows a delete control. The share renderer never passes it. `onExplainRecords` is the
+/// same kind of exception: it shows the control that opens the working behind a record.
 public struct WorkoutReceiptView: View {
   private let receipt: WorkoutReceipt
   private let unit: WeightUnit
   private let onDeleteLine: ((WorkoutReceipt.Line) -> Void)?
+  private let onExplainRecords: ((WorkoutReceipt.Line?) -> Void)?
 
+  /// - Parameter onExplainRecords: Opens the working behind a record: for one set when given a line,
+  ///   for the whole workout when given `nil`. Like `onDeleteLine`, a screen passes it and the share
+  ///   renderer never does, so the shared image holds no control.
   public init(
     receipt: WorkoutReceipt, unit: WeightUnit,
-    onDeleteLine: ((WorkoutReceipt.Line) -> Void)? = nil
+    onDeleteLine: ((WorkoutReceipt.Line) -> Void)? = nil,
+    onExplainRecords: ((WorkoutReceipt.Line?) -> Void)? = nil
   ) {
     self.receipt = receipt
     self.unit = unit
     self.onDeleteLine = onDeleteLine
+    self.onExplainRecords = onExplainRecords
   }
 
   public var body: some View {
@@ -102,6 +109,9 @@ public struct WorkoutReceiptView: View {
             RoundedRectangle(cornerRadius: Tokens.Radius.control)
               .strokeBorder(Tokens.Color.plateYellow.opacity(0.35), lineWidth: Tokens.Stroke.hairline)
           )
+        if let onExplainRecords {
+          WorkedFromButton("Worked from these records") { onExplainRecords(nil) }
+        }
       }
 
       if let gain = ScorecardCopy.gainText(card) {
@@ -213,6 +223,21 @@ public struct WorkoutReceiptView: View {
         }
       }
       .accessibilityElement(children: .combine)
+      // Its own element, outside the set's description, so activating the description never opens
+      // the working and the working is reachable on the set whose record it explains.
+      if let onExplainRecords, !line.records.isEmpty {
+        Button {
+          onExplainRecords(line)
+        } label: {
+          Image(systemName: WorkedFromSheet.glyph)
+            .font(Tokens.Text.headline)
+            .foregroundStyle(Tokens.Color.chalkDim)
+            .frame(minWidth: Tokens.minimumTapTarget, minHeight: Tokens.minimumTapTarget)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Worked from, record, \(Self.spokenSet(line, unit: unit))")
+      }
     }
   }
 

@@ -63,6 +63,8 @@ struct WorkoutReceiptScreen: View {
   @State private var pendingEditor: SavedWorkoutDraft?
   @State private var editor: SavedWorkoutDraft?
   @State private var didSaveWorkout = false
+  /// The working behind a record the lifter asked about, while its sheet is up.
+  @State private var working: WorkedFromPresentation?
   @Environment(\.syncStatus) private var syncStatus
   @Environment(\.displayScale) private var displayScale
   @Environment(\.dismiss) private var dismiss
@@ -167,7 +169,10 @@ struct WorkoutReceiptScreen: View {
           }
           WorkoutReceiptView(
             receipt: receipt, unit: unit,
-            onDeleteLine: isEditing && !isDeleting ? { pendingSet = $0 } : nil
+            onDeleteLine: isEditing && !isDeleting ? { pendingSet = $0 } : nil,
+            // Offered when not removing sets, so the minus controls are not crowded; the shared image
+            // is rendered without it.
+            onExplainRecords: isEditing ? nil : { showRecordWorking(receipt, line: $0) }
           )
           .confirmationDialog(
             "Delete this set?",
@@ -239,6 +244,25 @@ struct WorkoutReceiptScreen: View {
         }
       }
     }
+    // On the scroll reader, a different anchor from the naming sheet and the editor, so the three
+    // can never be asked to present from one view.
+    .sheet(item: $working) { presentation in
+      WorkedFromSheet(account: presentation.account)
+        .hardsetSheet()
+    }
+  }
+
+  // MARK: - Records
+
+  /// Opens the working behind the records on one set, or on the whole workout when `line` is `nil`.
+  /// The account is derived from the records the detector already attached to the receipt's lines,
+  /// with the machine step each was decided with, so it explains the trophies on screen.
+  private func showRecordWorking(_ receipt: WorkoutReceipt, line: WorkoutReceipt.Line?) {
+    guard
+      let account = RecordWorking.receiptAccount(
+        receipt: receipt, line: line, format: WorkedFromFormat(unit: unit))
+    else { return }
+    working = WorkedFromPresentation(account)
   }
 
   // MARK: - Save as workout

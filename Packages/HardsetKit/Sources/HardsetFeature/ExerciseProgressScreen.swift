@@ -69,7 +69,8 @@ public struct ExerciseProgressScreen: View {
               estimatesOneRepMax: history.estimatesOneRepMax,
               assumesAddedLoad: history.assumesAddedLoad,
               onExplain: { presented = .methodology },
-              onShowEstimateWorking: { showEstimateWorking($0) }
+              onShowEstimateWorking: { showEstimateWorking($0) },
+              onShowRecordWorking: { showRecordWorking() }
             )
             // Imported history is a line of its own, never joined to a machine's. Said under the
             // chart whenever one of its lines is imported, so the legend's label is not the only hint.
@@ -137,6 +138,20 @@ public struct ExerciseProgressScreen: View {
         assumesAddedLoad: history.assumesAddedLoad, label: history.label(for:))
     else { return }
     presented = .working(WorkedFromPresentation(working.account(format: WorkedFromFormat(unit: unit))))
+  }
+
+  /// Opens the working behind the record stars: the set that set each, what it beat, by how much
+  /// and the rule. Derived from the replay the stars themselves come from, with each machine's own
+  /// load step, when it is asked for.
+  private func showRecordWorking() {
+    guard let history = snapshot.value,
+      let account = RecordWorking.chartAccount(
+        keys: history.series.map(\.key), samples: history.samples,
+        estimatesOneRepMax: history.estimatesOneRepMax,
+        incrementKg: history.incrementKg(for:), label: history.label(for:),
+        format: WorkedFromFormat(unit: unit))
+    else { return }
+    presented = .working(WorkedFromPresentation(account))
   }
 
   private func load() async {

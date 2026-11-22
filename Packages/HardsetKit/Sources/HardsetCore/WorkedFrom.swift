@@ -102,10 +102,13 @@ public struct WorkedFromAccount: Hashable, Sendable {
     public let detail: String
     /// The whole line as a sentence, for VoiceOver.
     public let spoken: String
+    /// The words that say where the line stands, when the surface has better ones than the shared
+    /// "Produced the figure", "Counted" and "Left out": a record's set "Set the record".
+    public let standingWord: String?
 
     public init(
       id: String, standing: Standing, headline: String, context: String? = nil,
-      detail: String, spoken: String
+      detail: String, spoken: String, standingWord: String? = nil
     ) {
       self.id = id
       self.standing = standing
@@ -113,6 +116,7 @@ public struct WorkedFromAccount: Hashable, Sendable {
       self.context = context
       self.detail = detail
       self.spoken = spoken
+      self.standingWord = standingWord
     }
   }
 

@@ -253,6 +253,36 @@ struct ProgressionStoreTests {
     }
   }
 
+  /// The star on the chart and the account behind it come from one replay, with the machine's own
+  /// step, so the sessions the account explains are the sessions carrying a star.
+  @Test("The account behind the record stars explains exactly the starred sessions, with the machine's step")
+  func recordAccountMatchesTheStars() async throws {
+    let (database, logger, progression, exercise, gym) = try fixture()
+    let stack = MachineID()
+    try await database.write { db in
+      try Machine.insert { Machine.Draft(id: stack.rawValue, gymID: gym.rawValue, name: "Stack", stackIncrementKg: 5) }.execute(db)
+    }
+    try session(logger, exercise, stack, sets: [(100, 8)], at: now.addingTimeInterval(-21 * 86_400))
+    try session(logger, exercise, stack, sets: [(106, 8)], at: now.addingTimeInterval(-14 * 86_400))
+    try session(logger, exercise, stack, sets: [(106, 8)], at: now.addingTimeInterval(-7 * 86_400))
+    try session(logger, exercise, stack, sets: [(115, 8)], at: now.addingTimeInterval(-86_400))
+
+    for history in [try progression.history(for: exercise), try await progression.loadHistory(for: exercise)] {
+      let key = try #require(history.series.first?.key)
+      #expect(history.incrementKg(for: key) == 5)
+      let starred = try #require(history.recordSessionIDs[key])
+      #expect(starred.count == 2)
+
+      let working = RecordWorking.derive(
+        keys: history.series.map(\.key), samples: history.samples,
+        estimatesOneRepMax: history.estimatesOneRepMax,
+        incrementKg: history.incrementKg(for:), label: history.label(for:))
+      #expect(working.groups.count == starred.count)
+      #expect(working.groups.allSatisfy { $0.equipmentLabel == "Stack" })
+      #expect(working.groups.flatMap(\.entries).allSatisfy { $0.incrementKg == 5 })
+    }
+  }
+
   @Test("Free-weight work is a series labelled as such")
   func freeWeight() throws {
     let (_, logger, progression, exercise, _) = try fixture(modality: "barbell")

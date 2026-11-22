@@ -171,7 +171,7 @@ public struct WorkedFromSheet: View {
         if !dynamicTypeSize.isAccessibilitySize {
           Spacer(minLength: Tokens.Spacing.regular)
         }
-        Text(Self.word(for: line.standing))
+        Text(line.standingWord ?? Self.word(for: line.standing))
           .font(Tokens.Text.provenance)
           .foregroundStyle(Tokens.Color.chalkDim)
       }

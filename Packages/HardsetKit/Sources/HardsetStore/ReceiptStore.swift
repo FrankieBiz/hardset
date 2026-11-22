@@ -61,7 +61,8 @@ public nonisolated struct ReceiptStore: Sendable {
             ? .unrecorded
             : WorkoutReceipt.Equipment(machineName: machineName, modality: modalities[set.exerciseID] ?? nil),
           weightKg: set.weightKg, reps: set.reps, isWarmup: set.isWarmup, records: records, isImported: imported,
-          loadAssumption: (modalities[set.exerciseID] ?? nil) == nil ? ExerciseModality.unknownLoadAssumption : nil))
+          loadAssumption: (modalities[set.exerciseID] ?? nil) == nil ? ExerciseModality.unknownLoadAssumption : nil,
+          incrementKg: machine?.stackIncrementKg))
         if !set.isWarmup {
           history[key, default: []].append(.init(weightKg: set.weightKg, reps: set.reps, completedAt: set.completedAt))
         }

@@ -76,6 +76,54 @@
       ).account(muscleName: "Chest", windowLabel: "Last 7 days, 14 Nov to now", format: format)
     }
 
+    /// Two sessions that each set records on one machine, with the machine's own 5 kg step.
+    static func chartRecordAccount() -> WorkedFromAccount {
+      let exercise = ExerciseID()
+      let hammer = MachineID()
+      let key = ProgressionKey(exerciseID: exercise, machineID: hammer)
+      let start = Date(timeIntervalSince1970: 1_700_000_000)
+      func set(_ kg: Double, _ reps: Int, day: Int) -> ProgressionSample {
+        ProgressionSample(
+          sessionID: SessionID(), machineID: hammer, weightKg: kg, reps: reps,
+          completedAt: start.addingTimeInterval(Double(day) * 86_400))
+      }
+      return RecordWorking.chartAccount(
+        keys: [key], samples: [set(100, 5, day: 0), set(110, 5, day: 7), set(110, 8, day: 14)],
+        estimatesOneRepMax: true, incrementKg: { _ in 5 }, label: { _ in "Hammer Strength" },
+        format: format)!
+    }
+
+    /// A receipt with a record of each of the four kinds, so every sentence the account can say is
+    /// captured once.
+    static func receiptRecordAccount() -> WorkedFromAccount {
+      func line(
+        _ name: String, _ kg: Double, _ reps: Int, _ equipment: WorkoutReceipt.Equipment,
+        _ records: [PersonalRecord]
+      ) -> WorkoutReceipt.Line {
+        WorkoutReceipt.Line(
+          id: SetID(), exerciseID: nil, exerciseName: name, equipment: equipment, weightKg: kg,
+          reps: reps, isWarmup: false, records: records, incrementKg: 5)
+      }
+      let receipt = WorkoutReceipt(
+        id: SessionID(), title: "Push day", startedAt: Date(timeIntervalSince1970: 1_700_000_000),
+        finishedAt: Date(timeIntervalSince1970: 1_700_003_600),
+        lines: [
+          line(
+            "Chest press", 105, 5, .machine("Hammer Strength"),
+            [PersonalRecord(kind: .heaviestLoad, weightKg: 105, reps: 5, previousWeightKg: 100)]),
+          line(
+            "Chest press", 100, 9, .machine("Hammer Strength"),
+            [PersonalRecord(kind: .repsAtLoad, weightKg: 100, reps: 9, previousWeightKg: 100, previousReps: 8)]),
+          line(
+            "Row", 105, 8, .unrecorded,
+            [PersonalRecord(kind: .loadAtReps, weightKg: 105, reps: 8, previousWeightKg: 100, previousReps: 8)]),
+          line(
+            "Back squat", 100, 8, .freeWeight,
+            [PersonalRecord(kind: .estimatedOneRepMax, weightKg: 100, reps: 8, previousWeightKg: 116.7)]),
+        ])
+      return RecordWorking.receiptAccount(receipt: receipt, format: format)!
+    }
+
     private static func sheet(_ account: WorkedFromAccount) -> some View {
       WorkedFromSheet(account: account)
         .tint(Tokens.Color.plateBlue)
@@ -101,6 +149,20 @@
       }
       try await Snapshot.capture("kit-worked-from-muscle-light", size: Self.tall, style: .light) {
         Self.sheet(Self.muscleAccount())
+      }
+    }
+
+    @Test func records() async throws {
+      try await Snapshot.capture("kit-worked-from-records-chart-dark", size: Self.tall) {
+        Self.sheet(Self.chartRecordAccount())
+      }
+      try await Snapshot.capture("kit-worked-from-records-receipt-dark", size: Self.accessibility) {
+        Self.sheet(Self.receiptRecordAccount())
+      }
+      try await Snapshot.capture(
+        "kit-worked-from-records-receipt-light", size: Self.accessibility, style: .light
+      ) {
+        Self.sheet(Self.receiptRecordAccount())
       }
     }
 
