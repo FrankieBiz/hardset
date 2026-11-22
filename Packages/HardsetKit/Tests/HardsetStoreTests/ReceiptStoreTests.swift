@@ -48,6 +48,41 @@ struct ReceiptStoreTests {
     #expect(receipt.text(unit: .kilograms).contains("not independently verified"))
   }
 
+  /// The receipt's account of a record states the margin the detector applied, so the line carries
+  /// the machine's own step, and `nil` where there is none and the detector assumed one 5 lb plate.
+  @Test("A receipt line carries the machine step its record was decided with, and the account states it")
+  func recordAccountStatesTheMachineStep() async throws {
+    let db = try DatabaseQueue()
+    try HardsetMigrations.migrator().migrate(db)
+    let exercise = ExerciseID(), gym = UUID(), stack = MachineID()
+    let now = Date(timeIntervalSince1970: 10000)
+    let old = SessionID(), current = SessionID()
+    try await db.write { db in
+      try Exercise.insert { Exercise.Draft(id: exercise.rawValue, name: "Press") }.execute(db)
+      try Gym.insert { Gym.Draft(id: gym, name: "Gym") }.execute(db)
+      try Machine.insert { Machine.Draft(id: stack.rawValue, gymID: gym, name: "Sled A", stackIncrementKg: 5) }.execute(db)
+      try Session.insert { Session.Draft(id: old.rawValue, startedAt: now.addingTimeInterval(-5000), finishedAt: now.addingTimeInterval(-1000)) }.execute(db)
+      try Session.insert { Session.Draft(id: current.rawValue, startedAt: now, finishedAt: now.addingTimeInterval(600)) }.execute(db)
+      try LoggedSet.insert {
+        LoggedSet.Draft(id: UUID(), sessionID: old.rawValue, exerciseID: exercise.rawValue, machineID: stack.rawValue,
+          weightKg: 100, reps: 8, completedAt: now.addingTimeInterval(-4000))
+      }.execute(db)
+      // 106 beats 100 by 6, which clears this machine's 5 kg step, and by more than 2.5%.
+      try LoggedSet.insert {
+        LoggedSet.Draft(id: UUID(), sessionID: current.rawValue, exerciseID: exercise.rawValue, machineID: stack.rawValue,
+          weightKg: 106, reps: 8, completedAt: now.addingTimeInterval(60))
+      }.execute(db)
+    }
+    let receipt = try await ReceiptStore(database: db).load(current)
+    let line = try #require(receipt.lines.first)
+    #expect(line.incrementKg == 5)
+    let format = WorkedFromFormat(unit: .kilograms, locale: Locale(identifier: "en_US"), timeZone: TimeZone(identifier: "UTC")!)
+    let account = try #require(RecordWorking.receiptAccount(receipt: receipt, line: line, format: format))
+    let heaviest = try #require(account.sections.first?.lines.first { $0.headline == "Heaviest weight" })
+    #expect(heaviest.detail.contains("needs at least 5 kg more"))
+    #expect(heaviest.detail.hasPrefix("Beat your previous heaviest weight, 100 kg, by 6 kg (+6%)."))
+  }
+
   @Test("Imported equipment remains unevaluated in a shareable receipt")
   func imported() async throws {
     let db = try DatabaseQueue()

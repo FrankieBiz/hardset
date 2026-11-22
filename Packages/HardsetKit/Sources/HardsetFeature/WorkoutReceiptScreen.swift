@@ -78,6 +78,8 @@ struct WorkoutReceiptScreen: View {
   @State private var pendingEditor: SavedWorkoutDraft?
   @State private var editor: SavedWorkoutDraft?
   @State private var didSaveWorkout = false
+  /// The working behind a record the lifter asked about, while its sheet is up.
+  @State private var working: WorkedFromPresentation?
   @Environment(\.syncStatus) private var syncStatus
   @Environment(\.displayScale) private var displayScale
   @Environment(\.dismiss) private var dismiss
@@ -209,8 +211,18 @@ struct WorkoutReceiptScreen: View {
           WorkoutReceiptView(
             receipt: receipt, unit: unit,
             onDeleteLine: editing == .removing && !isDeleting ? { pendingSet = $0 } : nil,
-            onCorrectLine: editing == .correcting && !isDeleting ? { beginCorrecting($0) } : nil
+            onCorrectLine: editing == .correcting && !isDeleting ? { beginCorrecting($0) } : nil,
+            // Offered while no correction or removal is under way, so the pencil and minus controls
+            // are not crowded; the shared image is rendered without it.
+            onExplainRecords: editing == nil ? { showRecordWorking(line: $0) } : nil
           )
+          // On the receipt itself: the stack carries the editor's sheet, the group the naming sheet
+          // and the scroll reader the correction sheet, and a second sheet on one anchor never
+          // presents.
+          .sheet(item: $working) { presentation in
+            WorkedFromSheet(account: presentation.account)
+              .hardsetSheet()
+          }
           .confirmationDialog(
             "Delete this set?",
             isPresented: Binding(get: { pendingSet != nil }, set: { if !$0 { pendingSet = nil } }),
@@ -339,6 +351,29 @@ struct WorkoutReceiptScreen: View {
   /// "Sled A · Warm-up": where the set was done and what kind of set it was, under the movement.
   static func correctionDetail(_ line: WorkoutReceipt.Line) -> String {
     [line.equipmentLabel, line.isWarmup ? "Warm-up" : nil].compactMap { $0 }.joined(separator: " · ")
+  }
+
+  // MARK: - Records
+
+  /// Opens the working behind the records on one set, or on the whole workout when `line` is `nil`.
+  ///
+  /// Derived from the receipt on screen as it is now, found again by id, and never from a copy the
+  /// control was drawn with. A correction rewrites a set in place and the screen re-reads, so the
+  /// records here are the detector's answer on the corrected figures; a set that is no longer in the
+  /// receipt, or no longer has a record, opens nothing. The account states the machine step each
+  /// record was decided with, so it explains the trophies on screen.
+  private func showRecordWorking(line: WorkoutReceipt.Line?) {
+    guard let receipt = snapshot.value else { return }
+    var current: WorkoutReceipt.Line?
+    if let line {
+      guard let found = receipt.lines.first(where: { $0.id == line.id }) else { return }
+      current = found
+    }
+    guard
+      let account = RecordWorking.receiptAccount(
+        receipt: receipt, line: current, format: WorkedFromFormat(unit: unit))
+    else { return }
+    working = WorkedFromPresentation(account)
   }
 
   // MARK: - Save as workout

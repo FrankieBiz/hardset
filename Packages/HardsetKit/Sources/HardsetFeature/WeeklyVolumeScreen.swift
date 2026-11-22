@@ -10,11 +10,14 @@ private nonisolated enum VolumeSheet: Identifiable {
   case map
   /// How sets are counted.
   case methodology
+  /// The working behind one muscle's count.
+  case working(WorkedFromPresentation)
 
   var id: String {
     switch self {
     case .map: "map"
     case .methodology: "methodology"
+    case .working(let presentation): "working-\(presentation.id.uuidString)"
     }
   }
 }
@@ -36,6 +39,9 @@ public struct WeeklyVolumeScreen: View {
   @State private var snapshot = SnapshotLoader<VolumeWindow>()
   /// The sheet that is up, or `nil`. One value for both, so the screen holds one presentation.
   @State private var presented: VolumeSheet?
+  /// The working a lifter opened from inside the deep muscle map. The map is itself a sheet, so
+  /// this is presented over it, from its own stack, and closing it returns to the map.
+  @State private var mapWorking: WorkedFromPresentation?
   /// How many whole weeks before now the window ends. Zero is the last seven days.
   @State private var weeksBack = 0
   /// Bumped when the app returns to the foreground, so the rolling window is recomputed from now.
@@ -79,7 +85,8 @@ public struct WeeklyVolumeScreen: View {
           period: window.period,
           onShowSettings: onShowSettings,
           onEarlier: weeksBack < Self.maximumWeeksBack ? { weeksBack += 1 } : nil,
-          onLater: weeksBack > 0 ? { weeksBack -= 1 } : nil
+          onLater: weeksBack > 0 ? { weeksBack -= 1 } : nil,
+          onShowWorking: { presented = .working(workingPresentation(for: $0, in: window)) }
         )
       } else if snapshot.loadFailed {
         // Says what is wrong and what is not. Logged sets are safe either way, and saying so is
@@ -120,6 +127,9 @@ public struct WeeklyVolumeScreen: View {
       switch sheet {
       case .map: mapSheet
       case .methodology: methodologySheet
+      case .working(let presentation):
+        WorkedFromSheet(account: presentation.account)
+          .hardsetSheet()
       }
     }
     // Keyed on the window, the foreground token and the data revision, so stepping, returning or
@@ -145,7 +155,9 @@ public struct WeeklyVolumeScreen: View {
           VStack(alignment: .leading, spacing: Tokens.Spacing.regular) {
             // States why the map is open when it was not bought, such as a development build.
             LifetimeDevelopmentNote(access: lifetime).padding(.horizontal, Tokens.Spacing.loose)
-            MuscleHeatmapView(report: window.report, windowLabel: window.description)
+            MuscleHeatmapView(
+              report: window.report, windowLabel: window.description,
+              onShowWorking: { mapWorking = workingPresentation(for: $0, in: window) })
           }
         } else {
           LifetimePurchaseSection(access: lifetime).padding(Tokens.Spacing.loose)
@@ -155,6 +167,10 @@ public struct WeeklyVolumeScreen: View {
       .hardsetNavigationTitle("Deep muscle map")
       .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { presented = nil } } }
       .task { await lifetime.load() }
+      .sheet(item: $mapWorking) { presentation in
+        WorkedFromSheet(account: presentation.account)
+          .hardsetSheet()
+      }
     }
     .hardsetSheet()
   }
@@ -164,6 +180,19 @@ public struct WeeklyVolumeScreen: View {
     // arithmetic, and the same sheet Settings opens, so the two cannot disagree.
     MethodologySheet.setCounting()
       .hardsetSheet()
+  }
+
+  /// The working behind a muscle's count in the window on screen, derived from the sets and
+  /// attribution that window's report was counted from, by the rule the report counts with.
+  private func workingPresentation(for muscle: Muscle, in window: VolumeWindow) -> WorkedFromPresentation {
+    let working = MuscleCountWorking.derive(
+      muscle: muscle, sets: window.reading.sets, attribution: window.reading.attribution,
+      imported: window.reading.importedMovements, name: window.reading.name(for:))
+    return WorkedFromPresentation(
+      working.account(
+        muscleName: ExercisePickerView.displayName(MuscleKey(muscle)),
+        // A count holds no load, so the unit is never read; only the locale is.
+        windowLabel: window.description, format: WorkedFromFormat(unit: .kilograms)))
   }
 
   private func header(subtitle: String) -> some View {
@@ -179,8 +208,8 @@ public struct WeeklyVolumeScreen: View {
     // Whole local days, so the dates in the heading are exactly the days counted.
     let range = VolumeWindowRange(endingAt: now(), weeksBack: weeksBack)
     await snapshot.load {
-      let report = try await store.loadReport(in: range)
-      return VolumeWindow(report: report, range: range)
+      let reading = try await store.loadWindow(in: range)
+      return VolumeWindow(reading: reading, range: range)
     }
   }
 }
@@ -188,8 +217,11 @@ public struct WeeklyVolumeScreen: View {
 /// One read: the report and the window it covers, kept together so the heading always names the
 /// window whose numbers are on screen, even while the next one is being read.
 private nonisolated struct VolumeWindow: Sendable {
-  let report: MuscleVolumeReport
+  /// The report and the sets and attribution it was counted from, read together.
+  let reading: VolumeWindowReading
   let range: VolumeWindowRange
+
+  var report: MuscleVolumeReport { reading.report }
 
   /// "Last 7 days, 3 Nov to now", or "7 days, 27 Oct to 2 Nov" for an earlier window. Both name
   /// days counted in full, and adjacent windows never name the same day.

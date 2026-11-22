@@ -92,6 +92,15 @@ public enum PersonalRecordDetector {
   /// when the display unit does.
   public static let defaultIncrementKg = WeightUnit.pounds.toKilograms(WeightUnit.pounds.plateIncrement)
 
+  /// The smallest gain over `previousKg` that counts as a new load record: the greater of
+  /// `relativeThreshold` of it and one plate step, the equipment's own or `defaultIncrementKg`.
+  ///
+  /// The detector decides with this and the "Worked from" account states it with this, so what a
+  /// lifter is told a record needed is the margin that was applied.
+  public static func requiredMarginKg(over previousKg: Double, increment: Double?) -> Double {
+    max(previousKg * relativeThreshold, increment ?? defaultIncrementKg)
+  }
+
   /// A completed set being tested.
   public struct Candidate: Sendable, Hashable {
     public let weightKg: Double
@@ -132,12 +141,11 @@ public enum PersonalRecordDetector {
     guard !history.isEmpty else { return [] }
 
     var records: [PersonalRecord] = []
-    let step = increment ?? defaultIncrementKg
 
     // Heaviest load ever lifted for at least one rep.
     var emittedHeaviestLoad = false
     if let heaviest = history.map(\.weightKg).max() {
-      let margin = max(heaviest * relativeThreshold, step)
+      let margin = requiredMarginKg(over: heaviest, increment: increment)
       // The tolerance lets a typed 165 lb equal 160 lb plus a 5 lb step, which differ in the
       // last floating-point bit, while sub-plate noise still falls far short.
       if candidate.weightKg + loadMatchingTolerance >= heaviest + margin {
@@ -175,7 +183,7 @@ public enum PersonalRecordDetector {
         $0.weightKg == $1.weightKg ? $0.reps < $1.reps : $0.weightKg < $1.weightKg
       })
     {
-      let margin = max(beaten.weightKg * relativeThreshold, step)
+      let margin = requiredMarginKg(over: beaten.weightKg, increment: increment)
       if candidate.weightKg + loadMatchingTolerance >= beaten.weightKg + margin {
         records.append(
           PersonalRecord(

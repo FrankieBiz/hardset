@@ -32,6 +32,9 @@ public struct VolumeReportView: View {
   private let onShowSettings: (() -> Void)?
   private let onEarlier: (() -> Void)?
   private let onLater: (() -> Void)?
+  /// Opens the working behind a muscle's count, from the figure on its row. `nil` where the screen
+  /// has no working to show, and the figure is then plain text.
+  private let onShowWorking: ((Muscle) -> Void)?
 
   public init(
     report: MuscleVolumeReport,
@@ -42,7 +45,8 @@ public struct VolumeReportView: View {
     period: String = "in the last 7 days",
     onShowSettings: (() -> Void)? = nil,
     onEarlier: (() -> Void)? = nil,
-    onLater: (() -> Void)? = nil
+    onLater: (() -> Void)? = nil,
+    onShowWorking: ((Muscle) -> Void)? = nil
   ) {
     self.report = report
     self.excludedFromGaps = excludedFromGaps
@@ -53,6 +57,7 @@ public struct VolumeReportView: View {
     self.onShowSettings = onShowSettings
     self.onEarlier = onEarlier
     self.onLater = onLater
+    self.onShowWorking = onShowWorking
   }
 
   public var body: some View {
@@ -197,6 +202,12 @@ public struct VolumeReportView: View {
           .font(Tokens.Text.caption)
           .foregroundStyle(Tokens.Color.chalkDim)
           .fixedSize(horizontal: false, vertical: true)
+        if onShowWorking != nil {
+          Text("Tap a count to see the sets it was worked from.")
+            .font(Tokens.Text.caption)
+            .foregroundStyle(Tokens.Color.chalkDim)
+            .fixedSize(horizontal: false, vertical: true)
+        }
       }
 
       VStack(alignment: .leading, spacing: Tokens.Spacing.loose) {
@@ -229,8 +240,12 @@ public struct VolumeReportView: View {
     let isCounted = row.muscle.tier == .counted
     // The "≥" is load-bearing, not decorative.
     let value = (report.isLowerBound ? "≥ " : "") + Self.format(row.sets)
+    let figureSpoken =
+      "\(report.isLowerBound ? "at least " : "")\(Self.format(row.sets)) sets"
+    // With a control on the figure the figure is read once, by the control; the name block then
+    // speaks only the name and what is not modelled.
     let spoken: String =
-      "\(name), \(report.isLowerBound ? "at least " : "")\(Self.format(row.sets)) sets"
+      (onShowWorking == nil ? "\(name), \(figureSpoken)" : name)
       + (isCounted ? ", counted, not modelled" : "")
 
     // The name, what is not modelled, and the figure are one spoken element, so the figure is read
@@ -247,10 +262,31 @@ public struct VolumeReportView: View {
     }
     .accessibilityElement(children: .combine)
     .accessibilityLabel(spoken)
-    let figure = Text(value)
+    let figureText = Text(value)
       .font(Tokens.Text.figure)
       .foregroundStyle(Tokens.Color.chalk)
-      .accessibilityHidden(true)
+    // A glyph beside the figure shows, without a gesture, that it opens the working behind it.
+    let figure = Group {
+      if let onShowWorking {
+        Button {
+          onShowWorking(row.muscle)
+        } label: {
+          HStack(alignment: .firstTextBaseline, spacing: Tokens.Spacing.snug) {
+            figureText
+            Image(systemName: WorkedFromSheet.glyph)
+              .font(Tokens.Text.caption)
+              .foregroundStyle(Tokens.Color.chalkDim)
+              .accessibilityHidden(true)
+          }
+        }
+        .buttonStyle(InlineControlStyle(alignment: .trailing))
+        // Begins with the figure the control shows, so a Voice Control user can say what they see.
+        .accessibilityLabel("\(figureSpoken), \(name)")
+        .accessibilityHint("Shows the sets this count was worked from")
+      } else {
+        figureText.accessibilityHidden(true)
+      }
+    }
     // Where this muscle's count sits on the published dose-response, as the engine states it:
     // moderate inside the studied range, low beyond it, and not evaluated for a muscle outside the
     // corpus. Never a level chosen here.

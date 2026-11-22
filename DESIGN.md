@@ -467,6 +467,26 @@ Selection rows, the unit switch and pickers stay silent.
   syncs, and for a screen that does not know), it is drawn outside the receipt view so the shared image
   never carries it, and Settings still holds the whole warning. The launch view hands the sync status
   down through the environment. It adds no token and no motion.
+- **Worked from** (`WorkedFromSheet`, `WorkedFromButton`, `WorkedFromAccount`): the one presentation behind
+  every number that can say how it was made. An estimated max (the figure in a chart legend row), a muscle's
+  count (the figure on a Volume row and on a map tile) and a record (the chart's star key, a receipt set's
+  record and the scorecard's record line) each open the same sheet, in the `MethodologySheet` family: the
+  figure in `readout` with how far to trust it and where it is from, the rule in `label`, then the sets that
+  fed it and what was left out, each a line of `figure` over `provenance`. A line's standing is carried by a
+  word and a symbol, a tick, a ring or a minus, and never by colour. Every set that did not count is a line
+  under "Left out" with its reason, so nothing is silently missing. The account is derived in Core from the
+  same inputs and through the same functions as the figure (`EstimateWorking`, `MuscleCountWorking`,
+  `RecordWorking`), so the sheet does no arithmetic and cannot say what the figure did not do. The control is
+  visible without a gesture: a glyph beside the figure, or a quiet "Worked from" button. It is never drawn on
+  the shared receipt image. VoiceOver hears the account as one sentence on the header and each line as one
+  sentence. Imported history keeps its split here as everywhere: an imported set is left out of a machine's
+  line as imported history, an imported series has a working of its own and says what its records were
+  compared with, and a movement a workout import created is marked as one on the lines that count it. Its
+  confidence is whatever the estimator gives, and the account states the ladder from the estimator itself,
+  so a formula's figure never reads higher than Moderate. A correction to a finished set shows in the
+  working as it shows in the figure: a receipt's records are derived from the receipt as it is read now,
+  found again by the set's id, and a chart's from the history as it is read now, so neither explains a
+  record or an estimate from the figures before the correction. It adds no token and no motion.
 - **Selection** (`SelectionRow`, `SelectionCardButtonStyle`, `SelectionIndicator`): selected choices
   take the plate blue ring and `plateBlueSurface`, and the trailing indicator swaps an empty ring
   for a filled check, so the choice is carried by shape as well as colour. A pressed selection

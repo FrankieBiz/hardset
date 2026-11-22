@@ -214,6 +214,75 @@ struct ProgressionStoreTests {
     #expect(history.series[0].points[0].heaviestLoadKg == 100)
   }
 
+  /// "Worked from" explains the sets the chart used. The history carries them, and the warm-ups the
+  /// analysers never see, so the account can list a warm-up as left out instead of leaving it out of
+  /// the account too.
+  @Test("History carries the sets it was built from and the warm-ups it left out")
+  func historyCarriesItsWorking() async throws {
+    let (database, logger, progression, exercise, gym) = try fixture()
+    let hammer = try machine(database, gym, "Hammer Strength")
+    let started = now.addingTimeInterval(-86_400)
+    let id = try logger.startSession(at: started)
+    let sets: [(Double, Int, Bool)] = [(60, 10, true), (100, 8, false), (100, 20, false)]
+    for (index, set) in sets.enumerated() {
+      _ = try logger.logSet(
+        sessionID: id, exerciseID: exercise, machineID: hammer,
+        draft: SetEntryDraft(weightKg: set.0, reps: set.1), setOrdinal: index,
+        isWarmup: set.2, at: started.addingTimeInterval(Double(index) * 60))
+    }
+    try logger.finishSession(id, at: started.addingTimeInterval(3600))
+
+    for history in [try progression.history(for: exercise), try await progression.loadHistory(for: exercise)] {
+      #expect(history.samples.map(\.reps) == [8, 20])
+      #expect(history.warmupSamples.map(\.weightKg) == [60])
+      #expect(history.warmupSamples.allSatisfy { !$0.isImported })
+
+      // The account built from what the history carries agrees with the point the chart draws.
+      let point = try #require(history.series.first?.points.first)
+      let working = try #require(
+        EstimateWorking.derive(
+          key: history.series[0].key, sessionID: point.sessionID, samples: history.samples,
+          warmups: history.warmupSamples, estimatesOneRepMax: history.estimatesOneRepMax,
+          assumesAddedLoad: history.assumesAddedLoad, label: history.label(for:)))
+      #expect(working.figureKg == point.bestEstimatedOneRepMaxKg)
+      #expect(
+        working.entries.map(\.standing) == [
+          .excluded(.warmup), .figure, .excluded(.aboveRepLimit(reps: 20)),
+        ])
+      #expect(working.seriesLabel == "Hammer Strength")
+    }
+  }
+
+  /// The star on the chart and the account behind it come from one replay, with the machine's own
+  /// step, so the sessions the account explains are the sessions carrying a star.
+  @Test("The account behind the record stars explains exactly the starred sessions, with the machine's step")
+  func recordAccountMatchesTheStars() async throws {
+    let (database, logger, progression, exercise, gym) = try fixture()
+    let stack = MachineID()
+    try await database.write { db in
+      try Machine.insert { Machine.Draft(id: stack.rawValue, gymID: gym.rawValue, name: "Stack", stackIncrementKg: 5) }.execute(db)
+    }
+    try session(logger, exercise, stack, sets: [(100, 8)], at: now.addingTimeInterval(-21 * 86_400))
+    try session(logger, exercise, stack, sets: [(106, 8)], at: now.addingTimeInterval(-14 * 86_400))
+    try session(logger, exercise, stack, sets: [(106, 8)], at: now.addingTimeInterval(-7 * 86_400))
+    try session(logger, exercise, stack, sets: [(115, 8)], at: now.addingTimeInterval(-86_400))
+
+    for history in [try progression.history(for: exercise), try await progression.loadHistory(for: exercise)] {
+      let key = try #require(history.series.first?.key)
+      #expect(history.incrementKg(for: key) == 5)
+      let starred = try #require(history.recordSessionIDs[key])
+      #expect(starred.count == 2)
+
+      let working = RecordWorking.derive(
+        keys: history.series.map(\.key), samples: history.samples,
+        estimatesOneRepMax: history.estimatesOneRepMax,
+        incrementKg: history.incrementKg(for:), label: history.label(for:))
+      #expect(working.groups.count == starred.count)
+      #expect(working.groups.allSatisfy { $0.equipmentLabel == "Stack" })
+      #expect(working.groups.flatMap(\.entries).allSatisfy { $0.incrementKg == 5 })
+    }
+  }
+
   @Test("Free-weight work is a series labelled as such")
   func freeWeight() throws {
     let (_, logger, progression, exercise, _) = try fixture(modality: "barbell")
