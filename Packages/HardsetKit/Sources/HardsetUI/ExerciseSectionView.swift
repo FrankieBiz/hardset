@@ -247,13 +247,77 @@ public struct ExerciseSectionView: View {
   }
 
   private var hasMovementMenu: Bool {
-    onMoveUp != nil || onMoveDown != nil || onRemove != nil
+    onMoveUp != nil || onMoveDown != nil || onRemove != nil || correctableSlots != nil
   }
 
-  /// Order and removal: things done to the movement as a whole, rarely, so they sit in one menu
-  /// in the card's corner rather than as buttons repeated on every card.
+  /// The saved rows a lifter can correct from the card's menu, or `nil` when the menu has no such
+  /// entry: the host cannot write a correction, or nothing on the card is saved yet. The entry is
+  /// another way to the same correction a tap on a saved figure opens, not a second mechanism: it
+  /// calls `onEditSet`, which the session answers by putting its keypad on that set's weight.
+  private var correctableSlots: [SetSlot]? {
+    guard allowsCorrection, onEditSet != nil else { return nil }
+    let saved = state.slots.filter(\.isLogged)
+    return saved.isEmpty ? nil : saved
+  }
+
+  /// "Correct set", for the lifter who has a wrong figure on screen and does not know a saved
+  /// number can be tapped. With one saved set it is a single entry; with several it opens a list
+  /// that names each set by its figures, since the figures are what the lifter is looking for.
+  @ViewBuilder private func correctSetEntry(
+    _ saved: [SetSlot], edit: @escaping (SetSlot) -> Void
+  ) -> some View {
+    if saved.count == 1, let only = saved.first {
+      Button {
+        edit(only)
+      } label: {
+        Label("Correct set", systemImage: "pencil")
+      }
+      .accessibilityLabel("Correct set. \(correctionTitle(for: only))")
+    } else {
+      Menu {
+        ForEach(saved) { slot in
+          Button {
+            edit(slot)
+          } label: {
+            Text(correctionTitle(for: slot))
+          }
+        }
+      } label: {
+        Label("Correct set", systemImage: "pencil")
+      }
+    }
+  }
+
+  /// "Set 2 · 100 kg × 10", or "Warm-up · 40 kg × 8": the set's name and the figures it holds.
+  /// Warm-ups are numbered only when the card has more than one.
+  private func correctionTitle(for slot: SetSlot) -> String {
+    let name: String
+    if slot.isWarmup {
+      let warmups = state.slots.filter(\.isWarmup)
+      let place = warmups.firstIndex { $0.id == slot.id }.map { $0 + 1 }
+      name = warmups.count > 1 ? "Warm-up \(place ?? 1)" : "Warm-up"
+    } else {
+      name = "Set \(ordinal(of: slot) + 1)"
+    }
+    var figures: [String] = []
+    if let weight = slot.draft.weightKg {
+      figures.append("\(LoadFigure.text(unit.fromKilograms(weight))) \(unit.abbreviation)")
+    }
+    if let reps = slot.draft.reps { figures.append("× \(reps)") }
+    return ([name] + (figures.isEmpty ? [] : [figures.joined(separator: " ")]))
+      .joined(separator: " · ")
+  }
+
+  /// Order, removal and correction: things done to the movement as a whole or to one of its saved
+  /// sets, rarely, so they sit in one menu in the card's corner rather than as buttons repeated on
+  /// every card. This menu is the visible way to a correction; the long press and a tap on a saved
+  /// figure are the quicker ones.
   private var movementMenu: some View {
     HeaderIconMenu(accessibilityLabel: "\(state.exerciseName) options", style: .bare) {
+      if let saved = correctableSlots, let onEditSet {
+        correctSetEntry(saved, edit: onEditSet)
+        Divider()
+      }
       Button {
         onMoveUp?()
       } label: {

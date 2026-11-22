@@ -51,6 +51,9 @@ public struct SessionView: View {
   private let onMoveExercise: ((UUID, Int) -> Void)?
   private let onDismissError: (() -> Void)?
   private let onDismissRecords: (() -> Void)?
+  private let showsCorrectionHint: Bool
+  private let onCorrectionHintShown: (() -> Void)?
+  private let onDismissCorrectionHint: (() -> Void)?
   private let onFinish: () -> Void
   private let onFinishAt: ((Date) -> Void)?
   private let onDiscard: (() -> Void)?
@@ -121,6 +124,15 @@ public struct SessionView: View {
   /// - Parameter onCorrectSet: Writes a corrected weight and reps to a saved set, and is `true` when
   ///   it was saved. With it, a saved figure opens the keypad, and what is typed is written when the
   ///   keypad leaves that figure; without it saved figures are plain text.
+  /// - Parameter showsCorrectionHint: Offers the one-time line saying a saved weight can be tapped to
+  ///   correct it. Drawn only once a set is saved, only where `onCorrectSet` can write a correction,
+  ///   and never over the keypad, an error or a new record; the host decides whether it is still
+  ///   owed. See `onCorrectionHintShown`.
+  /// - Parameter onCorrectionHintShown: Called each time the hint is drawn, so the host can note it
+  ///   as seen. The host should keep `showsCorrectionHint` true for the rest of this screen's life,
+  ///   so the line does not vanish the moment it is noted.
+  /// - Parameter onDismissCorrectionHint: Called when the lifter dismisses the hint, and when they
+  ///   open a saved figure to correct it, which is the thing the hint was about.
   /// - Parameter onFinishAt: Finishes at a given instant; offered with the last set's time when
   ///   the workout is stale.
   /// - Parameter onDiscard: Deletes the workout. Always behind a confirmation.
@@ -159,6 +171,9 @@ public struct SessionView: View {
     onMoveExercise: ((UUID, Int) -> Void)? = nil,
     onDismissError: (() -> Void)? = nil,
     onDismissRecords: (() -> Void)? = nil,
+    showsCorrectionHint: Bool = false,
+    onCorrectionHintShown: (() -> Void)? = nil,
+    onDismissCorrectionHint: (() -> Void)? = nil,
     onFinish: @escaping () -> Void = {},
     onFinishAt: ((Date) -> Void)? = nil,
     onDiscard: (() -> Void)? = nil
@@ -197,6 +212,9 @@ public struct SessionView: View {
     self.onMoveExercise = onMoveExercise
     self.onDismissError = onDismissError
     self.onDismissRecords = onDismissRecords
+    self.showsCorrectionHint = showsCorrectionHint
+    self.onCorrectionHintShown = onCorrectionHintShown
+    self.onDismissCorrectionHint = onDismissCorrectionHint
     self.onFinish = onFinish
     self.onFinishAt = onFinishAt
     self.onDiscard = onDiscard
@@ -669,6 +687,11 @@ public struct SessionView: View {
             .padding(.horizontal, Tokens.Spacing.regular)
             .hardsetArrival()
         }
+        if isShowingCorrectionHint {
+          correctionHint
+            .padding(.horizontal, Tokens.Spacing.regular)
+            .hardsetArrival()
+        }
         RestBarView(
           state: restState,
           metadata: restMetadata,
@@ -690,7 +713,7 @@ public struct SessionView: View {
         )
         .tourTarget(.restBar)
       }
-      .padding(.bottom, isRestIdle && hasFeedback ? Tokens.Spacing.snug : 0)
+      .padding(.bottom, isRestIdle && (hasFeedback || isShowingCorrectionHint) ? Tokens.Spacing.snug : 0)
     }
   }
 
@@ -733,6 +756,44 @@ public struct SessionView: View {
   }
 
   private var hasFeedback: Bool { errorMessage != nil || !records.isEmpty }
+
+  /// The correction hint is owed, and this is a moment to draw it: something is saved to correct,
+  /// the screen can write a correction, and nothing more urgent is on the bottom edge. A failure or
+  /// a new record has the line to itself, so the hint waits and is drawn, and counted as seen, only
+  /// when it is actually in front of the lifter. The tour's staged phone never draws it, because the
+  /// lifter has not started training there.
+  private var isShowingCorrectionHint: Bool {
+    showsCorrectionHint && onCorrectSet != nil && !staging.presentsSheetsInline && !hasFeedback
+      && exercises.contains { $0.loggedCount > 0 }
+  }
+
+  /// One quiet line in `provenance` and `chalkDim`, with an inline "Got it" to put it away. It is
+  /// not a modal and not a banner, takes no colour and no motion of its own beyond the standard
+  /// insertion reveal, and wraps at any Dynamic Type size, where the dismissal drops below it.
+  private var correctionHint: some View {
+    let layout: AnyLayout =
+      dynamicTypeSize.isAccessibilitySize
+      ? AnyLayout(VStackLayout(alignment: .leading, spacing: Tokens.Spacing.tight))
+      : AnyLayout(HStackLayout(alignment: .firstTextBaseline, spacing: Tokens.Spacing.regular))
+    return layout {
+      Text("Tap a saved weight or reps to correct it.")
+        .hardsetText(.provenance)
+        .foregroundStyle(Tokens.Color.chalkDim)
+        .fixedSize(horizontal: false, vertical: true)
+        .frame(maxWidth: .infinity, alignment: .leading)
+      if let onDismissCorrectionHint {
+        Button(action: onDismissCorrectionHint) {
+          Text("Got it")
+            .font(Tokens.Text.provenance)
+            .foregroundStyle(Tokens.Color.chalk)
+        }
+        .buttonStyle(InlineControlStyle(minHeight: Tokens.minimumTapTarget, alignment: .trailing))
+      }
+    }
+    // With the outer inset this lines the words up with the movement cards' own margin.
+    .padding(.horizontal, Tokens.Spacing.tight)
+    .onAppear { onCorrectionHintShown?() }
+  }
 
   private var isRestIdle: Bool {
     if case .idle = restState { return true }
@@ -1080,6 +1141,8 @@ public struct SessionView: View {
     guard let opened = slot(exerciseID: exerciseID, slotID: slotID) else { return }
     let isCorrection = opened.isLogged
     guard !isCorrection || onCorrectSet != nil else { return }
+    // Opening a saved figure is what the hint teaches, so there is nothing left to teach.
+    if isCorrection { onDismissCorrectionHint?() }
     let target = KeypadTarget(
       exerciseID: exerciseID, slotID: slotID, field: field, isCorrection: isCorrection)
     if keypad != target {

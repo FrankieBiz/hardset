@@ -527,6 +527,18 @@ Selection rows, the unit switch and pickers stay silent.
   starts no rest and claims no record. A finished workout's sets are never edited; its corrections
   are removals, in the receipt. "Edit set" in the long-press menu and for VoiceOver does the same
   thing as tapping the weight, and "Undo log" still takes a set back.
+  Nothing on a saved figure says it can be tapped, so two things say it in words. The movement's
+  options menu, the visible "…" in the card's corner, opens with "Correct set": one entry when a
+  single set is saved, a list naming each set by its figures ("Set 2 · 100 kg × 10") when several
+  are, and each puts the keypad on that set's weight exactly as a tap does. It is another way to
+  the same correction, not a second mechanism. And once, in a lifter's first workout, one quiet
+  line at the bottom edge says "Tap a saved weight or reps to correct it." in `provenance` and
+  `chalkDim` with an inline "Got it": not a modal, not a banner, no colour, the insertion-only
+  reveal on `Motion.reveal` (instant under Reduce Motion), wrapped and with the dismissal below it
+  at accessibility sizes. It is drawn only once a set is saved, only where a correction can be
+  written, never over the keypad, an error or a new record, and never in the tour's staged phone.
+  It is spent when it is drawn, not when it is dismissed (`HintPreferences`, a device preference),
+  and opening a saved figure to correct it dismisses it too.
 - **Set log control**: four states, never confused, each one SF Symbol of one weight and one size,
   about 30 pt inside the logger's whole 56 pt region: incomplete is an empty square in `controlEdge`
   (faint, and above the 3:1 floor for a graphic), ready is a checked square in `chalkDim`, next up is
