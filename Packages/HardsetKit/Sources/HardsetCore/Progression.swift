@@ -38,9 +38,9 @@ public struct ProgressionPoint: Hashable, Sendable, Identifiable {
   /// twenty-rep sets produces no estimate, and inventing one would be the ancestor's bug.
   public let bestEstimatedOneRepMaxKg: Double?
   public let workingSets: Int
-  /// How far the best estimate can be trusted, from the rep count of the set that produced it:
-  /// a single or two to six reps is high, seven to ten moderate, eleven or twelve low. `nil` when
-  /// there is no estimate, and when the point was built without saying (previews).
+  /// How far the best estimate can be trusted, from the set that produced it: a measured single is
+  /// high, an estimate of two to ten reps is moderate, eleven or twelve low. A formula is never
+  /// high. `nil` when there is no estimate, and when the point was built without saying (previews).
   public let bestEstimateCertainty: Certainty?
 
   public var id: SessionID { sessionID }
@@ -306,17 +306,19 @@ public enum ProgressionAnalyzer {
     title: "Load history",
     methodology: """
       Each point is your best work in one session on one specific machine: the heaviest load you \
-      moved, and where the rep counts allow it, the best estimated one-rep max. Sessions on \
-      different machines are drawn as separate lines and never merged, because the same number on \
+      moved, and where the rep counts allow it, the best estimated one-rep max, worked out from a \
+      single set with the Epley formula. Sessions on different machines are drawn as separate \
+      lines and never merged, because the same number on \
       different equipment is not the same effort. Sets with no machine recorded form their own line. \
       Imported history is labelled as imported with no machine recorded and stays separate from native history.
       """,
     citation: nil,
     validRange: """
       An estimated one-rep max is only shown for sets of twelve reps or fewer; above that no \
-      estimate is produced. Its certainty follows the reps behind it: a single or two to six reps \
-      is high, seven to ten moderate, eleven or twelve low. A change in load across a machine \
-      switch is a difference between machines, not a change in strength, and is labelled as such.
+      estimate is produced. Its certainty follows the set behind it: a single you lifted is high, \
+      because nothing is estimated; two to ten reps is at most moderate, because a formula only \
+      approximates; eleven or twelve reps is low. A change in load across a machine switch is a \
+      difference between machines, not a change in strength, and is labelled as such.
       """
   )
 }

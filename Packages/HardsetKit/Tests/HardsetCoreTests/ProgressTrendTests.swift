@@ -249,7 +249,8 @@ struct ProgressTrendTests {
   }
 
   @Test func estimatedMaxTrendCarriesTheCertaintyOfItsLatestEstimate() {
-    // Ten reps is moderate, five is high, twelve is low: certainty follows the reps behind it.
+    // A single is a measurement and so high; five and ten reps are a formula and so moderate;
+    // twelve is low: certainty follows the set behind the estimate, and a formula is never high.
     func certainty(reps: Int) -> Certainty? {
       ProgressTrendAnalyzer.trend(
         key: key(),
@@ -258,7 +259,8 @@ struct ProgressTrendTests {
       )?.certainty
     }
 
-    #expect(certainty(reps: 5) == .high)
+    #expect(certainty(reps: 1) == .high)
+    #expect(certainty(reps: 5) == .moderate)
     #expect(certainty(reps: 10) == .moderate)
     #expect(certainty(reps: 12) == .low)
   }
@@ -296,8 +298,8 @@ struct ProgressTrendTests {
   @Test("Equal estimates select the same supported baseline regardless of set order", arguments: [false, true])
   func equalEstimateCertaintyAgrees(reversed: Bool) throws {
     let low = s(day: 0, session: 0, kg: 40, reps: 12)
-    let high = s(day: 0, session: 0, kg: 48, reps: 5)
-    let prior = reversed ? [high, low] : [low, high]
+    let supported = s(day: 0, session: 0, kg: 48, reps: 5)
+    let prior = reversed ? [supported, low] : [low, supported]
     let current = s(day: 42, session: 1, kg: 72, reps: 5)
     let trend = try #require(ProgressTrendAnalyzer.trend(key: key(), samples: prior + [current],
       incrementKg: 2.5, estimatesOneRepMax: true))
@@ -306,7 +308,7 @@ struct ProgressTrendTests {
     }
     let card = WorkoutScorecard.make([ScorecardInput(key: key(), exerciseName: "Press",
       currentSets: [record(current)], previousSets: prior.map(record))])
-    #expect(trend.certainty == .high)
+    #expect(trend.certainty == .moderate)
     #expect(card.biggestGain?.certainty == trend.certainty)
   }
 

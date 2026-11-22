@@ -70,8 +70,9 @@ struct WorkoutScorecardTests {
   }
 
   @Test func anEstimatedGainCarriesTheWeakerCertaintyOfTheTwoEstimatesItCompares() {
-    // Five reps estimate with high certainty, ten with moderate. The gain is a ratio of two
-    // estimates, so it is only as sure as the weaker one, whichever session it came from.
+    // A single is measured and so high; five or ten reps are a formula and so moderate; twelve is
+    // low. The gain is a ratio of two estimates, so it is only as sure as the weaker one,
+    // whichever session it came from, and two formula estimates are never better than moderate.
     func gainCertainty(current: Int, previous: Int) -> Certainty? {
       let a = input(
         ProgressionKey(exerciseID: ExerciseID()), "A",
@@ -79,10 +80,13 @@ struct WorkoutScorecardTests {
       return WorkoutScorecard.make([a]).biggestGain?.certainty
     }
 
-    #expect(gainCertainty(current: 5, previous: 5) == .high)
+    #expect(gainCertainty(current: 1, previous: 1) == .high)
+    #expect(gainCertainty(current: 5, previous: 5) == .moderate)
+    #expect(gainCertainty(current: 1, previous: 5) == .moderate)
+    #expect(gainCertainty(current: 5, previous: 1) == .moderate)
     #expect(gainCertainty(current: 10, previous: 5) == .moderate)
-    #expect(gainCertainty(current: 5, previous: 10) == .moderate)
     #expect(gainCertainty(current: 12, previous: 5) == .low)
+    #expect(gainCertainty(current: 12, previous: 1) == .low)
   }
 
   @Test func aHeaviestLoadGainHasNoCertainty() {

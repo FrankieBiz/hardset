@@ -71,9 +71,9 @@
     /// At an accessibility size the page scrolls: the capture is tall enough to show all of it.
     @Test func accessibilitySize() async throws {
       try await Snapshot.capture(
-        "pitch-2-8-reps-dark-ax3", size: CGSize(width: 402, height: 1400),
+        "pitch-2-3-reps-dark-ax3", size: CGSize(width: 402, height: 1400),
         typeSize: .accessibility3
-      ) { Self.page(PitchEstimatePage(unit: .kilograms, initialReps: 8)) }
+      ) { Self.page(PitchEstimatePage(unit: .kilograms, initialReps: 3)) }
       try await Snapshot.capture(
         "pitch-1-ready-dark-ax3", size: CGSize(width: 402, height: 1400),
         typeSize: .accessibility3
