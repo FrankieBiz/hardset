@@ -203,12 +203,11 @@ public enum ProgressionAnalyzer {
   ) -> ProgressionPoint {
     let heaviest = samples.map(\.weightKg).max() ?? 0
     // Only estimable sets contribute. A session of high-rep work yields no estimate at all rather
-    // than an extrapolated one.
-    let estimable = estimatesOneRepMax ? samples : []
-    // Equal estimates keep the same better-supported claim as trends and receipt gains.
-    let best = StrengthMath.bestSupportedEstimate(estimable.map {
-      StrengthMath.estimatedOneRepMax(weightKg: $0.weightKg, reps: $0.reps)
-    })
+    // than an extrapolated one. Equal estimates keep the same better-supported claim as trends and
+    // receipt gains. The steps are `EstimateWorking`'s, so the "Worked from" account for this point
+    // is the calculation that made it and not a copy of it.
+    let best = EstimateWorking.best(
+      of: EstimateWorking.claims(for: samples, estimatesOneRepMax: estimatesOneRepMax))
     return ProgressionPoint(
       sessionID: sessionID,
       machineID: machineID,

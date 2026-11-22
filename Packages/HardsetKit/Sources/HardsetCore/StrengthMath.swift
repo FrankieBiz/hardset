@@ -19,6 +19,10 @@ public enum StrengthMath {
   /// Sanity ceiling. Above this the input is a data-entry error, not a lift.
   public static let implausibleWeightKg: Double = 1_000
 
+  /// The 30 in Epley's weight x (1 + reps / 30). Named so the working shown to a lifter states the
+  /// same constant the arithmetic applies, rather than a second copy of it.
+  public static let epleyRepsDivisor: Double = 30
+
   public static let measuredSource = EvidenceSource(
     id: "one-rep-max.measured",
     title: "Measured single",
@@ -67,7 +71,7 @@ public enum StrengthMath {
       return .unevaluated(source: epleySource)
     }
 
-    let estimate = weightKg * (1.0 + Double(reps) / 30.0)
+    let estimate = weightKg * (1.0 + Double(reps) / epleyRepsDivisor)
 
     // A formula is never High. Past the Moderate band, certainty keeps falling with the distance
     // from the low-rep region the equation was fitted on.

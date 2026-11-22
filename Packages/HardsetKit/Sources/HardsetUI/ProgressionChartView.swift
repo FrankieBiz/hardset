@@ -35,6 +35,9 @@ public struct ProgressionChartView: View {
   private let machineChanges: [MachineChange]
   private let unit: WeightUnit
   private let onExplain: (() -> Void)?
+  /// Opens the working behind a machine's latest estimated max, from the legend's figure. `nil`
+  /// where the screen has no working to show, such as a preview, and the figure is then plain text.
+  private let onShowEstimateWorking: ((ProgressionKey) -> Void)?
   /// `false` for movements whose logged load is not the load moved (bodyweight work), where no
   /// one-rep max is ever estimated. Says so instead of blaming the rep count.
   private let estimatesOneRepMax: Bool
@@ -52,16 +55,20 @@ public struct ProgressionChartView: View {
     public let recordSessionIDs: Set<SessionID>
     /// The most reps at each weight this machine has seen, heaviest first, for the table beneath.
     public let bestAtWeight: [BestAtWeight]
+    /// Which series this is, so a tap on its figure can ask for the working behind it. `nil` for a
+    /// series built without one, such as a preview's.
+    public let key: ProgressionKey?
     public var id: String { label }
 
     public init(
       label: String, points: [ProgressionPoint], recordSessionIDs: Set<SessionID> = [],
-      bestAtWeight: [BestAtWeight] = []
+      bestAtWeight: [BestAtWeight] = [], key: ProgressionKey? = nil
     ) {
       self.label = label
       self.points = points
       self.recordSessionIDs = recordSessionIDs
       self.bestAtWeight = bestAtWeight
+      self.key = key
     }
   }
 
@@ -71,7 +78,8 @@ public struct ProgressionChartView: View {
     unit: WeightUnit,
     estimatesOneRepMax: Bool = true,
     assumesAddedLoad: Bool = false,
-    onExplain: (() -> Void)? = nil
+    onExplain: (() -> Void)? = nil,
+    onShowEstimateWorking: ((ProgressionKey) -> Void)? = nil
   ) {
     self.estimatesOneRepMax = estimatesOneRepMax && !assumesAddedLoad
     self.assumesAddedLoad = assumesAddedLoad
@@ -79,6 +87,7 @@ public struct ProgressionChartView: View {
     self.machineChanges = machineChanges
     self.unit = unit
     self.onExplain = onExplain
+    self.onShowEstimateWorking = onShowEstimateWorking
     self._metric = State(
       initialValue: assumesAddedLoad
         ? (ProgressionAnalyzer.hasNoAddedLoad(series.map(\.points)) ? .repsAtTopLoad : .heaviestLoad)
@@ -351,32 +360,93 @@ public struct ProgressionChartView: View {
     VStack(alignment: .leading, spacing: Tokens.Spacing.regular) {
       ForEach(plotted) { entry in
         let latest = latestPoint(entry.points)
-        HStack(alignment: .center, spacing: Tokens.Spacing.regular) {
-          legendGlyph(index: entry.index)
-          Text(entry.name)
-            .font(Tokens.Text.label)
-            .foregroundStyle(Tokens.Color.chalk)
-            .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 2)
-            .fixedSize(horizontal: false, vertical: true)
-          Spacer(minLength: Tokens.Spacing.snug)
-          if let latest {
-            HStack(alignment: .firstTextBaseline, spacing: Tokens.Spacing.tight) {
-              Text(valueText(latest))
-                .font(Tokens.Text.figure)
-                .foregroundStyle(Tokens.Color.chalk)
-              Text(metricUnit)
-                .font(Tokens.Text.unit)
+        if let latest, let key = estimateWorkingKey(for: entry), let onShowEstimateWorking {
+          legendRowWithWorking(entry, latest: latest) { onShowEstimateWorking(key) }
+        } else {
+          HStack(alignment: .center, spacing: Tokens.Spacing.regular) {
+            legendGlyph(index: entry.index)
+            Text(entry.name)
+              .font(Tokens.Text.label)
+              .foregroundStyle(Tokens.Color.chalk)
+              .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 2)
+              .fixedSize(horizontal: false, vertical: true)
+            Spacer(minLength: Tokens.Spacing.snug)
+            if let latest {
+              latestFigure(latest)
+            } else {
+              Text(emptyValueText)
+                .font(Tokens.Text.caption)
                 .foregroundStyle(Tokens.Color.chalkDim)
             }
-          } else {
-            Text(emptyValueText)
-              .font(Tokens.Text.caption)
-              .foregroundStyle(Tokens.Color.chalkDim)
           }
+          .accessibilityElement(children: .ignore)
+          .accessibilityLabel(legendLabel(entry, latest: latest))
         }
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel(legendLabel(entry, latest: latest))
       }
+      if onShowEstimateWorking != nil, plotted.contains(where: { estimateWorkingKey(for: $0) != nil }),
+        !isUnevaluated
+      {
+        Text("Tap an estimate to see the sets it was worked from.")
+          .font(Tokens.Text.caption)
+          .foregroundStyle(Tokens.Color.chalkDim)
+          .fixedSize(horizontal: false, vertical: true)
+      }
+    }
+  }
+
+  /// A machine's latest value and its unit.
+  private func latestFigure(_ latest: ProgressionPoint) -> some View {
+    HStack(alignment: .firstTextBaseline, spacing: Tokens.Spacing.tight) {
+      Text(valueText(latest))
+        .font(Tokens.Text.figure)
+        .foregroundStyle(Tokens.Color.chalk)
+      Text(metricUnit)
+        .font(Tokens.Text.unit)
+        .foregroundStyle(Tokens.Color.chalkDim)
+    }
+  }
+
+  /// The series whose latest estimate can open its working: only the estimate view of a movement that
+  /// estimates, for a series the screen identified.
+  private func estimateWorkingKey(for entry: PlottedSeries) -> ProgressionKey? {
+    guard metric == .estimatedOneRepMax, estimatesOneRepMax else { return nil }
+    return entry.key
+  }
+
+  /// A legend row whose figure is a control. The machine and its point shape are one spoken element,
+  /// and the figure is a button of its own that says what it opens, so the figure is read once. A
+  /// glyph beside it shows, without a gesture, that it opens something.
+  private func legendRowWithWorking(
+    _ entry: PlottedSeries, latest: ProgressionPoint, action: @escaping () -> Void
+  ) -> some View {
+    let shape = Self.symbolNames[Self.symbolIndex(at: entry.index)]
+    let date = latest.date.formatted(.dateTime.day().month(.wide))
+    return HStack(alignment: .center, spacing: Tokens.Spacing.regular) {
+      HStack(alignment: .center, spacing: Tokens.Spacing.regular) {
+        legendGlyph(index: entry.index)
+        Text(entry.name)
+          .font(Tokens.Text.label)
+          .foregroundStyle(Tokens.Color.chalk)
+          .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 2)
+          .fixedSize(horizontal: false, vertical: true)
+        Spacer(minLength: Tokens.Spacing.snug)
+      }
+      .accessibilityElement(children: .ignore)
+      .accessibilityLabel("\(entry.name), \(shape) points")
+      Button(action: action) {
+        HStack(alignment: .firstTextBaseline, spacing: Tokens.Spacing.snug) {
+          latestFigure(latest)
+          Image(systemName: WorkedFromSheet.glyph)
+            .font(Tokens.Text.caption)
+            .foregroundStyle(Tokens.Color.chalkDim)
+            .accessibilityHidden(true)
+        }
+      }
+      .buttonStyle(InlineControlStyle(alignment: .trailing))
+      // Begins with the words on the control, so a Voice Control user can say what they see.
+      .accessibilityLabel(
+        "\(valueText(latest)) \(metricUnit), latest estimate on \(date), \(entry.name)")
+      .accessibilityHint("Shows the sets this estimate was worked from")
     }
   }
 
@@ -533,6 +603,7 @@ public struct ProgressionChartView: View {
     let points: [ProgressionPoint]
     let recordSessionIDs: Set<SessionID>
     let bestAtWeight: [BestAtWeight]
+    let key: ProgressionKey?
     var id: Int { index }
   }
 
@@ -556,7 +627,8 @@ public struct ProgressionChartView: View {
       result.append(
         PlottedSeries(
           index: index, name: name, points: input.points,
-          recordSessionIDs: input.recordSessionIDs, bestAtWeight: input.bestAtWeight))
+          recordSessionIDs: input.recordSessionIDs, bestAtWeight: input.bestAtWeight,
+          key: input.key))
     }
     return result
   }
