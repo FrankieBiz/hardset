@@ -19,11 +19,11 @@ the code does yet, so a reader does not look for a screen that has not moved.
   segmented control, header buttons, text entry, cards, banners, tags and certainty badges.
 - The live session is in code, rebuilt monochrome and type-led (ruling D12): see Set row, Set log
   control, Inline control, Panel and the live-session layout below. Train's start screen is rebuilt
-  the same way (see Train start screen); Progress, Volume and Library follow in the next phases of
-  this one.
+  the same way (see Train start screen), and so is Progress: the board and the movement chart, with
+  Volume and Library following in the same phase.
 - Not yet in code, so the bullets below that name these describe where they are going: whatever a
   screen draws for itself instead of through the kit. That is the Library's "Curated" tag, the
-  Progress card's layout, the Volume gauge ends, the scorecard headline's type role, and the
+  Volume gauge ends, the scorecard headline's type role, and the
   onboarding and tour surfaces. It also includes three private outlined-card button styles that each draw their own
   stroke: the History row, the Settings disclosure row and the receipt's link row, plus the
   methodology citation card. A screen that uses the kit picks up the new look with no change; one that draws its own
@@ -145,8 +145,11 @@ measured single, which estimates nothing, is High. `StrengthMath.estimatedOneRep
 beside the figure, and every badge, record line and disclosure beside an estimate reads it from
 there. This matches the Volume ladder, which never exceeds Moderate either.
 
-Chart series (one line per machine, never merged) use `plateBlue`, chalk `#E7E7EC`/`#3A3A42`,
-lilac `#B9A8FF`/`#5236B8` and rose `#FF9DD6`/`#9A1F66`, each paired with a distinct point symbol.
+Chart series (one line per machine, never merged) use chalk `#E7E7EC`/`#3A3A42`, `plateBlue`,
+lilac `#B9A8FF`/`#5236B8` and rose `#FF9DD6`/`#9A1F66`, each paired with a distinct point symbol. Chalk
+comes first, so a movement on one machine, which is most of them, draws a monochrome line on a screen
+that has no primary action to own an accent; `plateBlue` appears only when a second machine needs a
+second hue.
 
 ## Typography
 
@@ -421,15 +424,21 @@ Selection rows, the unit switch and pickers stay silent.
   group. It adds no token and no motion.
 - **Progress board** (`ProgressBoardView`, `ProgressScreen`, the Progress tab): every trained movement,
   one row per movement and machine, grouped by body part under `SectionLabel` headers, with the movements
-  that have no body part last under the `warning` header. A row is a `SelectionCardButtonStyle` card: the
-  movement in `headline`, its machine in `provenance`, a small `plateBlue` sparkline of the last dozen
-  sessions (hidden from VoiceOver and dropped at accessibility sizes), and one sentence that names its
-  metric: "Estimated max +8% in 6 weeks", or, in `chalkDim`, "Estimated max · no 6-week comparison" with
+  that have no body part last under a header whose `warning` glyph is its only colour. Nothing is boxed:
+  a row is type on the canvas under a hairline, a button of 56 pt or more. It reads the
+  movement in `headline`, its machine in `provenance`, a small `chalkDim` sparkline of the last dozen
+  sessions with its newest session a `chalk` point (hidden from VoiceOver and dropped at accessibility
+  sizes), and one sentence that names its
+  metric: "Estimated max +8% in 6 weeks", in `provenance` and `chalkDim` with the signed percent alone
+  in `figure` and `chalk`, so the number is what the eye reads first and the sentence stays whole
+  (`ProgressBoardView.sentence` finds the figure inside `ProgressCopy`'s own words; it never composes
+  them), or, in `chalkDim`, "Estimated max · no 6-week comparison" with
   the history the movement does have ("4 sessions over 3 weeks. A comparison needs a session 5 to 7
   weeks before the latest.") when no session sits in that band. It never says "Not enough history":
   a movement trained every four weeks has plenty and only misses the band. The band is
-  `ProgressTrendAnalyzer.comparisonBandDays`, and the words are written from it. Beside every estimated-max figure sits its `CertaintyBadge`, drawn over the card's corner
-  as its own control so it never nests inside the card's button. A six-week change uses the weaker
+  `ProgressTrendAnalyzer.comparisonBandDays`, and the words are written from it. Beside every estimated-max figure sits its `CertaintyBadge` in the `.language`
+  style, a phrase ("Moderate confidence" and an info glyph) under the sentence, as its own control beneath
+  the row's button so it never nests inside it. A six-week change uses the weaker
   certainty of its two estimates. Imported history has its own series and says "Imported · machine
   not recorded" in the same `provenance` role. A movement with no equipment on record, which is every
   imported one until the lifter sets it in Library, shows its added-load reading with the sentence that
@@ -450,7 +459,8 @@ Selection rows, the unit switch and pickers stay silent.
   moving sets between movements would rewrite history to draw the same chart. Machine and cable
   movements whose sets have no
   machine say "No machine recorded" there and in the chart legend. A movement with no record in its last
-  three sessions says "No record in 3 sessions" in `warning` with `pause.circle`, and no advice: the rule
+  three sessions says "No record in 3 sessions" in `chalk` beside a `warning` `pause.circle`, the glyph being
+  the caveat's one mark, and no advice: the rule
   is only that none of those sessions set a record, and "stalled" would claim more about the lifter's
   body than the data knows. "Most
   improved · estimated max" at the top repeats three estimated-max gains, ordered by the confidence of
@@ -695,9 +705,13 @@ Selection rows, the unit switch and pickers stay silent.
   the ones with nothing credited in their own section, "Not counted directly yet", with the reason
   ("This is a gap in the catalogue, not in your training"), and a tile on the map with nothing
   credited says the same. Tags, `caption` and the `caveat` banner; no new token, no motion.
-- **Charts**: one series per machine with its own colour and point symbol, a custom legend in app
+- **Charts**: nothing around the chart: the metric control, then the metric's name, what is plotted and
+  its certainty as a `.language` phrase, the plot, a hairline and the legend sit straight on the canvas.
+  One series per machine with its own colour and point symbol (the first is chalk, see the palette notes),
+  a custom legend in app
   type, with equipment provenance allowed to wrap fully at accessibility sizes, and machine changes
-  as 2 pt dashed `warning` rules. The chart opens on the estimated max,
+  as 2 pt dashed `warning` rules. "Worked from these records" and "How this is measured" are inline
+  controls in `chalk`. The chart opens on the estimated max,
   which rises when the lifter does more weight or more reps, with the heaviest load as the other
   segment; it opens on the heaviest load when no estimate can be made. A session that set a record is
   marked on its line with a `star.fill` in `plateYellow`, drawn over the machine's own point, and the

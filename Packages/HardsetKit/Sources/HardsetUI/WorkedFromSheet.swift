@@ -15,25 +15,48 @@ public nonisolated struct WorkedFromPresentation: Identifiable, Sendable {
   }
 }
 
-/// The visible control that opens the working behind a number: a quiet button with a words-and-glyph
-/// label, so it is found without a gesture and can be said aloud by what it shows.
+/// The visible control that opens the working behind a number: a words-and-glyph label, so it is
+/// found without a gesture and can be said aloud by what it shows. A screen that has dropped its
+/// containers asks for `.inline`; every other screen keeps the quiet button.
 public struct WorkedFromButton: View {
+  /// How the control is drawn; the words, the glyph and the sheet it opens are the same.
+  public enum Style: Sendable, Hashable {
+    /// Accent text with no fill, inset like a quiet button.
+    case quiet
+    /// `chalk` words and the glyph with no face, for a screen that has dropped its containers.
+    case inline
+  }
+
   private let title: String
+  private let style: Style
   private let action: () -> Void
 
-  public init(_ title: String = "Worked from", action: @escaping () -> Void) {
+  public init(
+    _ title: String = "Worked from", style: Style = .quiet, action: @escaping () -> Void
+  ) {
     self.title = title
+    self.style = style
     self.action = action
   }
 
   public var body: some View {
-    Button(action: action) {
-      Label(title, systemImage: WorkedFromSheet.glyph)
+    switch style {
+    case .quiet:
+      Button(action: action) {
+        Label(title, systemImage: WorkedFromSheet.glyph)
+      }
+      .buttonStyle(HardsetButtonStyle(.quiet, fullWidth: false))
+      // The quiet style insets its label; pulling it back aligns the words with the content edge
+      // while the full 44 pt region stays tappable.
+      .padding(.leading, -Tokens.Spacing.snug)
+    case .inline:
+      Button(action: action) {
+        Label(title, systemImage: WorkedFromSheet.glyph)
+          .font(Tokens.Text.headline)
+          .foregroundStyle(Tokens.Color.chalk)
+      }
+      .buttonStyle(InlineControlStyle(alignment: .leading))
     }
-    .buttonStyle(HardsetButtonStyle(.quiet, fullWidth: false))
-    // The quiet style insets its label; pulling it back aligns the words with the content edge
-    // while the full 44 pt region stays tappable.
-    .padding(.leading, -Tokens.Spacing.snug)
   }
 }
 

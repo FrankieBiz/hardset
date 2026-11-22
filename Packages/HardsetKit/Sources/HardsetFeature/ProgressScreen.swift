@@ -56,7 +56,8 @@ public struct ProgressScreen: View {
             HardsetEmptyState(
               title: "Could not read your progress",
               detail: "Your logged sets are safe. Pull down to try again.",
-              systemImage: "exclamationmark.triangle"
+              systemImage: "exclamationmark.triangle",
+              style: .quiet
             )
           }
           .padding(.bottom, Tokens.Spacing.block)
@@ -108,7 +109,9 @@ public struct ProgressScreen: View {
   private var header: some View {
     ScreenHeader(Self.title) {
       if let onShowSettings {
-        HeaderIconButton(systemImage: "gearshape", accessibilityLabel: "Settings", action: onShowSettings)
+        HeaderIconButton(
+          systemImage: "gearshape", accessibilityLabel: "Settings", style: .bare,
+          action: onShowSettings)
       }
     }
   }

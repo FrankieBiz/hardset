@@ -144,10 +144,12 @@ public enum Tokens {
     ///
     /// Each is at least 3:1 against the plot background and is always paired with its own point
     /// symbol, so two machines are never told apart by hue alone. Neither green, amber, orange nor
-    /// red appears here: those already mean something.
+    /// red appears here: those already mean something. The first is chalk, so a movement on one
+    /// machine, which is most of them, draws a monochrome line: a screen with no primary action has
+    /// no accent to spend, and `plateBlue` only appears when a second machine needs a second hue.
     public static let series: [SwiftUI.Color] = [
-      plateBlue,
       swatch(light: 0x3A3A42, dark: 0xE7E7EC),
+      plateBlue,
       swatch(light: 0x5236B8, dark: 0xB9A8FF),
       swatch(light: 0x9A1F66, dark: 0xFF9DD6),
     ]
