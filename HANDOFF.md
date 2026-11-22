@@ -177,23 +177,6 @@ The 0.5 indirect-set credit is an adopted convention, not an inherited finding, 
 - **The UI pass can fail on a "Busy" launch.** The simulator sometimes refuses the first launch while
   the app's install is finishing (run 44648846716). The workflow retries a failing UI test once
   (`-retry-tests-on-failure`); a test that fails both attempts is real.
-- **A refused launch of the UI runner is waited out and retried.** "Application ...xctrunner is
-  installing or uninstalling, and cannot be launched" (Busy) came from the simulator, not the app
-  or the tests, and cost whole runs. `ui_xcodebuild` in `Tools/ui_launch.sh` lets the device settle
-  before each `test-without-building`, and when that exact refusal comes back before any test of
-  the invocation started it waits and launches the same invocation again, three attempts in all,
-  printing one `::warning` line per retry that names the test. An invocation in which a test
-  started is never retried by it, so an assertion failure stays one. `scripts/test_ui_launch.py`
-  covers the logic offline; whether a real simulator stops refusing is shown only by a macOS run,
-  and none has been seen yet. Count retries across runs with
-  `gh run view <id> --log | rg -c "launch denied on attempt"`.
-- **Each pass's result gates the job.** The dark and light checks at the end of the UI step were one
-  `a && b` line, and under `bash -e` a failed first grep of such a line stops nothing, so once the
-  reverse-order result followed it a dark pass that never succeeded failed no job. They are separate
-  checks now (`PASSES_FAILED`).
-- **`-retry-tests-on-failure` can turn a failing test green.** Runs 44969910828 and 44973199974 were
-  green although `testCorrectionsAndDiscardDark` failed assertions in iteration 1 and passed in
-  iteration 2. Left as it was; removing the flag is a decision about how strict the UI job is.
 - **SourceKit reports "No such module" constantly.** It is noise; trust the build.
 
 ## 10. How to work
