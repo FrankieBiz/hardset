@@ -6,12 +6,18 @@ import SwiftUI
 public struct MuscleHeatmapView: View {
   private let report: MuscleVolumeReport
   private let windowLabel: String
+  /// Opens the working behind a muscle's count. `nil` where the screen has none to show.
+  private let onShowWorking: ((Muscle) -> Void)?
   @Environment(\.dynamicTypeSize) private var typeSize
   /// - Parameter windowLabel: The window the report covers, in words. The sheet presenting the
   ///   map draws its title, so the view does not repeat it.
-  public init(report: MuscleVolumeReport, windowLabel: String = "Last 7 days") {
+  public init(
+    report: MuscleVolumeReport, windowLabel: String = "Last 7 days",
+    onShowWorking: ((Muscle) -> Void)? = nil
+  ) {
     self.report = report
     self.windowLabel = windowLabel
+    self.onShowWorking = onShowWorking
   }
   private func isUncatalogued(_ muscle: Muscle) -> Bool {
     report.sets(for: muscle) == 0 && ExerciseCatalog.unauthoredDirectTokens.contains(muscle)
@@ -53,6 +59,18 @@ public struct MuscleHeatmapView: View {
             .accessibilityElement(children: .combine)
             if report.sets(for: muscle) > 0 {
               MuscleCertaintyBadge(muscle: muscle, fractionalSets: report.sets(for: muscle))
+              if let onShowWorking {
+                // The same working the volume rows open: the map reads the same count.
+                Button {
+                  onShowWorking(muscle)
+                } label: {
+                  Label("Worked from", systemImage: WorkedFromSheet.glyph)
+                    .font(Tokens.Text.caption)
+                    .foregroundStyle(Tokens.Color.chalk)
+                }
+                .buttonStyle(InlineControlStyle())
+                .accessibilityLabel("Worked from, \(ExercisePickerView.displayName(MuscleKey(muscle)))")
+              }
             }
             MuscleShareGauge(
               fraction: report.sets(for: muscle)

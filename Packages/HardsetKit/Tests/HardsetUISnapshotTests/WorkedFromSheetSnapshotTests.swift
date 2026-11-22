@@ -47,6 +47,35 @@
       return working!.account(format: format)
     }
 
+    /// A week with a muscle credited by two movements at two roles, a movement that only stabilises
+    /// it, a movement nobody has attributed, and warm-ups: every line the account can hold.
+    static func muscleAccount() -> WorkedFromAccount {
+      let bench = ExerciseID()
+      let fly = ExerciseID()
+      let pullUp = ExerciseID()
+      let mystery = ExerciseID()
+      let squat = ExerciseID()
+      func contribution(_ muscle: Muscle, _ role: MuscleRole) -> MuscleContribution {
+        MuscleContribution(muscle, role: role, certainty: .moderate, source: .anatomy)
+      }
+      let attribution = AttributionIndex([
+        bench: [contribution(.chest, .direct), contribution(.triceps, .indirect)],
+        fly: [contribution(.chest, .indirect)],
+        pullUp: [contribution(.lats, .direct), contribution(.chest, .stabilizer)],
+        squat: [contribution(.quadriceps, .direct)],
+      ])
+      func sets(_ id: ExerciseID, _ count: Int, warmup: Bool = false) -> [CountableSet] {
+        (0..<count).map { _ in CountableSet(exerciseID: id, isWarmup: warmup) }
+      }
+      let names = [bench: "Barbell bench press", fly: "Cable fly", pullUp: "Pull-up", mystery: "Cable crossover", squat: "Back squat"]
+      return MuscleCountWorking.derive(
+        muscle: .chest,
+        sets: sets(bench, 8) + sets(bench, 2, warmup: true) + sets(fly, 5) + sets(pullUp, 6)
+          + sets(mystery, 3) + sets(squat, 4),
+        attribution: attribution, name: { names[$0] ?? "Unknown movement" }
+      ).account(muscleName: "Chest", windowLabel: "Last 7 days, 14 Nov to now", format: format)
+    }
+
     private static func sheet(_ account: WorkedFromAccount) -> some View {
       WorkedFromSheet(account: account)
         .tint(Tokens.Color.plateBlue)
@@ -66,11 +95,25 @@
       }
     }
 
+    @Test func muscleCount() async throws {
+      try await Snapshot.capture("kit-worked-from-muscle-dark", size: Self.tall) {
+        Self.sheet(Self.muscleAccount())
+      }
+      try await Snapshot.capture("kit-worked-from-muscle-light", size: Self.tall, style: .light) {
+        Self.sheet(Self.muscleAccount())
+      }
+    }
+
     @Test func accessibilitySizes() async throws {
       try await Snapshot.capture(
         "kit-worked-from-estimate-dark-ax3", size: Self.accessibility, typeSize: .accessibility3
       ) {
         Self.sheet(Self.estimateAccount())
+      }
+      try await Snapshot.capture(
+        "kit-worked-from-muscle-dark-ax3", size: Self.accessibility, typeSize: .accessibility3
+      ) {
+        Self.sheet(Self.muscleAccount())
       }
     }
   }
