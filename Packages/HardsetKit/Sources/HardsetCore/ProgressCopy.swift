@@ -83,13 +83,19 @@ public enum ProgressCopy {
     }
   }
 
-  /// Said under the Most improved label, because the order is not simply by percentage.
-  public static let mostImprovedOrdering =
-    "Ordered by confidence in the estimate first, then gain. A stalled movement ranks after one that is not."
+  /// Said under the Most improved label, because the order is not simply by percentage. The count
+  /// is the rule's own, `ProgressTrendAnalyzer.stallRun`, so the words cannot drift from it.
+  public static var mostImprovedOrdering: String {
+    "Ordered by confidence in the estimate first, then gain. A movement with no record in "
+      + "\(ProgressTrendAnalyzer.stallRun) sessions ranks after one that has a record in its last "
+      + "\(ProgressTrendAnalyzer.stallRun)."
+  }
 
-  /// "Stalled · 3 sessions". A fact about the last sessions, with no advice attached.
+  /// "No record in 3 sessions". The rule is only that none of the last sessions set a record, so
+  /// the words say that and no more: "stalled" would be a claim about the lifter's body, which the
+  /// data cannot support. A fact about the last sessions, with no advice attached.
   public static func stalledText(for trend: MovementTrend) -> String? {
-    trend.stalledSessions.map { "Stalled · \($0) sessions" }
+    trend.stalledSessions.map { "No record in \($0) sessions" }
   }
 
   /// A row as VoiceOver reads it: the movement and machine, the change, and any stall.

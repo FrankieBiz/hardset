@@ -21,9 +21,10 @@ public struct MovementTrend: Hashable, Sendable, Identifiable {
   /// A fraction, so 0.08 means +8%. Nil when the six-week window has no session.
   public let sixWeekChange: Double?
   public let sessionCount: Int
-  /// Non-nil means the movement is stalled: none of its last `ProgressTrendAnalyzer.stallRun`
-  /// sessions set a record, and the number is that count. It is never a longer run, because only
-  /// those sessions are checked.
+  /// Non-nil means none of the movement's last `ProgressTrendAnalyzer.stallRun` sessions set a
+  /// record, and the number is that count. It is never a longer run, because only those sessions
+  /// are checked. The screen says exactly that, "No record in 3 sessions", and not that the lifter
+  /// has stalled.
   public let stalledSessions: Int?
   public let latestDate: Date
   /// The date of the movement's first session, so a row with no six-week change can say how much
@@ -63,7 +64,7 @@ public struct MovementTrend: Hashable, Sendable, Identifiable {
   }
 }
 
-/// Builds movement trends, the sessions that set records, and the stalled flag.
+/// Builds movement trends, the sessions that set records, and the no-record-in-recent-sessions flag.
 public enum ProgressTrendAnalyzer {
   public static let stallRun = 3
   public static let minimumSessionsForStall = 4
@@ -202,11 +203,12 @@ public enum ProgressTrendAnalyzer {
 
   /// The positive six-week gains within one metric, best-supported first.
   ///
-  /// Ordered by how sure the estimate is, then by whether the movement has stalled, then by the size
-  /// of the gain. A bigger percentage from a weaker estimate does not outrank a smaller one from a
-  /// better one, and a movement that has stalled ranks after one of the same confidence that has not,
-  /// so the strip never leads with a Low-confidence movement that is also flagged Stalled while a
-  /// better-supported gain sits below it. `ProgressCopy.mostImprovedOrdering` says so on screen.
+  /// Ordered by how sure the estimate is, then by whether the movement has gone without a record,
+  /// then by the size of the gain. A bigger percentage from a weaker estimate does not outrank a
+  /// smaller one from a better one, and a movement with no record in its last sessions ranks after
+  /// one of the same confidence that has one, so the strip never leads with a Low-confidence
+  /// movement that is also flagged "No record in 3 sessions" while a better-supported gain sits
+  /// below it. `ProgressCopy.mostImprovedOrdering` says so on screen.
   public static func mostImproved(
     _ trends: [MovementTrend], metric: TrendMetric = mostImprovedMetric, limit: Int = 3
   ) -> [MovementTrend] {

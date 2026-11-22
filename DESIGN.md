@@ -400,11 +400,14 @@ Selection rows, the unit switch and pickers stay silent.
   certainty of its two estimates. Imported history has its own series and says "Imported · machine
   not recorded" in the same `provenance` role. Machine and cable movements whose sets have no
   machine say "No machine recorded" there and in the chart legend. A movement with no record in its last
-  three sessions is flagged "Stalled · 3 sessions" in `warning` with `pause.circle`, and no advice. "Most
+  three sessions says "No record in 3 sessions" in `warning` with `pause.circle`, and no advice: the rule
+  is only that none of those sessions set a record, and "stalled" would claim more about the lifter's
+  body than the data knows. "Most
   improved · estimated max" at the top repeats three estimated-max gains, ordered by the confidence of
-  the estimate first, then the size of the gain, with a stalled movement after one of the same
-  confidence that is not, and a `caption` under its label says so (`ProgressCopy.mostImprovedOrdering`),
-  so a Low-confidence gain that is also Stalled is never on top while a better-supported gain sits
+  the estimate first, then the size of the gain, with a movement that has no record in 3 sessions after
+  one of the same confidence that has, and a `caption` under its label says so
+  (`ProgressCopy.mostImprovedOrdering`), so a Low-confidence gain that also has no record in 3
+  sessions is never on top while a better-supported gain sits
   below it; load and rep percentages stay in their own movement rows. Empty, it says "Log a workout and your progress
   shows up here"; loading is a quiet line and a failed read says so, never an empty board. It adds no
   token and no motion.
