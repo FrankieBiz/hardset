@@ -598,7 +598,7 @@ public struct LiveSessionScreen: View {
       try gyms.archiveMachine(id)
       refreshMachines(forExercise: target)
     } catch {
-      machineError = "That machine could not be archived. Try again."
+      machineError = "That machine could not be removed. Try again."
     }
   }
 

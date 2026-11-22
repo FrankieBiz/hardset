@@ -170,17 +170,17 @@ public struct MachinePickerView: View {
     }
     .background(Tokens.Color.canvas)
     .pickerCancelAction(onCancel)
-    // Asked once, because nothing in the app brings an archived machine back to the list.
+    // Asked once, because nothing in the app brings a removed machine back to the list.
     .confirmationDialog(
       archiveTitle,
       isPresented: isConfirmingArchive,
       titleVisibility: .visible,
       presenting: archiveCandidate
     ) { option in
-      Button("Archive", role: .destructive) { onArchive?(option.id) }
+      Button("Remove", role: .destructive) { onArchive?(option.id) }
       Button("Cancel", role: .cancel) {}
     } message: { _ in
-      Text("It leaves this gym’s list. Sets already logged on it stay in your history.")
+      Text("It leaves this gym’s list for good: nothing in the app brings it back, and adding a machine with the same name starts a new one with no load history of its own. Sets already logged on it stay in History under its name, and its load chart stays in Progress.")
     }
   }
 
@@ -213,8 +213,8 @@ public struct MachinePickerView: View {
   }
 
   private var archiveTitle: String {
-    guard let archiveCandidate else { return "Archive this machine?" }
-    return "Archive \(archiveCandidate.displayName)?"
+    guard let archiveCandidate else { return "Remove this machine?" }
+    return "Remove \(archiveCandidate.displayName)?"
   }
 
   /// Not for the selected machine: the movement is being logged on it right now, and taking it
@@ -229,14 +229,14 @@ public struct MachinePickerView: View {
     row
       .contextMenu {
         if canArchive(option) {
-          Button("Archive machine", systemImage: "archivebox", role: .destructive) {
+          Button("Remove machine", systemImage: "archivebox", role: .destructive) {
             archiveCandidate = option
           }
         }
       }
       .accessibilityActions {
         if canArchive(option) {
-          Button("Archive machine") { archiveCandidate = option }
+          Button("Remove machine") { archiveCandidate = option }
         }
       }
   }
