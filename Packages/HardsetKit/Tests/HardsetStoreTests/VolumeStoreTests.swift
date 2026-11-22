@@ -138,6 +138,40 @@ struct VolumeStoreTests {
     #expect(report.coverage == 1.0)
   }
 
+  /// "Worked from" explains the count on screen from the sets and attribution the report was made
+  /// from, read in the same snapshot, through the same per-set rule.
+  @Test("A window reading carries what its report was counted from, and the working agrees with it")
+  func windowReadingCarriesItsWorking() async throws {
+    let (database, logger, volume) = try seeded()
+    let bench = try exerciseID(database, slug: "barbell-bench-press")
+    let pullUp = try exerciseID(database, slug: "pull-up")
+    let session = try logger.startSession(at: now.addingTimeInterval(-3600))
+    try log(logger, session, bench, sets: 1, at: now.addingTimeInterval(-3600), isWarmup: true)
+    try log(logger, session, bench, sets: 4, at: now.addingTimeInterval(-3000))
+    try log(logger, session, pullUp, sets: 3, at: now.addingTimeInterval(-2000))
+    try logger.finishSession(session, at: now.addingTimeInterval(-1800))
+
+    let range = VolumeWindowRange(endingAt: now, weeksBack: 0)
+    let reading = try await volume.loadWindow(in: range)
+    let report = try await volume.loadReport(in: range)
+    #expect(reading.sets.count == 8)
+    #expect(reading.report == report)
+    #expect(reading.name(for: bench) == "Barbell Bench Press")
+    #expect(reading.name(for: ExerciseID()) == "Unknown movement")
+
+    for muscle in Muscle.allCases {
+      let working = MuscleCountWorking.derive(
+        muscle: muscle, sets: reading.sets, attribution: reading.attribution, name: reading.name(for:))
+      #expect(working.total == reading.report.sets(for: muscle), "\(muscle)")
+      #expect(working.hardSets == reading.report.hardSets)
+    }
+    let chest = MuscleCountWorking.derive(
+      muscle: .chest, sets: reading.sets, attribution: reading.attribution, name: reading.name(for:))
+    #expect(chest.credited.map(\.name) == ["Barbell Bench Press"])
+    #expect(chest.warmupSets == 1)
+    #expect(chest.unrelatedSets == 3)
+  }
+
   /// Grip and bracing are stabilisers all the way through storage.
   @Test("Held grip credits nothing after a database round trip")
   func gripCreditsNothingEndToEnd() throws {

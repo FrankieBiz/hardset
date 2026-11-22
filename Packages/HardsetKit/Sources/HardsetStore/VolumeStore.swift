@@ -78,6 +78,33 @@ public nonisolated struct VolumeStore: Sendable {
     return VolumeAnalyzer.report(sets: sets, attribution: AttributionIndex(entries: entries))
   }
 
+  /// The report for `window`, with the sets and attribution it was counted from and the names of the
+  /// movements, all read from one snapshot.
+  ///
+  /// The "Worked from" account for a muscle is derived from these, so it explains the count on
+  /// screen and cannot be built from a window that changed after the count was made.
+  public func loadWindow(in window: VolumeWindowRange) async throws -> VolumeWindowReading {
+    try Task.checkCancellation()
+    let (sets, entries, names) = try await database.read { db in
+      (
+        try Self.readCountableSets(from: window.start, to: window.end, in: db),
+        try Self.readAttributionEntries(in: db),
+        try Self.readExerciseNames(in: db)
+      )
+    }
+    try Task.checkCancellation()
+    let attribution = AttributionIndex(entries: entries)
+    return VolumeWindowReading(
+      report: VolumeAnalyzer.report(sets: sets, attribution: attribution),
+      sets: sets, attribution: attribution, exerciseNames: names)
+  }
+
+  private static func readExerciseNames(in db: Database) throws -> [ExerciseID: String] {
+    try Exercise.fetchAll(db).reduce(into: [ExerciseID: String]()) {
+      $0[ExerciseID(rawValue: $1.id)] = $1.name
+    }
+  }
+
   private static func readCountableSets(from: Date, to: Date, in db: Database) throws
     -> [CountableSet]
   {
@@ -102,6 +129,29 @@ public nonisolated struct VolumeStore: Sendable {
   public func rollingWeek(endingAt now: Date) throws -> MuscleVolumeReport {
     try report(from: now.addingTimeInterval(-7 * 86_400), to: now)
   }
+}
+
+/// A window's report and everything it was counted from.
+public nonisolated struct VolumeWindowReading: Sendable {
+  public let report: MuscleVolumeReport
+  /// The window's sets, warm-ups included, as the report was given them.
+  public let sets: [CountableSet]
+  public let attribution: AttributionIndex
+  /// Every movement's name, archived ones included: their sets are in the window too.
+  public let exerciseNames: [ExerciseID: String]
+
+  public init(
+    report: MuscleVolumeReport, sets: [CountableSet], attribution: AttributionIndex,
+    exerciseNames: [ExerciseID: String]
+  ) {
+    self.report = report
+    self.sets = sets
+    self.attribution = attribution
+    self.exerciseNames = exerciseNames
+  }
+
+  /// A movement's name, or the same words the history uses for one that no longer exists.
+  public func name(for id: ExerciseID) -> String { exerciseNames[id] ?? "Unknown movement" }
 }
 
 /// Seven local days of volume, rolling rather than a calendar week, aligned to midnight so the

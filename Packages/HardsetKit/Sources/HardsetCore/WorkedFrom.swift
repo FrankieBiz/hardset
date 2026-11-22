@@ -30,6 +30,16 @@ public struct WorkedFromFormat: Hashable, Sendable {
     "\(load(weightKg)) × \(reps)"
   }
 
+  /// A count of fractional sets as the volume rows write it: "8.5", or "8" when it is whole.
+  public func sets(_ value: Double) -> String {
+    value.formatted(.number.precision(.fractionLength(0...1)).locale(locale))
+  }
+
+  /// The credit one set gives a muscle, always to one place so "1.0" and "0.5" line up: "0.5".
+  public func credit(_ value: Double) -> String {
+    value.formatted(.number.precision(.fractionLength(1)).locale(locale))
+  }
+
   /// "Nov 4, 2026", in the lifter's own time zone, so the day named is the day it was lifted.
   public func day(_ date: Date) -> String {
     date.formatted(
