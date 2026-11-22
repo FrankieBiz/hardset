@@ -53,7 +53,10 @@ struct RecordWorkingTests {
     let section = try #require(account.sections.first)
     #expect(section.heading == "Nov 21, 2023 · Hammer Strength")
     #expect(section.note == "Compared with every earlier working set on this machine.")
-    #expect(section.lines.map(\.headline) == ["Heaviest weight", "Best estimated 1RM · High confidence"])
+    // The estimate's own confidence is the engine's answer for that set, not a figure fixed here.
+    let confidence = ScorecardCopy.confidenceWords(
+      StrengthMath.estimatedOneRepMax(weightKg: 110, reps: 5).certainty)
+    #expect(section.lines.map(\.headline) == ["Heaviest weight", "Best estimated 1RM · \(confidence)"])
     #expect(section.lines.allSatisfy { $0.standing == .produced && $0.standingWord == "Set the record" })
     #expect(section.lines[0].context == "110 kg × 5 · Hammer Strength")
     #expect(
