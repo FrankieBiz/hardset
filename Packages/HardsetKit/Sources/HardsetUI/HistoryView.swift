@@ -51,6 +51,11 @@ public struct HistoryRow: Hashable, Sendable, Identifiable {
 /// control after the last month that asks for more, so a long or imported history is reachable
 /// rather than silently cut off. `onDelete` offers deleting a workout from a card's context menu;
 /// the caller confirms it.
+///
+/// Given a `search`, the view draws a search field under the header and lets the same rows be the
+/// answer to a query. The field sits in the one scrolling column that every state shares, so typing
+/// into it never rebuilds it and the keyboard stays up while the list below changes from the whole
+/// history to a search's matches and back.
 public struct HistoryView: View {
   private let rows: [HistoryRow]
   private let unit: WeightUnit
@@ -61,12 +66,14 @@ public struct HistoryView: View {
   private let isLoadingOlder: Bool
   private let onDelete: ((HistoryRow) -> Void)?
   private let onShowSettings: (() -> Void)?
+  private let search: HistorySearch?
 
   public init(
     rows: [HistoryRow],
     unit: WeightUnit,
     title: String? = nil,
     subtitle: String? = nil,
+    search: HistorySearch? = nil,
     onSelect: ((HistoryRow) -> Void)? = nil,
     onShowOlder: (() -> Void)? = nil,
     isLoadingOlder: Bool = false,
@@ -82,32 +89,24 @@ public struct HistoryView: View {
     self.isLoadingOlder = isLoadingOlder
     self.onDelete = onDelete
     self.onShowSettings = onShowSettings
+    self.search = search
   }
 
+  /// One scrolling column for every state, empty or not. The empty states used to be their own
+  /// scroll view; with a search field above them that would rebuild the field, and drop its focus,
+  /// the moment a query had no matches.
   public var body: some View {
-    if rows.isEmpty {
-      ScrollView {
-        VStack(alignment: .leading, spacing: Tokens.Spacing.section) {
-          if let title {
-            header(title, subtitle: subtitle)
-          }
-          HardsetEmptyState(
-            title: "No workouts yet",
-            detail: "Finished workouts appear here.",
-            systemImage: "clock.arrow.circlepath"
-          )
+    ScrollView {
+      LazyVStack(alignment: .leading, spacing: Tokens.Spacing.snug, pinnedViews: [.sectionHeaders]) {
+        if let title {
+          header(title, subtitle: subtitle ?? (rows.isEmpty ? nil : Self.countText(rows.count)))
         }
-        .padding(.top, title == nil ? Tokens.Spacing.section : 0)
-        .padding(.bottom, Tokens.Spacing.block)
-        .frame(maxWidth: .infinity, alignment: .leading)
-      }
-      .background(Tokens.Color.canvas)
-    } else {
-      ScrollView {
-        LazyVStack(alignment: .leading, spacing: Tokens.Spacing.snug, pinnedViews: [.sectionHeaders]) {
-          if let title {
-            header(title, subtitle: subtitle ?? Self.countText(rows.count))
-          }
+        if let search {
+          HistorySearchBar(search: search)
+        }
+        if rows.isEmpty {
+          emptyContent
+        } else {
           ForEach(Self.monthGroups(rows)) { group in
             Section {
               ForEach(group.rows) { row in
@@ -126,10 +125,7 @@ public struct HistoryView: View {
           }
           if let onShowOlder {
             Button(action: onShowOlder) {
-              Label(
-                isLoadingOlder ? "Reading older workouts…" : "Show older workouts",
-                systemImage: "clock.arrow.circlepath"
-              )
+              Label(olderTitle, systemImage: "clock.arrow.circlepath")
             }
             .buttonStyle(HardsetButtonStyle(.quiet))
             .disabled(isLoadingOlder)
@@ -137,11 +133,56 @@ public struct HistoryView: View {
             .padding(.top, Tokens.Spacing.regular)
           }
         }
-        .padding(.top, title == nil ? Tokens.Spacing.snug : 0)
-        .padding(.bottom, Tokens.Spacing.block)
       }
-      .background(Tokens.Color.canvas)
+      .padding(.top, title == nil ? (rows.isEmpty ? Tokens.Spacing.section : Tokens.Spacing.snug) : 0)
+      .padding(.bottom, Tokens.Spacing.block)
+      .frame(maxWidth: .infinity, alignment: .leading)
     }
+    // Dragging the list puts the keyboard away, so the matches under the field can be read.
+    .scrollDismissesKeyboard(.interactively)
+    .background(Tokens.Color.canvas)
+  }
+
+  /// What a list with no rows says. Which of the four it is depends on the search: before any
+  /// search it is the empty history; once a search has looked, a miss is a statement naming the
+  /// words, never a blank screen; a search still being read says so; and one that could not be read
+  /// says history is safe.
+  @ViewBuilder private var emptyContent: some View {
+    switch search?.state ?? .idle {
+    case .idle:
+      emptyState(
+        title: "No workouts yet", detail: "Finished workouts appear here.",
+        systemImage: "clock.arrow.circlepath")
+    case .searching:
+      Text(HistoryCopy.searching)
+        .font(Tokens.Text.label)
+        .foregroundStyle(Tokens.Color.chalkDim)
+        .padding(.horizontal, Tokens.Spacing.loose)
+        .padding(.top, Tokens.Spacing.loose)
+    case .answered(let query):
+      emptyState(
+        title: HistoryCopy.noMatchTitle(for: query), detail: HistoryCopy.noMatchDetail,
+        systemImage: "magnifyingglass")
+    case .failed:
+      emptyState(
+        title: HistoryCopy.searchFailedTitle, detail: HistoryCopy.searchFailedDetail,
+        systemImage: "exclamationmark.triangle")
+    }
+  }
+
+  /// Sits 24 pt under what is above it, as the empty state always has: the column's own 8 pt and 16 more.
+  private func emptyState(title: String, detail: String, systemImage: String) -> some View {
+    HardsetEmptyState(title: title, detail: detail, systemImage: systemImage)
+      .padding(.top, Tokens.Spacing.loose)
+  }
+
+  /// "Show older matches" when the rows are a search's answer, so the control does not claim the
+  /// whole history is being paged.
+  private var olderTitle: String {
+    if let state = search?.state, case .answered = state {
+      return isLoadingOlder ? HistoryCopy.readingOlderMatches : HistoryCopy.showOlderMatches
+    }
+    return isLoadingOlder ? "Reading older workouts…" : "Show older workouts"
   }
 
   /// The screen's header, with the Settings action when one is given, as on the Train tab.

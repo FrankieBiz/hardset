@@ -644,6 +644,101 @@ handout commit5887ceb is preserved. Main's earlier root-loading integration pass
 repeat run42430194445. The user selected Linux and simulator CI for now; signed
 account/device checks remain pending.
 
+## History search — 2026-11-22
+
+Release review finding C10: reaching a session from three years ago was a dozen taps and
+there was no search. `HistoryStore.searchHistory` finds finished workouts by movement,
+machine or gym name. It is built so a keystroke never scans the sets.
+
+How it reads, and why each step is keyed:
+
+- Names are read whole from `exercises`, `machines` and `gyms` (hundreds of rows, not
+  history) and matched in Swift by `CatalogSearch`, the movement picker's own rules, so
+  "ohp", "squats" and "press bench" behave in History as they do in the picker. SQLite
+  `LIKE '%x%'` could not use an index, and matching in Swift keeps one set of spelling rules.
+- Each matched movement leads to sessions through the existing exercise indexes. Each
+  matched machine leads there through `loggedSets_on_machineID_sessionID`, and each matched
+  gym through `sessions_on_gymID`. Both are new, from the additive migration
+  `v14_historySearch`: no existing index led with the machine, and a session's gym was not
+  indexed, so the current schema could not serve those two without a scan.
+- The matched workouts are resolved by primary key and ordered in Swift, newest start first
+  with the id breaking a tie, the list's own order. No statement sorts in SQLite, and the
+  one sort left is the page's own summary read, which the list also runs.
+- A query needs two letters or digits. One character begins nearly every movement name and
+  would read nearly every set.
+
+The index migration is local and non-unique, and changes no synchronized table's shape. The
+machine index is partial (`machineID IS NOT NULL`) because free-weight and imported sets
+have no machine; it carries the session id, so the lookup is answered from the index alone.
+
+Gate: `python3 Tools/check_query_performance.py --require-indexes` now also runs the shape
+of every search statement, and the three name reads are listed as whole-table reads beside
+the import candidates. Without `v14_historySearch` the gate fails on "history search by
+machine" and "history search by gym" (a scan of `loggedSets` and of `sessions`); with it, all
+pass. `HistorySearchTests` reads the plan of every statement the store really emits and fails
+on a scan of either big table, or on a sort in any lookup.
+
+Fixture medians, warm in-memory SQLite on Linux, 100,000 sets and 5,000 sessions:
+
+| Lookup | Rows | Time | Plan |
+| --- | ---: | ---: | --- |
+| By movement, two movements | 4,000 | 1.3 ms | search on the exercise index |
+| By machine, two machines | 3,334 | 0.6 ms | covering search on the new machine index |
+| By gym, two gyms | 3,333 | 0.9 ms | search on the new gym index |
+| Resolve three sessions | 3 | 0.004 ms | search on the primary key |
+
+Before the migration the machine lookup scanned all 100,000 sets: 3.0 ms for the same
+3,334-row answer, against 0.5 to 0.6 ms with the index. The gym lookup scanned every session
+and is no faster with its index on this fixture (0.7 ms before, 0.9 to 1.0 ms after), because a
+third of the sessions sit at each gym and the answer is most of the table; the index matters
+when a gym holds a small share of a long history, and stops the read from scaling with the
+whole table. These are host microbenchmarks, not iPhone timings. The cost of the new indexes on
+a set write, and on storage, is unmeasured on a device.
+
+The screen debounces typing (250 ms, and only when the words changed, so asking for more
+matches does not wait), cancels the read in flight through `SnapshotLoader`, and checks for
+cancellation before and after the database read. A search that matches nothing returns an
+empty page, and the screen says "No workouts match" with the words searched.
+
+Not verified: no SwiftUI target compiles on Linux. The search field, its focus behaviour while
+the list below it changes, Dynamic Type, VoiceOver and the 44 pt targets need a Mac or the macOS
+CI run.
+
+### Jumping to a month
+
+The same finding asked for a way to land near a period instead of scrolling. History now has a
+calendar button that opens the months that hold workouts, newest first under their year.
+Choosing one starts the list at that month's last workout and pages older from there
+(`loadHistory(limit:startedBefore:)`, with the next month's first instant as the bound), and
+"Back to latest workouts" returns to the newest. Only months with data are offered, so a jump
+never lands on an empty month, and the newest month is the newest workouts.
+
+- A month is cut by the lifter's own calendar, not by UTC: a workout at 11:30 pm on the 31st is
+  in the month its owner would say. That is why `loadMonths` reads one start time per finished
+  workout and groups them in Swift; SQL could only cut a month at UTC. It runs when the picker
+  opens, never on a keystroke, and the gate lists it with the whole-history reads.
+- `v15_historyOrder` adds `sessions_on_historyOrder`: `startedAt DESC, id DESC` over finished
+  sessions only. The list's order includes the id tie-break, and no existing index matched it, so
+  each page sorted. With it the page, its count and the month list are read straight off one index.
+  Fixture medians, same 5,000 sessions: a page from a month 0.046 to 0.033 ms with the sort gone,
+  its count 0.124 to 0.042 ms, the month list 1.22 to 0.78 ms. At this size the plan, not the
+  time, is the point. The same index also serves the existing newest-first page, which in a scratch
+  run went from sorting all 5,000 finished sessions (about 0.7 ms) to walking the index and
+  stopping at the limit (about 0.05 ms); that page is not in the gate, because it is a bounded scan
+  of an index rather than a keyed search.
+- The gate runs the page, its count and the month list, and fails without the index ("history page
+  from a month" sorts). `HistoryMonthsTests` pins that every month offered lands on a workout from
+  that month, including workouts on a boundary in a UTC-negative calendar, and that an open workout
+  is not in a month.
+
+Choosing a month hides workouts newer than it until the lifter taps "Back to latest workouts";
+the subtitle says "from March 2023 and earlier" so the list is never read as the whole history.
+A search always spans all of history, so the month button is hidden while a search is showing.
+
+Not verified: the picker sheet, its pinned year headings, selection rows, Dynamic Type and
+VoiceOver reading ("March, 14 workouts" under a "2023" heading) have not been compiled or seen;
+no SwiftUI target builds on Linux.
+
 ## Remaining app-wide work
 
 - Capture Release cold/warm launch, first usable workout, resume, picker, history,
