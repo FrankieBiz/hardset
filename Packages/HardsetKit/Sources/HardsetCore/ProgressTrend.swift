@@ -158,6 +158,17 @@ public enum ProgressTrendAnalyzer {
     )
   }
 
+  /// One record the detector found while replaying a series, with the set that set it.
+  public struct RecordFinding: Hashable, Sendable {
+    public let sessionID: SessionID
+    /// The set that set the record.
+    public let sample: ProgressionSample
+    public let record: PersonalRecord
+    /// The earlier set the record beat, when the history names exactly one. `nil` when two different
+    /// earlier sets match the record's own figures, rather than a guess between them.
+    public let beaten: PriorSetRecord?
+  }
+
   /// The sessions that set at least one record, with history always including every earlier set.
   ///
   /// The first session only builds history: with nothing before it, an ordinary ramp would look
@@ -173,28 +184,75 @@ public enum ProgressTrendAnalyzer {
     estimatesOneRepMax: Bool,
     lastSessions: Int? = nil
   ) -> Set<SessionID> {
+    Set(
+      recordFindings(
+        samples: samples, incrementKg: incrementKg, estimatesOneRepMax: estimatesOneRepMax,
+        lastSessions: lastSessions
+      ).map(\.sessionID))
+  }
+
+  /// Every record the replay finds, with the set that set it, oldest first. This is the replay the
+  /// record stars come from: `recordSessionIDs` is the sessions of these findings, so the "Worked
+  /// from" account for a star is the detector's own answer and not a second reading of the history.
+  public static func recordFindings(
+    samples: [ProgressionSample],
+    incrementKg: Double?,
+    estimatesOneRepMax: Bool,
+    lastSessions: Int? = nil
+  ) -> [RecordFinding] {
     let sessions = sessions(from: samples)
     guard sessions.count > 1 else { return [] }
 
-    var records = Set<SessionID>()
+    var findings: [RecordFinding] = []
     var history = RecordReplayIndex(samples: samples)
     let firstTested = max(1, sessions.count - (lastSessions ?? sessions.count))
 
     for (index, session) in sessions.enumerated() {
       for sample in session.samples.sorted(by: { $0.completedAt < $1.completedAt }) {
         if index >= firstTested {
+          let comparisons = history.comparisons(for: sample)
           let found = PersonalRecordDetector.records(
             for: .init(weightKg: sample.weightKg, reps: sample.reps),
-            history: history.comparisons(for: sample),
+            history: comparisons,
             increment: incrementKg,
             estimatesOneRepMax: estimatesOneRepMax
           )
-          if !found.isEmpty { records.insert(session.id) }
+          for record in found {
+            findings.append(
+              RecordFinding(
+                sessionID: session.id, sample: sample, record: record,
+                beaten: beatenSet(by: record, among: comparisons)))
+          }
         }
         history.append(sample)
       }
     }
-    return records
+    return findings
+  }
+
+  /// The one earlier set a record's own figures point to, among the comparisons it was decided
+  /// against, or `nil` when none or more than one different set fits.
+  static func beatenSet(by record: PersonalRecord, among comparisons: [PriorSetRecord]) -> PriorSetRecord? {
+    let tolerance = PersonalRecordDetector.loadMatchingTolerance
+    let matches: [PriorSetRecord]
+    switch record.kind {
+    case .heaviestLoad:
+      guard let previous = record.previousWeightKg else { return nil }
+      matches = comparisons.filter { $0.weightKg == previous }
+    case .repsAtLoad:
+      guard let reps = record.previousReps else { return nil }
+      matches = comparisons.filter { abs($0.weightKg - record.weightKg) < tolerance && $0.reps == reps }
+    case .loadAtReps:
+      guard let previous = record.previousWeightKg, let reps = record.previousReps else { return nil }
+      matches = comparisons.filter { $0.weightKg == previous && $0.reps == reps }
+    case .estimatedOneRepMax:
+      guard let previous = record.previousWeightKg else { return nil }
+      matches = comparisons.filter {
+        StrengthMath.estimatedOneRepMax(weightKg: $0.weightKg, reps: $0.reps).value == previous
+      }
+    }
+    let distinct = Set(matches)
+    return distinct.count == 1 ? distinct.first : nil
   }
 
   /// The ranking is deliberately one metric: percentages of load and reps cannot be ordered

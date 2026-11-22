@@ -84,16 +84,21 @@ public struct WorkoutReceipt: Hashable, Sendable, Identifiable {
     public let records: [PersonalRecord]
     public let loadAssumption: String?
     public let isImported: Bool
+    /// The equipment's own load step the record detector was given for this set, so the account of a
+    /// record can state the margin it needed. `nil` when the machine has none saved, or there is no
+    /// machine, and the detector then assumed one 5 lb plate.
+    public let incrementKg: Double?
 
     public init(
       id: SetID, exerciseID: ExerciseID?, exerciseName: String, equipment: Equipment,
       weightKg: Double, reps: Int, isWarmup: Bool, records: [PersonalRecord] = [],
-      isImported: Bool = false, loadAssumption: String? = nil
+      isImported: Bool = false, loadAssumption: String? = nil, incrementKg: Double? = nil
     ) {
       self.id = id; self.exerciseID = exerciseID; self.exerciseName = exerciseName
       self.equipment = equipment; self.weightKg = weightKg; self.reps = reps
       self.isWarmup = isWarmup; self.records = records
       self.loadAssumption = loadAssumption; self.isImported = isImported
+      self.incrementKg = incrementKg
     }
 
     /// A line known only by its machine name, as previews build them. With no machine the

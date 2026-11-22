@@ -38,6 +38,9 @@ public struct ProgressionChartView: View {
   /// Opens the working behind a machine's latest estimated max, from the legend's figure. `nil`
   /// where the screen has no working to show, such as a preview, and the figure is then plain text.
   private let onShowEstimateWorking: ((ProgressionKey) -> Void)?
+  /// Opens the working behind the record stars: the set that set each, what it beat and the rule.
+  /// `nil` where the screen has none to show.
+  private let onShowRecordWorking: (() -> Void)?
   /// `false` for movements whose logged load is not the load moved (bodyweight work), where no
   /// one-rep max is ever estimated. Says so instead of blaming the rep count.
   private let estimatesOneRepMax: Bool
@@ -79,7 +82,8 @@ public struct ProgressionChartView: View {
     estimatesOneRepMax: Bool = true,
     assumesAddedLoad: Bool = false,
     onExplain: (() -> Void)? = nil,
-    onShowEstimateWorking: ((ProgressionKey) -> Void)? = nil
+    onShowEstimateWorking: ((ProgressionKey) -> Void)? = nil,
+    onShowRecordWorking: (() -> Void)? = nil
   ) {
     self.estimatesOneRepMax = estimatesOneRepMax && !assumesAddedLoad
     self.assumesAddedLoad = assumesAddedLoad
@@ -88,6 +92,7 @@ public struct ProgressionChartView: View {
     self.unit = unit
     self.onExplain = onExplain
     self.onShowEstimateWorking = onShowEstimateWorking
+    self.onShowRecordWorking = onShowRecordWorking
     self._metric = State(
       initialValue: assumesAddedLoad
         ? (ProgressionAnalyzer.hasNoAddedLoad(series.map(\.points)) ? .repsAtTopLoad : .heaviestLoad)
@@ -144,6 +149,9 @@ public struct ProgressionChartView: View {
           legend(plotted)
           if plotted.contains(where: { !$0.recordSessionIDs.isEmpty }) {
             recordKey(plotted)
+            if let onShowRecordWorking {
+              WorkedFromButton("Worked from these records", action: onShowRecordWorking)
+            }
           }
         }
         .padding(Tokens.Spacing.loose)

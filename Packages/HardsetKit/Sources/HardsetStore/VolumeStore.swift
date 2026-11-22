@@ -298,7 +298,7 @@ public nonisolated struct ProgressionStore: Sendable {
       assumesAddedLoad: inputs.assumesAddedLoad,
       requiresMachineIdentity: inputs.requiresMachineIdentity,
       recordSessionIDs: recordSessions, bestAtWeight: ledgers,
-      samples: inputs.samples, warmupSamples: inputs.warmups
+      samples: inputs.samples, warmupSamples: inputs.warmups, incrementsKg: inputs.increments
     )
   }
 
@@ -390,6 +390,9 @@ public nonisolated struct ProgressionHistory: Hashable, Sendable {
   /// The exercise's warm-up sets, which the analysers never see. Held so an account can list them
   /// as left out.
   public let warmupSamples: [ProgressionSample]
+  /// Each machine's real load step, as the record replay was given it, so the account of a record
+  /// states the margin that was applied.
+  public let incrementsKg: [MachineID: Double]
 
   public init(
     series: [ProgressionSeries],
@@ -401,7 +404,8 @@ public nonisolated struct ProgressionHistory: Hashable, Sendable {
     recordSessionIDs: [ProgressionKey: Set<SessionID>] = [:],
     bestAtWeight: [ProgressionKey: [BestAtWeight]] = [:],
     samples: [ProgressionSample] = [],
-    warmupSamples: [ProgressionSample] = []
+    warmupSamples: [ProgressionSample] = [],
+    incrementsKg: [MachineID: Double] = [:]
   ) {
     self.series = series
     self.machineChanges = machineChanges
@@ -413,6 +417,13 @@ public nonisolated struct ProgressionHistory: Hashable, Sendable {
     self.bestAtWeight = bestAtWeight
     self.samples = samples
     self.warmupSamples = warmupSamples
+    self.incrementsKg = incrementsKg
+  }
+
+  /// The load step the record replay used for a series: its machine's own, or `nil` when it has
+  /// none saved, where the detector assumes one 5 lb plate.
+  public func incrementKg(for key: ProgressionKey) -> Double? {
+    key.machineID.flatMap { incrementsKg[$0] }
   }
 
   /// Label for a series. Free-weight work and a deleted machine are named rather than blank.
