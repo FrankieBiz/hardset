@@ -192,6 +192,9 @@ public nonisolated struct ProgressionStore: Sendable {
 
   private struct HistoryInputs: Sendable {
     let samples: [ProgressionSample]
+    /// The exercise's warm-ups, kept apart from `samples` so no analysis can count one, and read so
+    /// the "Worked from" account can list them as left out rather than leave them missing.
+    let warmups: [ProgressionSample]
     let names: [MachineID: String]
     /// Each machine's real load step, so a record on a 5 kg stack needs a genuine 5 kg.
     let increments: [MachineID: Double]
@@ -204,6 +207,7 @@ public nonisolated struct ProgressionStore: Sendable {
     -> HistoryInputs
   {
     let samples = try readSamples(for: exerciseID, limit: Int.max, in: db)
+    let warmups = try readWarmupSamples(for: exerciseID, in: db)
     let ids = Array(Set(samples.compactMap(\.machineID)))
     // The movement's modality decides whether its load may be estimated at all. An unknown or
     // missing modality cannot establish the whole load moved.
@@ -213,7 +217,7 @@ public nonisolated struct ProgressionStore: Sendable {
     // One read for both, so labelling a history stays a single query however much it carries.
     let machines = try readMachines(ids, in: db)
     return HistoryInputs(
-      samples: samples, names: machines.names, increments: machines.increments,
+      samples: samples, warmups: warmups, names: machines.names, increments: machines.increments,
       estimatesOneRepMax: estimates,
       assumesAddedLoad: knownModality == nil,
       requiresMachineIdentity: knownModality == .machine || knownModality == .cable
@@ -243,7 +247,8 @@ public nonisolated struct ProgressionStore: Sendable {
       estimatesOneRepMax: inputs.estimatesOneRepMax,
       assumesAddedLoad: inputs.assumesAddedLoad,
       requiresMachineIdentity: inputs.requiresMachineIdentity,
-      recordSessionIDs: recordSessions, bestAtWeight: ledgers
+      recordSessionIDs: recordSessions, bestAtWeight: ledgers,
+      samples: inputs.samples, warmupSamples: inputs.warmups
     )
   }
 
@@ -256,10 +261,29 @@ public nonisolated struct ProgressionStore: Sendable {
       .order { ($0.completedAt.desc(), $0.setOrdinal.desc(), $0.id.desc()) }
       .limit(limit)
       .fetchAll(db)
+    return try samples(from: rows.reversed(), in: db)
+  }
+
+  /// The exercise's warm-up sets, oldest first. Never fed to the analysers.
+  private static func readWarmupSamples(for exerciseID: ExerciseID, in db: Database) throws
+    -> [ProgressionSample]
+  {
+    let rows = try LoggedSet
+      .where { $0.exerciseID.eq(exerciseID.rawValue) }
+      .where { $0.isWarmup }
+      .order { ($0.completedAt, $0.setOrdinal, $0.id) }
+      .fetchAll(db)
+    return try samples(from: rows, in: db)
+  }
+
+  /// Rows as samples, in the order given, with imported sessions marked.
+  private static func samples(from rows: [LoggedSet], in db: Database) throws
+    -> [ProgressionSample]
+  {
     let sessionIDs = Array(Set(rows.map(\.sessionID)))
     let imported = Set(try Session.where { $0.id.in(sessionIDs) && $0.notes.like("Imported from %") }
       .select(\.id).fetchAll(db))
-    return rows.reversed().map {
+    return rows.map {
         ProgressionSample(
           sessionID: SessionID(rawValue: $0.sessionID),
           machineID: $0.machineID.map(MachineID.init(rawValue:)),
@@ -310,6 +334,12 @@ public nonisolated struct ProgressionHistory: Hashable, Sendable {
   public let recordSessionIDs: [ProgressionKey: Set<SessionID>]
   /// For each series, the most reps ever done at each weight, heaviest first.
   public let bestAtWeight: [ProgressionKey: [BestAtWeight]]
+  /// Every working set the series above were built from, across machines, oldest first. The
+  /// "Worked from" account derives from these, so it explains the sets the chart used and no others.
+  public let samples: [ProgressionSample]
+  /// The exercise's warm-up sets, which the analysers never see. Held so an account can list them
+  /// as left out.
+  public let warmupSamples: [ProgressionSample]
 
   public init(
     series: [ProgressionSeries],
@@ -319,7 +349,9 @@ public nonisolated struct ProgressionHistory: Hashable, Sendable {
     assumesAddedLoad: Bool = false,
     requiresMachineIdentity: Bool = false,
     recordSessionIDs: [ProgressionKey: Set<SessionID>] = [:],
-    bestAtWeight: [ProgressionKey: [BestAtWeight]] = [:]
+    bestAtWeight: [ProgressionKey: [BestAtWeight]] = [:],
+    samples: [ProgressionSample] = [],
+    warmupSamples: [ProgressionSample] = []
   ) {
     self.series = series
     self.machineChanges = machineChanges
@@ -329,6 +361,8 @@ public nonisolated struct ProgressionHistory: Hashable, Sendable {
     self.requiresMachineIdentity = requiresMachineIdentity
     self.recordSessionIDs = recordSessionIDs
     self.bestAtWeight = bestAtWeight
+    self.samples = samples
+    self.warmupSamples = warmupSamples
   }
 
   /// Label for a series. Free-weight work and a deleted machine are named rather than blank.
