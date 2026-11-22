@@ -149,6 +149,25 @@ jobs:
             -skipMacroValidation -skipPackagePluginValidation \
             CODE_SIGN_IDENTITY=- CODE_SIGN_STYLE=Manual DEVELOPMENT_TEAM="
           xcodebuild build-for-testing $COMMON 2>&1 | tee ui-build.log | grep -E "error:|BUILD|TEST BUILD" || true
+          APP_BUNDLE=$(find dd/Build/Products -name Hardset.app -type d | head -n 1)
+          BUNDLE_ID=$(/usr/libexec/PlistBuddy -c "Print :CFBundleIdentifier" "$APP_BUNDLE/Info.plist" 2>/dev/null || true)
+          RUNNER_APP=$(find dd/Build/Products -name '*-Runner.app' -type d | head -n 1)
+          RUNNER_ID=$(/usr/libexec/PlistBuddy -c "Print :CFBundleIdentifier" "$RUNNER_APP/Info.plist" 2>/dev/null || true)
+          # The simulator can refuse to launch the UI test runner while it is still installing or
+          # removing the runner bundle:
+          #   Simulator device failed to launch com.francisbisignano.hardset.uitests.xctrunner.
+          #   Application "...xctrunner" is installing or uninstalling, and cannot be launched. (Busy)
+          # Nothing is wrong with the app or the tests when it does, and it has cost whole runs on
+          # pull requests and on main. xcodebuild installs and launches the runner inside one
+          # process, so this script cannot wait between the two. ui_xcodebuild (Tools/ui_launch.sh)
+          # waits for the device to stop changing before every invocation, including each launch of
+          # the reverse-order loop below, and when that exact denial comes back before any test has
+          # run it waits and launches the same invocation again, three attempts in all, printing one
+          # line per retry. A run in which a test started is never retried by it, so a real failure
+          # stays one. Do not delete the wait or the retry as noise; the Busy denial returns without
+          # them.
+          . Tools/ui_launch.sh
+          export UI_SIM_UDID="$UDID" UI_SIM_BUNDLES="$BUNDLE_ID $RUNNER_ID"
           # A launch can be denied with "Busy" while the simulator is still finishing the app's
           # install (run 44648846716: the first test of the dark pass, the same tree passed in
           # 44618696304). Only a failing test is run once more, so a test that fails twice still
@@ -156,18 +175,16 @@ jobs:
           # Appearance is set on the device itself, around two passes: XCUIDevice.appearance did not
           # reach the system on this runner.
           xcrun simctl ui "$UDID" appearance dark
-          xcodebuild test-without-building $COMMON \
+          ui_xcodebuild "dark pass" ui-test.log test-without-building $COMMON \
             -only-testing:HardsetUITests \
             -skip-testing:HardsetUITests/AppScreensUITests/testScreensInLightMode \
             -retry-tests-on-failure -test-iterations 2 \
-            -resultBundlePath app-screens/ui-dark.xcresult \
-            2>&1 | tee ui-test.log | grep -E "error:|Test [Cc]ase|TEST (SUCCEEDED|FAILED)|Executed" || true
+            -resultBundlePath app-screens/ui-dark.xcresult || true
           xcrun simctl ui "$UDID" appearance light
-          xcodebuild test-without-building $COMMON \
+          ui_xcodebuild "light pass" ui-test-light.log test-without-building $COMMON \
             -only-testing:HardsetUITests/AppScreensUITests/testScreensInLightMode \
             -retry-tests-on-failure -test-iterations 2 \
-            -resultBundlePath app-screens/ui-light.xcresult \
-            2>&1 | tee ui-test-light.log | grep -E "error:|Test [Cc]ase|TEST (SUCCEEDED|FAILED)|Executed" || true
+            -resultBundlePath app-screens/ui-light.xcresult || true
           # The same journeys once more, one launch each, in reverse of their normal order. Every
           # journey starts from an empty store (HARDSET_STORE=reset), so the order must not change what
           # any of them finds; a journey that leaned on another's leftovers fails here and not in the
@@ -181,22 +198,25 @@ jobs:
               *) xcrun simctl ui "$UDID" appearance dark ;;
             esac
             TEST_RUNNER_HARDSET_UI_SHOT_DIR="$GITHUB_WORKSPACE/app-screens-reverse" \
-              xcodebuild test-without-building $COMMON \
+              ui_xcodebuild "$TEST" "app-screens-reverse/$TEST.log" test-without-building $COMMON \
               -only-testing:HardsetUITests/AppScreensUITests/$TEST \
               -retry-tests-on-failure -test-iterations 2 \
-              -resultBundlePath "app-screens-reverse/$TEST.xcresult" \
-              2>&1 | tee "app-screens-reverse/$TEST.log" | grep -E "error:|Test [Cc]ase|TEST (SUCCEEDED|FAILED)|Executed" || true
+              -resultBundlePath "app-screens-reverse/$TEST.xcresult" || true
             grep -qE "TEST (EXECUTE )?SUCCEEDED" "app-screens-reverse/$TEST.log" || { echo "Reverse order: $TEST failed"; REVERSE_FAILED=1; }
           done
           kill "$LOG_PID" || true
-          APP_BUNDLE=$(find dd/Build/Products -name Hardset.app -type d | head -n 1)
-          BUNDLE_ID=$(/usr/libexec/PlistBuddy -c "Print :CFBundleIdentifier" "$APP_BUNDLE/Info.plist" 2>/dev/null || true)
           DATA=$(xcrun simctl get_app_container "$UDID" "$BUNDLE_ID" data 2>/dev/null || true)
           [ -n "$DATA" ] && cp "$DATA/tmp/stderr.log" app-screens/app-stderr.txt 2>/dev/null || true
           cp -R "$HOME/Library/Developer/CoreSimulator/Devices/$UDID/data/Library/Logs/CrashReporter" app-screens/simulator-crashes 2>/dev/null || true
           ls -la app-screens
-          grep -qE "TEST (EXECUTE )?SUCCEEDED" ui-test.log && grep -qE "TEST (EXECUTE )?SUCCEEDED" ui-test-light.log
-          [ "$REVERSE_FAILED" = 0 ]
+          # Each pass is judged on its own. These were one `a && b` line before the reverse-order
+          # result was added after them, and under `bash -e` a failed first grep of an `&&` list does
+          # not stop the step, so a dark pass that never succeeded (a launch denied on every attempt
+          # included) failed nothing while the reverse pass was green.
+          PASSES_FAILED=0
+          grep -qE "TEST (EXECUTE )?SUCCEEDED" ui-test.log || { echo "Dark pass failed"; PASSES_FAILED=1; }
+          grep -qE "TEST (EXECUTE )?SUCCEEDED" ui-test-light.log || { echo "Light pass failed"; PASSES_FAILED=1; }
+          [ "$PASSES_FAILED" = 0 ] && [ "$REVERSE_FAILED" = 0 ]
 
       # When the app dies under test, its crash report is the only explanation. Simulator crashes
       # land in the host's DiagnosticReports.
