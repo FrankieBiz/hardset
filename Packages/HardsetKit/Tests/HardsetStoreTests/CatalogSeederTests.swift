@@ -184,6 +184,10 @@ struct CatalogSeederTests {
       ("rdl", "Romanian Deadlift"), ("ohp", "Overhead Press"), ("pull up", "Pull-up"),
       ("seated row", "Seated Cable Row"), ("incline bench", "Incline Barbell Bench Press"),
       ("db bench", "Dumbbell Bench Press"), ("squats", "Barbell Back Squat"),
+      ("adductor machine", "Hip Adduction Machine"),
+      ("abductor machine", "Hip Abduction Machine"),
+      ("glute drive", "Machine Hip Thrust"),
+      ("plate loaded pulldown", "Pulldown Machine"),
     ]
     for (query, expected) in cases {
       #expect(try seeder.search(query).first?.name == expected, "\(query)")
@@ -385,6 +389,22 @@ struct ExerciseCatalogTests {
       cable-triceps-kickback c9b06f22-eb1a-58c9-930a-12535b1dfd0a
       barbell-wrist-curl 0f4eac20-91a3-547d-8375-b064c621e985
       barbell-reverse-wrist-curl 665d4bf6-6894-5a87-b955-5bb4f62a4e05
+      abdominal-crunch-machine 392c4e77-6962-5ed8-9eb1-78ab0424a819
+      crunch 63a792dd-9bf9-531f-9343-7d646d4ea032
+      decline-crunch 8ed5e592-a011-5427-bbc0-ffbd1fda4d3d
+      reverse-crunch 9c30f353-e4f2-510a-b20f-05b695579b23
+      hanging-knee-raise 73c92a83-b756-5912-ae46-9331df327436
+      captain-chair-knee-raise d2cdd936-f46b-5fc9-9915-0eb94aba174e
+      cable-wood-chop 99b2ad89-5f54-542b-9350-48d01e481ea2
+      cable-side-bend 9e189aab-e44d-542e-9552-f6ed89606d03
+      dumbbell-side-bend 87b1cf07-3b2c-579e-9a8d-cf1a9ec8d4cc
+      torso-rotation-machine a8b4591b-d778-5b1d-b534-5adb0d2723d7
+      back-extension-machine 85c64763-220c-5dc2-b2d3-7f080feb0078
+      reverse-hyperextension 53a45ab3-4189-5f09-8907-379aed53a06a
+      cable-hip-adduction 4e9814cc-dee7-5973-815a-713b863c7bad
+      cable-external-rotation c8fc3b4d-5cfc-5c35-9903-43c944f76e2d
+      side-lying-dumbbell-external-rotation 77641a42-7038-5e34-93a7-c589ac780e12
+      cable-wrist-curl 9b7c42e0-adaa-564c-a34d-a10ef48f8587
       """.split(separator: "\n").map { $0.split(separator: " ").map(String.init) }
     let expected = Dictionary(uniqueKeysWithValues: pinned.map { ($0[0], $0[1]) })
     let actual = Dictionary(uniqueKeysWithValues: ExerciseCatalog.v1.map { ($0.slug, $0.id) })

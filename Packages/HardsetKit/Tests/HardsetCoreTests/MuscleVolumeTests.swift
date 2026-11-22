@@ -176,7 +176,10 @@ struct MuscleVolumeTests {
     #expect(gaps.contains(.hamstrings))
     // Content debt is not reported as the user's coverage gap.
     #expect(!gaps.contains(.neck))
-    #expect(!gaps.contains(.obliques))
+    // The expanded catalogue can directly train these, so they are real gaps in a chest-only week.
+    for muscle in [Muscle.obliques, .rotatorCuff, .adductors, .hipAbductors] {
+      #expect(gaps.contains(muscle))
+    }
   }
 }
 
