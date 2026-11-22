@@ -110,34 +110,49 @@ public struct VolumeReportView: View {
 
   /// Steps the rolling window a week at a time, as two words with a chevron each and no face.
   /// "Later" is dimmed, not hidden, on the newest window, so the pair never moves under the
-  /// lifter's thumb.
+  /// lifter's thumb. Side by side when both words fit; otherwise one above the other, because a
+  /// word that says what the control does is never truncated to "Earli…".
   private var windowControls: some View {
-    HStack(spacing: Tokens.Spacing.snug) {
-      Button {
-        onEarlier?()
-      } label: {
-        Label("Earlier", systemImage: "chevron.left")
-          .font(Tokens.Text.headline)
-          .foregroundStyle(Tokens.Color.chalk)
+    ViewThatFits(in: .horizontal) {
+      HStack(spacing: Tokens.Spacing.snug) {
+        earlierControl
+        Spacer(minLength: Tokens.Spacing.snug)
+        laterControl
       }
-      .buttonStyle(InlineControlStyle(alignment: .leading, dimsWhenDisabled: true))
-      .disabled(onEarlier == nil)
-      .accessibilityLabel("Earlier 7 days")
-      Spacer(minLength: Tokens.Spacing.snug)
-      Button {
-        onLater?()
-      } label: {
-        HStack(spacing: Tokens.Spacing.tight) {
-          Text("Later")
-          Image(systemName: "chevron.right").accessibilityHidden(true)
-        }
+      VStack(alignment: .leading, spacing: 0) {
+        earlierControl
+        laterControl
+      }
+    }
+  }
+
+  private var earlierControl: some View {
+    Button {
+      onEarlier?()
+    } label: {
+      Label("Earlier", systemImage: "chevron.left")
         .font(Tokens.Text.headline)
         .foregroundStyle(Tokens.Color.chalk)
-      }
-      .buttonStyle(InlineControlStyle(alignment: .trailing, dimsWhenDisabled: true))
-      .disabled(onLater == nil)
-      .accessibilityLabel("Later 7 days")
     }
+    .buttonStyle(InlineControlStyle(alignment: .leading, dimsWhenDisabled: true))
+    .disabled(onEarlier == nil)
+    .accessibilityLabel("Earlier 7 days")
+  }
+
+  private var laterControl: some View {
+    Button {
+      onLater?()
+    } label: {
+      HStack(spacing: Tokens.Spacing.tight) {
+        Text("Later")
+        Image(systemName: "chevron.right").accessibilityHidden(true)
+      }
+      .font(Tokens.Text.headline)
+      .foregroundStyle(Tokens.Color.chalk)
+    }
+    .buttonStyle(InlineControlStyle(alignment: .trailing, dimsWhenDisabled: true))
+    .disabled(onLater == nil)
+    .accessibilityLabel("Later 7 days")
   }
 
   // MARK: - Header
@@ -223,7 +238,7 @@ public struct VolumeReportView: View {
         }
       }
 
-      VStack(alignment: .leading, spacing: Tokens.Spacing.section) {
+      VStack(alignment: .leading, spacing: Tokens.Spacing.regular) {
         ForEach(rows, id: \.muscle) { row in
           bar(for: row, maxSets: maxSets)
         }
@@ -303,22 +318,28 @@ public struct VolumeReportView: View {
     // corpus. Never a level chosen here.
     let badge = MuscleCertaintyBadge(muscle: row.muscle, fractionalSets: row.sets, style: .language)
 
-    return VStack(alignment: .leading, spacing: Tokens.Spacing.snug) {
-      // One line when the name and the figure fit, which they do at ordinary sizes; otherwise the
-      // figure drops under the name so nothing is squeezed or cut. The certainty is a phrase on
-      // its own line under both, and the bar closes the row.
+    return VStack(alignment: .leading, spacing: 0) {
+      // The name and the figure on one line when they fit, which they do at ordinary sizes, with
+      // the certainty phrase tucked under the name as its subtitle; otherwise each takes its own
+      // line so nothing is squeezed or cut. The phrase is a 44 pt control, so at ordinary sizes it
+      // is drawn up into the space under the name, where nothing else can be tapped, and the bar
+      // closes the row.
       ViewThatFits(in: .horizontal) {
-        HStack(alignment: .center, spacing: Tokens.Spacing.snug) {
-          nameBlock
-          Spacer(minLength: Tokens.Spacing.snug)
-          figure
+        VStack(alignment: .leading, spacing: 0) {
+          HStack(alignment: .center, spacing: Tokens.Spacing.snug) {
+            nameBlock
+            Spacer(minLength: Tokens.Spacing.snug)
+            figure
+          }
+          badge
+            .padding(.top, -Tokens.Spacing.loose)
         }
         VStack(alignment: .leading, spacing: Tokens.Spacing.tight) {
           nameBlock
           figure
+          badge
         }
       }
-      badge
       track(fraction: CGFloat(row.sets / maxSets), isCounted: isCounted)
     }
   }
@@ -467,8 +488,18 @@ private struct CaveatNote: View {
   let title: String
   let message: String
 
+  @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
+  /// Glyph and words side by side at ordinary sizes; at accessibility sizes the glyph sits above
+  /// them, so the words keep the card's width instead of a narrow column beside it.
+  private var layout: AnyLayout {
+    dynamicTypeSize.isAccessibilitySize
+      ? AnyLayout(VStackLayout(alignment: .leading, spacing: Tokens.Spacing.snug))
+      : AnyLayout(HStackLayout(alignment: .firstTextBaseline, spacing: Tokens.Spacing.regular))
+  }
+
   var body: some View {
-    HStack(alignment: .firstTextBaseline, spacing: Tokens.Spacing.regular) {
+    layout {
       Image(systemName: "exclamationmark.circle")
         .font(Tokens.Text.headline)
         .foregroundStyle(Tokens.Color.warning)

@@ -692,10 +692,12 @@ Selection rows, the unit switch and pickers stay silent.
   week's own maximum, never to a target. Modelled muscles are solid `chalk`; muscles that are counted
   but not modelled are hollow (a `chalkDim` outline, no fill) and say so in words beside the name. The
   screen has no primary action, so the bars carry no accent. A row is the muscle's name in `label` and
-  its count in `setEntry`, the certainty phrase under them and the bar closing it, with space between
-  rows and no card, so the count is the biggest thing in the row. The week's total is `hero`. The window
+  its count in `setEntry`, the certainty phrase tucked under the name as its subtitle and the bar closing
+  it, with space between rows and no card, so the count is the biggest thing in the row. At accessibility
+  sizes the name, the count and the phrase each take a line. The week's total is `hero`. The window
   controls "Earlier" and "Later" and "How sets are counted" are inline controls in `chalk`, with "Later"
-  dimmed to 40% on the newest window; "Deep muscle map" is a pinned row under a hairline, words and a
+  dimmed to 40% on the newest window; the two window controls stack one above the other when they
+  cannot sit side by side, because a word that says what the control does is never truncated; "Deep muscle map" is a pinned row under a hairline, words and a
   chevron, a 56 pt control. It adds no token and no motion.
 - **Certainty on a muscle's count**: the badge beside a weekly count is about the research, not the
   count: whether published studies of weekly sets reach that muscle at that many sets. It is moderate
