@@ -286,8 +286,9 @@ struct ImportedMovementTests {
     #expect(row.trend.loadAssumption == nil)
     #expect(ProgressCopy.equipmentNote(for: row.trend) == nil)
     // 5 reps is inside the range the formula was fitted on, so the estimate is as certain as
-    // a native one: Epley, 110 x (1 + 5/30), against the session 42 days before.
-    #expect(row.trend.certainty == .high)
+    // a native one: Epley, 110 x (1 + 5/30), against the session 42 days before. A formula is never
+    // High, so that is Moderate, the same as a native 5-rep estimate.
+    #expect(row.trend.certainty == .moderate)
     let latest = try #require(row.trend.sparkline.last)
     #expect(abs(latest - 110 * (1 + 5.0 / 30)) < 1e-9)
     let change = try #require(row.trend.sixWeekChange)
