@@ -467,6 +467,19 @@ Selection rows, the unit switch and pickers stay silent.
   syncs, and for a screen that does not know), it is drawn outside the receipt view so the shared image
   never carries it, and Settings still holds the whole warning. The launch view hands the sync status
   down through the environment. It adds no token and no motion.
+- **Worked from** (`WorkedFromSheet`, `WorkedFromButton`, `WorkedFromAccount`): the one presentation behind
+  every number that can say how it was made. An estimated max (the figure in a chart legend row), a muscle's
+  count (the figure on a Volume row and on a map tile) and a record (the chart's star key, a receipt set's
+  record and the scorecard's record line) each open the same sheet, in the `MethodologySheet` family: the
+  figure in `readout` with how far to trust it and where it is from, the rule in `label`, then the sets that
+  fed it and what was left out, each a line of `figure` over `provenance`. A line's standing is carried by a
+  word and a symbol, a tick, a ring or a minus, and never by colour. Every set that did not count is a line
+  under "Left out" with its reason, so nothing is silently missing. The account is derived in Core from the
+  same inputs and through the same functions as the figure (`EstimateWorking`, `MuscleCountWorking`,
+  `RecordWorking`), so the sheet does no arithmetic and cannot say what the figure did not do. The control is
+  visible without a gesture: a glyph beside the figure, or a quiet "Worked from" button. It is never drawn on
+  the shared receipt image. VoiceOver hears the account as one sentence on the header and each line as one
+  sentence. It adds no token and no motion.
 - **Selection** (`SelectionRow`, `SelectionCardButtonStyle`, `SelectionIndicator`): selected choices
   take the plate blue ring and `plateBlueSurface`, and the trailing indicator swaps an empty ring
   for a filled check, so the choice is carried by shape as well as colour. A pressed selection
