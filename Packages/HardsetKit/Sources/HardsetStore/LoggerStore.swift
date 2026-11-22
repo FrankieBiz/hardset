@@ -456,7 +456,8 @@ public nonisolated struct LoggerStore: Sendable {
   /// Refused, with nothing written, for a finished or missing workout, and for a set that is not
   /// in this workout, including one already removed on another device: there is nothing here to
   /// correct, and reporting success would let the screen show a number that is not saved. A
-  /// finished workout's sets are never edited; its corrections are removals, in the receipt.
+  /// finished workout is refused here: it is corrected through `ReceiptStore.correctSet`, the same
+  /// narrow write plus the knowledge that History and records read the result.
   public func correctLoggedSet(
     _ id: SetID, in sessionID: SessionID, to draft: SetEntryDraft
   ) throws {

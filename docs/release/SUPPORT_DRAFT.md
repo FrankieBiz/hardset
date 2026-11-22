@@ -18,8 +18,9 @@ Do not publish this draft with an unconfigured contact section.
 
 ## Correct a mistake
 
-Long-press a logged set for Undo log or Edit set. Use a movement's options to
-remove it. Discarding an active workout and deleting saved history require
+Tap a logged weight or reps to correct it, or open a movement's options and
+choose Correct set. Long-press a logged set for Undo log or Edit set. Use a
+movement's options to remove it. Discarding an active workout and deleting saved history require
 confirmation. These actions remove data; an export cannot currently be imported
 as a Hardset database restore.
 

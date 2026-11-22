@@ -143,7 +143,8 @@ public nonisolated struct ReceiptStore: Sendable {
 
   /// Deletes a finished workout with all of its sets and its plan, in one transaction.
   ///
-  /// Sets stay immutable: a mistaken workout is removed, never edited. Children are deleted
+  /// A mistaken workout is removed whole; a mistaken set is corrected with `correctSet` or removed
+  /// with `deleteSet`. Children are deleted
   /// explicitly before the session rather than left to the schema's cascade, so the write states
   /// everything it removes. History, weekly volume, load history and record baselines all read
   /// the remaining rows, so each reflects the deletion on its next load. A copy already sent to
@@ -182,6 +183,54 @@ public nonisolated struct ReceiptStore: Sendable {
     }
   }
 
+  /// Corrects the weight and reps of one set in a finished workout, in place, in one transaction.
+  ///
+  /// This is D13: a finished set can be put right and not only removed. The write is the same
+  /// narrow operation the live session uses on an open workout. Only the two figures change. The
+  /// set keeps its id, the machine it was done on, its plan row, its ordinal, its warm-up flag, its
+  /// RPE and its save time, so a correction can never move a set between machines or blocks of the
+  /// same movement, or in time, and the workout keeps its own start and finish. The figures go
+  /// through the same completeness rule as writing a set, and nothing is written for a draft that
+  /// fails it.
+  ///
+  /// What is different from an open workout is who reads the result. A finished workout feeds
+  /// History, weekly volume, load history, record baselines and the Progress board's stall flag, and
+  /// each of those is derived from the stored sets on every read: nothing is cached or stored
+  /// beside them. So there is nothing to patch afterwards, and the one write is the whole
+  /// recomputation. The receipt's records, a later workout's comparison with this one, the record
+  /// star on a movement's chart and the stall flag all come out of the corrected figures the next
+  /// time they are read. The caller says so by re-reading, and persists first: the screen shows a
+  /// corrected set only after this has returned.
+  ///
+  /// Correcting a set to the figures it already holds writes nothing and succeeds.
+  ///
+  /// - Throws: `ReceiptError.incompleteSet` for a draft that is not a whole set,
+  ///   `.sessionNotFound`, `.sessionNotFinished` for an open workout (its corrections belong to the
+  ///   live session), or `.setNotFound` when the set does not exist or belongs to a different
+  ///   workout. Nothing is written for any of them.
+  public func correctSet(
+    _ setID: SetID, inSession sessionID: SessionID, to draft: SetEntryDraft
+  ) async throws {
+    try Task.checkCancellation()
+    guard let resolved = draft.resolved() else { throw ReceiptError.incompleteSet }
+    try await database.write { db in
+      try Self.requireFinishedSession(sessionID, in: db)
+      let saved = try LoggedSet
+        .where { $0.id.eq(setID.rawValue) && $0.sessionID.eq(sessionID.rawValue) }
+        .fetchOne(db)
+      guard let saved else { throw ReceiptError.setNotFound }
+      if saved.weightKg == resolved.weightKg, saved.reps == resolved.reps { return }
+      try LoggedSet
+        .where { $0.id.eq(setID.rawValue) && $0.sessionID.eq(sessionID.rawValue) }
+        .update {
+          $0.weightKg = #bind(resolved.weightKg)
+          $0.reps = #bind(resolved.reps)
+        }
+        .execute(db)
+      guard db.changesCount == 1 else { throw ReceiptError.setNotFound }
+    }
+  }
+
   private static func requireFinishedSession(_ id: SessionID, in db: Database) throws {
     let isOpen = try Session.where { $0.id.eq(id.rawValue) }
       .select { $0.finishedAt.is(nil) }.fetchOne(db)
@@ -199,4 +248,7 @@ public nonisolated enum ReceiptError: Error, Sendable, Hashable {
   case sessionNotFinished
   /// No set with this id belongs to this workout.
   case setNotFound
+  /// A correction was asked for figures that are not a whole set: a usable weight and at least one
+  /// rep. Nothing was written.
+  case incompleteSet
 }

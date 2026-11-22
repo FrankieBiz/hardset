@@ -33,12 +33,15 @@ private nonisolated struct SavedWorkoutDraft: Identifiable {
   var id: TemplateID { template.id }
 }
 
-/// A past workout's receipt, with the two corrections a lifter may need and a way into each
-/// movement's load history, and the way to keep it as a saved workout.
+/// A past workout's receipt, with the corrections a lifter may need and a way into each movement's
+/// load history, and the way to keep it as a saved workout.
 ///
-/// Saved sets are never edited. A mis-logged set can be removed, and a workout started by mistake
-/// can be deleted, each behind a destructive confirmation that says what will change. The receipt
-/// itself stays a static ledger, because the same view is shared as an image.
+/// A mis-logged set can be corrected, which changes its weight and reps and nothing else, or
+/// removed; a workout started by mistake can be deleted. Removing and deleting each sit behind a
+/// destructive confirmation that says what will change. A correction asks no confirmation, because
+/// it can be put right with another correction, and it writes first: the receipt is re-read from
+/// storage and shows the corrected set only once the write has succeeded. The receipt itself stays
+/// a static ledger, because the same view is shared as an image.
 struct WorkoutReceiptScreen: View {
   private let sessionID: SessionID
   private let store: ReceiptStore
@@ -46,13 +49,25 @@ struct WorkoutReceiptScreen: View {
   private let progression: ProgressionStore?
   /// Offers "Save as workout" when present.
   private let saveAsWorkout: SaveAsWorkoutTools?
-  /// Called after a set or the workout was deleted, so the caller can re-read what it shows.
+  /// Called after a set was corrected or deleted, or the workout was deleted, so the caller can
+  /// re-read what it shows.
   private let onChanged: () -> Void
 
   @State private var snapshot = SnapshotLoader<WorkoutReceipt>()
   @State private var image: Image?
-  @State private var isEditing = false
+  /// What the lifter is doing to the sets, when they have asked to do anything: each set shows the
+  /// matching control while it is on, and one mode at a time.
+  @State private var editing: Editing?
   @State private var pendingSet: WorkoutReceipt.Line?
+  /// The set on the correction sheet.
+  @State private var correcting: WorkoutReceipt.Line?
+  @State private var isSavingCorrection = false
+  /// Why the last save failed, shown in the sheet, which stays up with the figures typed.
+  @State private var correctionSheetError: String?
+  /// What the last correction did, in a plain sentence above the receipt.
+  @State private var correctionNote: String?
+  /// Counts requests to scroll the sets into view from outside the scroll view, such as the toolbar.
+  @State private var scrollToTopRequest = 0
   @State private var isConfirmingWorkoutDeletion = false
   @State private var isDeleting = false
   @State private var correctionError: String?
@@ -69,6 +84,11 @@ struct WorkoutReceiptScreen: View {
   @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
   private static let topID = "receipt-top"
+
+  private enum Editing {
+    case correcting
+    case removing
+  }
 
   init(
     sessionID: SessionID, store: ReceiptStore, unit: WeightUnit,
@@ -100,7 +120,14 @@ struct WorkoutReceiptScreen: View {
           // While editing, Done ends editing rather than closing the receipt, as it does in every
           // other editable list.
           Button("Done") {
-            if isEditing { isEditing = false } else { dismiss() }
+            if editing != nil { editing = nil } else { dismiss() }
+          }
+        }
+        // The way to a correction is at the top, where the receipt opens, and not only under the
+        // share and save buttons at the bottom of a long page.
+        if let receipt = snapshot.value, !receipt.lines.isEmpty {
+          ToolbarItem(placement: .cancellationAction) {
+            correctionsMenu
           }
         }
       }
@@ -158,16 +185,31 @@ struct WorkoutReceiptScreen: View {
       ScrollView {
         VStack(alignment: .leading, spacing: 0) {
           Color.clear.frame(height: 0).id(Self.topID)
-          if isEditing {
+          if let correctionNote {
+            // Neutral on purpose: a correction updates the ledger and does not celebrate, even
+            // when it made a record, so this is a plain note with no trophy and no tint.
+            HardsetBanner(.info, message: correctionNote, onDismiss: { self.correctionNote = nil })
+              .padding([.horizontal, .top], Tokens.Spacing.loose)
+              .hardsetArrival()
+          }
+          if editing == .correcting {
+            HardsetBanner(
+              .info, title: "Correcting sets",
+              message: "Tap the pencil beside a set to change its weight or reps. Nothing else about the set changes."
+            )
+            .padding([.horizontal, .top], Tokens.Spacing.loose)
+          }
+          if editing == .removing {
             HardsetBanner(
               .caveat, title: "Removing sets",
-              message: "Tap − beside a mis-logged set to delete it. Saved sets are never edited, only removed, and a removed set cannot be added back."
+              message: "Tap − beside a set that should not be there to delete it. A removed set cannot be added back; to change its figures instead, correct it."
             )
             .padding([.horizontal, .top], Tokens.Spacing.loose)
           }
           WorkoutReceiptView(
             receipt: receipt, unit: unit,
-            onDeleteLine: isEditing && !isDeleting ? { pendingSet = $0 } : nil
+            onDeleteLine: editing == .removing && !isDeleting ? { pendingSet = $0 } : nil,
+            onCorrectLine: editing == .correcting && !isDeleting ? { beginCorrecting($0) } : nil
           )
           .confirmationDialog(
             "Delete this set?",
@@ -226,19 +268,77 @@ struct WorkoutReceiptScreen: View {
               .padding(.bottom, Tokens.Spacing.section)
           }
 
-          corrections(receipt) {
-            isEditing.toggle()
-            if isEditing {
-              withAnimation(Tokens.Motion.adaptive(Tokens.Motion.state, reduceMotion: reduceMotion)) {
-                proxy.scrollTo(Self.topID, anchor: .top)
-              }
-            }
+          corrections(receipt) { mode in
+            startOrEnd(mode, scrollingWith: proxy)
           }
           .padding(.horizontal, Tokens.Spacing.loose)
           .padding(.bottom, Tokens.Spacing.block)
         }
       }
+      // Starting a mode from the toolbar scrolls to the sets it applies to.
+      .onChange(of: scrollToTopRequest) {
+        withAnimation(Tokens.Motion.adaptive(Tokens.Motion.state, reduceMotion: reduceMotion)) {
+          proxy.scrollTo(Self.topID, anchor: .top)
+        }
+      }
     }
+    // On the content, not on the stack and not on the group: the stack carries the editor's sheet
+    // and the group the naming sheet, and a second sheet on one anchor never presents.
+    .sheet(item: $correcting, onDismiss: { correctionSheetError = nil }) { line in
+      SetCorrectionSheet(
+        title: line.exerciseName,
+        detail: Self.correctionDetail(line),
+        weightKg: line.weightKg, reps: line.reps, unit: unit,
+        errorMessage: correctionSheetError, isSaving: isSavingCorrection,
+        onSave: { draft in Task { await correctSet(line, to: draft) } },
+        onCancel: { correcting = nil }
+      )
+      .hardsetSheet()
+    }
+  }
+
+  /// The toolbar's way to a correction, at the top of the receipt. Offered while the receipt has
+  /// sets; the destructive delete stays below, behind its own confirmation.
+  private var correctionsMenu: some View {
+    Menu {
+      Button {
+        startOrEnd(.correcting, scrollingWith: nil)
+      } label: {
+        Label("Correct a set", systemImage: "pencil")
+      }
+      Button {
+        startOrEnd(.removing, scrollingWith: nil)
+      } label: {
+        Label("Remove a set", systemImage: "minus.circle")
+      }
+    } label: {
+      Label("Correct", systemImage: "pencil")
+    }
+    .disabled(isDeleting)
+  }
+
+  /// Turns a mode on, or off when it is already the one that is on, and brings the sets into view.
+  private func startOrEnd(_ mode: Editing, scrollingWith proxy: ScrollViewProxy?) {
+    correctionNote = nil
+    editing = editing == mode ? nil : mode
+    guard editing != nil else { return }
+    if let proxy {
+      withAnimation(Tokens.Motion.adaptive(Tokens.Motion.state, reduceMotion: reduceMotion)) {
+        proxy.scrollTo(Self.topID, anchor: .top)
+      }
+    } else {
+      scrollToTopRequest &+= 1
+    }
+  }
+
+  private func beginCorrecting(_ line: WorkoutReceipt.Line) {
+    correctionSheetError = nil
+    correcting = line
+  }
+
+  /// "Sled A · Warm-up": where the set was done and what kind of set it was, under the movement.
+  static func correctionDetail(_ line: WorkoutReceipt.Line) -> String {
+    [line.equipmentLabel, line.isWarmup ? "Warm-up" : nil].compactMap { $0 }.joined(separator: " · ")
   }
 
   // MARK: - Save as workout
@@ -310,16 +410,29 @@ struct WorkoutReceiptScreen: View {
 
   // MARK: - Corrections
 
-  private func corrections(_ receipt: WorkoutReceipt, toggleEditing: @escaping () -> Void) -> some View {
+  private func corrections(_ receipt: WorkoutReceipt, start: @escaping (Editing) -> Void) -> some View {
     VStack(alignment: .leading, spacing: Tokens.Spacing.regular) {
       SectionLabel("Correct this workout")
-      Text("Corrections are removals only: a finished workout feeds History, volume and record baselines, so its sets are never edited or added. Remove a mis-logged set, or delete the whole workout if it was started by mistake.")
+      Text("A finished workout feeds History, volume, records and progress, so a correction changes what they read: correct a set's weight or reps, which changes nothing else about it, remove a set that should not be there, or delete the whole workout if it was started by mistake. A removed set cannot be added back.")
         .font(Tokens.Text.caption)
         .foregroundStyle(Tokens.Color.chalkDim)
         .fixedSize(horizontal: false, vertical: true)
       if !receipt.lines.isEmpty {
-        Button(action: toggleEditing) {
-          Label(isEditing ? "Finish removing sets" : "Remove a set…", systemImage: isEditing ? "checkmark" : "minus.circle")
+        Button {
+          start(.correcting)
+        } label: {
+          Label(
+            editing == .correcting ? "Finish correcting sets" : "Correct a set…",
+            systemImage: editing == .correcting ? "checkmark" : "pencil")
+        }
+        .buttonStyle(HardsetButtonStyle(.secondary))
+        .disabled(isDeleting)
+        Button {
+          start(.removing)
+        } label: {
+          Label(
+            editing == .removing ? "Finish removing sets" : "Remove a set…",
+            systemImage: editing == .removing ? "checkmark" : "minus.circle")
         }
         .buttonStyle(HardsetButtonStyle(.secondary))
         .disabled(isDeleting)
@@ -354,6 +467,7 @@ struct WorkoutReceiptScreen: View {
 
   private func deleteSet(_ line: WorkoutReceipt.Line) async {
     pendingSet = nil
+    correctionNote = nil
     isDeleting = true
     defer { isDeleting = false }
     do {
@@ -361,9 +475,36 @@ struct WorkoutReceiptScreen: View {
       correctionError = nil
       onChanged()
       await load()
-      if snapshot.value?.lines.isEmpty == true { isEditing = false }
+      if snapshot.value?.lines.isEmpty == true { editing = nil }
     } catch {
       correctionError = "The set could not be deleted. Your workout is unchanged."
+    }
+  }
+
+  /// Writes the correction, and only then changes what the receipt shows. The store persists in one
+  /// transaction; on success the receipt is re-read from storage, so its figures, records and
+  /// scorecard are the recomputed ones and never a guess made here, and `onChanged` tells the
+  /// screens under it to re-read History, volume and progress. A failure leaves the sheet up with
+  /// what was typed and the workout as it was.
+  private func correctSet(_ line: WorkoutReceipt.Line, to draft: SetEntryDraft) async {
+    isSavingCorrection = true
+    defer { isSavingCorrection = false }
+    do {
+      try await store.correctSet(line.id, inSession: sessionID, to: draft)
+    } catch {
+      correctionSheetError = "The set could not be corrected. Your workout is unchanged."
+      return
+    }
+    correctionSheetError = nil
+    onChanged()
+    await load()
+    correcting = nil
+    // Stated from the re-read receipt, so the sentence is about what is now stored. If the re-read
+    // failed the screen already says so and there is nothing true to add.
+    if let corrected = snapshot.value?.lines.first(where: { $0.id == line.id }) {
+      correctionNote = SetCorrectionCopy.note(
+        figures: WorkoutReceiptView.spokenSet(corrected, unit: unit),
+        before: line.records, after: corrected.records)
     }
   }
 

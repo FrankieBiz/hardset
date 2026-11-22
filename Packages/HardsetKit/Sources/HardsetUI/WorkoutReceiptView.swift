@@ -7,21 +7,25 @@ import SwiftUI
 /// of equipment, so the receipt reads like the training log it is rather than repeating the
 /// movement's name on every line.
 ///
-/// The same view is rendered into the shared image, so it holds no controls of its own. The one
-/// exception is `onDeleteLine`: a screen correcting a past workout passes it while editing, and
-/// each set then shows a delete control. The share renderer never passes it.
+/// The same view is rendered into the shared image, so it holds no controls of its own. The
+/// exceptions are `onDeleteLine` and `onCorrectLine`: a screen correcting a past workout passes one
+/// of them while editing, and each set then shows a delete or a correct control. The share renderer
+/// never passes either.
 public struct WorkoutReceiptView: View {
   private let receipt: WorkoutReceipt
   private let unit: WeightUnit
   private let onDeleteLine: ((WorkoutReceipt.Line) -> Void)?
+  private let onCorrectLine: ((WorkoutReceipt.Line) -> Void)?
 
   public init(
     receipt: WorkoutReceipt, unit: WeightUnit,
-    onDeleteLine: ((WorkoutReceipt.Line) -> Void)? = nil
+    onDeleteLine: ((WorkoutReceipt.Line) -> Void)? = nil,
+    onCorrectLine: ((WorkoutReceipt.Line) -> Void)? = nil
   ) {
     self.receipt = receipt
     self.unit = unit
     self.onDeleteLine = onDeleteLine
+    self.onCorrectLine = onCorrectLine
   }
 
   public var body: some View {
@@ -168,11 +172,26 @@ public struct WorkoutReceiptView: View {
     .accessibilityElement(children: .combine)
   }
 
-  /// One set: its load and reps as figures, then anything it earned. The delete control, when
-  /// present, is its own accessibility element so activating the set's description can never
-  /// delete it.
+  /// One set: its load and reps as figures, then anything it earned. The delete and correct
+  /// controls, when present, are their own accessibility elements so activating the set's
+  /// description can never delete or open it.
   private func row(_ line: WorkoutReceipt.Line) -> some View {
     HStack(alignment: .firstTextBaseline, spacing: Tokens.Spacing.snug) {
+      if let onCorrectLine {
+        // An action the lifter can take, so it is plate blue, with a pencil that says what it does
+        // and not a colour alone. Opens the sheet that changes the weight and reps and nothing else.
+        Button {
+          onCorrectLine(line)
+        } label: {
+          Image(systemName: "pencil.circle.fill")
+            .font(Tokens.Text.headline)
+            .foregroundStyle(Tokens.Color.plateBlue)
+            .frame(minWidth: Tokens.minimumTapTarget, minHeight: Tokens.minimumTapTarget)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Correct set, \(Self.spokenSet(line, unit: unit))")
+      }
       if let onDeleteLine {
         Button {
           onDeleteLine(line)
