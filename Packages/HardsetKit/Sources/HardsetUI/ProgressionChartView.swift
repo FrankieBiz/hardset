@@ -116,7 +116,8 @@ public struct ProgressionChartView: View {
         HardsetEmptyState(
           title: "No history yet",
           detail: "Log this movement a few times and its load history appears here.",
-          systemImage: "chart.xyaxis.line"
+          systemImage: "chart.xyaxis.line",
+          style: .quiet
         )
       } else {
         HardsetSegmentedControl(
@@ -150,13 +151,12 @@ public struct ProgressionChartView: View {
           if plotted.contains(where: { !$0.recordSessionIDs.isEmpty }) {
             recordKey(plotted)
             if let onShowRecordWorking {
-              WorkedFromButton("Worked from these records", action: onShowRecordWorking)
+              WorkedFromButton(
+                "Worked from these records", style: .inline, action: onShowRecordWorking)
             }
           }
         }
-        .padding(Tokens.Spacing.loose)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .hardsetCard()
 
         if plotted.contains(where: { !$0.bestAtWeight.isEmpty }) {
           bestAtEachWeight(plotted)
@@ -169,11 +169,10 @@ public struct ProgressionChartView: View {
         if let onExplain {
           Button(action: onExplain) {
             Label("How this is measured", systemImage: "questionmark.circle")
+              .font(Tokens.Text.headline)
+              .foregroundStyle(Tokens.Color.chalk)
           }
-          .buttonStyle(HardsetButtonStyle(.quiet, fullWidth: false))
-          // The quiet style insets its label; pulling it back aligns the words with the content
-          // edge while the full 44 pt region stays tappable.
-          .padding(.leading, -Tokens.Spacing.snug)
+          .buttonStyle(InlineControlStyle(alignment: .leading))
         }
       }
     }
@@ -193,26 +192,20 @@ public struct ProgressionChartView: View {
   // MARK: - Metric header
 
   /// What is plotted, in which unit, and how far to trust it -- the certainty sits beside the
-  /// metric it qualifies, not in a footnote.
+  /// metric it qualifies, not in a footnote, as a phrase under the line that says what is plotted.
   private var metricHeader: some View {
-    let layout =
-      dynamicTypeSize.isAccessibilitySize
-      ? AnyLayout(VStackLayout(alignment: .leading, spacing: Tokens.Spacing.snug))
-      : AnyLayout(HStackLayout(alignment: .center, spacing: Tokens.Spacing.regular))
-    return layout {
-      VStack(alignment: .leading, spacing: Tokens.Spacing.hairline) {
-        Text(metricTitle)
-          .font(Tokens.Text.headline)
-          .foregroundStyle(Tokens.Color.chalk)
-          .fixedSize(horizontal: false, vertical: true)
-        Text("Best per session, in \(metricUnit). One line per machine.")
-          .font(Tokens.Text.caption)
-          .foregroundStyle(Tokens.Color.chalkDim)
-          .fixedSize(horizontal: false, vertical: true)
-      }
-      .frame(maxWidth: .infinity, alignment: .leading)
+    VStack(alignment: .leading, spacing: Tokens.Spacing.hairline) {
+      Text(metricTitle)
+        .font(Tokens.Text.headline)
+        .foregroundStyle(Tokens.Color.chalk)
+        .fixedSize(horizontal: false, vertical: true)
+      Text("Best per session, in \(metricUnit). One line per machine.")
+        .font(Tokens.Text.caption)
+        .foregroundStyle(Tokens.Color.chalkDim)
+        .fixedSize(horizontal: false, vertical: true)
       certaintyBadge
     }
+    .frame(maxWidth: .infinity, alignment: .leading)
   }
 
   private var metricTitle: String {
@@ -225,11 +218,14 @@ public struct ProgressionChartView: View {
 
   @ViewBuilder private var certaintyBadge: some View {
     if assumesAddedLoad {
-      CertaintyBadge(level: .low, methodology: ExerciseModality.unknownLoadAssumption)
+      CertaintyBadge(
+        level: .low, methodology: ExerciseModality.unknownLoadAssumption, style: .language)
     } else {
       switch metric {
       case .repsAtTopLoad:
-        CertaintyBadge(level: .high, methodology: "The most reps logged at each session's top weight.")
+        CertaintyBadge(
+          level: .high, methodology: "The most reps logged at each session's top weight.",
+          style: .language)
       case .heaviestLoad:
         // High only for the arithmetic of taking a maximum of what was entered. The load itself is
         // user-entered and not independently verified, which is what the receipt says too.
@@ -239,7 +235,8 @@ public struct ProgressionChartView: View {
             ? "No added load was recorded for these sets, so there is no load to chart."
             : "The heaviest load you entered in each session. Each machine is its own line; sets "
               + "with no machine recorded form a separate line.",
-          citation: "User-entered load"
+          citation: "User-entered load",
+          style: .language
         )
       case .estimatedOneRepMax:
         // The weakest certainty among each line's latest estimate, from the reps behind it. With no
@@ -249,7 +246,8 @@ public struct ProgressionChartView: View {
           level: MethodologySheet.level(
             for: ProgressionAnalyzer.estimateCertainty(latestOf: series.map(\.points))),
           methodology: ProgressionAnalyzer.source.methodology,
-          citation: ProgressionAnalyzer.source.validRange
+          citation: ProgressionAnalyzer.source.validRange,
+          style: .language
         )
       }
     }

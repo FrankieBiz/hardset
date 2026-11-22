@@ -32,22 +32,25 @@
       ]
     }
 
-    /// The column as the Train tab draws it: the cards, the empty "Start workout", then the buttons
-    /// that follow it. The start is drawn here as the screen draws it, primary with nothing saved and
-    /// secondary under a card, so the render shows the order a lifter meets the buttons in.
+    /// The column as the Train tab draws it: the saved workouts, the empty "Start workout", then the
+    /// controls that follow it. The start is drawn here as the screen draws it, primary with nothing
+    /// saved and secondary under the workouts, so the render shows the order a lifter meets the
+    /// controls in, with the screen's own spacing between the groups.
     private static func cards(_ cards: [WorkoutCard], canRepeatLast: Bool = true) -> some View {
       ScrollView {
-        VStack(alignment: .leading, spacing: Tokens.Spacing.loose) {
+        VStack(alignment: .leading, spacing: Tokens.Spacing.block) {
           if !cards.isEmpty {
             WorkoutCardsView(cards: cards, onStart: { _ in }, onEdit: { _ in })
           }
-          Button {
-          } label: {
-            Label("Start workout", systemImage: "play.fill")
-              .labelStyle(.titleAndIcon)
+          VStack(alignment: .leading, spacing: Tokens.Spacing.regular) {
+            Button {
+            } label: {
+              Label("Start workout", systemImage: "play.fill")
+                .labelStyle(.titleAndIcon)
+            }
+            .buttonStyle(HardsetButtonStyle(cards.isEmpty ? .primary : .secondary, size: .logger))
+            WorkoutCardActions(canRepeatLast: canRepeatLast, onRepeatLast: {}, onNew: {})
           }
-          .buttonStyle(HardsetButtonStyle(cards.isEmpty ? .primary : .secondary, size: .logger))
-          WorkoutCardActions(canRepeatLast: canRepeatLast, onRepeatLast: {}, onNew: {})
         }
         .padding(Tokens.Spacing.loose)
       }

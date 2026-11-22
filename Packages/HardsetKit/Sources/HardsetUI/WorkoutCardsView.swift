@@ -3,14 +3,19 @@ import SwiftUI
 
 /// The Train tab's saved workouts: the one that is up next, large, then the rest.
 ///
-/// Starting is one tap, on the card's own button: there is no confirmation and no setup, because the
-/// lifter is standing at a machine. The up-next card reads like a coach's note, which workout, when
-/// it was last done, and how that session went against the one before it. Nothing here invents a
-/// programme: the order is only whichever workout was done longest ago, so two of them take turns.
+/// Starting is one tap, on the workout's own button: there is no confirmation and no setup, because
+/// the lifter is standing at a machine. The up-next workout reads like a coach's note, which
+/// workout, when it was last done, and how that session went against the one before it. Nothing
+/// here invents a programme: the order is only whichever workout was done longest ago, so two of
+/// them take turns.
+///
+/// Nothing is boxed. The up-next workout is type on the canvas with the screen's one primary
+/// button under it, and the others are rows separated by a hairline, each with its verbs as words:
+/// a card's fill and corner said nothing a row's own text did not.
 ///
 /// All of the words come from `WorkoutCard`, which is tested without a view; this draws them. The
-/// buttons that sit under the cards and the empty start are `WorkoutCardActions`, a separate view so
-/// the screen can put the empty "Start workout" between the two.
+/// buttons that sit under the workouts and the empty start are `WorkoutCardActions`, a separate
+/// view so the screen can put the empty "Start workout" between the two.
 public struct WorkoutCardsView: View {
   private let cards: [WorkoutCard]
   private let onStart: (TemplateID) -> Void
@@ -31,23 +36,25 @@ public struct WorkoutCardsView: View {
   }
 
   public var body: some View {
-    VStack(alignment: .leading, spacing: Tokens.Spacing.regular) {
+    VStack(alignment: .leading, spacing: Tokens.Spacing.section) {
       if let upNext = cards.first {
-        upNextCard(upNext)
+        upNextWorkout(upNext)
       }
       if cards.count > 1 {
-        SectionLabel("Your workouts", count: cards.count - 1)
-          .padding(.top, Tokens.Spacing.snug)
-        ForEach(Array(cards.dropFirst())) { card in
-          otherCard(card)
+        VStack(alignment: .leading, spacing: 0) {
+          SectionLabel("Your workouts", count: cards.count - 1)
+            .padding(.bottom, Tokens.Spacing.snug)
+          ForEach(Array(cards.dropFirst())) { card in
+            otherWorkout(card)
+          }
         }
       }
     }
   }
 
-  // MARK: - Cards
+  // MARK: - Workouts
 
-  private func upNextCard(_ card: WorkoutCard) -> some View {
+  private func upNextWorkout(_ card: WorkoutCard) -> some View {
     VStack(alignment: .leading, spacing: Tokens.Spacing.regular) {
       VStack(alignment: .leading, spacing: Tokens.Spacing.tight) {
         Text(card.name)
@@ -74,41 +81,50 @@ public struct WorkoutCardsView: View {
 
       editButton(card)
     }
-    .padding(Tokens.Spacing.loose)
     .frame(maxWidth: .infinity, alignment: .leading)
-    .hardsetCard()
   }
 
-  private func otherCard(_ card: WorkoutCard) -> some View {
-    VStack(alignment: .leading, spacing: Tokens.Spacing.regular) {
-      VStack(alignment: .leading, spacing: Tokens.Spacing.hairline) {
-        Text(card.name)
-          .font(Tokens.Text.headline)
-          .foregroundStyle(Tokens.Color.chalk)
-          .fixedSize(horizontal: false, vertical: true)
-        Text("\(card.movementsLine) · \(card.contextLine)")
-          .font(Tokens.Text.provenance)
-          .foregroundStyle(Tokens.Color.chalkDim)
-          .fixedSize(horizontal: false, vertical: true)
-      }
-      .accessibilityElement(children: .combine)
+  /// A row: the name and its line, and the two verbs as words at the trailing edge, or under the
+  /// text at accessibility sizes so a long name keeps the width. The hairline above it is where it
+  /// meets the row before it, or the label.
+  private func otherWorkout(_ card: WorkoutCard) -> some View {
+    VStack(alignment: .leading, spacing: 0) {
+      Rectangle()
+        .fill(Tokens.Color.hairline)
+        .frame(height: Tokens.Stroke.hairline)
+        .accessibilityHidden(true)
 
-      buttonLayout {
-        Button {
-          onStart(card.id)
-        } label: {
-          Label("Start", systemImage: "play.fill")
-            .labelStyle(.titleAndIcon)
+      rowLayout {
+        VStack(alignment: .leading, spacing: Tokens.Spacing.hairline) {
+          Text(card.name)
+            .font(Tokens.Text.headline)
+            .foregroundStyle(Tokens.Color.chalk)
+            .fixedSize(horizontal: false, vertical: true)
+          Text("\(card.movementsLine) · \(card.contextLine)")
+            .font(Tokens.Text.provenance)
+            .foregroundStyle(Tokens.Color.chalkDim)
+            .fixedSize(horizontal: false, vertical: true)
         }
-        .buttonStyle(HardsetButtonStyle(.secondary, size: .regular, fullWidth: false))
-        .accessibilityLabel("Start \(card.name)")
+        .accessibilityElement(children: .combine)
+        .frame(maxWidth: .infinity, alignment: .leading)
 
-        editButton(card)
+        HStack(spacing: Tokens.Spacing.regular) {
+          Button {
+            onStart(card.id)
+          } label: {
+            Label("Start", systemImage: "play.fill")
+              .labelStyle(.titleAndIcon)
+              .font(Tokens.Text.headline)
+              .foregroundStyle(Tokens.Color.chalk)
+          }
+          .buttonStyle(InlineControlStyle(minHeight: Tokens.minimumTapTarget, alignment: .leading))
+          .accessibilityLabel("Start \(card.name)")
+
+          editButton(card)
+        }
       }
+      .padding(.vertical, Tokens.Spacing.snug)
     }
-    .padding(Tokens.Spacing.loose)
-    .frame(maxWidth: .infinity, alignment: .leading)
-    .hardsetCard(cornerRadius: Tokens.Radius.control)
   }
 
   private func editButton(_ card: WorkoutCard) -> some View {
@@ -116,29 +132,33 @@ public struct WorkoutCardsView: View {
       onEdit(card.id)
     } label: {
       Text("Edit")
+        .font(Tokens.Text.headline)
+        .foregroundStyle(Tokens.Color.chalkDim)
     }
-    .buttonStyle(HardsetButtonStyle(.quiet, size: .regular, fullWidth: false))
+    .buttonStyle(InlineControlStyle(minHeight: Tokens.minimumTapTarget, alignment: .leading))
     .accessibilityLabel("Edit \(card.name)")
   }
 
   /// Side by side at ordinary sizes, stacked at accessibility sizes, so a long name never squeezes
-  /// the buttons.
-  private var buttonLayout: AnyLayout {
+  /// the verbs.
+  private var rowLayout: AnyLayout {
     dynamicTypeSize.isAccessibilitySize
       ? AnyLayout(VStackLayout(alignment: .leading, spacing: Tokens.Spacing.snug))
       : AnyLayout(HStackLayout(alignment: .center, spacing: Tokens.Spacing.regular))
   }
 }
 
-// MARK: - Actions under the cards
+// MARK: - Actions under the workouts
 
-/// The two buttons below the empty "Start workout": "Repeat last workout", which starts a session at
-/// once, and "New saved workout", which opens the plan editor and starts nothing.
+/// The two controls below the empty "Start workout": "Repeat last workout", which starts a session
+/// at once, and "New saved workout", which opens the plan editor and starts nothing.
 ///
 /// They are named for what they do and sit below the start, never above it: a lifter in a hurry
-/// meets the buttons that start a workout first, and the one that opens an editor says it makes a
+/// meets the controls that start a workout first, and the one that opens an editor says it makes a
 /// saved workout, so it cannot be mistaken for starting a session. Repeat is the one that starts, so
-/// it comes first.
+/// it comes first, and it keeps the logger's 56 pt region because a missed tap there starts
+/// nothing at a machine. Both are words and a symbol with no face, as the live session's actions
+/// are.
 public struct WorkoutCardActions: View {
   private let canRepeatLast: Bool
   private let onRepeatLast: () -> Void
@@ -146,7 +166,7 @@ public struct WorkoutCardActions: View {
 
   /// - Parameters:
   ///   - canRepeatLast: Whether a finished workout exists to repeat. "Repeat last workout" is only
-  ///     offered when it does, so it is never a button that has nothing to do.
+  ///     offered when it does, so it is never a control that has nothing to do.
   public init(
     canRepeatLast: Bool,
     onRepeatLast: @escaping () -> Void,
@@ -158,20 +178,32 @@ public struct WorkoutCardActions: View {
   }
 
   public var body: some View {
-    VStack(alignment: .leading, spacing: Tokens.Spacing.snug) {
+    VStack(alignment: .leading, spacing: 0) {
       if canRepeatLast {
         Button(action: onRepeatLast) {
           Label("Repeat last workout", systemImage: "arrow.counterclockwise")
             .labelStyle(.titleAndIcon)
+            .font(Tokens.Text.headline)
+            .foregroundStyle(Tokens.Color.chalk)
+            // Inside the region: at accessibility sizes both labels wrap, and the region's minimum
+            // height alone left the two touching.
+            .padding(.vertical, Tokens.Spacing.snug)
         }
-        .buttonStyle(HardsetButtonStyle(.secondary, size: .regular))
+        .buttonStyle(
+          InlineControlStyle(minHeight: Tokens.loggerTapTarget, alignment: .leading, fullWidth: true)
+        )
       }
 
       Button(action: onNew) {
         Label("New saved workout", systemImage: "plus")
           .labelStyle(.titleAndIcon)
+          .font(Tokens.Text.headline)
+          .foregroundStyle(Tokens.Color.chalk)
+          .padding(.vertical, Tokens.Spacing.snug)
       }
-      .buttonStyle(HardsetButtonStyle(.secondary, size: .regular))
+      .buttonStyle(
+        InlineControlStyle(minHeight: Tokens.minimumTapTarget, alignment: .leading, fullWidth: true)
+      )
     }
   }
 }

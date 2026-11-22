@@ -191,6 +191,22 @@
       try await Snapshot.capture("volume-light", style: .light) { Fixtures.volume() }
     }
 
+    /// Volume as the tab draws it, with every control on and the whole list in view: the header's
+    /// settings glyph, the window controls with "Later" dimmed on the newest window, the figures
+    /// that open their working, the lower-bound note and the gap lists. In both appearances and at
+    /// an accessibility size, where the figure drops under the name.
+    @Test func weeklyVolumeInFull() async throws {
+      let tall = CGSize(width: Snapshot.phone.width, height: 2000)
+      try await Snapshot.capture("volume-full-dark", size: tall) { Fixtures.volumeFull() }
+      try await Snapshot.capture("volume-full-light", size: tall, style: .light) {
+        Fixtures.volumeFull()
+      }
+      try await Snapshot.capture(
+        "volume-full-dark-ax3", size: CGSize(width: Snapshot.phone.width, height: 4800),
+        typeSize: .accessibility3
+      ) { Fixtures.volumeFull() }
+    }
+
     @Test func history() async throws {
       try await Snapshot.capture("history-dark") { Fixtures.history() }
       try await Snapshot.capture("history-light", style: .light) { Fixtures.history() }
@@ -316,6 +332,52 @@
         HardsetRootView(environment: environment, unit: .kilograms)
       }
       try await Snapshot.capture("root-start-light", style: .light) {
+        HardsetRootView(environment: environment, unit: .kilograms)
+      }
+    }
+
+    /// The start screen with the most on it: a gym, two saved workouts (one up next), the controls
+    /// that follow the empty start, and the last workout. Tall, so the whole column is in view, in
+    /// both appearances and at an accessibility size, where the rows of saved workouts stack.
+    @Test func startScreenWithSavedWorkouts() async throws {
+      guard Snapshot.directory != nil else { return }
+      let database = try Fixtures.database()
+      let environment = HardsetEnvironment(database: database)
+      try environment.catalog.seed()
+      let gym = try environment.gyms.createGym(name: "Metroflex Gym")
+      let coordinator = try SessionCoordinator.start(
+        store: environment.logger, gymID: gym, plan: [], restAfterSet: nil
+      )
+      try Fixtures.logTwoSets(in: coordinator, catalog: environment.catalog)
+      try coordinator.finish()
+
+      let pressEntries = try environment.catalog.search("Press")
+      let press = try #require(pressEntries.first)
+      let day = Date(timeIntervalSinceNow: -4 * 86_400)
+      try await environment.templates.save(
+        WorkoutTemplate(
+          name: "Upper A", position: 0,
+          exercises: [TemplateExercise(exerciseID: press.id, exerciseName: press.name, plannedSets: 3)],
+          lastDoneAt: day),
+        now: day)
+      try await environment.templates.save(
+        WorkoutTemplate(
+          name: "Upper B", position: 1,
+          exercises: [TemplateExercise(exerciseID: press.id, exerciseName: press.name, plannedSets: 3)]),
+        now: day)
+
+      let tall = CGSize(width: Snapshot.phone.width, height: 1500)
+      let settle: Duration = .seconds(4)
+      try await Snapshot.capture("train-saved-dark", size: tall, settle: settle) {
+        HardsetRootView(environment: environment, unit: .kilograms)
+      }
+      try await Snapshot.capture("train-saved-light", size: tall, style: .light, settle: settle) {
+        HardsetRootView(environment: environment, unit: .kilograms)
+      }
+      try await Snapshot.capture(
+        "train-saved-dark-ax3", size: CGSize(width: Snapshot.phone.width, height: 3200),
+        typeSize: .accessibility3, settle: settle
+      ) {
         HardsetRootView(environment: environment, unit: .kilograms)
       }
     }
@@ -567,6 +629,29 @@
         title: "This week",
         subtitle: "Last 7 days",
         onExplainCounting: {}
+      )
+    }
+
+    static func volumeFull() -> some View {
+      VolumeReportView(
+        report: MuscleVolumeReport(
+          fractionalSets: [
+            MuscleKey(.chest): 12, MuscleKey(.lats): 9, MuscleKey(.quadriceps): 8,
+            MuscleKey(.triceps): 6.5, MuscleKey(.biceps): 6, MuscleKey(.upperBack): 5,
+            MuscleKey(.frontDelts): 4, MuscleKey(.hamstrings): 3, MuscleKey(.glutes): 3,
+            MuscleKey(.sideDelts): 2, MuscleKey(.neck): 1,
+          ],
+          hardSets: 34,
+          unattributedHardSets: 3,
+          setsTouchingGroup: [.chest: 12, .back: 14, .legs: 11, .arms: 12, .shoulders: 6]
+        ),
+        excludedFromGaps: ExerciseCatalog.unauthoredDirectTokens,
+        title: "Volume",
+        subtitle: "Last 7 days, 16 Nov to now",
+        onExplainCounting: {},
+        onShowSettings: {},
+        onEarlier: {},
+        onShowWorking: { _ in }
       )
     }
 

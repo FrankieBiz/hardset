@@ -58,7 +58,8 @@ public struct ExerciseProgressScreen: View {
           HardsetEmptyState(
             title: "Could not read this history",
             detail: "Your logged sets are safe. Pull down to try again.",
-            systemImage: "exclamationmark.triangle"
+            systemImage: "exclamationmark.triangle",
+            style: .quiet
           )
         } else if let history = snapshot.value {
           VStack(alignment: .leading, spacing: Tokens.Spacing.loose) {

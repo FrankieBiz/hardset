@@ -15,6 +15,12 @@ import SwiftUI
 /// in it reads as nothing rather than being left out. It sums to the number of movements that have
 /// a body part; the ones still waiting for one are counted in their own section, not in a part.
 ///
+/// Nothing is boxed. A movement is a row under a hairline: its name, what it trains and, at the
+/// trailing edge, its equipment and whose it is as plain words. A movement the lifter can edit ends
+/// in a chevron, which is what says it opens; a curated one has none and carries no "Curated" word
+/// on screen, because a word repeated on every row says nothing, though its spoken label still says
+/// it. The one warning on the screen is a small glyph beside "Needs a body part".
+///
 /// Draws only its scrolling content. The screen that hosts it owns the title, the reads and the
 /// editor, because those need storage this view does not have.
 public struct LibraryView: View {
@@ -40,12 +46,13 @@ public struct LibraryView: View {
 
   public var body: some View {
     ScrollView {
-      LazyVStack(alignment: .leading, spacing: Tokens.Spacing.snug, pinnedViews: [.sectionHeaders]) {
+      LazyVStack(alignment: .leading, spacing: 0, pinnedViews: [.sectionHeaders]) {
         if sections.isEmpty {
           HardsetEmptyState(
             title: "No movements yet",
             detail: "Movements you add to a workout appear here, grouped by body part.",
-            systemImage: "books.vertical"
+            systemImage: "books.vertical",
+            style: .quiet
           )
         }
         ForEach(sections) { section in
@@ -82,14 +89,16 @@ public struct LibraryView: View {
     case .needsBodyPart:
       HStack(alignment: .firstTextBaseline, spacing: Tokens.Spacing.snug) {
         Image(systemName: "exclamationmark.triangle")
+          .foregroundStyle(Tokens.Color.warning)
           .accessibilityHidden(true)
         Text("Needs a body part")
+          .foregroundStyle(Tokens.Color.chalk)
         Text(section.entries.count, format: .number)
           .monospacedDigit()
+          .foregroundStyle(Tokens.Color.chalkDim)
         Spacer(minLength: 0)
       }
       .font(Tokens.Text.sectionHeader)
-      .foregroundStyle(Tokens.Color.warning)
       .accessibilityElement(children: .combine)
       .accessibilityAddTraits(.isHeader)
     case .category(let category):
@@ -99,28 +108,43 @@ public struct LibraryView: View {
 
   // MARK: - Rows
 
-  /// A movement the lifter owns is a button; a curated one is a flat card that says what it is.
+  /// A movement the lifter owns is a button that ends in a chevron; a curated one is plain type
+  /// that says nothing it cannot do. Each sits under a hairline, where it meets the row before it.
   @ViewBuilder private func row(_ entry: CatalogEntry) -> some View {
-    if entry.isCurated {
-      rowContent(entry)
-        .padding(.horizontal, Tokens.Spacing.regular)
-        .padding(.vertical, Tokens.Spacing.snug)
-        .frame(maxWidth: .infinity, minHeight: Tokens.loggerTapTarget, alignment: .leading)
-        .hardsetCard(cornerRadius: Tokens.Radius.control)
-        .accessibilityElement(children: .combine)
-    } else {
-      Button {
-        onSelect(entry)
-      } label: {
+    VStack(alignment: .leading, spacing: 0) {
+      Rectangle()
+        .fill(Tokens.Color.hairline)
+        .frame(height: Tokens.Stroke.hairline)
+        .accessibilityHidden(true)
+      if entry.isCurated {
         rowContent(entry)
-          .padding(.horizontal, Tokens.Spacing.regular)
           .padding(.vertical, Tokens.Spacing.snug)
           .frame(maxWidth: .infinity, minHeight: Tokens.loggerTapTarget, alignment: .leading)
-          .contentShape(RoundedRectangle(cornerRadius: Tokens.Radius.control))
+          // Said as a whole, with the word the screen does not draw, so a curated movement still
+          // announces what it is.
+          .accessibilityElement(children: .ignore)
+          .accessibilityLabel(Self.curatedSpokenLabel(entry))
+      } else {
+        Button {
+          onSelect(entry)
+        } label: {
+          HStack(alignment: .center, spacing: Tokens.Spacing.regular) {
+            rowContent(entry)
+            Image(systemName: "chevron.right")
+              .font(Tokens.Text.caption.weight(.semibold))
+              .foregroundStyle(Tokens.Color.chalkDim)
+              .accessibilityHidden(true)
+          }
+          .padding(.vertical, Tokens.Spacing.snug)
+          .frame(maxWidth: .infinity, minHeight: Tokens.loggerTapTarget, alignment: .leading)
+        }
+        .buttonStyle(
+          InlineControlStyle(
+            minHeight: Tokens.loggerTapTarget, alignment: .leading, fullWidth: true)
+        )
+        .accessibilityElement(children: .combine)
+        .accessibilityHint(entry.primaryMuscle.isAttributed ? "Edits its muscles" : "Choose its body part")
       }
-      .buttonStyle(SelectionCardButtonStyle(isSelected: false))
-      .accessibilityElement(children: .combine)
-      .accessibilityHint(entry.primaryMuscle.isAttributed ? "Edits its muscles" : "Choose its body part")
     }
   }
 
@@ -134,7 +158,7 @@ public struct LibraryView: View {
           .font(Tokens.Text.provenance)
           .foregroundStyle(Tokens.Color.chalkDim)
         if dynamicTypeSize.isAccessibilitySize {
-          HStack(spacing: Tokens.Spacing.tight) { tags(for: entry) }
+          HStack(spacing: Tokens.Spacing.regular) { marks(for: entry) }
             .padding(.top, Tokens.Spacing.tight)
         }
       }
@@ -143,22 +167,37 @@ public struct LibraryView: View {
       .frame(maxWidth: .infinity, alignment: .leading)
 
       if !dynamicTypeSize.isAccessibilitySize {
-        VStack(alignment: .trailing, spacing: Tokens.Spacing.tight) { tags(for: entry) }
+        VStack(alignment: .trailing, spacing: Tokens.Spacing.hairline) { marks(for: entry) }
       }
     }
   }
 
-  @ViewBuilder private func tags(for entry: CatalogEntry) -> some View {
+  /// The equipment, and whose the movement is, as plain `caption` words in `chalkDim`: no capsule,
+  /// no fill. A curated movement says only its equipment, because "Curated" on every one of them
+  /// tells the lifter nothing.
+  @ViewBuilder private func marks(for entry: CatalogEntry) -> some View {
     if let modality = entry.modality {
-      HardsetTag(modality.label)
+      Text(modality.label)
+        .font(Tokens.Text.caption)
+        .foregroundStyle(Tokens.Color.chalkDim)
     }
-    if entry.isCurated {
-      HardsetTag("Curated")
-    } else if entry.isImported {
-      HardsetTag("Imported", systemImage: "square.and.arrow.down")
-    } else {
-      HardsetTag("Custom", systemImage: "person.crop.circle")
+    if entry.isImported {
+      Label("Imported", systemImage: "square.and.arrow.down")
+        .font(Tokens.Text.caption)
+        .foregroundStyle(Tokens.Color.chalkDim)
+    } else if !entry.isCurated {
+      Label("Custom", systemImage: "person.crop.circle")
+        .font(Tokens.Text.caption)
+        .foregroundStyle(Tokens.Color.chalkDim)
     }
+  }
+
+  /// "Barbell Back Squat, Quads, also Glutes, Barbell, Curated": what the row draws, plus the word it
+  /// leaves out.
+  static func curatedSpokenLabel(_ entry: CatalogEntry) -> String {
+    [entry.name, detail(for: entry), entry.modality?.label, "Curated"]
+      .compactMap { $0 }
+      .joined(separator: ", ")
   }
 
   /// "Lats, also biceps", or the plain fact that nothing says what it trains. A movement of the

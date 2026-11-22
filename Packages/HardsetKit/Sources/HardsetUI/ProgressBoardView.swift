@@ -22,6 +22,12 @@ import SwiftUI
 /// view; this draws them. The sparkline is decoration for the eye and is hidden from VoiceOver,
 /// which reads the sentence instead.
 ///
+/// Nothing is boxed and nothing but a caveat is coloured. A row is type on the canvas under a
+/// hairline: the movement, its machine, the sentence with its figure set in the tabular face, and
+/// the certainty as a phrase beneath it. The sparkline is `chalkDim` with the newest session in
+/// `chalk`, because this screen has no primary action to own an accent, and a warning glyph is the
+/// only hue on it.
+///
 /// When given a `title`, the view draws its own `ScreenHeader` first in its scroll content, because
 /// the tab that hosts it hides the stock navigation bar.
 public struct ProgressBoardView: View {
@@ -55,7 +61,7 @@ public struct ProgressBoardView: View {
 
   public var body: some View {
     ScrollView {
-      LazyVStack(alignment: .leading, spacing: Tokens.Spacing.snug, pinnedViews: [.sectionHeaders]) {
+      LazyVStack(alignment: .leading, spacing: 0, pinnedViews: [.sectionHeaders]) {
         if let title {
           header(title)
         }
@@ -63,7 +69,8 @@ public struct ProgressBoardView: View {
           HardsetEmptyState(
             title: "No progress to show yet",
             detail: "Log a workout and your progress shows up here.",
-            systemImage: "chart.line.uptrend.xyaxis"
+            systemImage: "chart.line.uptrend.xyaxis",
+            style: .quiet
           )
           .padding(.top, Tokens.Spacing.section)
         } else {
@@ -83,8 +90,8 @@ public struct ProgressBoardView: View {
           }
           ForEach(board.sections) { section in
             Section {
-              ForEach(section.rows) { row in
-                rowCard(row, showsSparkline: true)
+              ForEach(section.rows) { entry in
+                rowView(entry, showsSparkline: true)
                   .padding(.horizontal, Tokens.Spacing.loose)
               }
             } header: {
@@ -107,7 +114,9 @@ public struct ProgressBoardView: View {
   private func header(_ title: String) -> some View {
     ScreenHeader(title, subtitle: subtitle) {
       if let onShowSettings {
-        HeaderIconButton(systemImage: "gearshape", accessibilityLabel: "Settings", action: onShowSettings)
+        HeaderIconButton(
+          systemImage: "gearshape", accessibilityLabel: "Settings", style: .bare,
+          action: onShowSettings)
       }
     }
   }
@@ -122,8 +131,12 @@ public struct ProgressBoardView: View {
         .font(Tokens.Text.caption)
         .foregroundStyle(Tokens.Color.chalkDim)
         .fixedSize(horizontal: false, vertical: true)
-      ForEach(rows) { row in
-        rowCard(row, showsSparkline: false)
+      // Each row carries its own hairline, so they sit flush: spacing would put a gap between a row's
+      // text and the rule that belongs to the next.
+      VStack(alignment: .leading, spacing: 0) {
+        ForEach(rows) { entry in
+          rowView(entry, showsSparkline: false)
+        }
       }
     }
     .padding(.horizontal, Tokens.Spacing.loose)
@@ -136,17 +149,20 @@ public struct ProgressBoardView: View {
     if let category = section.category {
       SectionLabel(ExercisePickerView.categoryTitle(for: category), count: section.rows.count)
     } else {
-      // Movements with no body part: said as a gap to close, in the library's own words.
+      // Movements with no body part: said as a gap to close, in the library's own words. The
+      // warning glyph is the mark; the words are `chalk`, as the stale-workout notice's are.
       HStack(alignment: .firstTextBaseline, spacing: Tokens.Spacing.snug) {
         Image(systemName: "exclamationmark.triangle")
+          .foregroundStyle(Tokens.Color.warning)
           .accessibilityHidden(true)
         Text("Needs a body part")
+          .foregroundStyle(Tokens.Color.chalk)
         Text(section.rows.count, format: .number)
           .monospacedDigit()
+          .foregroundStyle(Tokens.Color.chalkDim)
         Spacer(minLength: 0)
       }
       .font(Tokens.Text.sectionHeader)
-      .foregroundStyle(Tokens.Color.warning)
       .accessibilityElement(children: .combine)
       .accessibilityAddTraits(.isHeader)
     }
@@ -154,20 +170,28 @@ public struct ProgressBoardView: View {
 
   // MARK: - Rows
 
-  /// The whole card opens the movement. The certainty badge is its own control, drawn over the card
-  /// rather than inside its button, so a tap on it explains the estimate and a tap anywhere else
-  /// opens the history. Both read separately to VoiceOver.
-  private func rowCard(_ row: ProgressBoard.Row, showsSparkline: Bool) -> some View {
-    Button {
-      onSelect(row)
-    } label: {
-      rowContent(row, showsSparkline: showsSparkline)
-    }
-    .buttonStyle(SelectionCardButtonStyle(isSelected: false))
-    .accessibilityElement(children: .ignore)
-    .accessibilityLabel(ProgressCopy.spokenRow(row, sourceNote: sourceNotes[row.id]))
-    .accessibilityHint("Opens its history")
-    .overlay(alignment: .bottomTrailing) {
+  /// A row is the movement's button, then its certainty, under a hairline. The button opens the
+  /// history; the certainty is its own control beneath it rather than inside it, so a tap on it
+  /// explains the estimate and a tap anywhere else opens the history. Both read separately to
+  /// VoiceOver.
+  private func rowView(_ row: ProgressBoard.Row, showsSparkline: Bool) -> some View {
+    VStack(alignment: .leading, spacing: 0) {
+      Rectangle()
+        .fill(Tokens.Color.hairline)
+        .frame(height: Tokens.Stroke.hairline)
+        .accessibilityHidden(true)
+      Button {
+        onSelect(row)
+      } label: {
+        rowContent(row, showsSparkline: showsSparkline)
+      }
+      .buttonStyle(
+        InlineControlStyle(
+          minHeight: Tokens.loggerTapTarget, alignment: .leading, fullWidth: true)
+      )
+      .accessibilityElement(children: .ignore)
+      .accessibilityLabel(ProgressCopy.spokenRow(row, sourceNote: sourceNotes[row.id]))
+      .accessibilityHint("Opens its history")
       badge(for: row)
     }
   }
@@ -197,9 +221,7 @@ public struct ProgressBoardView: View {
 
       VStack(alignment: .leading, spacing: Tokens.Spacing.hairline) {
         if let change = ProgressCopy.changeText(for: row.trend) {
-          Text(change)
-            .font(Tokens.Text.provenance)
-            .foregroundStyle(Tokens.Color.chalk)
+          Text(Self.sentence(change, figure: row.trend.sixWeekChange.map(ProgressCopy.signedPercent)))
             .fixedSize(horizontal: false, vertical: true)
         } else {
           // What is missing, not a verdict on the history: a movement trained every four weeks, or
@@ -227,9 +249,16 @@ public struct ProgressBoardView: View {
             .fixedSize(horizontal: false, vertical: true)
         }
         if let stalled = ProgressCopy.stalledText(for: row.trend) {
-          Label(stalled, systemImage: "pause.circle")
-            .font(Tokens.Text.provenance)
-            .foregroundStyle(Tokens.Color.warning)
+          // The glyph is the caveat's one mark; the words are plain `chalk`.
+          HStack(alignment: .firstTextBaseline, spacing: Tokens.Spacing.snug) {
+            Image(systemName: "pause.circle")
+              .foregroundStyle(Tokens.Color.warning)
+              .accessibilityHidden(true)
+            Text(stalled)
+              .foregroundStyle(Tokens.Color.chalk)
+          }
+          .font(Tokens.Text.provenance)
+          .accessibilityElement(children: .combine)
         }
         if let note = sourceNotes[row.id] {
           Text(note)
@@ -239,40 +268,45 @@ public struct ProgressBoardView: View {
         }
       }
       .frame(maxWidth: .infinity, alignment: .leading)
-
-      // Room for the badge drawn over the card's corner. The badge itself, hidden, is the spacer, so
-      // the room is exactly its size at every Dynamic Type size and the sentence never runs under it.
-      if showsBadge(row) {
-        badge(for: row)
-          .hidden()
-          .frame(maxWidth: .infinity, alignment: .trailing)
-      }
     }
-    .padding(.horizontal, Tokens.Spacing.regular)
-    .padding(.vertical, Tokens.Spacing.snug)
-    .frame(maxWidth: .infinity, minHeight: Tokens.loggerTapTarget, alignment: .leading)
-    .contentShape(RoundedRectangle(cornerRadius: Tokens.Radius.control))
+    .padding(.top, Tokens.Spacing.snug)
+    // A row with a certainty phrase gives its bottom space to the phrase's own 44 pt region, so
+    // the phrase sits under the sentence it qualifies instead of floating a line below it.
+    .padding(.bottom, row.trend.certainty == nil ? Tokens.Spacing.snug : 0)
+    .frame(maxWidth: .infinity, alignment: .leading)
   }
 
-  private func showsBadge(_ row: ProgressBoard.Row) -> Bool {
-    row.trend.certainty != nil
+  /// "Estimated max +8% in 6 weeks" with the figure, and only the figure, in the tabular face and
+  /// `chalk`, so the number is the largest thing in the sentence and the words around it stay
+  /// quiet. The sentence is `ProgressCopy`'s, untouched: the figure is found in it, never composed
+  /// beside it, so a change to the words cannot leave this behind. When it is not found, as with
+  /// "unchanged in 6 weeks", the whole sentence is drawn plainly.
+  static func sentence(_ text: String, figure: String?) -> AttributedString {
+    var attributed = AttributedString(text)
+    attributed.font = Tokens.Text.provenance
+    attributed.foregroundColor = Tokens.Color.chalkDim
+    if let figure, let range = attributed.range(of: figure) {
+      attributed[range].font = Tokens.Text.figure
+      attributed[range].foregroundColor = Tokens.Color.chalk
+    }
+    return attributed
   }
 
-  /// Beside every estimated-max figure, the certainty of the estimate behind it.
+  /// Beside every estimated-max figure, the certainty of the estimate behind it, as a phrase.
   @ViewBuilder private func badge(for row: ProgressBoard.Row) -> some View {
     if let certainty = row.trend.certainty {
       CertaintyBadge(
         level: MethodologySheet.level(for: certainty),
         methodology: row.trend.loadAssumption ?? ProgressionAnalyzer.source.methodology,
-        citation: row.trend.loadAssumption == nil ? ProgressionAnalyzer.source.validRange : nil
+        citation: row.trend.loadAssumption == nil ? ProgressionAnalyzer.source.validRange : nil,
+        style: .language
       )
-      .padding(.trailing, Tokens.Spacing.snug)
     }
   }
 }
 
-/// A trend line with no axes: the shape of the last dozen sessions, nothing more. The newest
-/// session is marked with a point so its end is visible. Hidden from VoiceOver, which reads the
+/// A trend line with no axes: the shape of the last dozen sessions, nothing more, in `chalkDim`.
+/// The newest session is marked with a `chalk` point so its end is visible. Hidden from VoiceOver, which reads the
 /// row's sentence.
 private struct Sparkline: View {
   let values: [Double]
@@ -284,14 +318,14 @@ private struct Sparkline: View {
           x: .value("Session", item.offset),
           y: .value("Value", item.element)
         )
-        .foregroundStyle(Tokens.Color.plateBlue)
+        .foregroundStyle(Tokens.Color.chalkDim)
         .lineStyle(StrokeStyle(lineWidth: Tokens.Stroke.selected))
       }
       PointMark(
         x: .value("Session", max(values.count - 1, 0)),
         y: .value("Value", values.last ?? 0)
       )
-      .foregroundStyle(Tokens.Color.plateBlue)
+      .foregroundStyle(Tokens.Color.chalk)
     }
     .chartXAxis(.hidden)
     .chartYAxis(.hidden)
