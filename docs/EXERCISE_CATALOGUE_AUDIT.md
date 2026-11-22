@@ -98,5 +98,47 @@ execution-dependent attribution; everything else is moderate.
 | Dumbbell Front Raise (`dumbbell-front-raise`) | dumbbell | frontDelts | — | forearms, abs | Dumbbells raised forward through shoulder flexion, without trunk swing. |
 | Bent-Over Dumbbell Reverse Fly (`bent-over-dumbbell-reverse-fly`) | dumbbell | rearDelts | upperBack | forearms, abs, lowerBack | Hip hinge held; horizontal shoulder abduction and scapular retraction, lumbar hold credits zero. |
 | Cable Reverse Fly (`cable-reverse-fly`) | cable | rearDelts | upperBack | forearms, abs | Standing cables resist horizontal shoulder abduction; fixed torso. |
+| Single-Arm Pulldown Machine (`single-arm-pulldown-machine`) | machine | lats | upperBack, biceps | forearms, abs | One independent lever pulls the humerus down from overhead; plate-loaded machine history remains separate from cable history. |
+| Chest-Supported T-Bar Row (`chest-supported-t-bar-row`) | machine | upperBack | lats, rearDelts, biceps | forearms | Dedicated lever machine with chest pad, rather than an unsupported anchored barbell; no lumbar movement credit. |
+| Pulldown Machine (`pulldown-machine`) | machine | lats | upperBack, biceps | forearms | Independent lever/plate-loaded vertical pull, distinct from cable lat pulldown. |
+| Single-Arm Cable Pulldown (`single-arm-cable-pulldown`) | cable | lats | upperBack, biceps | forearms, abs | One handle pulls overhead humerus down, with fixed trunk. |
+| Seated Row Machine (`seated-row-machine`) | machine | upperBack | lats, rearDelts, biceps | forearms | Supported torso; row with meaningful scapular retraction, not an elbows-tucked lat isolation claim. |
+| Single-Arm Seated Row Machine (`single-arm-seated-row-machine`) | machine | upperBack | lats, rearDelts, biceps | forearms, abs | One independent row lever; trunk rotation held still. |
+| T-Bar Row (`t-bar-row`) | barbell | upperBack | lats, rearDelts, biceps | forearms, abs, lowerBack | Unsupported anchored barbell row; barbell modality rather than machine; lumbar hold has zero credit. |
+| Chest-Supported Dumbbell Row (`chest-supported-dumbbell-row`) | dumbbell | upperBack | lats, rearDelts, biceps | forearms | Prone on incline bench; shoulder extension, elbow flexion and scapular retraction. |
+| Inverted Row (`inverted-row`) | bodyweight | upperBack | lats, rearDelts, biceps | forearms, abs | Body pulls toward fixed bar; no body-mass-derived estimated max. |
+| Single-Arm Cable Row (`single-arm-cable-row`) | cable | upperBack | lats, rearDelts, biceps | forearms, abs | Unilateral seated cable row with scapular retraction; held torso, no rotation credit. |
+| Dumbbell Shrug (`dumbbell-shrug`) | dumbbell | traps | — | forearms | Scapular elevation against dumbbell load; no elbow curl or rolling claim. |
+| Smith Machine Shrug (`smith-machine-shrug`) | machine | traps | — | forearms | Guided bar, dynamic scapular elevation. |
+| Cable Shrug (`cable-shrug`) | cable | traps | — | forearms | Low cable resists scapular elevation. |
+| Cable Curl (`cable-curl`) | cable | biceps | — | forearms | Standing low cable elbow flexion; held wrist is not forearm training. |
+| High Cable Curl (`high-cable-curl`) | cable | biceps | — | forearms, sideDelts | Upper arms held out to side, elbows flex against high cables; shoulder hold is zero credit. |
+| Bayesian Cable Curl (`bayesian-cable-curl`) | cable | biceps | — | forearms | Upper arm held behind torso; elbow flexion only; no long-head or lengthened superiority claim. |
+| Dumbbell Preacher Curl (`dumbbell-preacher-curl`) | dumbbell | biceps | — | forearms | Free dumbbell on preacher pad; distinct from original machine preacher curl. |
+| Concentration Curl (`concentration-curl`) | dumbbell | biceps | — | forearms | Seated, upper arm supported against thigh, elbow flexion. |
+| Spider Curl (`spider-curl`) | dumbbell | biceps | — | forearms | Prone incline bench, upper arms hang forward; no biceps-head split. |
+| Triceps Extension Machine (`triceps-extension-machine`) | machine | triceps | — | forearms | Supported upper arms, lever resists elbow extension. |
+| Single-Arm Cable Pushdown (`single-arm-cable-pushdown`) | cable | triceps | — | forearms | One high-cable handle, upper arm held at torso. |
+| Dumbbell Overhead Triceps Extension (`dumbbell-overhead-triceps-extension`) | dumbbell | triceps | — | forearms | One dumbbell held in both hands overhead; no long-head isolation claim. |
+| Single-Arm Dumbbell Overhead Extension (`single-arm-dumbbell-overhead-extension`) | dumbbell | triceps | — | forearms | One arm extends the elbow overhead; shoulder angle held. |
+| Lying Dumbbell Triceps Extension (`lying-dumbbell-triceps-extension`) | dumbbell | triceps | — | forearms | Supine, independent dumbbells, elbow extension with upper arms held. |
+| Dumbbell Triceps Kickback (`dumbbell-triceps-kickback`) | dumbbell | triceps | — | forearms, rearDelts, lowerBack | Supported hinge, upper arm held behind torso; elbow extension, shoulder and trunk held. |
+| Cable Triceps Kickback (`cable-triceps-kickback`) | cable | triceps | — | forearms, rearDelts, lowerBack | Low cable, upper arm held behind torso, elbow extension without shoulder swing. |
+| Barbell Wrist Curl (`barbell-wrist-curl`) | barbell | forearms | — | — | Forearms supported, dynamic loaded wrist flexion; grip convention does not exclude actual wrist work. |
+| Barbell Reverse Wrist Curl (`barbell-reverse-wrist-curl`) | barbell | forearms | — | — | Forearms supported, dynamic loaded wrist extension, not a grip-only variation. |
 
-Current batch: 56 additions; 106 total movements.
+## Movement counts
+
+Each movement is counted once by its primary muscle and the app's region partition, not once per contribution.
+
+| Region | Original | Added | Total |
+|---|---:|---:|---:|
+| Chest | 8 | 14 | 22 |
+| Shoulders | 6 | 10 | 16 |
+| Back | 10 | 13 | 23 |
+| Arms | 11 | 15 | 26 |
+| Core | 2 | 0 | 2 |
+| Legs (including calves) | 12 | 26 | 38 |
+| Glutes | 1 | 6 | 7 |
+| Neck | 0 | 0 | 0 |
+| **Total** | **50** | **84** | **134** |

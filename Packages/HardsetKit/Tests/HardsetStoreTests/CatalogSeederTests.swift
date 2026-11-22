@@ -357,6 +357,34 @@ struct ExerciseCatalogTests {
       dumbbell-front-raise 981ce31e-f2f3-5009-aff9-335dcd5282f0
       bent-over-dumbbell-reverse-fly 13294f04-2b27-5bd1-bc9b-48a66b6f525c
       cable-reverse-fly bb498c3b-4669-59b8-8d9f-f38bc4856406
+      single-arm-pulldown-machine a439709b-9e00-55dc-89a3-51006d7aa2db
+      chest-supported-t-bar-row ca8408a6-5e08-5223-b38a-0b487ea8f5de
+      pulldown-machine 8a47a1b5-b34e-5814-98c0-c4989ad8b2d8
+      single-arm-cable-pulldown f66e9f9c-2d6d-5e84-b11b-635a3d478886
+      seated-row-machine b906a1f7-1a0b-5ac0-aae7-cb41887a9141
+      single-arm-seated-row-machine 85ab49da-e9a5-5131-8dab-19562938dde8
+      t-bar-row 433e2872-1109-5a55-a8d2-ee2ce8cc870d
+      chest-supported-dumbbell-row 5f9f76ed-8791-5895-ab0c-2b946c6d3fb8
+      inverted-row 12e269f5-477f-5026-a374-325ca13e9514
+      single-arm-cable-row 24a1df97-f6d8-558c-9cc4-87025dcc70e1
+      dumbbell-shrug 6066e5f1-1c3d-5750-83e8-e839f2521af0
+      smith-machine-shrug 909b81f8-499f-59d2-b7b2-41747a6cf63c
+      cable-shrug 3e652709-04a8-59e2-a6d1-84a7fe708a2b
+      cable-curl ffe80dbf-440e-5cf0-b4ce-20319316af55
+      high-cable-curl 35bed3c3-bd3c-5498-aeec-8bac4aa722ca
+      bayesian-cable-curl d9ddd21f-cfae-5c45-8609-64bdb7c72b16
+      dumbbell-preacher-curl 90da314f-d29c-5af3-ae93-bc8786b6bd88
+      concentration-curl bc9b0302-8e79-595e-a3c5-7695fb71c4ee
+      spider-curl 07733656-d105-5448-ba9b-abc6f13a78df
+      triceps-extension-machine fee28904-aaeb-55db-95c1-6daf95ca8c03
+      single-arm-cable-pushdown e12543f3-ad3a-5c01-89c4-c2272d4c1f47
+      dumbbell-overhead-triceps-extension 43b1256b-d26a-57f9-8d24-804fec6a46a7
+      single-arm-dumbbell-overhead-extension 78dc1ab8-854e-5150-b415-d20b0c0af8c5
+      lying-dumbbell-triceps-extension 413e31b3-de6e-5033-aa4a-fd7a7df41cf8
+      dumbbell-triceps-kickback 186a2884-b83b-5357-9c86-128d0dddd8fc
+      cable-triceps-kickback c9b06f22-eb1a-58c9-930a-12535b1dfd0a
+      barbell-wrist-curl 0f4eac20-91a3-547d-8375-b064c621e985
+      barbell-reverse-wrist-curl 665d4bf6-6894-5a87-b955-5bb4f62a4e05
       """.split(separator: "\n").map { $0.split(separator: " ").map(String.init) }
     let expected = Dictionary(uniqueKeysWithValues: pinned.map { ($0[0], $0[1]) })
     let actual = Dictionary(uniqueKeysWithValues: ExerciseCatalog.v1.map { ($0.slug, $0.id) })
