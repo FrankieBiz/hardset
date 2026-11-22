@@ -27,6 +27,7 @@ public enum CatalogSearch {
     "standing-calf-raise": ["calves", "calf raise"],
     "seated-calf-raise": ["calves", "calf raise"],
     "barbell-bench-press": ["bench", "bench press", "flat bench"],
+    "dumbbell-bench-press": ["dumbbell bench", "flat dumbbell bench"],
     "chest-press-machine": ["machine chest press", "chest press machine"],
     "pec-deck": ["pec fly", "machine fly", "butterfly"],
     "cable-fly": ["chest fly", "cable crossover", "crossover"],

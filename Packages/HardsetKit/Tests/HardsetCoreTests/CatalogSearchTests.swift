@@ -63,6 +63,14 @@ struct CatalogSearchTests {
     #expect(names(query).first == expected, "\(query) -> \(names(query))")
   }
 
+  @Test("Dumbbell bench shorthand keeps the flat press first in the store's alphabetical order")
+  func flatDumbbellBenchRanksBeforeDecline() {
+    let alphabetical = entries.sorted { $0.name < $1.name }
+    for query in ["db bench", "dumbbell bench"] {
+      #expect(CatalogSearch.rank(alphabetical, query: query).first?.slug == "dumbbell-bench-press")
+    }
+  }
+
   @Test("Every word must begin a word of the name, in any order")
   func everyWordMustMatch() {
     #expect(Set(names("dumbbell press")).isSuperset(of: [

@@ -1084,6 +1084,321 @@ public enum ExerciseCatalog {
         .init(.abs, role: .stabilizer, certainty: .moderate, source: .convention, citation: "Hardset zero-credit convention: held grip or posture; docs/MuscleTaxonomy-spec.md §5 G2 (not a claim that isometrics cannot grow muscle)."),
       ]
     ),
+    CatalogExercise(
+      id: "ec8578c4-366d-5977-a80a-93070d631405",
+      slug: "decline-barbell-bench-press",
+      name: "Decline Barbell Bench Press",
+      modality: .barbell,
+      primaryMuscle: .chest,
+      contributions: [
+        .init(.chest, role: .direct, certainty: .moderate, source: .anatomy, citation: "Anatomical inference: loaded shoulder horizontal adduction; docs/research/tax-spec.md §1 and §5 G1–G3; not a variant-specific growth trial."),
+        .init(.frontDelts, role: .indirect, certainty: .moderate, source: .anatomy, citation: "Anatomical inference: shoulder flexion in pressing or raising; docs/research/tax-spec.md §1 and §5 G1–G3; not a variant-specific growth trial."),
+        .init(.triceps, role: .indirect, certainty: .moderate, source: .anatomy, citation: "Anatomical inference: elbow extension; docs/research/tax-spec.md §1 and §5 G1–G3; not a variant-specific growth trial."),
+        .init(.forearms, role: .stabilizer, certainty: .moderate, source: .convention, citation: "Hardset zero-credit convention: held grip or posture; docs/MuscleTaxonomy-spec.md §5 G2 (not a claim that isometrics cannot grow muscle)."),
+      ]
+    ),
+    CatalogExercise(
+      id: "b939d71c-f5fe-5508-b4ec-64fe360234c5",
+      slug: "decline-dumbbell-bench-press",
+      name: "Decline Dumbbell Bench Press",
+      modality: .dumbbell,
+      primaryMuscle: .chest,
+      contributions: [
+        .init(.chest, role: .direct, certainty: .moderate, source: .anatomy, citation: "Anatomical inference: loaded shoulder horizontal adduction; docs/research/tax-spec.md §1 and §5 G1–G3; not a variant-specific growth trial."),
+        .init(.frontDelts, role: .indirect, certainty: .moderate, source: .anatomy, citation: "Anatomical inference: shoulder flexion in pressing or raising; docs/research/tax-spec.md §1 and §5 G1–G3; not a variant-specific growth trial."),
+        .init(.triceps, role: .indirect, certainty: .moderate, source: .anatomy, citation: "Anatomical inference: elbow extension; docs/research/tax-spec.md §1 and §5 G1–G3; not a variant-specific growth trial."),
+        .init(.forearms, role: .stabilizer, certainty: .moderate, source: .convention, citation: "Hardset zero-credit convention: held grip or posture; docs/MuscleTaxonomy-spec.md §5 G2 (not a claim that isometrics cannot grow muscle)."),
+      ]
+    ),
+    CatalogExercise(
+      id: "24503c7a-041f-5b53-8c7a-b8cdb79554aa",
+      slug: "smith-machine-bench-press",
+      name: "Smith Machine Bench Press",
+      modality: .machine,
+      primaryMuscle: .chest,
+      contributions: [
+        .init(.chest, role: .direct, certainty: .moderate, source: .anatomy, citation: "Anatomical inference: loaded shoulder horizontal adduction; docs/research/tax-spec.md §1 and §5 G1–G3; not a variant-specific growth trial."),
+        .init(.frontDelts, role: .indirect, certainty: .moderate, source: .anatomy, citation: "Anatomical inference: shoulder flexion in pressing or raising; docs/research/tax-spec.md §1 and §5 G1–G3; not a variant-specific growth trial."),
+        .init(.triceps, role: .indirect, certainty: .moderate, source: .anatomy, citation: "Anatomical inference: elbow extension; docs/research/tax-spec.md §1 and §5 G1–G3; not a variant-specific growth trial."),
+        .init(.forearms, role: .stabilizer, certainty: .moderate, source: .convention, citation: "Hardset zero-credit convention: held grip or posture; docs/MuscleTaxonomy-spec.md §5 G2 (not a claim that isometrics cannot grow muscle)."),
+      ]
+    ),
+    CatalogExercise(
+      id: "3ebf28e1-450d-5ea1-bea7-beccced28baf",
+      slug: "incline-smith-machine-press",
+      name: "Incline Smith Machine Press",
+      modality: .machine,
+      primaryMuscle: .chest,
+      contributions: [
+        .init(.chest, role: .direct, certainty: .moderate, source: .anatomy, citation: "Anatomical inference: loaded shoulder horizontal adduction; docs/research/tax-spec.md §1 and §5 G1–G3; not a variant-specific growth trial."),
+        .init(.frontDelts, role: .indirect, certainty: .moderate, source: .anatomy, citation: "Anatomical inference: shoulder flexion in pressing or raising; docs/research/tax-spec.md §1 and §5 G1–G3; not a variant-specific growth trial."),
+        .init(.triceps, role: .indirect, certainty: .moderate, source: .anatomy, citation: "Anatomical inference: elbow extension; docs/research/tax-spec.md §1 and §5 G1–G3; not a variant-specific growth trial."),
+        .init(.forearms, role: .stabilizer, certainty: .moderate, source: .convention, citation: "Hardset zero-credit convention: held grip or posture; docs/MuscleTaxonomy-spec.md §5 G2 (not a claim that isometrics cannot grow muscle)."),
+      ]
+    ),
+    CatalogExercise(
+      id: "9ffce5c0-923a-59d4-93ca-2cd1745d978f",
+      slug: "incline-chest-press-machine",
+      name: "Incline Chest Press Machine",
+      modality: .machine,
+      primaryMuscle: .chest,
+      contributions: [
+        .init(.chest, role: .direct, certainty: .moderate, source: .anatomy, citation: "Anatomical inference: loaded shoulder horizontal adduction; docs/research/tax-spec.md §1 and §5 G1–G3; not a variant-specific growth trial."),
+        .init(.frontDelts, role: .indirect, certainty: .moderate, source: .anatomy, citation: "Anatomical inference: shoulder flexion in pressing or raising; docs/research/tax-spec.md §1 and §5 G1–G3; not a variant-specific growth trial."),
+        .init(.triceps, role: .indirect, certainty: .moderate, source: .anatomy, citation: "Anatomical inference: elbow extension; docs/research/tax-spec.md §1 and §5 G1–G3; not a variant-specific growth trial."),
+        .init(.forearms, role: .stabilizer, certainty: .moderate, source: .convention, citation: "Hardset zero-credit convention: held grip or posture; docs/MuscleTaxonomy-spec.md §5 G2 (not a claim that isometrics cannot grow muscle)."),
+      ]
+    ),
+    CatalogExercise(
+      id: "78b378ae-a39a-5cdb-afe3-f3bab040564e",
+      slug: "single-arm-chest-press-machine",
+      name: "Single-Arm Chest Press Machine",
+      modality: .machine,
+      primaryMuscle: .chest,
+      contributions: [
+        .init(.chest, role: .direct, certainty: .moderate, source: .anatomy, citation: "Anatomical inference: loaded shoulder horizontal adduction; docs/research/tax-spec.md §1 and §5 G1–G3; not a variant-specific growth trial."),
+        .init(.frontDelts, role: .indirect, certainty: .moderate, source: .anatomy, citation: "Anatomical inference: shoulder flexion in pressing or raising; docs/research/tax-spec.md §1 and §5 G1–G3; not a variant-specific growth trial."),
+        .init(.triceps, role: .indirect, certainty: .moderate, source: .anatomy, citation: "Anatomical inference: elbow extension; docs/research/tax-spec.md §1 and §5 G1–G3; not a variant-specific growth trial."),
+        .init(.forearms, role: .stabilizer, certainty: .moderate, source: .convention, citation: "Hardset zero-credit convention: held grip or posture; docs/MuscleTaxonomy-spec.md §5 G2 (not a claim that isometrics cannot grow muscle)."),
+        .init(.abs, role: .stabilizer, certainty: .moderate, source: .convention, citation: "Hardset zero-credit convention: held grip or posture; docs/MuscleTaxonomy-spec.md §5 G2 (not a claim that isometrics cannot grow muscle)."),
+      ]
+    ),
+    CatalogExercise(
+      id: "4f0768b2-122f-5ff7-9bfc-4bda84e71cf9",
+      slug: "cable-chest-press",
+      name: "Cable Chest Press",
+      modality: .cable,
+      primaryMuscle: .chest,
+      contributions: [
+        .init(.chest, role: .direct, certainty: .moderate, source: .anatomy, citation: "Anatomical inference: loaded shoulder horizontal adduction; docs/research/tax-spec.md §1 and §5 G1–G3; not a variant-specific growth trial."),
+        .init(.frontDelts, role: .indirect, certainty: .moderate, source: .anatomy, citation: "Anatomical inference: shoulder flexion in pressing or raising; docs/research/tax-spec.md §1 and §5 G1–G3; not a variant-specific growth trial."),
+        .init(.triceps, role: .indirect, certainty: .moderate, source: .anatomy, citation: "Anatomical inference: elbow extension; docs/research/tax-spec.md §1 and §5 G1–G3; not a variant-specific growth trial."),
+        .init(.forearms, role: .stabilizer, certainty: .moderate, source: .convention, citation: "Hardset zero-credit convention: held grip or posture; docs/MuscleTaxonomy-spec.md §5 G2 (not a claim that isometrics cannot grow muscle)."),
+        .init(.abs, role: .stabilizer, certainty: .moderate, source: .convention, citation: "Hardset zero-credit convention: held grip or posture; docs/MuscleTaxonomy-spec.md §5 G2 (not a claim that isometrics cannot grow muscle)."),
+      ]
+    ),
+    CatalogExercise(
+      id: "5b56ffb4-1518-5d75-a9de-697b1e3ad616",
+      slug: "single-arm-cable-chest-press",
+      name: "Single-Arm Cable Chest Press",
+      modality: .cable,
+      primaryMuscle: .chest,
+      contributions: [
+        .init(.chest, role: .direct, certainty: .moderate, source: .anatomy, citation: "Anatomical inference: loaded shoulder horizontal adduction; docs/research/tax-spec.md §1 and §5 G1–G3; not a variant-specific growth trial."),
+        .init(.frontDelts, role: .indirect, certainty: .moderate, source: .anatomy, citation: "Anatomical inference: shoulder flexion in pressing or raising; docs/research/tax-spec.md §1 and §5 G1–G3; not a variant-specific growth trial."),
+        .init(.triceps, role: .indirect, certainty: .moderate, source: .anatomy, citation: "Anatomical inference: elbow extension; docs/research/tax-spec.md §1 and §5 G1–G3; not a variant-specific growth trial."),
+        .init(.forearms, role: .stabilizer, certainty: .moderate, source: .convention, citation: "Hardset zero-credit convention: held grip or posture; docs/MuscleTaxonomy-spec.md §5 G2 (not a claim that isometrics cannot grow muscle)."),
+        .init(.abs, role: .stabilizer, certainty: .moderate, source: .convention, citation: "Hardset zero-credit convention: held grip or posture; docs/MuscleTaxonomy-spec.md §5 G2 (not a claim that isometrics cannot grow muscle)."),
+      ]
+    ),
+    CatalogExercise(
+      id: "0e44d160-2616-54a8-8379-146931df1522",
+      slug: "dumbbell-floor-press",
+      name: "Dumbbell Floor Press",
+      modality: .dumbbell,
+      primaryMuscle: .chest,
+      contributions: [
+        .init(.chest, role: .direct, certainty: .moderate, source: .anatomy, citation: "Anatomical inference: loaded shoulder horizontal adduction; docs/research/tax-spec.md §1 and §5 G1–G3; not a variant-specific growth trial."),
+        .init(.frontDelts, role: .indirect, certainty: .moderate, source: .anatomy, citation: "Anatomical inference: shoulder flexion in pressing or raising; docs/research/tax-spec.md §1 and §5 G1–G3; not a variant-specific growth trial."),
+        .init(.triceps, role: .indirect, certainty: .moderate, source: .anatomy, citation: "Anatomical inference: elbow extension; docs/research/tax-spec.md §1 and §5 G1–G3; not a variant-specific growth trial."),
+        .init(.forearms, role: .stabilizer, certainty: .moderate, source: .convention, citation: "Hardset zero-credit convention: held grip or posture; docs/MuscleTaxonomy-spec.md §5 G2 (not a claim that isometrics cannot grow muscle)."),
+      ]
+    ),
+    CatalogExercise(
+      id: "edeebedb-a3f6-586e-a06e-7c066f1a6ed6",
+      slug: "push-up",
+      name: "Push-up",
+      modality: .bodyweight,
+      primaryMuscle: .chest,
+      contributions: [
+        .init(.chest, role: .direct, certainty: .moderate, source: .anatomy, citation: "Anatomical inference: loaded shoulder horizontal adduction; docs/research/tax-spec.md §1 and §5 G1–G3; not a variant-specific growth trial."),
+        .init(.frontDelts, role: .indirect, certainty: .moderate, source: .anatomy, citation: "Anatomical inference: shoulder flexion in pressing or raising; docs/research/tax-spec.md §1 and §5 G1–G3; not a variant-specific growth trial."),
+        .init(.triceps, role: .indirect, certainty: .moderate, source: .anatomy, citation: "Anatomical inference: elbow extension; docs/research/tax-spec.md §1 and §5 G1–G3; not a variant-specific growth trial."),
+        .init(.abs, role: .stabilizer, certainty: .moderate, source: .convention, citation: "Hardset zero-credit convention: held grip or posture; docs/MuscleTaxonomy-spec.md §5 G2 (not a claim that isometrics cannot grow muscle)."),
+      ]
+    ),
+    CatalogExercise(
+      id: "21bb7b64-594f-57d9-9429-a9f919bc0283",
+      slug: "feet-elevated-push-up",
+      name: "Feet-Elevated Push-up",
+      modality: .bodyweight,
+      primaryMuscle: .chest,
+      contributions: [
+        .init(.chest, role: .direct, certainty: .moderate, source: .anatomy, citation: "Anatomical inference: loaded shoulder horizontal adduction; docs/research/tax-spec.md §1 and §5 G1–G3; not a variant-specific growth trial."),
+        .init(.frontDelts, role: .indirect, certainty: .moderate, source: .anatomy, citation: "Anatomical inference: shoulder flexion in pressing or raising; docs/research/tax-spec.md §1 and §5 G1–G3; not a variant-specific growth trial."),
+        .init(.triceps, role: .indirect, certainty: .moderate, source: .anatomy, citation: "Anatomical inference: elbow extension; docs/research/tax-spec.md §1 and §5 G1–G3; not a variant-specific growth trial."),
+        .init(.abs, role: .stabilizer, certainty: .moderate, source: .convention, citation: "Hardset zero-credit convention: held grip or posture; docs/MuscleTaxonomy-spec.md §5 G2 (not a claim that isometrics cannot grow muscle)."),
+      ]
+    ),
+    CatalogExercise(
+      id: "7c7632c3-b753-56e1-a68b-9b9098834d33",
+      slug: "dumbbell-fly",
+      name: "Dumbbell Fly",
+      modality: .dumbbell,
+      primaryMuscle: .chest,
+      contributions: [
+        .init(.chest, role: .direct, certainty: .moderate, source: .anatomy, citation: "Anatomical inference: loaded shoulder horizontal adduction; docs/research/tax-spec.md §1 and §5 G1–G3; not a variant-specific growth trial."),
+        .init(.frontDelts, role: .indirect, certainty: .moderate, source: .anatomy, citation: "Anatomical inference: shoulder flexion in pressing or raising; docs/research/tax-spec.md §1 and §5 G1–G3; not a variant-specific growth trial."),
+        .init(.forearms, role: .stabilizer, certainty: .moderate, source: .convention, citation: "Hardset zero-credit convention: held grip or posture; docs/MuscleTaxonomy-spec.md §5 G2 (not a claim that isometrics cannot grow muscle)."),
+        .init(.biceps, role: .stabilizer, certainty: .moderate, source: .convention, citation: "Hardset zero-credit convention: held grip or posture; docs/MuscleTaxonomy-spec.md §5 G2 (not a claim that isometrics cannot grow muscle)."),
+      ]
+    ),
+    CatalogExercise(
+      id: "102c6f8b-83f8-53ad-bbcd-09891518c99b",
+      slug: "incline-dumbbell-fly",
+      name: "Incline Dumbbell Fly",
+      modality: .dumbbell,
+      primaryMuscle: .chest,
+      contributions: [
+        .init(.chest, role: .direct, certainty: .moderate, source: .anatomy, citation: "Anatomical inference: loaded shoulder horizontal adduction; docs/research/tax-spec.md §1 and §5 G1–G3; not a variant-specific growth trial."),
+        .init(.frontDelts, role: .indirect, certainty: .moderate, source: .anatomy, citation: "Anatomical inference: shoulder flexion in pressing or raising; docs/research/tax-spec.md §1 and §5 G1–G3; not a variant-specific growth trial."),
+        .init(.forearms, role: .stabilizer, certainty: .moderate, source: .convention, citation: "Hardset zero-credit convention: held grip or posture; docs/MuscleTaxonomy-spec.md §5 G2 (not a claim that isometrics cannot grow muscle)."),
+        .init(.biceps, role: .stabilizer, certainty: .moderate, source: .convention, citation: "Hardset zero-credit convention: held grip or posture; docs/MuscleTaxonomy-spec.md §5 G2 (not a claim that isometrics cannot grow muscle)."),
+      ]
+    ),
+    CatalogExercise(
+      id: "57001253-2efa-5f56-b266-8e40e7cabe1c",
+      slug: "single-arm-cable-fly",
+      name: "Single-Arm Cable Fly",
+      modality: .cable,
+      primaryMuscle: .chest,
+      contributions: [
+        .init(.chest, role: .direct, certainty: .moderate, source: .anatomy, citation: "Anatomical inference: loaded shoulder horizontal adduction; docs/research/tax-spec.md §1 and §5 G1–G3; not a variant-specific growth trial."),
+        .init(.frontDelts, role: .indirect, certainty: .moderate, source: .anatomy, citation: "Anatomical inference: shoulder flexion in pressing or raising; docs/research/tax-spec.md §1 and §5 G1–G3; not a variant-specific growth trial."),
+        .init(.forearms, role: .stabilizer, certainty: .moderate, source: .convention, citation: "Hardset zero-credit convention: held grip or posture; docs/MuscleTaxonomy-spec.md §5 G2 (not a claim that isometrics cannot grow muscle)."),
+        .init(.abs, role: .stabilizer, certainty: .moderate, source: .convention, citation: "Hardset zero-credit convention: held grip or posture; docs/MuscleTaxonomy-spec.md §5 G2 (not a claim that isometrics cannot grow muscle)."),
+        .init(.biceps, role: .stabilizer, certainty: .moderate, source: .convention, citation: "Hardset zero-credit convention: held grip or posture; docs/MuscleTaxonomy-spec.md §5 G2 (not a claim that isometrics cannot grow muscle)."),
+      ]
+    ),
+    CatalogExercise(
+      id: "d1179d9f-d9c8-5ace-8688-0314c5ebbba4",
+      slug: "shoulder-press-machine",
+      name: "Shoulder Press Machine",
+      modality: .machine,
+      primaryMuscle: .frontDelts,
+      contributions: [
+        .init(.frontDelts, role: .direct, certainty: .moderate, source: .anatomy, citation: "Anatomical inference: shoulder flexion in pressing or raising; docs/research/tax-spec.md §1 and §5 G1–G3; not a variant-specific growth trial."),
+        .init(.sideDelts, role: .indirect, certainty: .moderate, source: .anatomy, citation: "Anatomical inference: shoulder abduction; docs/research/tax-spec.md §1 and §5 G1–G3; not a variant-specific growth trial."),
+        .init(.triceps, role: .indirect, certainty: .moderate, source: .anatomy, citation: "Anatomical inference: elbow extension; docs/research/tax-spec.md §1 and §5 G1–G3; not a variant-specific growth trial."),
+        .init(.forearms, role: .stabilizer, certainty: .moderate, source: .convention, citation: "Hardset zero-credit convention: held grip or posture; docs/MuscleTaxonomy-spec.md §5 G2 (not a claim that isometrics cannot grow muscle)."),
+      ]
+    ),
+    CatalogExercise(
+      id: "5b56a6b3-6433-520a-b5ea-a2b57655060c",
+      slug: "smith-machine-shoulder-press",
+      name: "Smith Machine Shoulder Press",
+      modality: .machine,
+      primaryMuscle: .frontDelts,
+      contributions: [
+        .init(.frontDelts, role: .direct, certainty: .moderate, source: .anatomy, citation: "Anatomical inference: shoulder flexion in pressing or raising; docs/research/tax-spec.md §1 and §5 G1–G3; not a variant-specific growth trial."),
+        .init(.sideDelts, role: .indirect, certainty: .moderate, source: .anatomy, citation: "Anatomical inference: shoulder abduction; docs/research/tax-spec.md §1 and §5 G1–G3; not a variant-specific growth trial."),
+        .init(.triceps, role: .indirect, certainty: .moderate, source: .anatomy, citation: "Anatomical inference: elbow extension; docs/research/tax-spec.md §1 and §5 G1–G3; not a variant-specific growth trial."),
+        .init(.forearms, role: .stabilizer, certainty: .moderate, source: .convention, citation: "Hardset zero-credit convention: held grip or posture; docs/MuscleTaxonomy-spec.md §5 G2 (not a claim that isometrics cannot grow muscle)."),
+      ]
+    ),
+    CatalogExercise(
+      id: "5089c302-cd90-5970-b686-dc94bb3c13e1",
+      slug: "standing-dumbbell-press",
+      name: "Standing Dumbbell Press",
+      modality: .dumbbell,
+      primaryMuscle: .frontDelts,
+      contributions: [
+        .init(.frontDelts, role: .direct, certainty: .moderate, source: .anatomy, citation: "Anatomical inference: shoulder flexion in pressing or raising; docs/research/tax-spec.md §1 and §5 G1–G3; not a variant-specific growth trial."),
+        .init(.sideDelts, role: .indirect, certainty: .moderate, source: .anatomy, citation: "Anatomical inference: shoulder abduction; docs/research/tax-spec.md §1 and §5 G1–G3; not a variant-specific growth trial."),
+        .init(.triceps, role: .indirect, certainty: .moderate, source: .anatomy, citation: "Anatomical inference: elbow extension; docs/research/tax-spec.md §1 and §5 G1–G3; not a variant-specific growth trial."),
+        .init(.forearms, role: .stabilizer, certainty: .moderate, source: .convention, citation: "Hardset zero-credit convention: held grip or posture; docs/MuscleTaxonomy-spec.md §5 G2 (not a claim that isometrics cannot grow muscle)."),
+        .init(.abs, role: .stabilizer, certainty: .moderate, source: .convention, citation: "Hardset zero-credit convention: held grip or posture; docs/MuscleTaxonomy-spec.md §5 G2 (not a claim that isometrics cannot grow muscle)."),
+      ]
+    ),
+    CatalogExercise(
+      id: "e5a401b2-eff5-5c17-b529-570c75394b7a",
+      slug: "single-arm-dumbbell-press",
+      name: "Single-Arm Dumbbell Press",
+      modality: .dumbbell,
+      primaryMuscle: .frontDelts,
+      contributions: [
+        .init(.frontDelts, role: .direct, certainty: .moderate, source: .anatomy, citation: "Anatomical inference: shoulder flexion in pressing or raising; docs/research/tax-spec.md §1 and §5 G1–G3; not a variant-specific growth trial."),
+        .init(.sideDelts, role: .indirect, certainty: .moderate, source: .anatomy, citation: "Anatomical inference: shoulder abduction; docs/research/tax-spec.md §1 and §5 G1–G3; not a variant-specific growth trial."),
+        .init(.triceps, role: .indirect, certainty: .moderate, source: .anatomy, citation: "Anatomical inference: elbow extension; docs/research/tax-spec.md §1 and §5 G1–G3; not a variant-specific growth trial."),
+        .init(.forearms, role: .stabilizer, certainty: .moderate, source: .convention, citation: "Hardset zero-credit convention: held grip or posture; docs/MuscleTaxonomy-spec.md §5 G2 (not a claim that isometrics cannot grow muscle)."),
+        .init(.abs, role: .stabilizer, certainty: .moderate, source: .convention, citation: "Hardset zero-credit convention: held grip or posture; docs/MuscleTaxonomy-spec.md §5 G2 (not a claim that isometrics cannot grow muscle)."),
+      ]
+    ),
+    CatalogExercise(
+      id: "03a64531-3141-50e5-8e75-d4953a624bb2",
+      slug: "single-arm-landmine-press",
+      name: "Single-Arm Landmine Press",
+      modality: .barbell,
+      primaryMuscle: .frontDelts,
+      contributions: [
+        .init(.frontDelts, role: .direct, certainty: .low, source: .anatomy, citation: "Anatomical inference: shoulder flexion in pressing or raising; docs/research/tax-spec.md §1 and §5 G1–G3; not a variant-specific growth trial."),
+        .init(.chest, role: .indirect, certainty: .low, source: .anatomy, citation: "Anatomical inference: loaded shoulder horizontal adduction; docs/research/tax-spec.md §1 and §5 G1–G3; not a variant-specific growth trial."),
+        .init(.triceps, role: .indirect, certainty: .moderate, source: .anatomy, citation: "Anatomical inference: elbow extension; docs/research/tax-spec.md §1 and §5 G1–G3; not a variant-specific growth trial."),
+        .init(.forearms, role: .stabilizer, certainty: .moderate, source: .convention, citation: "Hardset zero-credit convention: held grip or posture; docs/MuscleTaxonomy-spec.md §5 G2 (not a claim that isometrics cannot grow muscle)."),
+        .init(.abs, role: .stabilizer, certainty: .moderate, source: .convention, citation: "Hardset zero-credit convention: held grip or posture; docs/MuscleTaxonomy-spec.md §5 G2 (not a claim that isometrics cannot grow muscle)."),
+      ]
+    ),
+    CatalogExercise(
+      id: "2d6ec09b-84a6-53e6-bfd7-f5b1c174f800",
+      slug: "lateral-raise-machine",
+      name: "Lateral Raise Machine",
+      modality: .machine,
+      primaryMuscle: .sideDelts,
+      contributions: [
+        .init(.sideDelts, role: .direct, certainty: .moderate, source: .anatomy, citation: "Anatomical inference: shoulder abduction; docs/research/tax-spec.md §1 and §5 G1–G3; not a variant-specific growth trial."),
+      ]
+    ),
+    CatalogExercise(
+      id: "9654efee-6e33-5729-b4e8-bafe5b2ce9a1",
+      slug: "cable-front-raise",
+      name: "Cable Front Raise",
+      modality: .cable,
+      primaryMuscle: .frontDelts,
+      contributions: [
+        .init(.frontDelts, role: .direct, certainty: .moderate, source: .anatomy, citation: "Anatomical inference: shoulder flexion in pressing or raising; docs/research/tax-spec.md §1 and §5 G1–G3; not a variant-specific growth trial."),
+        .init(.forearms, role: .stabilizer, certainty: .moderate, source: .convention, citation: "Hardset zero-credit convention: held grip or posture; docs/MuscleTaxonomy-spec.md §5 G2 (not a claim that isometrics cannot grow muscle)."),
+        .init(.abs, role: .stabilizer, certainty: .moderate, source: .convention, citation: "Hardset zero-credit convention: held grip or posture; docs/MuscleTaxonomy-spec.md §5 G2 (not a claim that isometrics cannot grow muscle)."),
+      ]
+    ),
+    CatalogExercise(
+      id: "981ce31e-f2f3-5009-aff9-335dcd5282f0",
+      slug: "dumbbell-front-raise",
+      name: "Dumbbell Front Raise",
+      modality: .dumbbell,
+      primaryMuscle: .frontDelts,
+      contributions: [
+        .init(.frontDelts, role: .direct, certainty: .moderate, source: .anatomy, citation: "Anatomical inference: shoulder flexion in pressing or raising; docs/research/tax-spec.md §1 and §5 G1–G3; not a variant-specific growth trial."),
+        .init(.forearms, role: .stabilizer, certainty: .moderate, source: .convention, citation: "Hardset zero-credit convention: held grip or posture; docs/MuscleTaxonomy-spec.md §5 G2 (not a claim that isometrics cannot grow muscle)."),
+        .init(.abs, role: .stabilizer, certainty: .moderate, source: .convention, citation: "Hardset zero-credit convention: held grip or posture; docs/MuscleTaxonomy-spec.md §5 G2 (not a claim that isometrics cannot grow muscle)."),
+      ]
+    ),
+    CatalogExercise(
+      id: "13294f04-2b27-5bd1-bc9b-48a66b6f525c",
+      slug: "bent-over-dumbbell-reverse-fly",
+      name: "Bent-Over Dumbbell Reverse Fly",
+      modality: .dumbbell,
+      primaryMuscle: .rearDelts,
+      contributions: [
+        .init(.rearDelts, role: .direct, certainty: .moderate, source: .anatomy, citation: "Anatomical inference: shoulder horizontal abduction; docs/research/tax-spec.md §1 and §5 G1–G3; not a variant-specific growth trial."),
+        .init(.upperBack, role: .indirect, certainty: .moderate, source: .anatomy, citation: "Anatomical inference: scapular retraction and depression; docs/research/tax-spec.md §1 and §5 G1–G3; not a variant-specific growth trial."),
+        .init(.forearms, role: .stabilizer, certainty: .moderate, source: .convention, citation: "Hardset zero-credit convention: held grip or posture; docs/MuscleTaxonomy-spec.md §5 G2 (not a claim that isometrics cannot grow muscle)."),
+        .init(.abs, role: .stabilizer, certainty: .moderate, source: .convention, citation: "Hardset zero-credit convention: held grip or posture; docs/MuscleTaxonomy-spec.md §5 G2 (not a claim that isometrics cannot grow muscle)."),
+        .init(.lowerBack, role: .stabilizer, certainty: .moderate, source: .convention, citation: "Hardset zero-credit convention: held grip or posture; docs/MuscleTaxonomy-spec.md §5 G2 (not a claim that isometrics cannot grow muscle)."),
+      ]
+    ),
+    CatalogExercise(
+      id: "bb498c3b-4669-59b8-8d9f-f38bc4856406",
+      slug: "cable-reverse-fly",
+      name: "Cable Reverse Fly",
+      modality: .cable,
+      primaryMuscle: .rearDelts,
+      contributions: [
+        .init(.rearDelts, role: .direct, certainty: .moderate, source: .anatomy, citation: "Anatomical inference: shoulder horizontal abduction; docs/research/tax-spec.md §1 and §5 G1–G3; not a variant-specific growth trial."),
+        .init(.upperBack, role: .indirect, certainty: .moderate, source: .anatomy, citation: "Anatomical inference: scapular retraction and depression; docs/research/tax-spec.md §1 and §5 G1–G3; not a variant-specific growth trial."),
+        .init(.forearms, role: .stabilizer, certainty: .moderate, source: .convention, citation: "Hardset zero-credit convention: held grip or posture; docs/MuscleTaxonomy-spec.md §5 G2 (not a claim that isometrics cannot grow muscle)."),
+        .init(.abs, role: .stabilizer, certainty: .moderate, source: .convention, citation: "Hardset zero-credit convention: held grip or posture; docs/MuscleTaxonomy-spec.md §5 G2 (not a claim that isometrics cannot grow muscle)."),
+      ]
+    ),
   ]
 
   public static var slugs: [String] { v1.map(\.slug) }

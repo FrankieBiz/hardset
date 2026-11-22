@@ -31,8 +31,8 @@ manufacturer stack, unloaded sled resistance, pulley ratio or dumbbell increment
 is invented. Small isolation loads may require a smaller physical-machine setting;
 the catalogue does not assert equipment-specific precision. Bodyweight remains
 added load only, with no estimated 1RM. Smith and lever/plate-loaded devices are
-`machine`; a landmine uses a barbell and is `barbell`. An assisted bodyweight device
-is `bodyweight`: log added load only, never the assistance stack as lifted weight.
+`machine`; a landmine uses a barbell and is `barbell`. Assisted devices are deferred
+because the existing positive added-load model cannot honestly represent assistance.
 
 ## Authored additions
 
@@ -74,5 +74,29 @@ execution-dependent attribution; everything else is moderate.
 | Leg Press Calf Raise (`leg-press-calf-raise`) | machine | gastrocnemius, soleus | — | — | Straight knees, ankle plantarflexion only; anatomical transfer of tax-spec §2.13 knee-position distinction, not a machine-specific trial. |
 | Single-Leg Dumbbell Calf Raise (`single-leg-dumbbell-calf-raise`) | dumbbell | gastrocnemius, soleus | — | forearms | Straight-knee unilateral heel raise; free hand supports balance. |
 | Smith Machine Calf Raise (`smith-machine-calf-raise`) | machine | gastrocnemius, soleus | — | forearms, abs | Guided standing straight-knee heel raise; no claim about machine leverage. |
+| Decline Barbell Bench Press (`decline-barbell-bench-press`) | barbell | chest | frontDelts, triceps | forearms | Declined bench, loaded shoulder adduction and elbow extension; chest stays one token. |
+| Decline Dumbbell Bench Press (`decline-dumbbell-bench-press`) | dumbbell | chest | frontDelts, triceps | forearms | Independent dumbbells on declined bench; no lower-chest isolation claim. |
+| Smith Machine Bench Press (`smith-machine-bench-press`) | machine | chest | frontDelts, triceps | forearms | Guided bar over flat bench; machine history stays separate from free-bar history. |
+| Incline Smith Machine Press (`incline-smith-machine-press`) | machine | chest | frontDelts, triceps | forearms | Guided incline press; no attribution to a separate upper-chest region. |
+| Incline Chest Press Machine (`incline-chest-press-machine`) | machine | chest | frontDelts, triceps | forearms | Inclined lever or selectorized press; actions, not manufacturer muscle labels. |
+| Single-Arm Chest Press Machine (`single-arm-chest-press-machine`) | machine | chest | frontDelts, triceps | forearms, abs | One independent machine lever; anti-rotation is held posture and credits zero. |
+| Cable Chest Press (`cable-chest-press`) | cable | chest | frontDelts, triceps | forearms, abs | Standing horizontal cable press; torso held still. |
+| Single-Arm Cable Chest Press (`single-arm-cable-chest-press`) | cable | chest | frontDelts, triceps | forearms, abs | Unilateral cable press with fixed torso; no rotational oblique credit. |
+| Dumbbell Floor Press (`dumbbell-floor-press`) | dumbbell | chest | frontDelts, triceps | forearms | Floor limits shoulder extension; no claim of equal stimulus to full-range bench. |
+| Push-up (`push-up`) | bodyweight | chest | frontDelts, triceps | abs | Loaded shoulder adduction and elbow extension; straight trunk is stabilisation. |
+| Feet-Elevated Push-up (`feet-elevated-push-up`) | bodyweight | chest | frontDelts, triceps | abs | Feet on bench; angle/load differs from floor push-up, without a regional growth claim. |
+| Dumbbell Fly (`dumbbell-fly`) | dumbbell | chest | frontDelts | forearms, biceps | Flat bench; elbows hold a slight bend, so biceps do not receive moving-joint credit. |
+| Incline Dumbbell Fly (`incline-dumbbell-fly`) | dumbbell | chest | frontDelts | forearms, biceps | Incline bench fly; no separate upper-chest token. |
+| Single-Arm Cable Fly (`single-arm-cable-fly`) | cable | chest | frontDelts | forearms, abs, biceps | One cable, fixed elbow and torso; no anti-rotation credit. |
+| Shoulder Press Machine (`shoulder-press-machine`) | machine | frontDelts | sideDelts, triceps | forearms | Seated supported overhead press; inferred analogue of corpus shoulder presses. |
+| Smith Machine Shoulder Press (`smith-machine-shoulder-press`) | machine | frontDelts | sideDelts, triceps | forearms | Seated upright bench under guided bar. |
+| Standing Dumbbell Press (`standing-dumbbell-press`) | dumbbell | frontDelts | sideDelts, triceps | forearms, abs | Standing overhead press; abdominal bracing contributes zero sets. |
+| Single-Arm Dumbbell Press (`single-arm-dumbbell-press`) | dumbbell | frontDelts | sideDelts, triceps | forearms, abs | One standing dumbbell overhead; torso held still. |
+| Single-Arm Landmine Press (`single-arm-landmine-press`) | barbell | frontDelts (low) | chest (low), triceps | forearms, abs | Anchored bar pressed forward/up; angle-dependent shoulder excursion makes front-deltoid and chest roles low confidence; barbell modality follows the implement. |
+| Lateral Raise Machine (`lateral-raise-machine`) | machine | sideDelts | — | — | Upper-arm pads resist shoulder abduction; no hand-held grip required. |
+| Cable Front Raise (`cable-front-raise`) | cable | frontDelts | — | forearms, abs | Cable resists shoulder flexion; no elbow movement. |
+| Dumbbell Front Raise (`dumbbell-front-raise`) | dumbbell | frontDelts | — | forearms, abs | Dumbbells raised forward through shoulder flexion, without trunk swing. |
+| Bent-Over Dumbbell Reverse Fly (`bent-over-dumbbell-reverse-fly`) | dumbbell | rearDelts | upperBack | forearms, abs, lowerBack | Hip hinge held; horizontal shoulder abduction and scapular retraction, lumbar hold credits zero. |
+| Cable Reverse Fly (`cable-reverse-fly`) | cable | rearDelts | upperBack | forearms, abs | Standing cables resist horizontal shoulder abduction; fixed torso. |
 
-Current batch: 32 additions; 82 total movements.
+Current batch: 56 additions; 106 total movements.

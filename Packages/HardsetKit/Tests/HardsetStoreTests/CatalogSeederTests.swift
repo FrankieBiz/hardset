@@ -240,6 +240,7 @@ struct CatalogSeederTests {
       #expect(actual.primaryMuscle == MuscleKey(expected.primaryMuscle))
       #expect(Set(actual.contributions) == Set(expected.contributions))
       #expect(actual.unreadableEntryCount == 0)
+      #expect(try seeder.search(expected.name).first?.id == actual.id)
     }
   }
 }
@@ -332,6 +333,30 @@ struct ExerciseCatalogTests {
       leg-press-calf-raise 49be22e8-1366-5cdd-a555-6c80bd6d10cc
       single-leg-dumbbell-calf-raise 23ab8549-58d8-5254-8618-f0e69fa5d398
       smith-machine-calf-raise cb2361b3-5909-5633-baae-259a0be878e3
+      decline-barbell-bench-press ec8578c4-366d-5977-a80a-93070d631405
+      decline-dumbbell-bench-press b939d71c-f5fe-5508-b4ec-64fe360234c5
+      smith-machine-bench-press 24503c7a-041f-5b53-8c7a-b8cdb79554aa
+      incline-smith-machine-press 3ebf28e1-450d-5ea1-bea7-beccced28baf
+      incline-chest-press-machine 9ffce5c0-923a-59d4-93ca-2cd1745d978f
+      single-arm-chest-press-machine 78b378ae-a39a-5cdb-afe3-f3bab040564e
+      cable-chest-press 4f0768b2-122f-5ff7-9bfc-4bda84e71cf9
+      single-arm-cable-chest-press 5b56ffb4-1518-5d75-a9de-697b1e3ad616
+      dumbbell-floor-press 0e44d160-2616-54a8-8379-146931df1522
+      push-up edeebedb-a3f6-586e-a06e-7c066f1a6ed6
+      feet-elevated-push-up 21bb7b64-594f-57d9-9429-a9f919bc0283
+      dumbbell-fly 7c7632c3-b753-56e1-a68b-9b9098834d33
+      incline-dumbbell-fly 102c6f8b-83f8-53ad-bbcd-09891518c99b
+      single-arm-cable-fly 57001253-2efa-5f56-b266-8e40e7cabe1c
+      shoulder-press-machine d1179d9f-d9c8-5ace-8688-0314c5ebbba4
+      smith-machine-shoulder-press 5b56a6b3-6433-520a-b5ea-a2b57655060c
+      standing-dumbbell-press 5089c302-cd90-5970-b686-dc94bb3c13e1
+      single-arm-dumbbell-press e5a401b2-eff5-5c17-b529-570c75394b7a
+      single-arm-landmine-press 03a64531-3141-50e5-8e75-d4953a624bb2
+      lateral-raise-machine 2d6ec09b-84a6-53e6-bfd7-f5b1c174f800
+      cable-front-raise 9654efee-6e33-5729-b4e8-bafe5b2ce9a1
+      dumbbell-front-raise 981ce31e-f2f3-5009-aff9-335dcd5282f0
+      bent-over-dumbbell-reverse-fly 13294f04-2b27-5bd1-bc9b-48a66b6f525c
+      cable-reverse-fly bb498c3b-4669-59b8-8d9f-f38bc4856406
       """.split(separator: "\n").map { $0.split(separator: " ").map(String.init) }
     let expected = Dictionary(uniqueKeysWithValues: pinned.map { ($0[0], $0[1]) })
     let actual = Dictionary(uniqueKeysWithValues: ExerciseCatalog.v1.map { ($0.slug, $0.id) })
