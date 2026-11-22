@@ -5,10 +5,21 @@ import SwiftUI
 /// Drawn as an empty slot rather than a dialog: the symbol sits in a dashed socket, which is the
 /// one place a dashed outline appears in the app and it always means "nothing here yet". Then a
 /// plain-English statement of what is missing, and, when there is one, the action that fills it.
+/// A screen that has dropped its containers asks for `.quiet` instead: the same symbol and words
+/// with no socket, because a dashed placeholder shape is what the monochrome direction rules out.
 ///
 /// The words and symbol read as one VoiceOver element; the action stays its own button, so it can
 /// be found and activated rather than being folded into a sentence.
 public struct HardsetEmptyState: View {
+  /// How the empty slot is drawn. The words, the symbol and the action are the same in both.
+  public enum Style: Sendable, Hashable {
+    /// The symbol in a dashed socket.
+    case socket
+    /// The symbol on its own, in `chalkDim`: no socket, no fill, no outline.
+    case quiet
+  }
+
+  private let style: Style
   private let title: String
   private let detail: String?
   private let systemImage: String
@@ -26,8 +37,10 @@ public struct HardsetEmptyState: View {
     systemImage: String,
     actionTitle: String? = nil,
     actionSystemImage: String = "plus",
+    style: Style = .socket,
     action: (() -> Void)? = nil
   ) {
+    self.style = style
     self.title = title
     self.detail = detail
     self.systemImage = systemImage
@@ -39,22 +52,7 @@ public struct HardsetEmptyState: View {
   public var body: some View {
     VStack(spacing: Tokens.Spacing.loose) {
       VStack(spacing: Tokens.Spacing.regular) {
-        Image(systemName: systemImage)
-          .font(Tokens.Text.title)
-          .foregroundStyle(Tokens.Color.chalkDim)
-          .frame(width: socketSize, height: socketSize)
-          .accessibilityHidden(true)
-          .background(
-            Tokens.Color.steelRaised,
-            in: Tokens.Shape.card
-          )
-          .overlay(
-            Tokens.Shape.card
-              .strokeBorder(
-                Tokens.Color.controlEdge,
-                style: StrokeStyle(lineWidth: Tokens.Stroke.hairline, dash: [4, 3])
-              )
-          )
+        glyph
 
         VStack(spacing: Tokens.Spacing.tight) {
           Text(title)
@@ -83,6 +81,35 @@ public struct HardsetEmptyState: View {
     .padding(.vertical, Tokens.Spacing.section)
     .padding(.horizontal, Tokens.Spacing.section)
     .frame(maxWidth: .infinity)
+  }
+}
+
+extension HardsetEmptyState {
+  @ViewBuilder fileprivate var glyph: some View {
+    switch style {
+    case .socket:
+      Image(systemName: systemImage)
+        .font(Tokens.Text.title)
+        .foregroundStyle(Tokens.Color.chalkDim)
+        .frame(width: socketSize, height: socketSize)
+        .accessibilityHidden(true)
+        .background(
+          Tokens.Color.steelRaised,
+          in: Tokens.Shape.card
+        )
+        .overlay(
+          Tokens.Shape.card
+            .strokeBorder(
+              Tokens.Color.controlEdge,
+              style: StrokeStyle(lineWidth: Tokens.Stroke.hairline, dash: [4, 3])
+            )
+        )
+    case .quiet:
+      Image(systemName: systemImage)
+        .font(Tokens.Text.title)
+        .foregroundStyle(Tokens.Color.chalkDim)
+        .accessibilityHidden(true)
+    }
   }
 }
 

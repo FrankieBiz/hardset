@@ -18,14 +18,15 @@ the code does yet, so a reader does not look for a screen that has not moved.
   kit: the flat control face and its outline rule (`ControlFace.swift`), buttons, chips, the
   segmented control, header buttons, text entry, cards, banners, tags and certainty badges.
 - The live session is in code, rebuilt monochrome and type-led (ruling D12): see Set row, Set log
-  control, Inline control, Panel and the live-session layout below. Its sibling screens have not
-  moved.
+  control, Inline control, Panel and the live-session layout below. Train's start screen is rebuilt
+  the same way (see Train start screen); Progress, Volume and Library follow in the next phases of
+  this one.
 - Not yet in code, so the bullets below that name these describe where they are going: whatever a
   screen draws for itself instead of through the kit. That is the Library's "Curated" tag, the
   Progress card's layout, the Volume gauge ends, the scorecard headline's type role, and the
-  onboarding and tour surfaces. It also includes four private outlined-card button styles that each draw their own
-  stroke: the History row, the Settings disclosure row, the Train screen's gym row and the
-  receipt's link row, plus the methodology citation card. A screen that uses the kit picks up the new look with no change; one that draws its own
+  onboarding and tour surfaces. It also includes three private outlined-card button styles that each draw their own
+  stroke: the History row, the Settings disclosure row and the receipt's link row, plus the
+  methodology citation card. A screen that uses the kit picks up the new look with no change; one that draws its own
   face or stroke keeps the old one until it is migrated.
 - The keypad keys keep their `controlEdge` outline until the keypad has had its device check; see
   Keys. `ScaledPhoneFrame` still reads the retired `edgeLight`; see the palette notes.
@@ -326,7 +327,9 @@ Selection rows, the unit switch and pickers stay silent.
   of text, not a spinner. An empty slot is drawn with a dashed outline, the app's one mark for
   "nothing here yet": the empty-state socket, the workout editor's "Add movement" slot and the rule
   under "Not evaluated". The live session draws none: its "Add movement" is an inline control, a
-  warm-up's ordinal is a plain "W", and an incomplete set's log control is an empty square.
+  warm-up's ordinal is a plain "W", and an incomplete set's log control is an empty square. A screen
+  that has dropped its containers asks `HardsetEmptyState` for `.quiet`, the same symbol and words
+  with no socket, and Train's "No sessions yet" is plain left-aligned type with no symbol.
 - **Tags versus chips**: a chip can be tapped and is a raised fill with an action label; a tag
   (modality, "Recent", "Custom", an untrained muscle) is flat `steelRaised`, so it never imitates a
   control. At
@@ -365,24 +368,41 @@ Selection rows, the unit switch and pickers stay silent.
   `caption` under "Equipment" saying that no max is estimated until the lifter says what the load is.
   Saving without choosing leaves the equipment as it was, so naming a body part never declares
   equipment; only a chip the lifter taps does.
-- **Workout cards** (`WorkoutCardsView`, `WorkoutCard`): the Train tab's saved workouts. The workout done
-  longest ago, or never, is the up-next card, in `hardsetCard`, with its name in `title`, "3 movements" in
-  `label` and a context line in `provenance`: "Up next · last done 4 days ago · beat 4 of 6 last time".
-  Its one `primary` 56 pt button reads "Start" and the name; starting is a single tap with no
-  confirmation, because the lifter is standing at a machine. It is the screen's one primary button:
-  while a saved workout is shown, the empty "Start workout" below it steps down to `secondary`. The
-  other workouts are control-radius cards with a `secondary` Start and a `quiet` Edit. The empty "Start
-  workout" follows the cards, and under it are `secondary` "Repeat last workout", only when a finished
-  workout of the lifter's own exists (an imported one does not count), and "New saved workout", which
-  opens the plan editor and starts nothing. They sit below the start and never above it, and the editor's
-  button says it makes a saved workout, so a lifter in a hurry cannot take it for starting one
-  (`WorkoutCardActions`). Nothing is claimed that was not measured:
-  "beat 4 of 6" appears only when something was compared, and only on the workout it belongs to. The
-  order is the rotation, never a schedule or a streak. A workout counts as done, for the rotation, the
-  last-done day, "last time" and "Repeat last workout", and for Apple Health alike, only when it
-  finished with a working set: an accidental Start finished with nothing logged, or with warm-ups only,
-  leaves all of them where they were. At accessibility sizes the buttons stack. It adds no token and no
-  motion.
+- **Train start screen** (`HardsetRootView.startView`, `WorkoutCardsView`): nothing on it is boxed.
+  Top to bottom: the header, with Library and Settings as `.bare` header glyphs and the gym as the
+  header's own line; the saved workouts; the empty "Start workout", its sentence, and the two
+  controls that follow it; then, under a hairline, the last workout. The gym line is the live
+  session's gym chip: a pin, "Training at" and the name in `chalkDim`, and a chevron that says it
+  opens the list; with no gym it is "Add a gym to track machines" in full `chalk` with a plus and its
+  reason in `caption` under it, an invitation and not a warning. Its accessible name is unchanged,
+  and Voice Control also answers to "Change gym". The last workout is a section label and one
+  button: the workout's title (or its date) in `headline`, its length in `figure` with a clock, a
+  chevron, a `StatLedger` of working sets, reps and volume, and the movements in `label` and
+  `chalkDim`. It is a 56 pt `InlineControlStyle` region that opens the receipt. With no finished
+  workout, "No sessions yet" is left-aligned type under the same hairline and no symbol. The one
+  accent is the primary Start: the up-next workout's when one is saved, the empty "Start workout"
+  otherwise. It adds no token and no motion.
+- **Workout cards** (`WorkoutCardsView`, `WorkoutCard`): the Train tab's saved workouts, drawn without
+  cards. The workout done longest ago, or never, is the up-next workout, type on the canvas, with its
+  name in `title`, "3 movements" in `label` and a context line in `provenance`: "Up next · last done 4
+  days ago · beat 4 of 6 last time". Its one `primary` 56 pt button reads "Start" and the name;
+  starting is a single tap with no confirmation, because the lifter is standing at a machine. Under it
+  is "Edit", an inline control in `chalkDim`. It is the screen's one primary button: while a saved
+  workout is shown, the empty "Start workout" below it steps down to `secondary`. The other workouts
+  are rows under a "Your workouts" label, each under a hairline: the name in `headline` and its line
+  in `provenance`, with "Start" in `chalk` and "Edit" in `chalkDim` as inline controls at the
+  trailing edge. The empty "Start workout" follows the workouts, and under it are the inline controls
+  "Repeat last workout", only when a finished workout of the lifter's own exists (an imported one does
+  not count), and "New saved workout", which opens the plan editor and starts nothing. "Repeat" keeps
+  the logger's 56 pt region, because it starts a workout; "New saved workout" is 44 pt. They sit
+  below the start and never above it, and the editor's control says it makes a saved workout, so a
+  lifter in a hurry cannot take it for starting one (`WorkoutCardActions`). Nothing is claimed that
+  was not measured: "beat 4 of 6" appears only when something was compared, and only on the workout
+  it belongs to. The order is the rotation, never a schedule or a streak. A workout counts as done,
+  for the rotation, the last-done day, "last time" and "Repeat last workout", and for Apple Health
+  alike, only when it finished with a working set: an accidental Start finished with nothing logged,
+  or with warm-ups only, leaves all of them where they were. At accessibility sizes a row's controls
+  stack under its text. It adds no token and no motion.
 - **Workout editor** (`WorkoutEditorView`, `WorkoutEditorScreen`, `WorkoutDraft`): a name field in
   `entryFieldChrome` and a card per movement. Each card has Sets and, once added, a rep range as large
   44 pt minus and plus controls around a `figure` value, so a plan made sitting down cannot hold a number

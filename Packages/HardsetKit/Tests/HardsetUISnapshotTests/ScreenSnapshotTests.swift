@@ -320,6 +320,52 @@
       }
     }
 
+    /// The start screen with the most on it: a gym, two saved workouts (one up next), the controls
+    /// that follow the empty start, and the last workout. Tall, so the whole column is in view, in
+    /// both appearances and at an accessibility size, where the rows of saved workouts stack.
+    @Test func startScreenWithSavedWorkouts() async throws {
+      guard Snapshot.directory != nil else { return }
+      let database = try Fixtures.database()
+      let environment = HardsetEnvironment(database: database)
+      try environment.catalog.seed()
+      let gym = try environment.gyms.createGym(name: "Metroflex Gym")
+      let coordinator = try SessionCoordinator.start(
+        store: environment.logger, gymID: gym, plan: [], restAfterSet: nil
+      )
+      try Fixtures.logTwoSets(in: coordinator, catalog: environment.catalog)
+      try coordinator.finish()
+
+      let pressEntries = try environment.catalog.search("Press")
+      let press = try #require(pressEntries.first)
+      let day = Date(timeIntervalSinceNow: -4 * 86_400)
+      try await environment.templates.save(
+        WorkoutTemplate(
+          name: "Upper A", position: 0,
+          exercises: [TemplateExercise(exerciseID: press.id, exerciseName: press.name, plannedSets: 3)],
+          lastDoneAt: day),
+        now: day)
+      try await environment.templates.save(
+        WorkoutTemplate(
+          name: "Upper B", position: 1,
+          exercises: [TemplateExercise(exerciseID: press.id, exerciseName: press.name, plannedSets: 3)]),
+        now: day)
+
+      let tall = CGSize(width: Snapshot.phone.width, height: 1500)
+      let settle: Duration = .seconds(4)
+      try await Snapshot.capture("train-saved-dark", size: tall, settle: settle) {
+        HardsetRootView(environment: environment, unit: .kilograms)
+      }
+      try await Snapshot.capture("train-saved-light", size: tall, style: .light, settle: settle) {
+        HardsetRootView(environment: environment, unit: .kilograms)
+      }
+      try await Snapshot.capture(
+        "train-saved-dark-ax3", size: CGSize(width: Snapshot.phone.width, height: 3200),
+        typeSize: .accessibility3, settle: settle
+      ) {
+        HardsetRootView(environment: environment, unit: .kilograms)
+      }
+    }
+
     /// The live session wired to a real coordinator and database, as the Train tab shows it.
     /// Rendered outside the tab view: this renderer cannot draw the tab bar's glass accessory,
     /// which veiled the whole screen when it was included.

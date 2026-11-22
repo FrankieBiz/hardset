@@ -416,10 +416,12 @@ public struct HardsetRootView: View {
   private var startHeader: some View {
     ScreenHeader("Train", subtitle: Self.dayLabel(today)) {
       HStack(spacing: Tokens.Spacing.snug) {
-        HeaderIconButton(systemImage: "books.vertical", accessibilityLabel: "Library") {
+        HeaderIconButton(
+          systemImage: "books.vertical", accessibilityLabel: "Library", style: .bare
+        ) {
           isShowingLibrary = true
         }
-        HeaderIconButton(systemImage: "gearshape", accessibilityLabel: "Settings") {
+        HeaderIconButton(systemImage: "gearshape", accessibilityLabel: "Settings", style: .bare) {
           isShowingSettings = true
         }
       }
@@ -430,7 +432,7 @@ public struct HardsetRootView: View {
   /// it so Settings is reachable while a workout is still being prepared.
   private var trainHeader: some View {
     ScreenHeader("Train", subtitle: Self.dayLabel(today)) {
-      HeaderIconButton(systemImage: "gearshape", accessibilityLabel: "Settings") {
+      HeaderIconButton(systemImage: "gearshape", accessibilityLabel: "Settings", style: .bare) {
         isShowingSettings = true
       }
     }
@@ -478,11 +480,15 @@ public struct HardsetRootView: View {
   private var startView: some View {
     ScrollView {
       VStack(alignment: .leading, spacing: Tokens.Spacing.block) {
-        startHeader
+        // The gym is the header's own line, as it is on the live session: where the lifter is is
+        // context for the title, not a card of its own.
+        VStack(alignment: .leading, spacing: Tokens.Spacing.snug) {
+          startHeader
+          gymLine
+            .padding(.horizontal, Tokens.Spacing.loose)
+        }
 
-        VStack(alignment: .leading, spacing: Tokens.Spacing.loose) {
-          gymCard
-
+        VStack(alignment: .leading, spacing: Tokens.Spacing.block) {
           savedWorkoutCards
 
           VStack(alignment: .leading, spacing: Tokens.Spacing.regular) {
@@ -510,9 +516,9 @@ public struct HardsetRootView: View {
             .font(Tokens.Text.provenance)
             .foregroundStyle(Tokens.Color.chalkDim)
             .fixedSize(horizontal: false, vertical: true)
-          }
 
-          savedWorkoutActions
+            savedWorkoutActions
+          }
         }
         .padding(.horizontal, Tokens.Spacing.loose)
         .animation(
@@ -520,19 +526,8 @@ public struct HardsetRootView: View {
           value: startFailed
         )
 
-        if let lastWorkout {
-          lastWorkoutCard(lastWorkout)
-            .padding(.horizontal, Tokens.Spacing.loose)
-        } else if lastWorkoutSnapshot.value != nil {
-          // Read successfully and empty: said as what it is. Before the read has returned, or if it
-          // failed, nothing is drawn, so this never appears on a guess.
-          HardsetEmptyState(
-            title: "No sessions yet",
-            detail: "Start a workout and your last one will live here.",
-            systemImage: "clock.arrow.circlepath"
-          )
+        lastWorkoutSection
           .padding(.horizontal, Tokens.Spacing.loose)
-        }
       }
       .padding(.bottom, Tokens.Spacing.block)
     }
@@ -613,61 +608,47 @@ public struct HardsetRootView: View {
   /// Sets where this workout is, which is what makes per-machine tracking reachable at all: a
   /// machine belongs to a gym, so a session with no gym can only ever log `machineID == nil`.
   ///
-  /// Stated as one card rather than a required step. It is preselected from the last gym used, so
-  /// the common case — training at the same place — costs nothing. With no gym it is an
-  /// invitation in neutral colours, not a warning: training without one is a valid choice.
-  private var gymCard: some View {
-    Button {
-      isChoosingGym = true
-    } label: {
-      HStack(spacing: Tokens.Spacing.regular) {
-        Image(systemName: "mappin.and.ellipse")
-          .font(Tokens.Text.headline)
-          .foregroundStyle(Tokens.Color.plateBlue)
-          .accessibilityHidden(true)
-
-        VStack(alignment: .leading, spacing: Tokens.Spacing.hairline) {
-          if let selectedGymName {
-            Text("Training at")
-              .font(Tokens.Text.caption)
-              .foregroundStyle(Tokens.Color.chalkDim)
-            Text(selectedGymName)
-              .font(Tokens.Text.title)
-              .foregroundStyle(Tokens.Color.chalk)
-            if dynamicTypeSize.isAccessibilitySize {
-              // Under the name at large sizes, so the name keeps the card's width.
-              changeLabel
-            }
-          } else {
-            Text(gymInvitation)
-              .font(Tokens.Text.headline)
-              .foregroundStyle(Tokens.Color.chalk)
-            Text("Optional. Loads are recorded per machine, and machines belong to a gym.")
-              .font(Tokens.Text.caption)
-              .foregroundStyle(Tokens.Color.chalkDim)
+  /// Stated as one line of type under the title rather than a required step or a card, and drawn as
+  /// the live session draws the same fact: a pin, the name in `chalkDim` and a chevron that says it
+  /// opens. It is preselected from the last gym used, so the common case, training at the same
+  /// place, costs nothing. With no gym it is an invitation in full `chalk`, with the reason under
+  /// it, not a warning: training without one is a valid choice.
+  private var gymLine: some View {
+    let isSet = selectedGymName != nil
+    return VStack(alignment: .leading, spacing: Tokens.Spacing.hairline) {
+      Button {
+        isChoosingGym = true
+      } label: {
+        HStack(spacing: Tokens.Spacing.snug) {
+          Image(systemName: isSet ? "mappin.and.ellipse" : "plus")
+            .font(Tokens.Text.provenance.weight(.medium))
+            .accessibilityHidden(true)
+          Text(selectedGymName.map { "Training at \($0)" } ?? gymInvitation)
+            .font(Tokens.Text.provenance.weight(.medium))
+            .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 1)
+            .multilineTextAlignment(.leading)
+          if isSet {
+            Image(systemName: "chevron.down")
+              .font(Tokens.Text.caption.weight(.semibold))
+              .accessibilityHidden(true)
           }
         }
-        .multilineTextAlignment(.leading)
-        .frame(maxWidth: .infinity, alignment: .leading)
+        .foregroundStyle(isSet ? Tokens.Color.chalkDim : Tokens.Color.chalk)
+      }
+      .buttonStyle(InlineControlStyle(minHeight: Tokens.minimumTapTarget, alignment: .leading))
+      .accessibilityLabel(gymCardAccessibilityLabel)
+      .accessibilityHint("Opens the list of gyms")
+      // Begins with the words on the line, so a Voice Control user can say what they see.
+      .accessibilityInputLabels(
+        selectedGymName.map { [$0, "Change gym", "Gym"] } ?? [gymInvitation, "Gym"])
 
-        if selectedGymName != nil, !dynamicTypeSize.isAccessibilitySize {
-          changeLabel
-        }
-        Image(systemName: "chevron.right")
-          .font(Tokens.Text.caption.weight(.semibold))
+      if !isSet {
+        Text("Optional. Loads are recorded per machine, and machines belong to a gym.")
+          .font(Tokens.Text.caption)
           .foregroundStyle(Tokens.Color.chalkDim)
-          .accessibilityHidden(true)
+          .fixedSize(horizontal: false, vertical: true)
       }
     }
-    .buttonStyle(OutlinedCardButtonStyle())
-    .accessibilityLabel(gymCardAccessibilityLabel)
-    .accessibilityHint("Opens the list of gyms")
-  }
-
-  private var changeLabel: some View {
-    Text("Change")
-      .font(Tokens.Text.headline)
-      .foregroundStyle(Tokens.Color.plateBlue)
   }
 
   private var selectedGymName: String? {
@@ -698,19 +679,53 @@ public struct HardsetRootView: View {
 
   private var lastWorkout: SessionSummary? { lastWorkoutSnapshot.value?.first }
 
-  /// The newest finished workout, as it was recorded, opening its receipt.
+  /// The newest finished workout, as it was recorded, opening its receipt. The hairline above the
+  /// section is where it meets the start controls; nothing is boxed.
   ///
-  /// The receipt is a static record, so the card still cannot be mistaken for a plan to repeat.
+  /// The receipt is a static record, so the section still cannot be mistaken for a plan to repeat.
   /// Duration appears only when the timeline is plausible — a forgotten session is not presented as
-  /// a six-hour effort here any more than it is in history.
-  private func lastWorkoutCard(_ summary: SessionSummary) -> some View {
-    Button {
-      receiptSelection = LastWorkoutReceipt(id: summary.id)
-    } label: {
-      lastWorkoutContent(summary)
+  /// a six-hour effort here any more than it is in history. With no finished workout read, it says
+  /// so in words; before the read has returned, or if it failed, nothing is drawn, so this never
+  /// appears on a guess.
+  @ViewBuilder private var lastWorkoutSection: some View {
+    if let lastWorkout {
+      VStack(alignment: .leading, spacing: Tokens.Spacing.regular) {
+        sectionRule
+        SectionLabel("Last workout")
+        Button {
+          receiptSelection = LastWorkoutReceipt(id: lastWorkout.id)
+        } label: {
+          lastWorkoutContent(lastWorkout)
+        }
+        .buttonStyle(
+          InlineControlStyle(
+            minHeight: Tokens.loggerTapTarget, alignment: .leading, fullWidth: true)
+        )
+        .accessibilityHint("Opens the receipt")
+      }
+    } else if lastWorkoutSnapshot.value != nil {
+      VStack(alignment: .leading, spacing: Tokens.Spacing.regular) {
+        sectionRule
+        VStack(alignment: .leading, spacing: Tokens.Spacing.tight) {
+          Text("No sessions yet")
+            .font(Tokens.Text.headline)
+            .foregroundStyle(Tokens.Color.chalk)
+          Text("Start a workout and your last one will live here.")
+            .font(Tokens.Text.provenance)
+            .foregroundStyle(Tokens.Color.chalkDim)
+            .fixedSize(horizontal: false, vertical: true)
+        }
+        .accessibilityElement(children: .combine)
+      }
     }
-    .buttonStyle(HardsetPressStyle())
-    .accessibilityHint("Opens the receipt")
+  }
+
+  /// The hairline that separates the last workout from the controls above it.
+  private var sectionRule: some View {
+    Rectangle()
+      .fill(Tokens.Color.hairline)
+      .frame(height: Tokens.Stroke.hairline)
+      .accessibilityHidden(true)
   }
 
   private func lastWorkoutContent(_ summary: SessionSummary) -> some View {
@@ -718,55 +733,59 @@ public struct HardsetRootView: View {
     let date = Self.sessionDate(summary.timeline.startedAt)
     let duration = summary.hasImplausibleDuration ? nil : summary.timeline.duration
 
-    return VStack(alignment: .leading, spacing: Tokens.Spacing.snug) {
-      SectionLabel("Last workout")
-
-      VStack(alignment: .leading, spacing: Tokens.Spacing.loose) {
-        // Side by side at ordinary sizes; at accessibility sizes the duration drops under the
-        // title instead of squeezing it into a narrow column.
-        headerLayout {
-          VStack(alignment: .leading, spacing: Tokens.Spacing.hairline) {
-            Text(title.isEmpty ? date : title)
-              .font(Tokens.Text.headline)
-              .foregroundStyle(Tokens.Color.chalk)
-            if !title.isEmpty {
-              Text(date)
-                .font(Tokens.Text.caption)
-                .foregroundStyle(Tokens.Color.chalkDim)
-            }
-          }
-          .frame(maxWidth: .infinity, alignment: .leading)
-
-          if let duration {
-            // The same clock format the history list uses, so the two never disagree.
-            Label(duration.clockString, systemImage: "clock")
-              .labelStyle(.titleAndIcon)
-              .font(Tokens.Text.figure)
+    return VStack(alignment: .leading, spacing: Tokens.Spacing.regular) {
+      // Side by side at ordinary sizes; at accessibility sizes the duration drops under the
+      // title instead of squeezing it into a narrow column.
+      headerLayout {
+        VStack(alignment: .leading, spacing: Tokens.Spacing.hairline) {
+          Text(title.isEmpty ? date : title)
+            .font(Tokens.Text.headline)
+            .foregroundStyle(Tokens.Color.chalk)
+          if !title.isEmpty {
+            Text(date)
+              .font(Tokens.Text.caption)
               .foregroundStyle(Tokens.Color.chalkDim)
-              .accessibilityLabel("Duration \(duration.clockString)")
           }
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
 
-        if summary.volume.isEmpty {
-          Text("Finished with no sets logged.")
-            .font(Tokens.Text.label)
+        if let duration {
+          // The same clock format the history list uses, so the two never disagree.
+          Label(duration.clockString, systemImage: "clock")
+            .labelStyle(.titleAndIcon)
+            .font(Tokens.Text.figure)
             .foregroundStyle(Tokens.Color.chalkDim)
-        } else {
-          StatLedger(ledgerItems(summary.volume))
+            .accessibilityLabel("Duration \(duration.clockString)")
         }
 
-        if !summary.exerciseNames.isEmpty {
-          Text(summary.exerciseNames.joined(separator: ", "))
-            .font(Tokens.Text.label)
+        // With nothing boxed, the chevron is what says the block opens. At accessibility sizes the
+        // header stacks, and the hint says it instead.
+        if !dynamicTypeSize.isAccessibilitySize {
+          Image(systemName: "chevron.right")
+            .font(Tokens.Text.caption.weight(.semibold))
             .foregroundStyle(Tokens.Color.chalkDim)
-            .lineLimit(2)
+            .accessibilityHidden(true)
         }
       }
-      .padding(Tokens.Spacing.loose)
-      .frame(maxWidth: .infinity, alignment: .leading)
-      .hardsetCard()
-      .accessibilityElement(children: .combine)
+
+      if summary.volume.isEmpty {
+        Text("Finished with no sets logged.")
+          .font(Tokens.Text.label)
+          .foregroundStyle(Tokens.Color.chalkDim)
+      } else {
+        StatLedger(ledgerItems(summary.volume))
+      }
+
+      if !summary.exerciseNames.isEmpty {
+        Text(summary.exerciseNames.joined(separator: ", "))
+          .font(Tokens.Text.label)
+          .foregroundStyle(Tokens.Color.chalkDim)
+          .lineLimit(2)
+          .multilineTextAlignment(.leading)
+      }
     }
+    .frame(maxWidth: .infinity, alignment: .leading)
+    .accessibilityElement(children: .combine)
   }
 
   private var headerLayout: AnyLayout {
@@ -1082,43 +1101,4 @@ public struct HardsetRootView: View {
 /// The root's tabs, as the tab view's selection.
 private nonisolated enum RootTab: Hashable, Sendable {
   case train, progress, volume, history
-}
-
-/// The start screen's gym card: a full-width card that is also one button.
-///
-/// Outlined with the measured control border rather than a card's decorative hairline, because
-/// the boundary is what tells the lifter it can be tapped. Pressed, it sinks to the pressed fill;
-/// with Reduce Motion on, the scale is dropped and only the fill changes.
-private struct OutlinedCardButtonStyle: ButtonStyle {
-  // Spelled out rather than `Configuration`: this file imports SQLiteData, whose GRDB
-  // `Configuration` shadows the style's associated type and breaks the conformance.
-  func makeBody(configuration: ButtonStyleConfiguration) -> some View {
-    OutlinedCardButtonBody(configuration: configuration)
-  }
-}
-
-private struct OutlinedCardButtonBody: View {
-  let configuration: ButtonStyleConfiguration
-
-  @Environment(\.isEnabled) private var isEnabled
-  @Environment(\.accessibilityReduceMotion) private var reduceMotion
-
-  var body: some View {
-    let shape = RoundedRectangle(cornerRadius: Tokens.Radius.card)
-    configuration.label
-      .padding(.horizontal, Tokens.Spacing.loose)
-      .padding(.vertical, Tokens.Spacing.regular)
-      .frame(maxWidth: .infinity, minHeight: Tokens.loggerTapTarget, alignment: .leading)
-      .background(
-        configuration.isPressed ? Tokens.Color.steelPressed : Tokens.Color.steel,
-        in: shape
-      )
-      .overlay {
-        shape.strokeBorder(Tokens.Color.controlEdge, lineWidth: Tokens.Stroke.hairline)
-      }
-      .contentShape(shape)
-      .scaleEffect(configuration.isPressed && !reduceMotion ? 0.97 : 1)
-      .opacity(isEnabled ? 1 : 0.4)
-      .animation(Tokens.Motion.press, value: configuration.isPressed)
-  }
 }
