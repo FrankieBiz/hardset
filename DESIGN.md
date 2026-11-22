@@ -483,7 +483,10 @@ Selection rows, the unit switch and pickers stay silent.
   line as imported history, an imported series has a working of its own and says what its records were
   compared with, and a movement a workout import created is marked as one on the lines that count it. Its
   confidence is whatever the estimator gives, and the account states the ladder from the estimator itself,
-  so a formula's figure never reads higher than Moderate. It adds no token and no motion.
+  so a formula's figure never reads higher than Moderate. A correction to a finished set shows in the
+  working as it shows in the figure: a receipt's records are derived from the receipt as it is read now,
+  found again by the set's id, and a chart's from the history as it is read now, so neither explains a
+  record or an estimate from the figures before the correction. It adds no token and no motion.
 - **Selection** (`SelectionRow`, `SelectionCardButtonStyle`, `SelectionIndicator`): selected choices
   take the plate blue ring and `plateBlueSurface`, and the trailing indicator swaps an empty ring
   for a filled check, so the choice is carried by shape as well as colour. A pressed selection
