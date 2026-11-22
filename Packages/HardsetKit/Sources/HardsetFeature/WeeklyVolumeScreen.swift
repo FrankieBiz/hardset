@@ -98,7 +98,8 @@ public struct WeeklyVolumeScreen: View {
             HardsetEmptyState(
               title: "Could not read these 7 days",
               detail: "Your logged sets are safe. Pull down to try again.",
-              systemImage: "exclamationmark.triangle"
+              systemImage: "exclamationmark.triangle",
+              style: .quiet
             )
           }
           .padding(.bottom, Tokens.Spacing.block)
@@ -118,9 +119,34 @@ public struct WeeklyVolumeScreen: View {
     .safeAreaInset(edge: .bottom) {
       // Offered only when there is something to map. An empty window's map is all zeros.
       if let window = snapshot.value, window.report.hardSets > 0 {
-        Button("Deep muscle map") { presented = .map }
-          .buttonStyle(HardsetButtonStyle(.secondary))
-          .padding(Tokens.Spacing.loose).background(Tokens.Color.canvas)
+        // Pinned over the list, so a hairline says where the list ends and the control begins.
+        // Words and a chevron with no face; the whole row is the control.
+        VStack(spacing: 0) {
+          Rectangle()
+            .fill(Tokens.Color.hairline)
+            .frame(height: Tokens.Stroke.hairline)
+            .accessibilityHidden(true)
+          Button {
+            presented = .map
+          } label: {
+            HStack(spacing: Tokens.Spacing.snug) {
+              Text("Deep muscle map")
+              Spacer(minLength: Tokens.Spacing.snug)
+              Image(systemName: "chevron.right")
+                .font(Tokens.Text.caption.weight(.semibold))
+                .foregroundStyle(Tokens.Color.chalkDim)
+                .accessibilityHidden(true)
+            }
+            .font(Tokens.Text.headline)
+            .foregroundStyle(Tokens.Color.chalk)
+          }
+          .buttonStyle(
+            InlineControlStyle(
+              minHeight: Tokens.loggerTapTarget, alignment: .leading, fullWidth: true)
+          )
+          .padding(.horizontal, Tokens.Spacing.loose)
+        }
+        .background(Tokens.Color.canvas)
       }
     }
     .sheet(item: $presented) { sheet in
@@ -198,7 +224,9 @@ public struct WeeklyVolumeScreen: View {
   private func header(subtitle: String) -> some View {
     ScreenHeader(Self.title, subtitle: subtitle) {
       if let onShowSettings {
-        HeaderIconButton(systemImage: "gearshape", accessibilityLabel: "Settings", action: onShowSettings)
+        HeaderIconButton(
+          systemImage: "gearshape", accessibilityLabel: "Settings", style: .bare,
+          action: onShowSettings)
       }
     }
   }

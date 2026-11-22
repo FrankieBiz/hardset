@@ -19,11 +19,11 @@ the code does yet, so a reader does not look for a screen that has not moved.
   segmented control, header buttons, text entry, cards, banners, tags and certainty badges.
 - The live session is in code, rebuilt monochrome and type-led (ruling D12): see Set row, Set log
   control, Inline control, Panel and the live-session layout below. Train's start screen is rebuilt
-  the same way (see Train start screen), and so is Progress: the board and the movement chart, with
-  Volume and Library following in the same phase.
+  the same way (see Train start screen), and so are Progress, the board and the movement chart, and
+  Volume, with Library following in the same phase.
 - Not yet in code, so the bullets below that name these describe where they are going: whatever a
   screen draws for itself instead of through the kit. That is the Library's "Curated" tag, the
-  Volume gauge ends, the scorecard headline's type role, and the
+  scorecard headline's type role, the deep muscle map, and the
   onboarding and tour surfaces. It also includes three private outlined-card button styles that each draw their own
   stroke: the History row, the Settings disclosure row and the receipt's link row, plus the
   methodology citation card. A screen that uses the kit picks up the new look with no change; one that draws its own
@@ -683,28 +683,40 @@ Selection rows, the unit switch and pickers stay silent.
 - **Button Shapes**: with the system setting on, every stroke-free control, `quiet` buttons
   included, wears the `controlEdge` outline, and the exercise name (the load-history link) is
   underlined.
-- **Volume bars**: round-ended gauges, 4 pt continuous, scaled to the week's own maximum, never to a target. Modelled
-  muscles are solid plate blue; muscles that are counted but not modelled are hollow (plate blue
-  outline on `plateBlueSurface`) and say so in words beside the bar.
+- **Volume bars**: round-ended gauges, 4 pt tall and continuous, on a `hairline` ground, scaled to the
+  week's own maximum, never to a target. Modelled muscles are solid `chalk`; muscles that are counted
+  but not modelled are hollow (a `chalkDim` outline, no fill) and say so in words beside the name. The
+  screen has no primary action, so the bars carry no accent. A row is the muscle's name in `label` and
+  its count in `setEntry`, the certainty phrase under them and the bar closing it, with space between
+  rows and no card, so the count is the biggest thing in the row. The week's total is `hero`. The window
+  controls "Earlier" and "Later" and "How sets are counted" are inline controls in `chalk`, with "Later"
+  dimmed to 40% on the newest window; "Deep muscle map" is a pinned row under a hairline, words and a
+  chevron, a 56 pt control. It adds no token and no motion.
 - **Certainty on a muscle's count**: the badge beside a weekly count is about the research, not the
   count: whether published studies of weekly sets reach that muscle at that many sets. It is moderate
   for the six modelled muscles up to about 25 fractional sets, low above that, and not evaluated for
   every other muscle, whose count is still shown. The rule is `VolumeAnalyzer.doseResponse` and
   nothing else: the volume rows and the deep muscle map draw the same `MuscleCertaintyBadge` from it,
-  so one count never carries two answers, and the map carries no badge of its own for the week.
+  so one count never carries two answers, and the map carries no badge of its own for the week. The
+  Volume rows draw it as the `.language` phrase under the muscle's name; the map keeps the capsule
+  until it is rebuilt.
   `VolumeAnalyzer.certaintyMeaning` says what the badge is about, once, in words on the Volume screen,
   on the map and at the top of the "How sets are counted" disclosure; the disclosure's capsule is the
   best level a count can reach, `VolumeAnalyzer.bestCertainty`, and `certaintyScale` names where each
   level applies. Settings opens the same disclosure. No new token, no motion.
-- **Lower bounds and muscles the catalogue cannot train yet**: the `caveat` banner "Counts below are
-  lower bounds" says the cause and the way out, and is shared by the Volume screen and the map: sets
+- **Lower bounds and muscles the catalogue cannot train yet**: the caveat "Counts below are
+  lower bounds" says the cause and the way out. The Volume screen draws it as a neutral note, a card
+  with a small `warning` glyph and `chalk` words, as the stale-workout notice is drawn, and the map
+  keeps the `caveat` banner until it is rebuilt; both say the same words: sets
   on a movement with no muscles recorded count toward no muscle, and a movement the lifter made, or one
   a workout import created, gets its muscles from a body part set in Library on the Train tab. The
   muscles no built-in movement trains directly (`ExerciseCatalog.unauthoredDirectTokens`) are
   not listed under "Nothing logged for", where a zero would blame the lifter; the Volume screen names
   the ones with nothing credited in their own section, "Not counted directly yet", with the reason
   ("This is a gap in the catalogue, not in your training"), and a tile on the map with nothing
-  credited says the same. Tags, `caption` and the `caveat` banner; no new token, no motion.
+  credited says the same. On Volume the muscles in both sections are plain `label` type in `chalkDim`
+  joined by " · ", not tags, because nothing there can be tapped; the map keeps its tags. No new
+  token, no motion.
 - **Charts**: nothing around the chart: the metric control, then the metric's name, what is plotted and
   its certainty as a `.language` phrase, the plot, a hairline and the legend sit straight on the canvas.
   One series per machine with its own colour and point symbol (the first is chalk, see the palette notes),

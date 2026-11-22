@@ -191,6 +191,22 @@
       try await Snapshot.capture("volume-light", style: .light) { Fixtures.volume() }
     }
 
+    /// Volume as the tab draws it, with every control on and the whole list in view: the header's
+    /// settings glyph, the window controls with "Later" dimmed on the newest window, the figures
+    /// that open their working, the lower-bound note and the gap lists. In both appearances and at
+    /// an accessibility size, where the figure drops under the name.
+    @Test func weeklyVolumeInFull() async throws {
+      let tall = CGSize(width: Snapshot.phone.width, height: 2000)
+      try await Snapshot.capture("volume-full-dark", size: tall) { Fixtures.volumeFull() }
+      try await Snapshot.capture("volume-full-light", size: tall, style: .light) {
+        Fixtures.volumeFull()
+      }
+      try await Snapshot.capture(
+        "volume-full-dark-ax3", size: CGSize(width: Snapshot.phone.width, height: 4800),
+        typeSize: .accessibility3
+      ) { Fixtures.volumeFull() }
+    }
+
     @Test func history() async throws {
       try await Snapshot.capture("history-dark") { Fixtures.history() }
       try await Snapshot.capture("history-light", style: .light) { Fixtures.history() }
@@ -613,6 +629,29 @@
         title: "This week",
         subtitle: "Last 7 days",
         onExplainCounting: {}
+      )
+    }
+
+    static func volumeFull() -> some View {
+      VolumeReportView(
+        report: MuscleVolumeReport(
+          fractionalSets: [
+            MuscleKey(.chest): 12, MuscleKey(.lats): 9, MuscleKey(.quadriceps): 8,
+            MuscleKey(.triceps): 6.5, MuscleKey(.biceps): 6, MuscleKey(.upperBack): 5,
+            MuscleKey(.frontDelts): 4, MuscleKey(.hamstrings): 3, MuscleKey(.glutes): 3,
+            MuscleKey(.sideDelts): 2, MuscleKey(.neck): 1,
+          ],
+          hardSets: 34,
+          unattributedHardSets: 3,
+          setsTouchingGroup: [.chest: 12, .back: 14, .legs: 11, .arms: 12, .shoulders: 6]
+        ),
+        excludedFromGaps: ExerciseCatalog.unauthoredDirectTokens,
+        title: "Volume",
+        subtitle: "Last 7 days, 16 Nov to now",
+        onExplainCounting: {},
+        onShowSettings: {},
+        onEarlier: {},
+        onShowWorking: { _ in }
       )
     }
 

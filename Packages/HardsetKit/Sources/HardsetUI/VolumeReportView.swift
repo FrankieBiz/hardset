@@ -16,6 +16,13 @@ import SwiftUI
 /// When given a `title`, the view draws its own `ScreenHeader` as the first thing in its scroll
 /// content, because the tab that hosts it hides the stock navigation bar.
 ///
+/// Nothing is boxed and nothing is coloured that is not saying something. The hero total and each
+/// muscle's count are the figures; a bar is a thin `chalk` mark scaled to the biggest muscle, hollow
+/// where a muscle is counted but not modelled; certainty is a phrase under the name, as it is on
+/// the live session; the lower-bound caveat is a neutral note with a small `warning` glyph; and
+/// the muscles with nothing credited are plain type, not tags. The window controls, "How sets are
+/// counted" and the pinned "Deep muscle map" are words and a symbol with no face.
+///
 /// The window is a rolling seven days, not a calendar week, and the copy says so: `period` is the
 /// phrase every sentence uses ("in the last 7 days"), so a Monday morning never reads as "this
 /// week". `onEarlier` and `onLater` step the window back and forward a week at a time.
@@ -66,7 +73,9 @@ public struct VolumeReportView: View {
         if let title {
           ScreenHeader(title, subtitle: subtitle) {
             if let onShowSettings {
-              HeaderIconButton(systemImage: "gearshape", accessibilityLabel: "Settings", action: onShowSettings)
+              HeaderIconButton(
+                systemImage: "gearshape", accessibilityLabel: "Settings", style: .bare,
+                action: onShowSettings)
             }
           }
         }
@@ -78,7 +87,8 @@ public struct VolumeReportView: View {
             HardsetEmptyState(
               title: "Nothing logged \(period)",
               detail: "Sets per muscle appear here once you log a workout.",
-              systemImage: "chart.bar"
+              systemImage: "chart.bar",
+              style: .quiet
             )
           } else {
             header
@@ -98,16 +108,19 @@ public struct VolumeReportView: View {
 
   // MARK: - Window
 
-  /// Steps the rolling window a week at a time. "Later" is disabled, not hidden, on the newest
-  /// window, so the pair never moves under the lifter's thumb.
+  /// Steps the rolling window a week at a time, as two words with a chevron each and no face.
+  /// "Later" is dimmed, not hidden, on the newest window, so the pair never moves under the
+  /// lifter's thumb.
   private var windowControls: some View {
     HStack(spacing: Tokens.Spacing.snug) {
       Button {
         onEarlier?()
       } label: {
         Label("Earlier", systemImage: "chevron.left")
+          .font(Tokens.Text.headline)
+          .foregroundStyle(Tokens.Color.chalk)
       }
-      .buttonStyle(HardsetButtonStyle(.secondary, fullWidth: false))
+      .buttonStyle(InlineControlStyle(alignment: .leading, dimsWhenDisabled: true))
       .disabled(onEarlier == nil)
       .accessibilityLabel("Earlier 7 days")
       Spacer(minLength: Tokens.Spacing.snug)
@@ -118,8 +131,10 @@ public struct VolumeReportView: View {
           Text("Later")
           Image(systemName: "chevron.right").accessibilityHidden(true)
         }
+        .font(Tokens.Text.headline)
+        .foregroundStyle(Tokens.Color.chalk)
       }
-      .buttonStyle(HardsetButtonStyle(.secondary, fullWidth: false))
+      .buttonStyle(InlineControlStyle(alignment: .trailing, dimsWhenDisabled: true))
       .disabled(onLater == nil)
       .accessibilityLabel("Later 7 days")
     }
@@ -146,8 +161,7 @@ public struct VolumeReportView: View {
       // The lower-bound statement is not a footnote. If some sets could not be attributed, every
       // number below is a floor, and saying so is the whole point of the coverage field.
       if report.isLowerBound {
-        HardsetBanner(
-          .caveat,
+        CaveatNote(
           title: "Counts below are lower bounds",
           message: Self.lowerBoundMessage(unattributed: report.unattributedHardSets)
         )
@@ -156,11 +170,10 @@ public struct VolumeReportView: View {
       if let onExplainCounting {
         Button(action: onExplainCounting) {
           Label("How sets are counted", systemImage: "questionmark.circle")
+            .font(Tokens.Text.headline)
+            .foregroundStyle(Tokens.Color.chalk)
         }
-        .buttonStyle(HardsetButtonStyle(.quiet, fullWidth: false))
-        // The quiet style insets its label; pulling it back aligns the words with the content
-        // edge while the full 44 pt region stays tappable.
-        .padding(.leading, -Tokens.Spacing.snug)
+        .buttonStyle(InlineControlStyle(alignment: .leading))
       }
     }
   }
@@ -210,14 +223,12 @@ public struct VolumeReportView: View {
         }
       }
 
-      VStack(alignment: .leading, spacing: Tokens.Spacing.loose) {
+      VStack(alignment: .leading, spacing: Tokens.Spacing.section) {
         ForEach(rows, id: \.muscle) { row in
           bar(for: row, maxSets: maxSets)
         }
       }
-      .padding(Tokens.Spacing.loose)
       .frame(maxWidth: .infinity, alignment: .leading)
-      .hardsetCard()
       .tourTarget(.volumeFigures)
     }
   }
@@ -263,7 +274,7 @@ public struct VolumeReportView: View {
     .accessibilityElement(children: .combine)
     .accessibilityLabel(spoken)
     let figureText = Text(value)
-      .font(Tokens.Text.figure)
+      .font(Tokens.Text.setEntry)
       .foregroundStyle(Tokens.Color.chalk)
     // A glyph beside the figure shows, without a gesture, that it opens the working behind it.
     let figure = Group {
@@ -290,59 +301,54 @@ public struct VolumeReportView: View {
     // Where this muscle's count sits on the published dose-response, as the engine states it:
     // moderate inside the studied range, low beyond it, and not evaluated for a muscle outside the
     // corpus. Never a level chosen here.
-    let badge = MuscleCertaintyBadge(muscle: row.muscle, fractionalSets: row.sets)
+    let badge = MuscleCertaintyBadge(muscle: row.muscle, fractionalSets: row.sets, style: .language)
 
     return VStack(alignment: .leading, spacing: Tokens.Spacing.snug) {
-      // One line when the name, its certainty and the figure fit, which they do at ordinary sizes;
-      // otherwise the certainty drops under the name so nothing is squeezed or cut.
+      // One line when the name and the figure fit, which they do at ordinary sizes; otherwise the
+      // figure drops under the name so nothing is squeezed or cut. The certainty is a phrase on
+      // its own line under both, and the bar closes the row.
       ViewThatFits(in: .horizontal) {
         HStack(alignment: .center, spacing: Tokens.Spacing.snug) {
           nameBlock
-          badge
           Spacer(minLength: Tokens.Spacing.snug)
           figure
         }
         VStack(alignment: .leading, spacing: Tokens.Spacing.tight) {
-          HStack(alignment: .top, spacing: Tokens.Spacing.snug) {
-            nameBlock
-            Spacer(minLength: Tokens.Spacing.snug)
-            figure
-          }
-          badge
+          nameBlock
+          figure
         }
       }
+      badge
       track(fraction: CGFloat(row.sets / maxSets), isCounted: isCounted)
     }
   }
 
-  /// The bar itself: a raised track with a readout-cyan fill, square-ended like a gauge.
+  /// The bar itself: a thin mark on a `hairline` ground, round-ended, scaled to the report's biggest
+  /// muscle and never to a target.
   ///
-  /// A modelled muscle's fill is solid. A counted one is drawn hollow -- a cyan outline over the
-  /// accent tint -- so the weaker claim reads as weaker without a second hue, and certainly without
-  /// an evaluative one. The words "Counted, not modelled" carry the same meaning beside it.
+  /// A modelled muscle's fill is solid `chalk`. A counted one is drawn hollow, a `chalkDim` outline
+  /// and no fill, so the weaker claim reads as weaker without a second hue, and certainly without
+  /// an evaluative one. The words "Counted, not modelled" carry the same meaning beside the name.
   private func track(fraction: CGFloat, isCounted: Bool) -> some View {
     GeometryReader { proxy in
       ZStack(alignment: .leading) {
-        Rectangle()
-          .fill(Tokens.Color.steelRaised)
+        Tokens.Shape.bar
+          .fill(Tokens.Color.hairline)
         Group {
           if isCounted {
-            Rectangle()
-              .fill(Tokens.Color.plateBlueSurface)
-              .overlay(
-                Rectangle()
-                  .strokeBorder(Tokens.Color.plateBlue, lineWidth: Tokens.Stroke.hairline)
-              )
+            Tokens.Shape.bar
+              .strokeBorder(Tokens.Color.chalkDim, lineWidth: Tokens.Stroke.hairline)
           } else {
-            Rectangle()
-              .fill(Tokens.Color.plateBlue)
+            Tokens.Shape.bar
+              .fill(Tokens.Color.chalk)
           }
         }
-        // Never narrower than the bar is tall, so the smallest real count is still a visible mark.
+        // Never narrower than twice the bar's height, so the smallest real count is still a
+        // visible mark.
         .frame(width: max(Tokens.Spacing.snug, proxy.size.width * fraction))
       }
     }
-    .frame(height: Tokens.Spacing.snug)
+    .frame(height: Tokens.Spacing.tight)
     .accessibilityHidden(true)
   }
 
@@ -368,15 +374,9 @@ public struct VolumeReportView: View {
               .fixedSize(horizontal: false, vertical: true)
           }
 
-          // Tags, not chips: a fill and no control border, because none of them does anything
-          // when tapped and none of them should look as if it might. The shared tag also carries
-          // the accessibility-size radius and wrapping policy.
-          FlowLayout(spacing: Tokens.Spacing.snug) {
-            ForEach(gaps, id: \.self) { muscle in
-              HardsetTag(ExercisePickerView.displayName(MuscleKey(muscle)))
-            }
-          }
-          .accessibilityElement(children: .combine)
+          // Plain type, not tags: nothing here does anything when tapped, so nothing is drawn as if
+          // it might. It wraps like any sentence, and VoiceOver reads it as a list.
+          Self.namesLine(gaps)
         }
       }
     }
@@ -399,15 +399,20 @@ public struct VolumeReportView: View {
               .foregroundStyle(Tokens.Color.chalkDim)
               .fixedSize(horizontal: false, vertical: true)
           }
-          FlowLayout(spacing: Tokens.Spacing.snug) {
-            ForEach(muscles, id: \.self) { muscle in
-              HardsetTag(ExercisePickerView.displayName(MuscleKey(muscle)))
-            }
-          }
-          .accessibilityElement(children: .combine)
+          Self.namesLine(muscles)
         }
       }
     }
+  }
+
+  /// Muscle names as one line of type, "Neck · Hips · Calves", spoken with commas.
+  private static func namesLine(_ muscles: [Muscle]) -> some View {
+    let names = muscles.map { ExercisePickerView.displayName(MuscleKey($0)) }
+    return Text(verbatim: names.joined(separator: " · "))
+      .font(Tokens.Text.label)
+      .foregroundStyle(Tokens.Color.chalkDim)
+      .fixedSize(horizontal: false, vertical: true)
+      .accessibilityLabel(names.joined(separator: ", "))
   }
 
   static func format(_ sets: Double) -> String {
@@ -439,14 +444,49 @@ enum UncatalogedMuscleCopy {
 struct MuscleCertaintyBadge: View {
   let muscle: Muscle
   let fractionalSets: Double
+  /// A capsule where the screen still draws them, a phrase where it has dropped them. The map keeps
+  /// the capsule until it is rebuilt; the Volume rows ask for the phrase.
+  var style: CertaintyBadge.Style = .capsule
 
   var body: some View {
     let claim = VolumeAnalyzer.doseResponse(fractionalSets: fractionalSets, for: muscle)
     CertaintyBadge(
       level: CertaintyLevel(claim.certainty),
       methodology: claim.source.methodology,
-      citation: claim.source.citation
+      citation: claim.source.citation,
+      style: style
     )
+  }
+}
+
+/// A caveat that belongs above content, as a neutral note: a small `warning` glyph, a `chalk` title
+/// and `chalk` words on the card surface. The glyph is the one mark; the words and the surface
+/// carry no hue, because a caveat is read by its words and a tinted fill says nothing they do not.
+/// The same shape as the live session's stale-workout notice, without its buttons.
+private struct CaveatNote: View {
+  let title: String
+  let message: String
+
+  var body: some View {
+    HStack(alignment: .firstTextBaseline, spacing: Tokens.Spacing.regular) {
+      Image(systemName: "exclamationmark.circle")
+        .font(Tokens.Text.headline)
+        .foregroundStyle(Tokens.Color.warning)
+        .accessibilityHidden(true)
+      VStack(alignment: .leading, spacing: Tokens.Spacing.tight) {
+        Text(title)
+          .font(Tokens.Text.headline)
+          .foregroundStyle(Tokens.Color.chalk)
+        Text(message)
+          .font(Tokens.Text.provenance)
+          .foregroundStyle(Tokens.Color.chalk)
+          .fixedSize(horizontal: false, vertical: true)
+      }
+      .frame(maxWidth: .infinity, alignment: .leading)
+    }
+    .padding(Tokens.Spacing.regular)
+    .hardsetCard()
+    .accessibilityElement(children: .combine)
   }
 }
 
