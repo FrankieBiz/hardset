@@ -185,6 +185,9 @@ public struct WorkoutCardActions: View {
             .labelStyle(.titleAndIcon)
             .font(Tokens.Text.headline)
             .foregroundStyle(Tokens.Color.chalk)
+            // Inside the region: at accessibility sizes both labels wrap, and the region's minimum
+            // height alone left the two touching.
+            .padding(.vertical, Tokens.Spacing.snug)
         }
         .buttonStyle(
           InlineControlStyle(minHeight: Tokens.loggerTapTarget, alignment: .leading, fullWidth: true)
@@ -196,6 +199,7 @@ public struct WorkoutCardActions: View {
           .labelStyle(.titleAndIcon)
           .font(Tokens.Text.headline)
           .foregroundStyle(Tokens.Color.chalk)
+          .padding(.vertical, Tokens.Spacing.snug)
       }
       .buttonStyle(
         InlineControlStyle(minHeight: Tokens.minimumTapTarget, alignment: .leading, fullWidth: true)

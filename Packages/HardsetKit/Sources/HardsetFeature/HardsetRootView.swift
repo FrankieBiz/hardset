@@ -623,10 +623,12 @@ public struct HardsetRootView: View {
           Image(systemName: isSet ? "mappin.and.ellipse" : "plus")
             .font(Tokens.Text.provenance.weight(.medium))
             .accessibilityHidden(true)
+          // Wraps rather than truncating at any size: a long gym name is the whole point of the
+          // line, and the accessibility audit flags a single-line limit as clipping at larger text.
           Text(selectedGymName.map { "Training at \($0)" } ?? gymInvitation)
             .font(Tokens.Text.provenance.weight(.medium))
-            .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 1)
             .multilineTextAlignment(.leading)
+            .fixedSize(horizontal: false, vertical: true)
           if isSet {
             Image(systemName: "chevron.down")
               .font(Tokens.Text.caption.weight(.semibold))

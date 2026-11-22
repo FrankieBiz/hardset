@@ -381,7 +381,7 @@ Selection rows, the unit switch and pickers stay silent.
   header's own line; the saved workouts; the empty "Start workout", its sentence, and the two
   controls that follow it; then, under a hairline, the last workout. The gym line is the live
   session's gym chip: a pin, "Training at" and the name in `chalkDim`, and a chevron that says it
-  opens the list; with no gym it is "Add a gym to track machines" in full `chalk` with a plus and its
+  opens the list, wrapping rather than truncating a long name; with no gym it is "Add a gym to track machines" in full `chalk` with a plus and its
   reason in `caption` under it, an invitation and not a warning. Its accessible name is unchanged,
   and Voice Control also answers to "Change gym". The last workout is a section label and one
   button: the workout's title (or its date) in `headline`, its length in `figure` with a clock, a
