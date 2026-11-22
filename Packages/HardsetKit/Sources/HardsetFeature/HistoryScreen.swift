@@ -13,6 +13,11 @@ import SwiftUI
 /// older ones. A workout can be deleted from its card's context menu or from its receipt, which
 /// also removes single mis-logged sets; both are confirmed first. The list re-reads after a
 /// correction and whenever the app returns to the foreground.
+///
+/// A search field finds an old workout by movement, machine or gym. Typing waits for a pause before
+/// anything is read, a newer keystroke cancels the read in flight, and the answer is the same list
+/// of workouts, newest first, opening the same receipt. A search that matches nothing says so by
+/// name rather than drawing an empty screen.
 @MainActor
 public struct HistoryScreen: View {
   /// Owns the read. A newer request cancels an older one, and a cancelled or stale completion
@@ -28,6 +33,12 @@ public struct HistoryScreen: View {
   @State private var receiptChanged = false
   @State private var pendingDeletion: HistoryRow?
   @State private var deletionFailed = false
+  /// Owns the search read, apart from the list's, so typing never disturbs the list underneath it
+  /// and clearing the field returns to it exactly as it was.
+  @State private var searchSnapshot = SnapshotLoader<HistorySearchListing>()
+  @State private var searchText = ""
+  /// How many matches the search reads. Grows a page at a time, and starts over with each query.
+  @State private var searchLimit = HistoryScreen.pageSize
   @Environment(\.scenePhase) private var scenePhase
 
   private let receipts: ReceiptStore?
@@ -43,6 +54,14 @@ public struct HistoryScreen: View {
 
   private static let title = "History"
   private static let pageSize = 50
+  /// How long typing must pause before a search reads anything. Short enough to feel immediate,
+  /// long enough that a word typed at speed is one read and not five.
+  private static let searchPause = Duration.milliseconds(250)
+
+  /// What was typed, without the spaces around it.
+  private var query: String { searchText.trimmingCharacters(in: .whitespacesAndNewlines) }
+  /// A search is showing once the query is long enough to search; shorter, the list is untouched.
+  private var isSearching: Bool { HistoryStore.isSearchable(query) }
 
   /// - Parameters:
   ///   - progression: Opens each movement's load history from a receipt. Defaults to the receipt
@@ -92,14 +111,16 @@ public struct HistoryScreen: View {
         }
         .background(Tokens.Color.canvas)
       } else if let listing = snapshot.value {
+        let shown = showing(listing)
         HistoryView(
-          rows: listing.rows,
+          rows: shown.rows,
           unit: unit,
           title: Self.title,
-          subtitle: Self.subtitle(listing),
+          subtitle: shown.subtitle,
+          search: HistorySearch(text: $searchText, state: shown.state),
           onSelect: receipts == nil ? nil : { selectedSession = ReceiptSelection(id: $0.id) },
-          onShowOlder: listing.hasMore ? { limit = listing.rows.count + Self.pageSize } : nil,
-          isLoadingOlder: listing.limit < limit,
+          onShowOlder: shown.showOlder,
+          isLoadingOlder: shown.isLoadingOlder,
           onDelete: receipts == nil ? nil : { pendingDeletion = $0 },
           onShowSettings: onShowSettings
         )
@@ -114,7 +135,15 @@ public struct HistoryScreen: View {
     // Keyed on the page size and the reload token, so asking for older workouts, a correction and
     // a return to the foreground each re-read, and a superseded read is cancelled.
     .task(id: LoadKey(limit: limit, token: reloadToken, revision: dataRevision)) { await load() }
-    .refreshable { await load() }
+    // Keyed on the words as well, so a keystroke cancels the read, or the pause, of the one before.
+    .task(id: SearchKey(query: isSearching ? query : "", limit: searchLimit, token: reloadToken, revision: dataRevision)) {
+      await search()
+    }
+    .onChange(of: query) { _, _ in searchLimit = Self.pageSize }
+    .refreshable {
+      await load()
+      await search()
+    }
     .onChange(of: scenePhase) { _, phase in
       if phase == .active { reloadToken &+= 1 }
     }
@@ -190,19 +219,78 @@ public struct HistoryScreen: View {
     let limit = limit
     await snapshot.load { @MainActor in
       let page = try await store.loadHistory(limit: limit)
-      let rows = page.sessions.map { summary in
-        HistoryRow(
-          id: summary.id,
-          title: summary.title,
-          date: summary.timeline.startedAt,
-          duration: summary.timeline.duration,
-          exerciseNames: summary.exerciseNames,
-          volume: summary.volume,
-          hasImplausibleDuration: summary.hasImplausibleDuration
-        )
-      }
-      return HistoryListing(rows: rows, totalCount: page.totalCount, limit: limit)
+      return HistoryListing(rows: Self.rows(from: page), totalCount: page.totalCount, limit: limit)
     }
+  }
+
+  /// Reads the matches for what is typed. Does nothing until the query is long enough to search.
+  private func search() async {
+    let words = query
+    guard HistoryStore.isSearchable(words) else { return }
+    let store = store
+    let limit = searchLimit
+    // A new query waits for typing to pause; the next keystroke cancels this task and the pause
+    // with it. Asking for more of the same matches, or re-reading after a correction, does not wait.
+    if searchSnapshot.value?.query != words {
+      do { try await Task.sleep(for: Self.searchPause) } catch { return }
+    }
+    await searchSnapshot.load { @MainActor in
+      let page = try await store.searchHistory(words, limit: limit)
+      return HistorySearchListing(
+        query: words, rows: Self.rows(from: page), totalCount: page.totalCount, limit: limit)
+    }
+  }
+
+  private static func rows(from page: HistoryPage) -> [HistoryRow] {
+    page.sessions.map { summary in
+      HistoryRow(
+        id: summary.id,
+        title: summary.title,
+        date: summary.timeline.startedAt,
+        duration: summary.timeline.duration,
+        exerciseNames: summary.exerciseNames,
+        volume: summary.volume,
+        hasImplausibleDuration: summary.hasImplausibleDuration
+      )
+    }
+  }
+
+  /// What the list shows now: the whole history, or the answer to the query being typed.
+  private struct Showing {
+    var rows: [HistoryRow]
+    var subtitle: String?
+    var state: HistorySearch.State
+    var showOlder: (() -> Void)?
+    var isLoadingOlder: Bool
+  }
+
+  private func showing(_ listing: HistoryListing) -> Showing {
+    guard isSearching else {
+      return Showing(
+        rows: listing.rows, subtitle: Self.subtitle(listing), state: .idle,
+        showOlder: listing.hasMore ? { limit = listing.rows.count + Self.pageSize } : nil,
+        isLoadingOlder: listing.limit < limit)
+    }
+    if searchSnapshot.loadFailed {
+      return Showing(
+        rows: [], subtitle: nil, state: .failed(query), showOlder: nil, isLoadingOlder: false)
+    }
+    // Until the first answer arrives there are no rows to show, and the list says it is searching.
+    // After that the rows stay on screen while a newer query is read, each answer naming the
+    // words it answers, so a late arrival is never read as the answer to what is now typed.
+    guard let found = searchSnapshot.value else {
+      return Showing(
+        rows: [], subtitle: nil, state: .searching(query), showOlder: nil, isLoadingOlder: false)
+    }
+    return Showing(
+      rows: found.rows,
+      subtitle: found.rows.isEmpty
+        ? nil
+        : HistoryCopy.searchSubtitle(
+          query: found.query, shown: found.rows.count, total: found.totalCount),
+      state: .answered(found.query),
+      showOlder: found.hasMore ? { searchLimit = found.rows.count + Self.pageSize } : nil,
+      isLoadingOlder: found.limit < searchLimit)
   }
 }
 
@@ -216,7 +304,24 @@ private nonisolated struct HistoryListing: Sendable {
   var hasMore: Bool { rows.count < totalCount }
 }
 
+/// One read of a search: the words it answers, the matches shown, how many workouts matched in all,
+/// and the page size asked for.
+private nonisolated struct HistorySearchListing: Sendable {
+  let query: String
+  let rows: [HistoryRow]
+  let totalCount: Int
+  let limit: Int
+  var hasMore: Bool { rows.count < totalCount }
+}
+
 private nonisolated struct LoadKey: Hashable, Sendable {
+  let limit: Int
+  let token: Int
+  let revision: Int
+}
+
+private nonisolated struct SearchKey: Hashable, Sendable {
+  let query: String
   let limit: Int
   let token: Int
   let revision: Int

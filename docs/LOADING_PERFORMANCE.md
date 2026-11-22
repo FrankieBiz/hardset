@@ -644,6 +644,66 @@ handout commit5887ceb is preserved. Main's earlier root-loading integration pass
 repeat run42430194445. The user selected Linux and simulator CI for now; signed
 account/device checks remain pending.
 
+## History search — 2026-11-22
+
+Release review finding C10: reaching a session from three years ago was a dozen taps and
+there was no search. `HistoryStore.searchHistory` finds finished workouts by movement,
+machine or gym name. It is built so a keystroke never scans the sets.
+
+How it reads, and why each step is keyed:
+
+- Names are read whole from `exercises`, `machines` and `gyms` (hundreds of rows, not
+  history) and matched in Swift by `CatalogSearch`, the movement picker's own rules, so
+  "ohp", "squats" and "press bench" behave in History as they do in the picker. SQLite
+  `LIKE '%x%'` could not use an index, and matching in Swift keeps one set of spelling rules.
+- Each matched movement leads to sessions through the existing exercise indexes. Each
+  matched machine leads there through `loggedSets_on_machineID_sessionID`, and each matched
+  gym through `sessions_on_gymID`. Both are new, from the additive migration
+  `v14_historySearch`: no existing index led with the machine, and a session's gym was not
+  indexed, so the current schema could not serve those two without a scan.
+- The matched workouts are resolved by primary key and ordered in Swift, newest start first
+  with the id breaking a tie, the list's own order. No statement sorts in SQLite, and the
+  one sort left is the page's own summary read, which the list also runs.
+- A query needs two letters or digits. One character begins nearly every movement name and
+  would read nearly every set.
+
+The index migration is local and non-unique, and changes no synchronized table's shape. The
+machine index is partial (`machineID IS NOT NULL`) because free-weight and imported sets
+have no machine; it carries the session id, so the lookup is answered from the index alone.
+
+Gate: `python3 Tools/check_query_performance.py --require-indexes` now also runs the shape
+of every search statement, and the three name reads are listed as whole-table reads beside
+the import candidates. Without `v14_historySearch` the gate fails on "history search by
+machine" and "history search by gym" (a scan of `loggedSets` and of `sessions`); with it, all
+pass. `HistorySearchTests` reads the plan of every statement the store really emits and fails
+on a scan of either big table, or on a sort in any lookup.
+
+Fixture medians, warm in-memory SQLite on Linux, 100,000 sets and 5,000 sessions:
+
+| Lookup | Rows | Time | Plan |
+| --- | ---: | ---: | --- |
+| By movement, two movements | 4,000 | 1.3 ms | search on the exercise index |
+| By machine, two machines | 3,334 | 0.6 ms | covering search on the new machine index |
+| By gym, two gyms | 3,333 | 0.9 ms | search on the new gym index |
+| Resolve three sessions | 3 | 0.004 ms | search on the primary key |
+
+Before the migration the machine lookup scanned all 100,000 sets: 3.0 ms for the same
+3,334-row answer, against 0.5 to 0.6 ms with the index. The gym lookup scanned every session
+and is no faster with its index on this fixture (0.7 ms before, 0.9 to 1.0 ms after), because a
+third of the sessions sit at each gym and the answer is most of the table; the index matters
+when a gym holds a small share of a long history, and stops the read from scaling with the
+whole table. These are host microbenchmarks, not iPhone timings. The cost of the new indexes on
+a set write, and on storage, is unmeasured on a device.
+
+The screen debounces typing (250 ms, and only when the words changed, so asking for more
+matches does not wait), cancels the read in flight through `SnapshotLoader`, and checks for
+cancellation before and after the database read. A search that matches nothing returns an
+empty page, and the screen says "No workouts match" with the words searched.
+
+Not verified: no SwiftUI target compiles on Linux. The search field, its focus behaviour while
+the list below it changes, Dynamic Type, VoiceOver and the 44 pt targets need a Mac or the macOS
+CI run.
+
 ## Remaining app-wide work
 
 - Capture Release cold/warm launch, first usable workout, resume, picker, history,

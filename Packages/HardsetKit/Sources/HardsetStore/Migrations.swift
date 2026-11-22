@@ -597,6 +597,29 @@ public nonisolated enum HardsetMigrations {
       ).execute(db)
     }
 
+    // Searching history by machine or gym. Searching by movement needs nothing new: sets are already
+    // indexed by exercise. No index led with the machine, so finding the sessions done on one would
+    // scan every set, and a session's gym was not indexed at all. Both are local and non-unique, so
+    // no synchronized table changes shape. The machine index is partial because most sets, free
+    // weights and imports among them, have no machine, and it carries the session so the lookup is
+    // answered from the index alone.
+    migrator.registerMigration("v14_historySearch") { db in
+      try #sql(
+        """
+        CREATE INDEX "loggedSets_on_machineID_sessionID"
+          ON "loggedSets"("machineID", "sessionID")
+          WHERE "machineID" IS NOT NULL
+        """
+      )
+      .execute(db)
+      try #sql(
+        """
+        CREATE INDEX "sessions_on_gymID" ON "sessions"("gymID")
+        """
+      )
+      .execute(db)
+    }
+
     return migrator
   }
 }

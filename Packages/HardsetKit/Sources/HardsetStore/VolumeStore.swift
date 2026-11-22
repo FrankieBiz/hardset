@@ -497,7 +497,8 @@ public nonisolated struct HistoryPage: Hashable, Sendable {
 
 /// Reads finished sessions for the history screen.
 public nonisolated struct HistoryStore: Sendable {
-  private let database: any DatabaseWriter
+  /// Module-internal so `HistoryStore+Search.swift` reads through the same database.
+  let database: any DatabaseWriter
 
   public init(database: any DatabaseWriter) {
     self.database = database
@@ -539,6 +540,12 @@ public nonisolated struct HistoryStore: Sendable {
       .order { ($0.startedAt.desc(), $0.id.desc()) }
       .limit(limit)
       .fetchAll(db)
+    return try summaries(of: sessions, in: db)
+  }
+
+  /// Summaries of `sessions`, in the order given. Shared by the newest-first list and by search, so
+  /// a workout reads identically wherever it is found.
+  static func summaries(of sessions: [Session], in db: Database) throws -> [SessionSummary] {
     guard !sessions.isEmpty else { return [] }
 
     let sessionIDs = sessions.map(\.id)
