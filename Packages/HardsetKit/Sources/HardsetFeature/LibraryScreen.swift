@@ -37,7 +37,8 @@ public struct LibraryScreen: View {
           HardsetEmptyState(
             title: "Could not read your movements",
             detail: "Your logged sets are safe. Pull down to try again.",
-            systemImage: "exclamationmark.triangle"
+            systemImage: "exclamationmark.triangle",
+            style: .quiet
           )
           .padding(.top, Tokens.Spacing.section)
         }

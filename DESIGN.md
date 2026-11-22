@@ -19,11 +19,11 @@ the code does yet, so a reader does not look for a screen that has not moved.
   segmented control, header buttons, text entry, cards, banners, tags and certainty badges.
 - The live session is in code, rebuilt monochrome and type-led (ruling D12): see Set row, Set log
   control, Inline control, Panel and the live-session layout below. Train's start screen is rebuilt
-  the same way (see Train start screen), and so are Progress, the board and the movement chart, and
-  Volume, with Library following in the same phase.
+  the same way (see Train start screen), and so are Progress, the board and the movement chart,
+  Volume and Library.
 - Not yet in code, so the bullets below that name these describe where they are going: whatever a
-  screen draws for itself instead of through the kit. That is the Library's "Curated" tag, the
-  scorecard headline's type role, the deep muscle map, and the
+  screen draws for itself instead of through the kit. That is the scorecard headline's type role, the
+  deep muscle map, and the
   onboarding and tour surfaces. It also includes three private outlined-card button styles that each draw their own
   stroke: the History row, the Settings disclosure row and the receipt's link row, plus the
   methodology citation card. A screen that uses the kit picks up the new look with no change; one that draws its own
@@ -343,17 +343,22 @@ Selection rows, the unit switch and pickers stay silent.
   import created (`CatalogSeeder.libraryExercises`), because the Library is the only place an imported
   movement's body part and equipment can be set; the picker, search and recent list still leave imported
   movements out, however they are tagged, so nobody logs today's sets against an imported copy.
-  Movements with no body part come first under a `warning` header with its `exclamationmark.triangle`
-  symbol, "Needs a body part", because until one is tagged its sets count toward no muscle. A row is a
-  56 pt `SelectionCardButtonStyle` button for the lifter's own movement, marked "Custom", or "Imported"
-  for one a workout import created, and opens the editor; a curated movement is a flat card with no
-  tag, because a tag repeated on every row says nothing, and its spoken label still says "Curated". A
+  Movements with no body part come first under the header "Needs a body part", whose
+  `exclamationmark.triangle` is the one `warning` mark and whose words are `chalk`, because until one is
+  tagged its sets count toward no muscle. Nothing is boxed: a row is type under a hairline, the name in
+  `headline` and what it trains in `provenance`, with its equipment and whose it is as plain `caption`
+  words in `chalkDim` at the trailing edge, or under the name at accessibility sizes. A row for the
+  lifter's own movement is a 56 pt button that ends in a chevron, which is what says it opens the editor,
+  and says "Custom", or "Imported" for one a workout import created; a curated movement is a plain row
+  with no chevron and no "Curated" word on screen, because a word repeated on every row says nothing,
+  and its spoken label still says "Curated". A
   movement that is not curated and has no equipment on record says "Equipment not set" after its
-  muscles in `provenance`, so the absence of a tag is not the only sign. It does
+  muscles in `provenance`, so the absence of a mark is not the only sign. A curated row does
   not open the editor, so nothing that looks tappable does nothing. The footer lists every body part, zeros
   included, in `figure` against `chalkDim` for a zero, each row under a `hairline`. It reads what is
-  there: loading is a quiet line, a failed read says so in `HardsetEmptyState`, and neither draws an empty
-  library. It adds no token and no motion.
+  there: loading is a quiet line, a failed read says so in `HardsetEmptyState` with the quiet style, and
+  neither draws an empty library. The one accent on the screen is the "New movement" plus in the bar,
+  which is the screen's primary action. It adds no token and no motion.
 - **Movement editor** (`MovementEditorSheet`, `MovementEditorDraft`): a name field in `entryFieldChrome`,
   body-part chips, a `SelectionRow` per muscle where the body part has more than one, up to three optional
   secondary muscles chosen from chips (each counts half a set), and the equipment as chips. Chips wrap
