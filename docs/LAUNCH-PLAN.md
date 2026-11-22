@@ -1,6 +1,6 @@
 # Hardset Launch & Positioning Plan
 
-An operational plan for launching Hardset on the iOS App Store, designed to be executed by a single developer with zero marketing budget.
+An operational plan for launching Hardset on the iOS App Store, designed to be executed by a single developer with zero marketing budget. Every on-screen string, label, caption, and mathematical formula cited in this plan has been verified verbatim against the shipped codebase on `origin/main`.
 
 ---
 
@@ -31,37 +31,90 @@ Apple strictly limits the subtitle to 30 characters. The subtitle must be instan
 
 In the App Store gallery, a potential user grants roughly two seconds per card. Honesty cannot wait for card four; it must be proven in the first two screenshots, or the user leaves. 
 
-All screenshots are presented in Hardset's high-contrast monochrome design system (canvas black `#050608`, chalk white `#F3F3F5`, plate-calibrated accents), with tabular numbers set in condensed typography.
+All screenshots are presented in Hardset's high-contrast monochrome design system (canvas black `#050608`, chalk white `#F3F3F5`, plate-calibrated accents), with tabular numbers set in condensed typography. Every string below is quoted verbatim from the application source.
 
-### Screenshot 1: The Live Workout Session
-- **Screen:** `WorkoutScreen` (Live Workout Session).
+### Screenshot 1: The Live Workout Session (Train Tab)
+- **Screen:** `SessionView` / `ExerciseSectionView` (Live workout session).
 - **State:**
-  - Movement: `Incline Chest Press` at `Gym A · Machine 1 (45° Plate-Loaded Sled)`.
-  - Sets logged: Two working sets completed with plate-green check marks (`225 lb × 8` and `225 lb × 7`). Set 3 active on the gym-floor numeric pad.
-  - Heading metadata: Tabular readout of estimated 1RM (`285 lb`) displaying the quiet provenance line: `Moderate confidence (from 8 reps) · Formula estimate, not measured single`.
-  - Provenance caveat: Beneath the movement title, an inline disclosure states: `Different machine from Gym B · Load history not inherited`.
-  - Pinned rest timer: Opaque panel displaying `01:42` remaining.
+  - **Movement title:** `Incline Chest Press` with machine chip `Plate-Loaded Incline`.
+  - **Machine provenance caveat (`ExerciseSectionView.swift:203`):** Beneath the title, an inline `.language` badge displays:
+    `From another machine · Low confidence` [ⓘ]
+    *(Verified: `state.priorNote` is `"From another machine"`, rendered via `CertaintyBadge(context: "From another machine", level: .low, style: .language)`).*
+  - **Logged sets:** Two completed working sets with plate-green check seals (`checkmark.circle.fill`):
+    - Row 1: `225 lb × 8`
+    - Row 2: `225 lb × 8`
+    - Row 3 (Active draft): `225 lb × 8` active on the custom numeric keypad.
+  - **Personal record banner (`SessionView.swift:815-850`):** Pinned record panel above the rest bar:
+    - Header: Trophy icon in `plateYellow` with `Incline Chest Press · New record`
+    - Metric line: `Best estimated 1RM: About 285 lb` *(computed via `SessionView.describe` using `LoadText.estimate`)*
+    - Certainty phrase: `Moderate confidence` [ⓘ] *(rendered via `CertaintyBadge(level: .moderate, style: .language)`)*
+  - **Rest timer (`RestBarView.swift:215-220`):** Pinned opaque panel displaying tabular countdown:
+    - Hero countdown: `01:42`
+    - Status label: `Resting`
+    - Rest controls: `−15`, `+15`, `pause.fill`, `forward.end.fill`
+    - Next rest selector: `Next rest 02:00` with `chevron.up`
 - **Caption:** `It tells you when it's estimating.`
-- **What a stranger learns in two seconds:** This app does not pretend a 5-to-8 rep formula calculation is a measured 1-rep maximum. It tags the physical machine, rates its own certainty out loud, and refuses to inflate numbers to flatter the user.
+- **What a stranger learns in two seconds:** This app does not pretend a formula is a measured single. It tags the exact physical equipment, rates its own certainty out loud, and refuses to inflate numbers to flatter the user.
 
-### Screenshot 2: Volume Breakdown and Attribution
-- **Screen:** `VolumeScreen` ("Where the work went").
+---
+
+### Screenshot 2: Volume Breakdown and Attribution (Volume Tab)
+- **Screen:** `VolumeReportView` (`WeeklyVolumeScreen.swift` / `VolumeReportView.swift`).
 - **State:**
-  - Weekly volume ledger showing fractional attribution for recent training: Incline Bench Press contributes `1.0 set` to Chest, `0.5 set` to Front Delts, and `0.5 set` to Triceps.
-  - Group-level counts: Displays `setsTouchingGroup` (`8 sets touch Chest`), preventing false triple-counting.
-  - Transparent neglect: An explicit section reads: `Nothing logged for Rear Delts, Calves, Traps`.
-  - Scientific disclosure footnote: Plain text citing the literature: `0.5 indirect credit is an adopted convention (Pelland et al.), not an inherited finding. Weekly target: Unevaluated.`
+  - **Screen title & window:** Title `Volume` with subtitle `in the last 7 days`.
+  - **Hero volume total (`VolumeReportView.swift:173`):** `14 working sets in the last 7 days`.
+  - **Counting disclosure button:** Inline header button `How sets are counted` with `questionmark.circle`.
+  - **Trained section header (`VolumeReportView.swift:225`):** `Where the work went` with count `5`.
+  - **Scale and target disclosure (`VolumeReportView.swift:228`):** Verbatim caption:
+    `Bars are relative to your biggest muscle in the last 7 days. There is no target line, because no weekly set target is established.`
+  - **Confidence explanation (`VolumeReportView.swift:234`, `MuscleVolume.swift:238`):** Verbatim caption:
+    `Confidence is about the research, not your count. It says whether published studies of weekly sets reach this muscle at this many sets. Not evaluated means they do not; the count is still shown.`
+  - **Tap working hint (`VolumeReportView.swift:239`):** `Tap a count to see the sets it was worked from.`
+  - **Muscle rows (`VolumeReportView.swift:247-350`):**
+    - `Chest`: `10 sets` with `Moderate confidence` [ⓘ] and solid chalk bar.
+    - `Front delts`: `7.5 sets` with `Moderate confidence` [ⓘ] and solid chalk bar.
+    - `Triceps`: `6 sets` with `Moderate confidence` [ⓘ] and solid chalk bar.
+    - *(Note: Tapping `10 sets` opens `WorkedFromSheet` showing exact movement-level arithmetic: direct sets credit 1.0, indirect credit 0.5).*
+  - **Untrained gaps section (`VolumeReportView.swift:392-400`):**
+    - Section header: `Nothing logged for` with count `3`.
+    - Fact caption: `These had no sets in the last 7 days. Whether that matters depends on your plan.`
+    - Muscle list: `Rear delts`, `Calves`, `Traps`.
+  - **Methodology sheet (`SetCounting.swift:448-472`, opened via "How sets are counted"):**
+    - Sheet title: `Fractional set counting`
+    - Methodology verbatim: `A completed working set credits 1.0 set to each muscle labelled direct on the movement, 0.5 to each labelled indirect, and 0 to each labelled stabilising. The 1.0/0.5 split follows the fractional scheme that best fitted 67 training studies in Pelland et al. (2025). Those authors fixed the 0.5 weight in advance rather than estimating it from the data, and describe it as an assumption and a heuristic; Hardset adopts it as a stated convention. The 0 weight for stabilising and gripping muscles is Hardset's own convention and is not part of the scheme that was tested.`
+    - Citation: `Pelland JC, Remmert JF, Robinson ZP, Hinson SR, Zourdos MC. Sports Med 2025. DOI 10.1007/s40279-025-02344-w, PMID 41343037.`
 - **Caption:** `Shows its math. Refuses to invent targets.`
 - **What a stranger learns in two seconds:** It does not manufacture arbitrary green progress bars or pretend to know individual biological recovery thresholds (MEV/MRV). It shows the exact fractional math, cites the research, admits when targets are scientifically unevaluated, and shows what was skipped.
 
-### Screenshot 3: Equipment-Separated Progression
-- **Screen:** `ProgressBoardView` (Progress Board).
+---
+
+### Screenshot 3: Equipment-Separated Progression (Progress Tab)
+- **Screen:** `ProgressBoardView` (`ProgressBoardView.swift` / `ProgressCopy.swift`).
 - **State:**
-  - Single card for `Leg Press` displaying two distinct, unmerged trend lines:
-    1. `45° Incline Sled (Gym A)`: `+20 lb in 6 weeks · Moderate confidence`.
-    2. `Horizontal Cable Sled (Gym B)`: `3 sessions over 2 weeks · No 6-week comparison (needs baseline)`.
-  - Most improved ordering: Header states `Most improved · ranked by confidence first, then gain`.
-  - Stalled lift disclosure: `Overhead Press · No record in 3 sessions` with neutral pause symbol (no patronizing automated deload advice).
+  - **Most improved strip (`ProgressBoardView.swift:128-133`):**
+    - Section header: `Most improved · estimated max` *(from `ProgressCopy.mostImprovedTitle`)*
+    - Ordering caption verbatim (`ProgressCopy.swift:89`):
+      `Ordered by confidence in the estimate first, then gain. A movement with no record in 3 sessions ranks after one that has a record in its last 3.`
+    - Highlighted row: `Chest Press` at `Hammer Strength` with sparkline, change `Estimated max +8% in 6 weeks`, and badge `Moderate confidence` [ⓘ].
+  - **Body-part section (`Legs`):**
+    - Section header: `Legs` with count `2`.
+    - **Row 1 (Machine A):**
+      - Movement: `Leg Press`
+      - Machine label: `45° Incline Sled`
+      - Sparkline graph
+      - Change sentence (`ProgressCopy.swift:43`): `Estimated max +12% in 6 weeks`
+      - Badge: `Moderate confidence` [ⓘ]
+    - **Row 2 (Machine B — separate unmerged series):**
+      - Movement: `Leg Press`
+      - Machine label: `Horizontal Cable Sled`
+      - Change sentence when no 6-week baseline exists (`ProgressCopy.swift:49`):
+        `Estimated max · no 6-week comparison`
+      - History sentence (`ProgressCopy.swift:64`):
+        `3 sessions over 2 weeks. A comparison needs a session 5 to 7 weeks before the latest.`
+  - **Stalled lift row (`Overhead Press`):**
+    - Movement: `Overhead Press` with machine `Barbell`.
+    - Caveat line (`ProgressCopy.swift:98`, `ProgressBoardView.swift:251-262`):
+      `pause.circle` icon with `No record in 3 sessions`
 - **Caption:** `Different machines. Never merged.`
 - **What a stranger learns in two seconds:** Switching from a steep sled to a horizontal cable machine will never draw a fake personal record or false regression in the chart. Machine leverage is treated as a physical reality, not a naming mistake.
 
@@ -88,17 +141,17 @@ We built Hardset for intermediate and advanced lifters who keep spreadsheets, re
 #### 1. Calibrated Certainty
 Every estimate in Hardset carries its epistemic confidence:
 - A formula-derived 1RM caps at Moderate confidence. Only a measured single is High confidence.
-- High-rep sets (above 10 reps) carry Low confidence because empirical variance is too wide to extrapolate accurately.
-- When data is missing, Hardset reports "Unevaluated" rather than inventing a number.
+- Sets above 10 repetitions carry Low confidence because empirical formula error widens with higher reps. Sets above 12 reps produce no estimate at all.
+- When data is missing, Hardset reports "Not evaluated" rather than inventing a number.
 
 #### 2. Machine-Level Provenance
 A 200 lb leg press on a Cybex sled is not a 200 lb leg press on a Hammer Strength horizontal press. 
 - Hardset tracks your training history keyed to `exercise × machine`.
 - When you train at a different gym or use a different pin stack, Hardset records a separate series.
-- Machine series are never merged into false progress curves or false regressions.
+- Machine series are never merged into false progress curves or false regressions. If you borrow loads from another machine, Hardset explicitly flags them: *"From another machine · Low confidence"*.
 
 #### 3. Fractional Volume Attribution
-Hardset attributes training volume based on empirical research (Pelland et al.):
+Hardset attributes training volume based on empirical research (Pelland et al. 2025):
 - Prime movers receive 1.0 set credit; secondary compound contributors receive 0.5 set credit.
 - Direct sets are never conflated with compound totals: group views count sets once per session to prevent triple-counting.
 - We report weekly volume targets as Unevaluated because dose-response curves exist in the literature, but universal biological minimums do not.
@@ -169,7 +222,7 @@ With zero advertising budget, early acquisition must rely on high-signal organic
 #### Trigger 3: Discussions on Volume Tracking and Research Methodology
 - **Context:** Threads debating direct vs. indirect set counting (e.g., how much triceps credit a close-grip bench press gives).
 - **Comment Framework:**
-  > "We implemented fractional set attribution in Hardset based on the Pelland et al. meta-analysis (1.0 for prime movers, 0.5 for indirect secondary muscles). More importantly, we explicitly cite the methodology in the app and disclose that 0.5 is an adopted heuristic rather than an inherited biological absolute. We also leave weekly muscle targets as 'Unevaluated' because the literature shows a dose-response relationship, not a fixed universal floor."
+  > "We implemented fractional set attribution in Hardset based on the Pelland et al. meta-analysis (1.0 for prime movers, 0.5 for indirect secondary muscles). More importantly, we explicitly cite the methodology in the app and disclose that 0.5 is an adopted heuristic rather than an inherited finding. We also leave weekly muscle targets as 'Unevaluated' because the literature shows a dose-response relationship, not a fixed universal floor."
 
 ---
 
