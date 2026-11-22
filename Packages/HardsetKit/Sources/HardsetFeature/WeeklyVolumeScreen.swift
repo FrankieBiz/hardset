@@ -131,7 +131,7 @@ public struct WeeklyVolumeScreen: View {
           } label: {
             HStack(spacing: Tokens.Spacing.snug) {
               Text("Deep muscle map")
-              Spacer(minLength: Tokens.Spacing.snug)
+                .frame(maxWidth: .infinity, alignment: .leading)
               Image(systemName: "chevron.right")
                 .font(Tokens.Text.caption.weight(.semibold))
                 .foregroundStyle(Tokens.Color.chalkDim)

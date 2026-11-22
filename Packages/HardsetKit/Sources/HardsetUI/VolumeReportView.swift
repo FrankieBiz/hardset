@@ -137,6 +137,10 @@ public struct VolumeReportView: View {
     .buttonStyle(InlineControlStyle(alignment: .leading, dimsWhenDisabled: true))
     .disabled(onEarlier == nil)
     .accessibilityLabel("Earlier 7 days")
+    // Its own width and no less. With a Spacer beside it a stack offers each child an equal share,
+    // about a third of the line, and a word wider than that was cut to "Earli…" with the room to
+    // spare sitting empty beside it.
+    .fixedSize(horizontal: true, vertical: false)
   }
 
   private var laterControl: some View {
@@ -153,6 +157,7 @@ public struct VolumeReportView: View {
     .buttonStyle(InlineControlStyle(alignment: .trailing, dimsWhenDisabled: true))
     .disabled(onLater == nil)
     .accessibilityLabel("Later 7 days")
+    .fixedSize(horizontal: true, vertical: false)
   }
 
   // MARK: - Header
@@ -326,10 +331,13 @@ public struct VolumeReportView: View {
       // closes the row.
       ViewThatFits(in: .horizontal) {
         VStack(alignment: .leading, spacing: 0) {
+          // The figure keeps its own width and the name takes the rest, so a long muscle name
+          // wraps instead of being cut by a share of the line a Spacer would have kept.
           HStack(alignment: .center, spacing: Tokens.Spacing.snug) {
             nameBlock
-            Spacer(minLength: Tokens.Spacing.snug)
+              .frame(maxWidth: .infinity, alignment: .leading)
             figure
+              .fixedSize(horizontal: true, vertical: false)
           }
           badge
             .padding(.top, -Tokens.Spacing.loose)
