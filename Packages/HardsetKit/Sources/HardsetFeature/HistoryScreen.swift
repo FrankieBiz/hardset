@@ -44,6 +44,9 @@ public struct HistoryScreen: View {
   @State private var searchText = ""
   /// How many matches the search reads. Grows a page at a time, and starts over with each query.
   @State private var searchLimit = HistoryScreen.pageSize
+  /// The words whose answer VoiceOver was last told, so a refresh or a longer page of the same
+  /// matches does not announce itself again.
+  @State private var announcedQuery: String?
   /// The month the list starts from, when the lifter jumped to one; `nil` starts at the newest.
   @State private var anchor: HistoryMonth?
   @State private var isChoosingMonth = false
@@ -159,6 +162,9 @@ public struct HistoryScreen: View {
       await search()
     }
     .onChange(of: query) { _, _ in searchLimit = Self.pageSize }
+    .onChange(of: isSearching) { _, searching in
+      if !searching { announcedQuery = nil }
+    }
     .refreshable {
       await load()
       await search()
@@ -307,6 +313,22 @@ public struct HistoryScreen: View {
       return HistorySearchListing(
         query: words, rows: Self.rows(from: page), totalCount: page.totalCount, limit: limit)
     }
+    announceAnswer(to: words)
+  }
+
+  /// Tells VoiceOver what a search found, once per query: the matches appear under the field, away
+  /// from where focus is, so without this a lifter who cannot see the list would not know the
+  /// search had answered, or that nothing matched.
+  private func announceAnswer(to words: String) {
+    guard !Task.isCancelled, announcedQuery != words,
+      let found = searchSnapshot.value, found.query == words
+    else { return }
+    announcedQuery = words
+    AccessibilityNotification.Announcement(
+      found.rows.isEmpty
+        ? HistoryCopy.noMatchTitle(for: words)
+        : HistoryCopy.searchSubtitle(query: words, shown: found.rows.count, total: found.totalCount)
+    ).post()
   }
 
   private static func rows(from page: HistoryPage) -> [HistoryRow] {

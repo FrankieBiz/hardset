@@ -493,7 +493,8 @@ Selection rows, the unit switch and pickers stay silent.
   read, and the results are the same month-grouped cards, opening the same receipt, with a subtitle that names
   the words ("7 workouts match “bench”, newest first"). A search that finds nothing is a `HardsetEmptyState`
   that names the words, "No workouts match “deadlift”", never a blank screen; one still being read says so in
-  a quiet line, and one that failed says history is safe. The field sits in the one scrolling column every
+  a quiet line, and one that failed says history is safe. VoiceOver is told what a search found, once per
+  query, because the matches appear away from where focus is. The field sits in the one scrolling column every
   state shares, so a no-match never rebuilds it and the keyboard stays up; dragging the list puts it away. The
   calendar button opens a sheet of the months that hold workouts, under pinned year headings, each a
   `SelectionRow` with its workout count and the current month marked by the ring and check. Choosing one starts
