@@ -269,7 +269,10 @@ public struct ProgressBoardView: View {
       }
       .frame(maxWidth: .infinity, alignment: .leading)
     }
-    .padding(.vertical, Tokens.Spacing.snug)
+    .padding(.top, Tokens.Spacing.snug)
+    // A row with a certainty phrase gives its bottom space to the phrase's own 44 pt region, so
+    // the phrase sits under the sentence it qualifies instead of floating a line below it.
+    .padding(.bottom, row.trend.certainty == nil ? Tokens.Spacing.snug : 0)
     .frame(maxWidth: .infinity, alignment: .leading)
   }
 
