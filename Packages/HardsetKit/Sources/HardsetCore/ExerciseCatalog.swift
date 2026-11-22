@@ -83,14 +83,10 @@ public enum ExerciseModality: String, Sendable, CaseIterable, Codable {
 
 /// The v1 seed catalogue.
 ///
-/// **This is a starting seed, not the shipping catalogue.** Fifty movements covering every major
-/// muscle group is enough to log real training and to build against; the research puts a
-/// defensible v1 at roughly 240 hand-curated entries, which is 260–340 hours of content work
-/// that has not been done. Nothing here should be read as that work being finished.
-///
-/// Five tokens have no `direct` credit anywhere in these fifty and are a recorded content debt:
-/// `rotatorCuff`, `obliques`, `adductors`, `hipAbductors`, `neck`. A test holds that list as a
-/// shrinking allowlist so it cannot be forgotten.
+/// The original 50 entries and their permanent ids are retained. Additions are authored from
+/// the corpus's loaded-action rule, with an explicit citation on every contribution. Anatomical
+/// inference is not a movement-specific growth finding and never earns high certainty.
+/// See docs/EXERCISE_CATALOGUE_AUDIT.md for execution, source limits, and omitted candidates.
 ///
 /// On roles: grip is `stabilizer`, never `direct` on `forearms`, and isometric bracing is
 /// `stabilizer`, never `indirect` on `abs`. The first draft of this file credited both as
@@ -683,12 +679,417 @@ public enum ExerciseCatalog {
         .init(.forearms, role: .direct, certainty: .moderate, source: .anatomy),
       ]
     ),
+
+    CatalogExercise(
+      id: "e2905df6-184f-5223-991c-6f2a05e5b83c",
+      slug: "horizontal-leg-press",
+      name: "Horizontal Leg Press",
+      modality: .machine,
+      primaryMuscle: .quadriceps,
+      contributions: [
+        .init(.quadriceps, role: .direct, certainty: .moderate, source: .anatomy, citation: "Anatomical inference: knee extension; docs/research/tax-spec.md §1 and §5 G1–G3; not a variant-specific growth trial."),
+        .init(.glutes, role: .indirect, certainty: .low, source: .anatomy, citation: "Anatomical inference: hip extension; docs/research/tax-spec.md §1 and §5 G1–G3; not a variant-specific growth trial."),
+        .init(.adductors, role: .indirect, certainty: .low, source: .anatomy, citation: "Anatomical inference: hip adduction and assisted hip extension; docs/research/tax-spec.md §1 and §5 G1–G3; not a variant-specific growth trial."),
+      ]
+    ),
+    CatalogExercise(
+      id: "1c253d38-2b2c-5e8f-b2ba-c8fd251d7a0e",
+      slug: "single-leg-press",
+      name: "Single-Leg Press",
+      modality: .machine,
+      primaryMuscle: .quadriceps,
+      contributions: [
+        .init(.quadriceps, role: .direct, certainty: .moderate, source: .anatomy, citation: "Anatomical inference: knee extension; docs/research/tax-spec.md §1 and §5 G1–G3; not a variant-specific growth trial."),
+        .init(.glutes, role: .indirect, certainty: .low, source: .anatomy, citation: "Anatomical inference: hip extension; docs/research/tax-spec.md §1 and §5 G1–G3; not a variant-specific growth trial."),
+        .init(.adductors, role: .indirect, certainty: .low, source: .anatomy, citation: "Anatomical inference: hip adduction and assisted hip extension; docs/research/tax-spec.md §1 and §5 G1–G3; not a variant-specific growth trial."),
+      ]
+    ),
+    CatalogExercise(
+      id: "f67ec066-8c46-58b1-bbb1-d56af7359f88",
+      slug: "smith-machine-squat",
+      name: "Smith Machine Squat",
+      modality: .machine,
+      primaryMuscle: .quadriceps,
+      contributions: [
+        .init(.quadriceps, role: .direct, certainty: .moderate, source: .anatomy, citation: "Anatomical inference: knee extension; docs/research/tax-spec.md §1 and §5 G1–G3; not a variant-specific growth trial."),
+        .init(.glutes, role: .indirect, certainty: .low, source: .anatomy, citation: "Anatomical inference: hip extension; docs/research/tax-spec.md §1 and §5 G1–G3; not a variant-specific growth trial."),
+        .init(.adductors, role: .indirect, certainty: .low, source: .anatomy, citation: "Anatomical inference: hip adduction and assisted hip extension; docs/research/tax-spec.md §1 and §5 G1–G3; not a variant-specific growth trial."),
+        .init(.abs, role: .stabilizer, certainty: .moderate, source: .convention, citation: "Hardset zero-credit convention: held grip or posture; docs/MuscleTaxonomy-spec.md §5 G2 (not a claim that isometrics cannot grow muscle)."),
+        .init(.lowerBack, role: .stabilizer, certainty: .moderate, source: .convention, citation: "Hardset zero-credit convention: held grip or posture; docs/MuscleTaxonomy-spec.md §5 G2 (not a claim that isometrics cannot grow muscle)."),
+      ]
+    ),
+    CatalogExercise(
+      id: "6a413ea2-8cb5-5c34-b885-c0187fdb9046",
+      slug: "pendulum-squat",
+      name: "Pendulum Squat",
+      modality: .machine,
+      primaryMuscle: .quadriceps,
+      contributions: [
+        .init(.quadriceps, role: .direct, certainty: .moderate, source: .anatomy, citation: "Anatomical inference: knee extension; docs/research/tax-spec.md §1 and §5 G1–G3; not a variant-specific growth trial."),
+        .init(.glutes, role: .indirect, certainty: .low, source: .anatomy, citation: "Anatomical inference: hip extension; docs/research/tax-spec.md §1 and §5 G1–G3; not a variant-specific growth trial."),
+        .init(.adductors, role: .indirect, certainty: .low, source: .anatomy, citation: "Anatomical inference: hip adduction and assisted hip extension; docs/research/tax-spec.md §1 and §5 G1–G3; not a variant-specific growth trial."),
+      ]
+    ),
+    CatalogExercise(
+      id: "ae6add92-5dbc-5bd9-aa07-d4f4b2dab2f8",
+      slug: "belt-squat",
+      name: "Belt Squat",
+      modality: .machine,
+      primaryMuscle: .quadriceps,
+      contributions: [
+        .init(.quadriceps, role: .direct, certainty: .moderate, source: .anatomy, citation: "Anatomical inference: knee extension; docs/research/tax-spec.md §1 and §5 G1–G3; not a variant-specific growth trial."),
+        .init(.glutes, role: .indirect, certainty: .low, source: .anatomy, citation: "Anatomical inference: hip extension; docs/research/tax-spec.md §1 and §5 G1–G3; not a variant-specific growth trial."),
+        .init(.adductors, role: .indirect, certainty: .low, source: .anatomy, citation: "Anatomical inference: hip adduction and assisted hip extension; docs/research/tax-spec.md §1 and §5 G1–G3; not a variant-specific growth trial."),
+        .init(.abs, role: .stabilizer, certainty: .moderate, source: .convention, citation: "Hardset zero-credit convention: held grip or posture; docs/MuscleTaxonomy-spec.md §5 G2 (not a claim that isometrics cannot grow muscle)."),
+      ]
+    ),
+    CatalogExercise(
+      id: "bb2fd281-bf5f-5500-930c-82922cd1020f",
+      slug: "goblet-squat",
+      name: "Goblet Squat",
+      modality: .dumbbell,
+      primaryMuscle: .quadriceps,
+      contributions: [
+        .init(.quadriceps, role: .direct, certainty: .moderate, source: .anatomy, citation: "Anatomical inference: knee extension; docs/research/tax-spec.md §1 and §5 G1–G3; not a variant-specific growth trial."),
+        .init(.glutes, role: .indirect, certainty: .low, source: .anatomy, citation: "Anatomical inference: hip extension; docs/research/tax-spec.md §1 and §5 G1–G3; not a variant-specific growth trial."),
+        .init(.adductors, role: .indirect, certainty: .low, source: .anatomy, citation: "Anatomical inference: hip adduction and assisted hip extension; docs/research/tax-spec.md §1 and §5 G1–G3; not a variant-specific growth trial."),
+        .init(.forearms, role: .stabilizer, certainty: .moderate, source: .convention, citation: "Hardset zero-credit convention: held grip or posture; docs/MuscleTaxonomy-spec.md §5 G2 (not a claim that isometrics cannot grow muscle)."),
+        .init(.abs, role: .stabilizer, certainty: .moderate, source: .convention, citation: "Hardset zero-credit convention: held grip or posture; docs/MuscleTaxonomy-spec.md §5 G2 (not a claim that isometrics cannot grow muscle)."),
+        .init(.upperBack, role: .stabilizer, certainty: .moderate, source: .convention, citation: "Hardset zero-credit convention: held grip or posture; docs/MuscleTaxonomy-spec.md §5 G2 (not a claim that isometrics cannot grow muscle)."),
+      ]
+    ),
+    CatalogExercise(
+      id: "df7a6ec9-6fc5-5aaa-80aa-7fff94c9d536",
+      slug: "dumbbell-front-squat",
+      name: "Dumbbell Front Squat",
+      modality: .dumbbell,
+      primaryMuscle: .quadriceps,
+      contributions: [
+        .init(.quadriceps, role: .direct, certainty: .moderate, source: .anatomy, citation: "Anatomical inference: knee extension; docs/research/tax-spec.md §1 and §5 G1–G3; not a variant-specific growth trial."),
+        .init(.glutes, role: .indirect, certainty: .low, source: .anatomy, citation: "Anatomical inference: hip extension; docs/research/tax-spec.md §1 and §5 G1–G3; not a variant-specific growth trial."),
+        .init(.adductors, role: .indirect, certainty: .low, source: .anatomy, citation: "Anatomical inference: hip adduction and assisted hip extension; docs/research/tax-spec.md §1 and §5 G1–G3; not a variant-specific growth trial."),
+        .init(.forearms, role: .stabilizer, certainty: .moderate, source: .convention, citation: "Hardset zero-credit convention: held grip or posture; docs/MuscleTaxonomy-spec.md §5 G2 (not a claim that isometrics cannot grow muscle)."),
+        .init(.abs, role: .stabilizer, certainty: .moderate, source: .convention, citation: "Hardset zero-credit convention: held grip or posture; docs/MuscleTaxonomy-spec.md §5 G2 (not a claim that isometrics cannot grow muscle)."),
+        .init(.upperBack, role: .stabilizer, certainty: .moderate, source: .convention, citation: "Hardset zero-credit convention: held grip or posture; docs/MuscleTaxonomy-spec.md §5 G2 (not a claim that isometrics cannot grow muscle)."),
+      ]
+    ),
+    CatalogExercise(
+      id: "895392c5-5946-5f9e-9f9f-76c008df9b1e",
+      slug: "barbell-split-squat",
+      name: "Barbell Split Squat",
+      modality: .barbell,
+      primaryMuscle: .quadriceps,
+      contributions: [
+        .init(.quadriceps, role: .direct, certainty: .moderate, source: .anatomy, citation: "Anatomical inference: knee extension; docs/research/tax-spec.md §1 and §5 G1–G3; not a variant-specific growth trial."),
+        .init(.glutes, role: .indirect, certainty: .low, source: .anatomy, citation: "Anatomical inference: hip extension; docs/research/tax-spec.md §1 and §5 G1–G3; not a variant-specific growth trial."),
+        .init(.adductors, role: .indirect, certainty: .low, source: .anatomy, citation: "Anatomical inference: hip adduction and assisted hip extension; docs/research/tax-spec.md §1 and §5 G1–G3; not a variant-specific growth trial."),
+        .init(.forearms, role: .stabilizer, certainty: .moderate, source: .convention, citation: "Hardset zero-credit convention: held grip or posture; docs/MuscleTaxonomy-spec.md §5 G2 (not a claim that isometrics cannot grow muscle)."),
+        .init(.abs, role: .stabilizer, certainty: .moderate, source: .convention, citation: "Hardset zero-credit convention: held grip or posture; docs/MuscleTaxonomy-spec.md §5 G2 (not a claim that isometrics cannot grow muscle)."),
+        .init(.lowerBack, role: .stabilizer, certainty: .moderate, source: .convention, citation: "Hardset zero-credit convention: held grip or posture; docs/MuscleTaxonomy-spec.md §5 G2 (not a claim that isometrics cannot grow muscle)."),
+      ]
+    ),
+    CatalogExercise(
+      id: "8fb3f86c-3cbc-595c-af59-613e84dbac1d",
+      slug: "dumbbell-reverse-lunge",
+      name: "Dumbbell Reverse Lunge",
+      modality: .dumbbell,
+      primaryMuscle: .quadriceps,
+      contributions: [
+        .init(.quadriceps, role: .direct, certainty: .moderate, source: .anatomy, citation: "Anatomical inference: knee extension; docs/research/tax-spec.md §1 and §5 G1–G3; not a variant-specific growth trial."),
+        .init(.glutes, role: .indirect, certainty: .low, source: .anatomy, citation: "Anatomical inference: hip extension; docs/research/tax-spec.md §1 and §5 G1–G3; not a variant-specific growth trial."),
+        .init(.adductors, role: .indirect, certainty: .low, source: .anatomy, citation: "Anatomical inference: hip adduction and assisted hip extension; docs/research/tax-spec.md §1 and §5 G1–G3; not a variant-specific growth trial."),
+        .init(.forearms, role: .stabilizer, certainty: .moderate, source: .convention, citation: "Hardset zero-credit convention: held grip or posture; docs/MuscleTaxonomy-spec.md §5 G2 (not a claim that isometrics cannot grow muscle)."),
+        .init(.abs, role: .stabilizer, certainty: .moderate, source: .convention, citation: "Hardset zero-credit convention: held grip or posture; docs/MuscleTaxonomy-spec.md §5 G2 (not a claim that isometrics cannot grow muscle)."),
+      ]
+    ),
+    CatalogExercise(
+      id: "7570b68a-f102-5e79-9b60-19ba38555d92",
+      slug: "dumbbell-walking-lunge",
+      name: "Dumbbell Walking Lunge",
+      modality: .dumbbell,
+      primaryMuscle: .quadriceps,
+      contributions: [
+        .init(.quadriceps, role: .direct, certainty: .moderate, source: .anatomy, citation: "Anatomical inference: knee extension; docs/research/tax-spec.md §1 and §5 G1–G3; not a variant-specific growth trial."),
+        .init(.glutes, role: .indirect, certainty: .low, source: .anatomy, citation: "Anatomical inference: hip extension; docs/research/tax-spec.md §1 and §5 G1–G3; not a variant-specific growth trial."),
+        .init(.adductors, role: .indirect, certainty: .low, source: .anatomy, citation: "Anatomical inference: hip adduction and assisted hip extension; docs/research/tax-spec.md §1 and §5 G1–G3; not a variant-specific growth trial."),
+        .init(.forearms, role: .stabilizer, certainty: .moderate, source: .convention, citation: "Hardset zero-credit convention: held grip or posture; docs/MuscleTaxonomy-spec.md §5 G2 (not a claim that isometrics cannot grow muscle)."),
+        .init(.abs, role: .stabilizer, certainty: .moderate, source: .convention, citation: "Hardset zero-credit convention: held grip or posture; docs/MuscleTaxonomy-spec.md §5 G2 (not a claim that isometrics cannot grow muscle)."),
+      ]
+    ),
+    CatalogExercise(
+      id: "ee1fb1dc-5b63-5f4d-9485-5366d71bc0ae",
+      slug: "dumbbell-step-up",
+      name: "Dumbbell Step-Up",
+      modality: .dumbbell,
+      primaryMuscle: .quadriceps,
+      contributions: [
+        .init(.quadriceps, role: .direct, certainty: .moderate, source: .anatomy, citation: "Anatomical inference: knee extension; docs/research/tax-spec.md §1 and §5 G1–G3; not a variant-specific growth trial."),
+        .init(.glutes, role: .indirect, certainty: .low, source: .anatomy, citation: "Anatomical inference: hip extension; docs/research/tax-spec.md §1 and §5 G1–G3; not a variant-specific growth trial."),
+        .init(.forearms, role: .stabilizer, certainty: .moderate, source: .convention, citation: "Hardset zero-credit convention: held grip or posture; docs/MuscleTaxonomy-spec.md §5 G2 (not a claim that isometrics cannot grow muscle)."),
+        .init(.abs, role: .stabilizer, certainty: .moderate, source: .convention, citation: "Hardset zero-credit convention: held grip or posture; docs/MuscleTaxonomy-spec.md §5 G2 (not a claim that isometrics cannot grow muscle)."),
+      ]
+    ),
+    CatalogExercise(
+      id: "fbcecc62-157d-5354-bbf5-98753130806f",
+      slug: "smith-machine-split-squat",
+      name: "Smith Machine Split Squat",
+      modality: .machine,
+      primaryMuscle: .quadriceps,
+      contributions: [
+        .init(.quadriceps, role: .direct, certainty: .moderate, source: .anatomy, citation: "Anatomical inference: knee extension; docs/research/tax-spec.md §1 and §5 G1–G3; not a variant-specific growth trial."),
+        .init(.glutes, role: .indirect, certainty: .low, source: .anatomy, citation: "Anatomical inference: hip extension; docs/research/tax-spec.md §1 and §5 G1–G3; not a variant-specific growth trial."),
+        .init(.adductors, role: .indirect, certainty: .low, source: .anatomy, citation: "Anatomical inference: hip adduction and assisted hip extension; docs/research/tax-spec.md §1 and §5 G1–G3; not a variant-specific growth trial."),
+        .init(.abs, role: .stabilizer, certainty: .moderate, source: .convention, citation: "Hardset zero-credit convention: held grip or posture; docs/MuscleTaxonomy-spec.md §5 G2 (not a claim that isometrics cannot grow muscle)."),
+      ]
+    ),
+    CatalogExercise(
+      id: "5b7ccc74-a76f-58f1-825f-a9bdb8f8123c",
+      slug: "single-leg-extension",
+      name: "Single-Leg Extension",
+      modality: .machine,
+      primaryMuscle: .quadriceps,
+      contributions: [
+        .init(.quadriceps, role: .direct, certainty: .moderate, source: .anatomy, citation: "Anatomical inference: knee extension; docs/research/tax-spec.md §1 and §5 G1–G3; not a variant-specific growth trial."),
+      ]
+    ),
+    CatalogExercise(
+      id: "0c1d994a-d6d4-5ec9-a755-ba541c72f0ec",
+      slug: "standing-leg-curl",
+      name: "Standing Leg Curl",
+      modality: .machine,
+      primaryMuscle: .hamstrings,
+      contributions: [
+        .init(.hamstrings, role: .direct, certainty: .moderate, source: .anatomy, citation: "Anatomical inference: knee flexion or hip extension; docs/research/tax-spec.md §1 and §5 G1–G3; not a variant-specific growth trial."),
+        .init(.gastrocnemius, role: .indirect, certainty: .low, source: .anatomy, citation: "Anatomical inference: straight-knee plantarflexion or knee flexion; docs/research/tax-spec.md §1 and §5 G1–G3; knee-position distinction §2.13; not a variant-specific growth trial."),
+      ]
+    ),
+    CatalogExercise(
+      id: "0b15b0cd-dda9-5cab-9233-3d1b8487442a",
+      slug: "single-leg-seated-leg-curl",
+      name: "Single-Leg Seated Leg Curl",
+      modality: .machine,
+      primaryMuscle: .hamstrings,
+      contributions: [
+        .init(.hamstrings, role: .direct, certainty: .moderate, source: .anatomy, citation: "Anatomical inference: knee flexion or hip extension; docs/research/tax-spec.md §1 and §5 G1–G3; not a variant-specific growth trial."),
+        .init(.gastrocnemius, role: .indirect, certainty: .low, source: .anatomy, citation: "Anatomical inference: straight-knee plantarflexion or knee flexion; docs/research/tax-spec.md §1 and §5 G1–G3; knee-position distinction §2.13; not a variant-specific growth trial."),
+      ]
+    ),
+    CatalogExercise(
+      id: "f73a70bc-6b4a-5c17-9026-c1adbc7cb4e0",
+      slug: "nordic-hamstring-curl",
+      name: "Nordic Hamstring Curl",
+      modality: .bodyweight,
+      primaryMuscle: .hamstrings,
+      contributions: [
+        .init(.hamstrings, role: .direct, certainty: .moderate, source: .anatomy, citation: "Anatomical inference: knee flexion or hip extension; docs/research/tax-spec.md §1 and §5 G1–G3; not a variant-specific growth trial."),
+        .init(.gastrocnemius, role: .indirect, certainty: .low, source: .anatomy, citation: "Anatomical inference: straight-knee plantarflexion or knee flexion; docs/research/tax-spec.md §1 and §5 G1–G3; knee-position distinction §2.13; not a variant-specific growth trial."),
+        .init(.abs, role: .stabilizer, certainty: .moderate, source: .convention, citation: "Hardset zero-credit convention: held grip or posture; docs/MuscleTaxonomy-spec.md §5 G2 (not a claim that isometrics cannot grow muscle)."),
+        .init(.glutes, role: .stabilizer, certainty: .moderate, source: .convention, citation: "Hardset zero-credit convention: held grip or posture; docs/MuscleTaxonomy-spec.md §5 G2 (not a claim that isometrics cannot grow muscle)."),
+      ]
+    ),
+    CatalogExercise(
+      id: "3e104211-da92-5539-970f-881c37d4db81",
+      slug: "dumbbell-romanian-deadlift",
+      name: "Dumbbell Romanian Deadlift",
+      modality: .dumbbell,
+      primaryMuscle: .hamstrings,
+      contributions: [
+        .init(.hamstrings, role: .direct, certainty: .moderate, source: .anatomy, citation: "Anatomical inference: knee flexion or hip extension; docs/research/tax-spec.md §1 and §5 G1–G3; not a variant-specific growth trial."),
+        .init(.glutes, role: .direct, certainty: .moderate, source: .anatomy, citation: "Anatomical inference: hip extension; docs/research/tax-spec.md §1 and §5 G1–G3; not a variant-specific growth trial."),
+        .init(.forearms, role: .stabilizer, certainty: .moderate, source: .convention, citation: "Hardset zero-credit convention: held grip or posture; docs/MuscleTaxonomy-spec.md §5 G2 (not a claim that isometrics cannot grow muscle)."),
+        .init(.abs, role: .stabilizer, certainty: .moderate, source: .convention, citation: "Hardset zero-credit convention: held grip or posture; docs/MuscleTaxonomy-spec.md §5 G2 (not a claim that isometrics cannot grow muscle)."),
+        .init(.lowerBack, role: .stabilizer, certainty: .moderate, source: .convention, citation: "Hardset zero-credit convention: held grip or posture; docs/MuscleTaxonomy-spec.md §5 G2 (not a claim that isometrics cannot grow muscle)."),
+      ]
+    ),
+    CatalogExercise(
+      id: "8d6fb9df-f678-513a-aef3-0e8174e77185",
+      slug: "single-leg-romanian-deadlift",
+      name: "Single-Leg Romanian Deadlift",
+      modality: .dumbbell,
+      primaryMuscle: .hamstrings,
+      contributions: [
+        .init(.hamstrings, role: .direct, certainty: .moderate, source: .anatomy, citation: "Anatomical inference: knee flexion or hip extension; docs/research/tax-spec.md §1 and §5 G1–G3; not a variant-specific growth trial."),
+        .init(.glutes, role: .direct, certainty: .moderate, source: .anatomy, citation: "Anatomical inference: hip extension; docs/research/tax-spec.md §1 and §5 G1–G3; not a variant-specific growth trial."),
+        .init(.forearms, role: .stabilizer, certainty: .moderate, source: .convention, citation: "Hardset zero-credit convention: held grip or posture; docs/MuscleTaxonomy-spec.md §5 G2 (not a claim that isometrics cannot grow muscle)."),
+        .init(.abs, role: .stabilizer, certainty: .moderate, source: .convention, citation: "Hardset zero-credit convention: held grip or posture; docs/MuscleTaxonomy-spec.md §5 G2 (not a claim that isometrics cannot grow muscle)."),
+        .init(.lowerBack, role: .stabilizer, certainty: .moderate, source: .convention, citation: "Hardset zero-credit convention: held grip or posture; docs/MuscleTaxonomy-spec.md §5 G2 (not a claim that isometrics cannot grow muscle)."),
+      ]
+    ),
+    CatalogExercise(
+      id: "11c23621-900c-59d0-971c-a121bd9c4fb3",
+      slug: "smith-machine-romanian-deadlift",
+      name: "Smith Machine Romanian Deadlift",
+      modality: .machine,
+      primaryMuscle: .hamstrings,
+      contributions: [
+        .init(.hamstrings, role: .direct, certainty: .moderate, source: .anatomy, citation: "Anatomical inference: knee flexion or hip extension; docs/research/tax-spec.md §1 and §5 G1–G3; not a variant-specific growth trial."),
+        .init(.glutes, role: .direct, certainty: .moderate, source: .anatomy, citation: "Anatomical inference: hip extension; docs/research/tax-spec.md §1 and §5 G1–G3; not a variant-specific growth trial."),
+        .init(.forearms, role: .stabilizer, certainty: .moderate, source: .convention, citation: "Hardset zero-credit convention: held grip or posture; docs/MuscleTaxonomy-spec.md §5 G2 (not a claim that isometrics cannot grow muscle)."),
+        .init(.abs, role: .stabilizer, certainty: .moderate, source: .convention, citation: "Hardset zero-credit convention: held grip or posture; docs/MuscleTaxonomy-spec.md §5 G2 (not a claim that isometrics cannot grow muscle)."),
+        .init(.lowerBack, role: .stabilizer, certainty: .moderate, source: .convention, citation: "Hardset zero-credit convention: held grip or posture; docs/MuscleTaxonomy-spec.md §5 G2 (not a claim that isometrics cannot grow muscle)."),
+      ]
+    ),
+    CatalogExercise(
+      id: "b552ae66-dc15-5daf-aef9-b277d51281cc",
+      slug: "barbell-good-morning",
+      name: "Barbell Good Morning",
+      modality: .barbell,
+      primaryMuscle: .hamstrings,
+      contributions: [
+        .init(.hamstrings, role: .direct, certainty: .moderate, source: .anatomy, citation: "Anatomical inference: knee flexion or hip extension; docs/research/tax-spec.md §1 and §5 G1–G3; not a variant-specific growth trial."),
+        .init(.glutes, role: .direct, certainty: .moderate, source: .anatomy, citation: "Anatomical inference: hip extension; docs/research/tax-spec.md §1 and §5 G1–G3; not a variant-specific growth trial."),
+        .init(.forearms, role: .stabilizer, certainty: .moderate, source: .convention, citation: "Hardset zero-credit convention: held grip or posture; docs/MuscleTaxonomy-spec.md §5 G2 (not a claim that isometrics cannot grow muscle)."),
+        .init(.abs, role: .stabilizer, certainty: .moderate, source: .convention, citation: "Hardset zero-credit convention: held grip or posture; docs/MuscleTaxonomy-spec.md §5 G2 (not a claim that isometrics cannot grow muscle)."),
+        .init(.lowerBack, role: .stabilizer, certainty: .moderate, source: .convention, citation: "Hardset zero-credit convention: held grip or posture; docs/MuscleTaxonomy-spec.md §5 G2 (not a claim that isometrics cannot grow muscle)."),
+      ]
+    ),
+    CatalogExercise(
+      id: "4e4b080d-cdb4-5459-8874-ae20b72e4e3b",
+      slug: "cable-pull-through",
+      name: "Cable Pull-Through",
+      modality: .cable,
+      primaryMuscle: .glutes,
+      contributions: [
+        .init(.glutes, role: .direct, certainty: .moderate, source: .anatomy, citation: "Anatomical inference: hip extension; docs/research/tax-spec.md §1 and §5 G1–G3; not a variant-specific growth trial."),
+        .init(.hamstrings, role: .direct, certainty: .moderate, source: .anatomy, citation: "Anatomical inference: knee flexion or hip extension; docs/research/tax-spec.md §1 and §5 G1–G3; not a variant-specific growth trial."),
+        .init(.forearms, role: .stabilizer, certainty: .moderate, source: .convention, citation: "Hardset zero-credit convention: held grip or posture; docs/MuscleTaxonomy-spec.md §5 G2 (not a claim that isometrics cannot grow muscle)."),
+        .init(.abs, role: .stabilizer, certainty: .moderate, source: .convention, citation: "Hardset zero-credit convention: held grip or posture; docs/MuscleTaxonomy-spec.md §5 G2 (not a claim that isometrics cannot grow muscle)."),
+        .init(.lowerBack, role: .stabilizer, certainty: .moderate, source: .convention, citation: "Hardset zero-credit convention: held grip or posture; docs/MuscleTaxonomy-spec.md §5 G2 (not a claim that isometrics cannot grow muscle)."),
+      ]
+    ),
+    CatalogExercise(
+      id: "10c199d7-67b5-5df1-90cc-afc8e50e3f64",
+      slug: "machine-hip-thrust",
+      name: "Machine Hip Thrust",
+      modality: .machine,
+      primaryMuscle: .glutes,
+      contributions: [
+        .init(.glutes, role: .direct, certainty: .moderate, source: .anatomy, citation: "Anatomical inference: hip extension; docs/research/tax-spec.md §1 and §5 G1–G3; not a variant-specific growth trial."),
+        .init(.hamstrings, role: .indirect, certainty: .low, source: .anatomy, citation: "Anatomical inference: knee flexion or hip extension; docs/research/tax-spec.md §1 and §5 G1–G3; not a variant-specific growth trial."),
+        .init(.abs, role: .stabilizer, certainty: .moderate, source: .convention, citation: "Hardset zero-credit convention: held grip or posture; docs/MuscleTaxonomy-spec.md §5 G2 (not a claim that isometrics cannot grow muscle)."),
+      ]
+    ),
+    CatalogExercise(
+      id: "27bdb80a-58ce-5111-aa5c-a1c810e34ce4",
+      slug: "dumbbell-hip-thrust",
+      name: "Dumbbell Hip Thrust",
+      modality: .dumbbell,
+      primaryMuscle: .glutes,
+      contributions: [
+        .init(.glutes, role: .direct, certainty: .moderate, source: .anatomy, citation: "Anatomical inference: hip extension; docs/research/tax-spec.md §1 and §5 G1–G3; not a variant-specific growth trial."),
+        .init(.hamstrings, role: .indirect, certainty: .low, source: .anatomy, citation: "Anatomical inference: knee flexion or hip extension; docs/research/tax-spec.md §1 and §5 G1–G3; not a variant-specific growth trial."),
+        .init(.abs, role: .stabilizer, certainty: .moderate, source: .convention, citation: "Hardset zero-credit convention: held grip or posture; docs/MuscleTaxonomy-spec.md §5 G2 (not a claim that isometrics cannot grow muscle)."),
+      ]
+    ),
+    CatalogExercise(
+      id: "5f01f79c-9a48-53f8-9471-8d3591f11bf4",
+      slug: "glute-bridge",
+      name: "Glute Bridge",
+      modality: .bodyweight,
+      primaryMuscle: .glutes,
+      contributions: [
+        .init(.glutes, role: .direct, certainty: .moderate, source: .anatomy, citation: "Anatomical inference: hip extension; docs/research/tax-spec.md §1 and §5 G1–G3; not a variant-specific growth trial."),
+        .init(.hamstrings, role: .indirect, certainty: .low, source: .anatomy, citation: "Anatomical inference: knee flexion or hip extension; docs/research/tax-spec.md §1 and §5 G1–G3; not a variant-specific growth trial."),
+        .init(.abs, role: .stabilizer, certainty: .moderate, source: .convention, citation: "Hardset zero-credit convention: held grip or posture; docs/MuscleTaxonomy-spec.md §5 G2 (not a claim that isometrics cannot grow muscle)."),
+      ]
+    ),
+    CatalogExercise(
+      id: "44f3fdec-f2ea-5781-9701-65edd7964be2",
+      slug: "cable-glute-kickback",
+      name: "Cable Glute Kickback",
+      modality: .cable,
+      primaryMuscle: .glutes,
+      contributions: [
+        .init(.glutes, role: .direct, certainty: .moderate, source: .anatomy, citation: "Anatomical inference: hip extension; docs/research/tax-spec.md §1 and §5 G1–G3; not a variant-specific growth trial."),
+        .init(.hamstrings, role: .indirect, certainty: .low, source: .anatomy, citation: "Anatomical inference: knee flexion or hip extension; docs/research/tax-spec.md §1 and §5 G1–G3; not a variant-specific growth trial."),
+        .init(.abs, role: .stabilizer, certainty: .moderate, source: .convention, citation: "Hardset zero-credit convention: held grip or posture; docs/MuscleTaxonomy-spec.md §5 G2 (not a claim that isometrics cannot grow muscle)."),
+      ]
+    ),
+    CatalogExercise(
+      id: "15f95a02-7a92-5cbd-865c-a0bb3e22d265",
+      slug: "hip-extension-machine",
+      name: "Hip Extension Machine",
+      modality: .machine,
+      primaryMuscle: .glutes,
+      contributions: [
+        .init(.glutes, role: .direct, certainty: .moderate, source: .anatomy, citation: "Anatomical inference: hip extension; docs/research/tax-spec.md §1 and §5 G1–G3; not a variant-specific growth trial."),
+        .init(.hamstrings, role: .indirect, certainty: .low, source: .anatomy, citation: "Anatomical inference: knee flexion or hip extension; docs/research/tax-spec.md §1 and §5 G1–G3; not a variant-specific growth trial."),
+        .init(.abs, role: .stabilizer, certainty: .moderate, source: .convention, citation: "Hardset zero-credit convention: held grip or posture; docs/MuscleTaxonomy-spec.md §5 G2 (not a claim that isometrics cannot grow muscle)."),
+      ]
+    ),
+    CatalogExercise(
+      id: "dd2e5975-a0e2-5982-8c72-4820006f649f",
+      slug: "hip-adduction-machine",
+      name: "Hip Adduction Machine",
+      modality: .machine,
+      primaryMuscle: .adductors,
+      contributions: [
+        .init(.adductors, role: .direct, certainty: .moderate, source: .anatomy, citation: "Anatomical inference: hip adduction and assisted hip extension; docs/research/tax-spec.md §1 and §5 G1–G3; not a variant-specific growth trial."),
+      ]
+    ),
+    CatalogExercise(
+      id: "065406b1-f7a6-5351-811e-7b2ed18c0ea7",
+      slug: "hip-abduction-machine",
+      name: "Hip Abduction Machine",
+      modality: .machine,
+      primaryMuscle: .hipAbductors,
+      contributions: [
+        .init(.hipAbductors, role: .direct, certainty: .moderate, source: .anatomy, citation: "Anatomical inference: hip abduction; docs/research/tax-spec.md §1 and §5 G1–G3; not a variant-specific growth trial."),
+      ]
+    ),
+    CatalogExercise(
+      id: "02057a33-45d9-532d-ac2e-da0d1a72c5f9",
+      slug: "standing-cable-hip-abduction",
+      name: "Standing Cable Hip Abduction",
+      modality: .cable,
+      primaryMuscle: .hipAbductors,
+      contributions: [
+        .init(.hipAbductors, role: .direct, certainty: .moderate, source: .anatomy, citation: "Anatomical inference: hip abduction; docs/research/tax-spec.md §1 and §5 G1–G3; not a variant-specific growth trial."),
+        .init(.abs, role: .stabilizer, certainty: .moderate, source: .convention, citation: "Hardset zero-credit convention: held grip or posture; docs/MuscleTaxonomy-spec.md §5 G2 (not a claim that isometrics cannot grow muscle)."),
+      ]
+    ),
+    CatalogExercise(
+      id: "49be22e8-1366-5cdd-a555-6c80bd6d10cc",
+      slug: "leg-press-calf-raise",
+      name: "Leg Press Calf Raise",
+      modality: .machine,
+      primaryMuscle: .gastrocnemius,
+      contributions: [
+        .init(.gastrocnemius, role: .direct, certainty: .moderate, source: .anatomy, citation: "Anatomical inference: straight-knee plantarflexion or knee flexion; docs/research/tax-spec.md §1 and §5 G1–G3; knee-position distinction §2.13; not a variant-specific growth trial."),
+        .init(.soleus, role: .direct, certainty: .moderate, source: .anatomy, citation: "Anatomical inference: plantarflexion; docs/research/tax-spec.md §1 and §5 G1–G3; knee-position distinction §2.13; not a variant-specific growth trial."),
+      ]
+    ),
+    CatalogExercise(
+      id: "23ab8549-58d8-5254-8618-f0e69fa5d398",
+      slug: "single-leg-dumbbell-calf-raise",
+      name: "Single-Leg Dumbbell Calf Raise",
+      modality: .dumbbell,
+      primaryMuscle: .gastrocnemius,
+      contributions: [
+        .init(.gastrocnemius, role: .direct, certainty: .moderate, source: .anatomy, citation: "Anatomical inference: straight-knee plantarflexion or knee flexion; docs/research/tax-spec.md §1 and §5 G1–G3; knee-position distinction §2.13; not a variant-specific growth trial."),
+        .init(.soleus, role: .direct, certainty: .moderate, source: .anatomy, citation: "Anatomical inference: plantarflexion; docs/research/tax-spec.md §1 and §5 G1–G3; knee-position distinction §2.13; not a variant-specific growth trial."),
+        .init(.forearms, role: .stabilizer, certainty: .moderate, source: .convention, citation: "Hardset zero-credit convention: held grip or posture; docs/MuscleTaxonomy-spec.md §5 G2 (not a claim that isometrics cannot grow muscle)."),
+      ]
+    ),
+    CatalogExercise(
+      id: "cb2361b3-5909-5633-baae-259a0be878e3",
+      slug: "smith-machine-calf-raise",
+      name: "Smith Machine Calf Raise",
+      modality: .machine,
+      primaryMuscle: .gastrocnemius,
+      contributions: [
+        .init(.gastrocnemius, role: .direct, certainty: .moderate, source: .anatomy, citation: "Anatomical inference: straight-knee plantarflexion or knee flexion; docs/research/tax-spec.md §1 and §5 G1–G3; knee-position distinction §2.13; not a variant-specific growth trial."),
+        .init(.soleus, role: .direct, certainty: .moderate, source: .anatomy, citation: "Anatomical inference: plantarflexion; docs/research/tax-spec.md §1 and §5 G1–G3; knee-position distinction §2.13; not a variant-specific growth trial."),
+        .init(.forearms, role: .stabilizer, certainty: .moderate, source: .convention, citation: "Hardset zero-credit convention: held grip or posture; docs/MuscleTaxonomy-spec.md §5 G2 (not a claim that isometrics cannot grow muscle)."),
+        .init(.abs, role: .stabilizer, certainty: .moderate, source: .convention, citation: "Hardset zero-credit convention: held grip or posture; docs/MuscleTaxonomy-spec.md §5 G2 (not a claim that isometrics cannot grow muscle)."),
+      ]
+    ),
   ]
 
   public static var slugs: [String] { v1.map(\.slug) }
 
   /// Tokens with no `direct` credit in the seed. Content debt, not a design statement.
   public static let unauthoredDirectTokens: Set<Muscle> = [
-    .rotatorCuff, .obliques, .adductors, .hipAbductors, .neck,
+    .rotatorCuff, .obliques, .neck,
   ]
 }

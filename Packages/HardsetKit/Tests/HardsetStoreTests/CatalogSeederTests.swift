@@ -201,10 +201,163 @@ struct CatalogSeederTests {
     // And again, to prove the shipped data is genuinely idempotent, not just the fixture.
     #expect(try seeder.seed(now: now) == 0)
   }
+
+  @Test("Expanding the original seed preserves user edits and performs no old-row updates")
+  func expansionPreservesOriginalRows() throws {
+    let database = try migratedDatabase()
+    let seeder = CatalogSeeder(database: database)
+    let original = Array(ExerciseCatalog.v1.prefix(50))
+    #expect(try seeder.seed(original, now: now) == 50)
+    try database.write { db in
+      try db.execute(sql: "UPDATE exercises SET name = 'My movement', notes = 'Keep', isArchived = 1")
+      try db.execute(sql: "CREATE TABLE expansionUpdates (id TEXT)")
+      try db.execute(sql: "CREATE TRIGGER auditExpansion AFTER UPDATE ON exercises BEGIN INSERT INTO expansionUpdates VALUES (NEW.id); END")
+    }
+    let before = try database.read { db in try Exercise.order { $0.id }.fetchAll(db) }
+    #expect(try seeder.seed(now: now.addingTimeInterval(100)) == ExerciseCatalog.v1.count - 50)
+    let after = try database.read { db in try Exercise.order { $0.id }.fetchAll(db) }
+    let originalIDs = Set(before.map(\.id))
+    #expect(after.filter { originalIDs.contains($0.id) } == before)
+    let updates = try database.read { db in
+      try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM expansionUpdates")
+    }
+    #expect(updates == 0)
+    #expect(try seeder.seed(now: now) == 0)
+    // An older catalogue must not prune entries authored by the newer build.
+    #expect(try seeder.seed(original, now: now) == 0)
+    #expect(try seeder.selectableExercises().count == ExerciseCatalog.v1.count - 50)
+  }
+
+  @Test("Every new movement's complete attribution survives real seeding")
+  func expansionAttributionRoundTrips() throws {
+    let database = try migratedDatabase()
+    let seeder = CatalogSeeder(database: database)
+    try seeder.seed(now: now)
+    let stored = Dictionary(uniqueKeysWithValues: try seeder.selectableExercises().map { ($0.slug, $0) })
+    for expected in ExerciseCatalog.v1.dropFirst(50) {
+      let actual = try #require(stored[expected.slug])
+      #expect(actual.modality == expected.modality)
+      #expect(actual.primaryMuscle == MuscleKey(expected.primaryMuscle))
+      #expect(Set(actual.contributions) == Set(expected.contributions))
+      #expect(actual.unreadableEntryCount == 0)
+    }
+  }
 }
 
 @Suite("The shipped catalogue is well formed")
 struct ExerciseCatalogTests {
+  // BEGIN PERMANENT CATALOGUE IDENTITIES
+  @Test("Shipped slugs keep their permanent ids")
+  func permanentIdentities() {
+    let pinned = """
+      barbell-back-squat 2141aeb9-8b67-5832-91dd-0884206173a6
+      barbell-front-squat 46b7b2d2-42f2-51e9-8535-d00134b5473b
+      hack-squat ae073606-c6d4-5ff9-8043-cddc202f5a5d
+      leg-press 806fa1fa-8da3-5fae-b3ad-113e91d9fe98
+      leg-extension 3ff3622c-e166-581d-ab47-bdbee49afa0a
+      romanian-deadlift e15f932c-bd9f-5182-abc7-442763cfbce9
+      conventional-deadlift 4d6fab67-0dfd-5304-ad2d-09710c22ecae
+      seated-leg-curl 049c5267-2be5-5e29-9aa5-9ddd5d4b5aac
+      lying-leg-curl f442b84c-cc45-5437-97a3-b5fdde3f4327
+      hip-thrust 7665ad74-7f11-566b-be9a-bd8e9feb9d95
+      bulgarian-split-squat 3b270010-5d55-506b-8199-0f53b80440c0
+      standing-calf-raise 940029be-c7e6-5d22-87f7-bbcef1d2143f
+      seated-calf-raise 686670d7-855d-5b7e-8242-487e501b53ed
+      barbell-bench-press 668d15d9-1181-534e-b8e7-b3aece6c914a
+      incline-barbell-bench-press 29c5f886-e58a-5c94-9a20-a9e1a0485ec6
+      dumbbell-bench-press 446a021e-d536-5b7d-96f2-d54f0141f73f
+      incline-dumbbell-press a0623ea0-682f-55d1-ad7a-0a720703ed7d
+      chest-press-machine f19e9ce0-67c8-5d82-a2dd-6b1b5e1ada13
+      pec-deck 32ec43d7-a514-5845-98f0-7eae2a9e35ae
+      cable-fly 6fd64ea9-2b23-5cec-bebe-ffd6caa409eb
+      dip 2bccda58-87f0-5418-b61f-2815619a73b5
+      pull-up 259d7c14-500b-5c05-a39a-edc859c28a20
+      chin-up b9cfb919-457c-5873-b001-8a842d065545
+      lat-pulldown df0d3510-25f3-5f98-a63e-232a13f30ef3
+      seated-cable-row 611b1ae7-fc7e-5aba-a9b3-441b5684d30d
+      barbell-row 0a21aac0-209b-5627-bf6d-80120ceb3a5b
+      chest-supported-row 9afbe580-9c2d-554e-bd5a-b5e98c523ca8
+      single-arm-dumbbell-row 1f1b4e17-b104-51a6-98c2-96510a5d8c18
+      straight-arm-pulldown 9236077a-6784-5e79-969e-811b9f3aa16f
+      overhead-press a5449d5a-4bd2-5b60-881c-dcbe4fd2ffad
+      seated-dumbbell-press af2a4a3b-01c7-5f3e-9c03-9c88e9f1a450
+      lateral-raise 6b823bc2-186c-5022-9f4a-ece3d2b16d8b
+      cable-lateral-raise 513144a3-3f12-562b-af79-6673fddeb061
+      reverse-pec-deck ee726368-4213-5624-a385-170afbbc61af
+      face-pull 332c9e5f-caf6-5820-87bb-eea1033c0705
+      barbell-curl 8668ff40-3999-5eca-8b89-32c33747ec7a
+      dumbbell-curl 58ea086e-223d-5d81-afbe-c1df1be63ef3
+      incline-dumbbell-curl 95df7daa-8ada-52ff-b4ab-a4d0a27ae525
+      preacher-curl 78054ad4-73ab-540f-8a7b-995046cf6b88
+      hammer-curl 9eb4470d-e452-5e57-a8d6-0308ea34f0fb
+      cable-triceps-pushdown f8c888ce-a223-5025-8f87-a9c12de07a5a
+      overhead-cable-extension dc10175f-308b-56d7-8e8b-0e79f8c05190
+      skull-crusher 8ff53fd6-a4e6-5115-a5fd-b48e9674c34b
+      close-grip-bench-press 0b8342ec-7bd7-5b49-acea-077aec8249fd
+      shrug 8e9234e6-6ef4-5e84-8814-4fae767c0e83
+      cable-crunch 4bb8fb96-0fac-5e37-8f55-073860eefd4b
+      hanging-leg-raise d804c206-70be-559d-aade-02cbb159c723
+      back-extension 404f7e81-5a0d-5a6b-bbf6-6eb72e85489d
+      wrist-curl 472004ef-5b01-52f6-8550-519880c45d6c
+      reverse-wrist-curl 0b0f4101-98b5-5e8e-8ece-fb8681e0ca21
+      horizontal-leg-press e2905df6-184f-5223-991c-6f2a05e5b83c
+      single-leg-press 1c253d38-2b2c-5e8f-b2ba-c8fd251d7a0e
+      smith-machine-squat f67ec066-8c46-58b1-bbb1-d56af7359f88
+      pendulum-squat 6a413ea2-8cb5-5c34-b885-c0187fdb9046
+      belt-squat ae6add92-5dbc-5bd9-aa07-d4f4b2dab2f8
+      goblet-squat bb2fd281-bf5f-5500-930c-82922cd1020f
+      dumbbell-front-squat df7a6ec9-6fc5-5aaa-80aa-7fff94c9d536
+      barbell-split-squat 895392c5-5946-5f9e-9f9f-76c008df9b1e
+      dumbbell-reverse-lunge 8fb3f86c-3cbc-595c-af59-613e84dbac1d
+      dumbbell-walking-lunge 7570b68a-f102-5e79-9b60-19ba38555d92
+      dumbbell-step-up ee1fb1dc-5b63-5f4d-9485-5366d71bc0ae
+      smith-machine-split-squat fbcecc62-157d-5354-bbf5-98753130806f
+      single-leg-extension 5b7ccc74-a76f-58f1-825f-a9bdb8f8123c
+      standing-leg-curl 0c1d994a-d6d4-5ec9-a755-ba541c72f0ec
+      single-leg-seated-leg-curl 0b15b0cd-dda9-5cab-9233-3d1b8487442a
+      nordic-hamstring-curl f73a70bc-6b4a-5c17-9026-c1adbc7cb4e0
+      dumbbell-romanian-deadlift 3e104211-da92-5539-970f-881c37d4db81
+      single-leg-romanian-deadlift 8d6fb9df-f678-513a-aef3-0e8174e77185
+      smith-machine-romanian-deadlift 11c23621-900c-59d0-971c-a121bd9c4fb3
+      barbell-good-morning b552ae66-dc15-5daf-aef9-b277d51281cc
+      cable-pull-through 4e4b080d-cdb4-5459-8874-ae20b72e4e3b
+      machine-hip-thrust 10c199d7-67b5-5df1-90cc-afc8e50e3f64
+      dumbbell-hip-thrust 27bdb80a-58ce-5111-aa5c-a1c810e34ce4
+      glute-bridge 5f01f79c-9a48-53f8-9471-8d3591f11bf4
+      cable-glute-kickback 44f3fdec-f2ea-5781-9701-65edd7964be2
+      hip-extension-machine 15f95a02-7a92-5cbd-865c-a0bb3e22d265
+      hip-adduction-machine dd2e5975-a0e2-5982-8c72-4820006f649f
+      hip-abduction-machine 065406b1-f7a6-5351-811e-7b2ed18c0ea7
+      standing-cable-hip-abduction 02057a33-45d9-532d-ac2e-da0d1a72c5f9
+      leg-press-calf-raise 49be22e8-1366-5cdd-a555-6c80bd6d10cc
+      single-leg-dumbbell-calf-raise 23ab8549-58d8-5254-8618-f0e69fa5d398
+      smith-machine-calf-raise cb2361b3-5909-5633-baae-259a0be878e3
+      """.split(separator: "\n").map { $0.split(separator: " ").map(String.init) }
+    let expected = Dictionary(uniqueKeysWithValues: pinned.map { ($0[0], $0[1]) })
+    let actual = Dictionary(uniqueKeysWithValues: ExerciseCatalog.v1.map { ($0.slug, $0.id) })
+    #expect(actual == expected)
+  }
+  // END PERMANENT CATALOGUE IDENTITIES
+
+  @Test("Expansion citations distinguish anatomical inference from trial evidence")
+  func expansionSourcesAreExplicit() throws {
+    for entry in ExerciseCatalog.v1.dropFirst(50) {
+      for contribution in entry.contributions {
+        let citation = try #require(contribution.citation, "\(entry.slug) lacks a source")
+        #expect(contribution.certainty == .moderate || contribution.certainty == .low)
+        if contribution.role == .stabilizer {
+          #expect(contribution.sourceID == AttributionSourceID.convention.rawValue)
+          #expect(citation.contains("docs/MuscleTaxonomy-spec.md §5 G2"))
+          #expect(contribution.setWeight == 0)
+        } else {
+          #expect(contribution.sourceID == AttributionSourceID.anatomy.rawValue)
+          #expect(citation.contains("docs/research/tax-spec.md §1 and §5 G1–G3"))
+          #expect(citation.contains("not a variant-specific growth trial"))
+        }
+      }
+    }
+  }
+
   /// A malformed UUID literal would fail at seed time on a user's device, so it is caught here.
   @Test("Every id is a valid UUID, lowercase, and unique")
   func idsAreValid() {

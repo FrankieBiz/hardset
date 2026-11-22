@@ -70,7 +70,9 @@ struct CatalogSearchTests {
     ]))
     #expect(!names("dumbbell press").contains("Barbell Bench Press"))
     #expect(names("press dumbbell incline") == ["Incline Dumbbell Press"])
-    #expect(Set(names("leg curl")) == ["Seated Leg Curl", "Lying Leg Curl"])
+    #expect(Set(names("leg curl")) == [
+      "Seated Leg Curl", "Lying Leg Curl", "Standing Leg Curl", "Single-Leg Seated Leg Curl",
+    ])
     #expect(Set(names("pull up")) == ["Pull-up"])
   }
 
