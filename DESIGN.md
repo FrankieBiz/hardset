@@ -410,8 +410,19 @@ Selection rows, the unit switch and pickers stay silent.
   its body's own load is unknown and, under it, "Equipment not set, so no max is estimated. Set it in
   Library, on the Train tab." (`ProgressCopy.equipmentNotSet`, also in the chart and spoken by VoiceOver).
   The estimated max appears once the lifter has declared equipment that has one, never before, and
-  naming a body part declares nothing; a bodyweight movement gets none however it is declared. Machine
-  and cable movements whose sets have no
+  naming a body part declares nothing; a bodyweight movement gets none however it is declared.
+  Imported history is never merged into what the lifter logged, so a lift can have two rows, and the
+  split is stated rather than hidden (`ProgressBoard.sourceNotes`, in `provenance` and `chalkDim` as the
+  last line of a row): an imported row says "Not combined with sets you log in Hardset, even for the same
+  lift"; a movement with both an imported series and a logged one, which is what an import under the
+  catalogue's own name makes, says on each row that the other is on its own row; and a logged row with no
+  imported series of its own movement says nothing, because two names that look alike are not evidence
+  of one lift and the app does not guess. Above the rows, in `caption`, the board says once why a lift
+  can appear twice, whenever any row is imported. Under a movement's chart, one `caption` says an
+  imported line is kept as its own series because an imported set records no machine. No merge action is
+  offered: the two series would stay two rows either way, since an imported series has its own key, and
+  moving sets between movements would rewrite history to draw the same chart. Machine and cable
+  movements whose sets have no
   machine say "No machine recorded" there and in the chart legend. A movement with no record in its last
   three sessions is flagged "Stalled · 3 sessions" in `warning` with `pause.circle`, and no advice. "Most
   improved · estimated max" at the top repeats three estimated-max gains, ordered by the confidence of

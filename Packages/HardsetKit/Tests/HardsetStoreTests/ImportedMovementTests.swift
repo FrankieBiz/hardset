@@ -347,4 +347,86 @@ struct ImportedMovementTests {
 
     #expect(try await metric() == .estimatedMax)
   }
+
+  // MARK: - Imported history beside what was logged here
+
+  /// Two native sessions of a movement, finished, at `kg` x 5.
+  private func logNatively(
+    _ database: any DatabaseWriter, _ exercise: ExerciseID, loads: [Double], from start: Date
+  ) throws {
+    let store = LoggerStore(database: database)
+    for (index, kg) in loads.enumerated() {
+      let at = start.addingTimeInterval(Double(index) * 7 * 86_400)
+      let session = try store.startSession(at: at)
+      _ = try store.logSet(
+        sessionID: session, exerciseID: exercise, draft: SetEntryDraft(weightKg: kg, reps: 5),
+        setOrdinal: 0, at: at.addingTimeInterval(60))
+      try store.finishSession(session, at: at.addingTimeInterval(3600))
+    }
+  }
+
+  @Test("An import under the catalogue's own name sits beside the logged history, apart and unchanged")
+  func exactNameImportIsASeparateSeriesAndNothingIsRewritten() async throws {
+    let database = try migratedDatabase()
+    let seeder = CatalogSeeder(database: database)
+    try seeder.seed()
+    let bench = try #require(try seeder.libraryExercises().first { $0.name == "Barbell Bench Press" })
+    let start = try #require(ISO8601DateFormatter().date(from: "2026-11-01T10:00:00Z"))
+    try logNatively(database, bench.id, loads: [80, 85], from: start)
+    func nativeLoads() async throws -> [UUID: Double] {
+      try await database.read { db in
+        Dictionary(
+          uniqueKeysWithValues: try LoggedSet.where { $0.exerciseID.eq(bench.id.rawValue) }
+            .fetchAll(db).filter { $0.completedAt >= start }.map { ($0.id, $0.weightKg) })
+      }
+    }
+    let nativeBefore = try await nativeLoads()
+    #expect(nativeBefore.count == 2)
+
+    try await importCSV(
+      database,
+      strongCSV("Barbell Bench Press", days: ["2026-09-01", "2026-09-08"]))
+
+    let board = try await ProgressBoardStore(database: database).loadBoard()
+    let rows = board.rows.filter { $0.id.exerciseID == bench.id }
+    // Two rows for one movement: one imported series, one logged series, never one line.
+    #expect(rows.count == 2)
+    let imported = try #require(rows.first { $0.id.isImported })
+    let logged = try #require(rows.first { !$0.id.isImported })
+    #expect(imported.machineName == ProgressCopy.importedHistory)
+    #expect(imported.trend.sparkline != logged.trend.sparkline)
+    #expect(board.sourceNotes[imported.id] == ProgressCopy.importedBesideLogged)
+    #expect(board.sourceNotes[logged.id] == ProgressCopy.loggedBesideImported)
+    #expect(board.hasImportedHistory)
+    // Nothing was moved or rewritten to produce that: the logged sets are exactly as they were,
+    // and the import made no movement of its own.
+    #expect(try await nativeLoads() == nativeBefore)
+    #expect(try seeder.libraryExercises().filter(\.isImported).isEmpty)
+  }
+
+  @Test("An import under another name stays its own movement, and nothing claims it is the logged one")
+  func differentNameImportIsNotMatchedByGuessing() async throws {
+    let database = try migratedDatabase()
+    let seeder = CatalogSeeder(database: database)
+    try seeder.seed()
+    let bench = try #require(try seeder.libraryExercises().first { $0.name == "Barbell Bench Press" })
+    let start = try #require(ISO8601DateFormatter().date(from: "2026-11-01T10:00:00Z"))
+    try logNatively(database, bench.id, loads: [80, 85], from: start)
+
+    try await importCSV(database, strongCSV(days: ["2026-09-01", "2026-09-08"]))
+
+    let board = try await ProgressBoardStore(database: database).loadBoard()
+    let imported = try #require(board.rows.first { $0.exerciseName == importedName })
+    let logged = try #require(board.rows.first { $0.id.exerciseID == bench.id })
+    #expect(imported.id.exerciseID != bench.id)
+    #expect(imported.id.isImported && !logged.id.isImported)
+    // Neither row names the other, because nothing established that they are one lift.
+    #expect(board.sourceNotes[imported.id] == ProgressCopy.importedAlone)
+    #expect(board.sourceNotes[logged.id] == nil)
+    #expect(board.hasImportedHistory)
+    let importedSets = try await database.read { db in
+      try LoggedSet.where { $0.exerciseID.eq(imported.id.exerciseID.rawValue) }.fetchAll(db).count
+    }
+    #expect(importedSets == 2)
+  }
 }

@@ -107,8 +107,37 @@ public enum ProgressCopy {
     trend.loadAssumption == nil ? nil : equipmentNotSet
   }
 
-  /// A row as VoiceOver reads it: the movement and machine, the change, and any stall.
-  public static func spokenRow(_ row: ProgressBoard.Row) -> String {
+  // MARK: - Imported history beside what was logged here
+
+  /// An imported movement's own row, with no movement of the same identity logged in Hardset. The
+  /// lifter may well have the same lift under another name; the app does not guess that two names
+  /// are one movement, so it says the rows are not combined rather than where the other half is.
+  public static let importedAlone =
+    "Not combined with sets you log in Hardset, even for the same lift."
+
+  /// An imported series on a movement the lifter has also logged here: one movement, two rows.
+  public static let importedBesideLogged =
+    "Not combined with the sets you logged in Hardset for this movement, which are on their own row."
+
+  /// The logged half of the same pair.
+  public static let loggedBesideImported =
+    "Not combined with this movement's imported history, which is on its own row."
+
+  /// Said once above the board when any row is imported, for the lift whose two halves carry two
+  /// names and so cannot be pointed at one another. States the rule instead of a guess.
+  public static let importedBoardNote =
+    "Imported history stays on its own rows, so one lift can appear twice: once as imported, once as "
+    + "logged in Hardset. Hardset does not guess that two names are the same movement, and never joins "
+    + "two series into one line."
+
+  /// Said under a movement's chart when one of its lines is imported history.
+  public static let importedSeriesNote =
+    "An imported set records no machine, so Hardset keeps the imported line as its own series and "
+    + "does not join it to the others."
+
+  /// A row as VoiceOver reads it: the movement and machine, the change, any stall, and, when the row
+  /// has one, how it relates to the history on the other source.
+  public static func spokenRow(_ row: ProgressBoard.Row, sourceNote: String? = nil) -> String {
     var sentences = [[row.exerciseName, row.machineName].compactMap { $0 }.joined(separator: ", ")]
     if let change = changeText(for: row.trend) {
       sentences.append(change)
@@ -119,6 +148,7 @@ public enum ProgressCopy {
     if let assumption = row.trend.loadAssumption { sentences.append(assumption) }
     if let note = equipmentNote(for: row.trend) { sentences.append(note) }
     if let stalled = stalledText(for: row.trend) { sentences.append(stalled) }
+    if let sourceNote { sentences.append(sourceNote) }
     return sentences.map { $0.hasSuffix(".") ? $0 : $0 + "." }.joined(separator: " ")
   }
 }

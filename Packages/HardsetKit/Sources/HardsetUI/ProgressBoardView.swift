@@ -12,6 +12,11 @@ import SwiftUI
 /// states. A movement that has not set a record in its last three sessions is flagged "Stalled" in
 /// the warning colour, with no advice attached: it is a fact about the sessions, not a prescription.
 ///
+/// Imported history is never merged into what the lifter logged here, so a lift can have two rows.
+/// Each imported row says it is not combined with the sets logged in Hardset, a movement with both
+/// halves says so on both rows, and the board says once, above its rows, why a lift can appear
+/// twice. No two names are guessed to be one movement.
+///
 /// The words come from `ProgressCopy` and the grouping from `ProgressBoard`, both tested without a
 /// view; this draws them. The sparkline is decoration for the eye and is hidden from VoiceOver,
 /// which reads the sentence instead.
@@ -24,6 +29,8 @@ public struct ProgressBoardView: View {
   private let subtitle: String?
   private let onSelect: (ProgressBoard.Row) -> Void
   private let onShowSettings: (() -> Void)?
+  /// Read once from the board, not per row: how an imported row and the logged row beside it relate.
+  private let sourceNotes: [ProgressionKey: String]
 
   @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
@@ -38,6 +45,7 @@ public struct ProgressBoardView: View {
     onSelect: @escaping (ProgressBoard.Row) -> Void
   ) {
     self.board = board
+    self.sourceNotes = board.sourceNotes
     self.title = title
     self.subtitle = subtitle
     self.onShowSettings = onShowSettings
@@ -58,6 +66,14 @@ public struct ProgressBoardView: View {
           )
           .padding(.top, Tokens.Spacing.section)
         } else {
+          if board.hasImportedHistory {
+            Text(ProgressCopy.importedBoardNote)
+              .font(Tokens.Text.caption)
+              .foregroundStyle(Tokens.Color.chalkDim)
+              .fixedSize(horizontal: false, vertical: true)
+              .padding(.horizontal, Tokens.Spacing.loose)
+              .padding(.top, Tokens.Spacing.regular)
+          }
           if !board.mostImproved.isEmpty {
             mostImprovedStrip(board.mostImproved, metric: .estimatedMax)
           }
@@ -148,7 +164,7 @@ public struct ProgressBoardView: View {
     }
     .buttonStyle(SelectionCardButtonStyle(isSelected: false))
     .accessibilityElement(children: .ignore)
-    .accessibilityLabel(ProgressCopy.spokenRow(row))
+    .accessibilityLabel(ProgressCopy.spokenRow(row, sourceNote: sourceNotes[row.id]))
     .accessibilityHint("Opens its history")
     .overlay(alignment: .bottomTrailing) {
       badge(for: row)
@@ -213,6 +229,12 @@ public struct ProgressBoardView: View {
           Label(stalled, systemImage: "pause.circle")
             .font(Tokens.Text.provenance)
             .foregroundStyle(Tokens.Color.warning)
+        }
+        if let note = sourceNotes[row.id] {
+          Text(note)
+            .font(Tokens.Text.provenance)
+            .foregroundStyle(Tokens.Color.chalkDim)
+            .fixedSize(horizontal: false, vertical: true)
         }
       }
       .frame(maxWidth: .infinity, alignment: .leading)
