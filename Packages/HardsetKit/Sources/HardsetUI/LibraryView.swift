@@ -161,8 +161,16 @@ public struct LibraryView: View {
     }
   }
 
-  /// "Lats, also biceps", or the plain fact that nothing says what it trains.
+  /// "Lats, also biceps", or the plain fact that nothing says what it trains. A movement of the
+  /// lifter's with no equipment on record says so too: an imported one has none until they say, and
+  /// no max is estimated for it, which the tag row cannot say by leaving something out.
   static func detail(for entry: CatalogEntry) -> String {
+    let muscles = muscleDetail(for: entry)
+    guard entry.modality == nil, !entry.isCurated else { return muscles }
+    return muscles + " · Equipment not set"
+  }
+
+  private static func muscleDetail(for entry: CatalogEntry) -> String {
     guard entry.primaryMuscle.isAttributed else { return "No body part yet" }
     let primary = ExercisePickerView.displayName(entry.primaryMuscle)
     let others = entry.creditedMuscles.filter { $0.key != entry.primaryMuscle }

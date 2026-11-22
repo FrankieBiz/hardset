@@ -92,6 +92,21 @@ public enum ProgressCopy {
     trend.stalledSessions.map { "Stalled · \($0) sessions" }
   }
 
+  /// Said beside "the body's own load is unknown": what is missing, and the one place it is set.
+  ///
+  /// The assumption sentence is true of a movement with no equipment on record, but for a barbell or
+  /// machine lift it reads as nonsense, and an imported lift has no equipment until its owner says.
+  /// This says the max is withheld rather than guessed, and where the lifter can end that. It does
+  /// not promise a max: a bodyweight movement gets none however it is declared.
+  public static let equipmentNotSet =
+    "Equipment not set, so no max is estimated. Set it in Library, on the Train tab."
+
+  /// The note that goes with a trend whose load is assumed, which is exactly a movement with no
+  /// equipment on record. Nil for every other trend.
+  public static func equipmentNote(for trend: MovementTrend) -> String? {
+    trend.loadAssumption == nil ? nil : equipmentNotSet
+  }
+
   /// A row as VoiceOver reads it: the movement and machine, the change, and any stall.
   public static func spokenRow(_ row: ProgressBoard.Row) -> String {
     var sentences = [[row.exerciseName, row.machineName].compactMap { $0 }.joined(separator: ", ")]
@@ -102,6 +117,7 @@ public enum ProgressCopy {
       sentences.append(historyText(for: row.trend))
     }
     if let assumption = row.trend.loadAssumption { sentences.append(assumption) }
+    if let note = equipmentNote(for: row.trend) { sentences.append(note) }
     if let stalled = stalledText(for: row.trend) { sentences.append(stalled) }
     return sentences.map { $0.hasSuffix(".") ? $0 : $0 + "." }.joined(separator: " ")
   }

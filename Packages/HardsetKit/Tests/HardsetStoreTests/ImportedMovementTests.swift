@@ -220,4 +220,131 @@ struct ImportedMovementTests {
     #expect(kept.primaryMuscle.storedValue == "chest")
     #expect(kept.modality == .barbell)
   }
+
+  // MARK: - Equipment, and the estimated max it allows
+
+  /// Two Strong sessions of the same lift, 42 days apart, at 100 kg x 5 and 110 kg x 5, so the
+  /// board has a six-week comparison to state.
+  private func importBench(_ database: any DatabaseWriter) async throws -> CatalogEntry {
+    let csv = "Date,Workout Name,Duration,Exercise Name,Set Order,Weight,Reps\n"
+      + "2026-09-01 10:00:00,Push,1h,Bench Press (Barbell),1,100,5\n"
+      + "2026-10-13 10:00:00,Push,1h,Bench Press (Barbell),1,110,5\n"
+    try await importCSV(database, csv)
+    return try importedEntry(CatalogSeeder(database: database))
+  }
+
+  private func benchRow(_ database: any DatabaseWriter) async throws -> ProgressBoard.Row {
+    let board = try await ProgressBoardStore(database: database).loadBoard()
+    return try #require(board.sections.flatMap(\.rows).first { $0.exerciseName == importedName })
+  }
+
+  @Test("An imported lift with no declared equipment gets no estimated max, only the added-load reading")
+  func undeclaredImportHasNoEstimate() async throws {
+    let database = try migratedDatabase()
+    let imported = try await importBench(database)
+
+    let row = try await benchRow(database)
+    #expect(row.trend.metric == .addedLoad)
+    #expect(row.trend.certainty == .low)
+    #expect(row.trend.loadAssumption == ExerciseModality.unknownLoadAssumption)
+    #expect(ProgressCopy.equipmentNote(for: row.trend) == ProgressCopy.equipmentNotSet)
+    let chart = try await ProgressionStore(database: database).loadHistory(for: imported.id)
+    #expect(chart.assumesAddedLoad)
+    #expect(!chart.estimatesOneRepMax)
+    #expect(chart.series.flatMap(\.points).allSatisfy { $0.bestEstimatedOneRepMaxKg == nil })
+  }
+
+  @Test("Giving the lift a body part and nothing else does not make an estimate appear")
+  func bodyPartAloneDoesNotDeclareEquipment() async throws {
+    let database = try migratedDatabase()
+    let seeder = CatalogSeeder(database: database)
+    let imported = try await importBench(database)
+
+    _ = try seeder.updateCustomExercise(
+      imported.id, name: imported.name, attribution: try #require(CustomAttribution(primary: .chest)))
+
+    let row = try await benchRow(database)
+    #expect(row.trend.metric == .addedLoad)
+    #expect(row.trend.loadAssumption != nil)
+    let chart = try await ProgressionStore(database: database).loadHistory(for: imported.id)
+    #expect(!chart.estimatesOneRepMax)
+    #expect(chart.series.flatMap(\.points).allSatisfy { $0.bestEstimatedOneRepMaxKg == nil })
+  }
+
+  @Test("Once the lifter says it is a barbell lift the estimated max appears, from their declaration")
+  func declaredBarbellGetsAnEstimate() async throws {
+    let database = try migratedDatabase()
+    let seeder = CatalogSeeder(database: database)
+    let imported = try await importBench(database)
+
+    _ = try seeder.updateCustomExercise(
+      imported.id, name: imported.name,
+      attribution: try #require(CustomAttribution(primary: .chest, modality: .barbell)))
+
+    let row = try await benchRow(database)
+    #expect(row.trend.metric == .estimatedMax)
+    #expect(row.trend.loadAssumption == nil)
+    #expect(ProgressCopy.equipmentNote(for: row.trend) == nil)
+    // 5 reps is inside the range the formula was fitted on, so the estimate is as certain as
+    // a native one: Epley, 110 x (1 + 5/30), against the session 42 days before.
+    #expect(row.trend.certainty == .high)
+    let latest = try #require(row.trend.sparkline.last)
+    #expect(abs(latest - 110 * (1 + 5.0 / 30)) < 1e-9)
+    let change = try #require(row.trend.sixWeekChange)
+    #expect(abs(change - (110.0 / 100 - 1)) < 1e-9)
+    #expect(ProgressCopy.changeText(for: row.trend) == "Estimated max +10% in 6 weeks")
+    let chart = try await ProgressionStore(database: database).loadHistory(for: imported.id)
+    #expect(chart.estimatesOneRepMax)
+    #expect(!chart.assumesAddedLoad)
+    #expect(chart.series.flatMap(\.points).allSatisfy { $0.bestEstimatedOneRepMaxKg != nil })
+    // Declared, and still described as imported history, on its own series.
+    #expect(row.id.isImported)
+    #expect(row.machineName == ProgressCopy.importedHistory)
+  }
+
+  @Test("Declaring a bodyweight movement never produces an estimated max, whoever declares it")
+  func declaredBodyweightStillHasNoEstimate() async throws {
+    let database = try migratedDatabase()
+    let seeder = CatalogSeeder(database: database)
+    let imported = try await importBench(database)
+
+    _ = try seeder.updateCustomExercise(
+      imported.id, name: imported.name,
+      attribution: try #require(CustomAttribution(primary: .chest, modality: .bodyweight)))
+
+    let row = try await benchRow(database)
+    #expect(row.trend.metric == .repsAtTopLoad)
+    #expect(row.trend.loadAssumption == nil)
+    let chart = try await ProgressionStore(database: database).loadHistory(for: imported.id)
+    #expect(!chart.estimatesOneRepMax)
+    #expect(chart.series.flatMap(\.points).allSatisfy { $0.bestEstimatedOneRepMaxKg == nil })
+  }
+
+  @Test("A movement the lifter made with no equipment is held to the same rule")
+  func nativeUnknownEquipmentIsHeldToTheSameRule() async throws {
+    let database = try migratedDatabase()
+    let seeder = CatalogSeeder(database: database)
+    let own = try seeder.createCustomExercise(named: "Pendulum press")
+    let store = LoggerStore(database: database)
+    let start = Date(timeIntervalSince1970: 14_000_000)
+    for (daysAgo, kg) in [(42.0, 100.0), (0.0, 110.0)] {
+      let at = start.addingTimeInterval(-daysAgo * 86_400)
+      let session = try store.startSession(at: at)
+      _ = try store.logSet(
+        sessionID: session, exerciseID: own.id, draft: SetEntryDraft(weightKg: kg, reps: 5),
+        setOrdinal: 0, at: at.addingTimeInterval(60))
+      try store.finishSession(session, at: at.addingTimeInterval(3600))
+    }
+    func metric() async throws -> TrendMetric {
+      let board = try await ProgressBoardStore(database: database).loadBoard()
+      return try #require(board.sections.flatMap(\.rows).first { $0.id.exerciseID == own.id }).trend.metric
+    }
+    #expect(try await metric() == .addedLoad)
+
+    _ = try seeder.updateCustomExercise(
+      own.id, name: own.name,
+      attribution: try #require(CustomAttribution(primary: .chest, modality: .machine)))
+
+    #expect(try await metric() == .estimatedMax)
+  }
 }

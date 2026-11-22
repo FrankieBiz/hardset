@@ -203,6 +203,12 @@ public struct ProgressBoardView: View {
             .foregroundStyle(Tokens.Color.chalkDim)
             .fixedSize(horizontal: false, vertical: true)
         }
+        if let note = ProgressCopy.equipmentNote(for: row.trend) {
+          Text(note)
+            .font(Tokens.Text.provenance)
+            .foregroundStyle(Tokens.Color.chalkDim)
+            .fixedSize(horizontal: false, vertical: true)
+        }
         if let stalled = ProgressCopy.stalledText(for: row.trend) {
           Label(stalled, systemImage: "pause.circle")
             .font(Tokens.Text.provenance)

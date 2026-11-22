@@ -335,7 +335,9 @@ Selection rows, the unit switch and pickers stay silent.
   symbol, "Needs a body part", because until one is tagged its sets count toward no muscle. A row is a
   56 pt `SelectionCardButtonStyle` button for the lifter's own movement, marked "Custom", or "Imported"
   for one a workout import created, and opens the editor; a curated movement is a flat card with no
-  tag, because a tag repeated on every row says nothing, and its spoken label still says "Curated". It does
+  tag, because a tag repeated on every row says nothing, and its spoken label still says "Curated". A
+  movement that is not curated and has no equipment on record says "Equipment not set" after its
+  muscles in `provenance`, so the absence of a tag is not the only sign. It does
   not open the editor, so nothing that looks tappable does nothing. The footer lists every body part, zeros
   included, in `figure` against `chalkDim` for a zero, each row under a `hairline`. It reads what is
   there: loading is a quiet line, a failed read says so in `HardsetEmptyState`, and neither draws an empty
@@ -403,7 +405,13 @@ Selection rows, the unit switch and pickers stay silent.
   `ProgressTrendAnalyzer.comparisonBandDays`, and the words are written from it. Beside every estimated-max figure sits its `CertaintyBadge`, drawn over the card's corner
   as its own control so it never nests inside the card's button. A six-week change uses the weaker
   certainty of its two estimates. Imported history has its own series and says "Imported · machine
-  not recorded" in the same `provenance` role. Machine and cable movements whose sets have no
+  not recorded" in the same `provenance` role. A movement with no equipment on record, which is every
+  imported one until the lifter sets it in Library, shows its added-load reading with the sentence that
+  its body's own load is unknown and, under it, "Equipment not set, so no max is estimated. Set it in
+  Library, on the Train tab." (`ProgressCopy.equipmentNotSet`, also in the chart and spoken by VoiceOver).
+  The estimated max appears once the lifter has declared equipment that has one, never before, and
+  naming a body part declares nothing; a bodyweight movement gets none however it is declared. Machine
+  and cable movements whose sets have no
   machine say "No machine recorded" there and in the chart legend. A movement with no record in its last
   three sessions is flagged "Stalled · 3 sessions" in `warning` with `pause.circle`, and no advice. "Most
   improved · estimated max" at the top repeats three estimated-max gains, ordered by the confidence of
