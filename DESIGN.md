@@ -487,6 +487,19 @@ Selection rows, the unit switch and pickers stay silent.
   working as it shows in the figure: a receipt's records are derived from the receipt as it is read now,
   found again by the set's id, and a chart's from the history as it is read now, so neither explains a
   record or an estimate from the figures before the correction. It adds no token and no motion.
+- **History search and month jump** (`HistorySearch`, `HistorySearchBar`, `HistoryMonthJumpSheet`): under the
+  History header, the app's own search field and, beside it, a round calendar header button. The field finds
+  workouts by movement, machine or gym and says so in its prompt; typing waits for a pause before anything is
+  read, and the results are the same month-grouped cards, opening the same receipt, with a subtitle that names
+  the words ("7 workouts match “bench”, newest first"). A search that finds nothing is a `HardsetEmptyState`
+  that names the words, "No workouts match “deadlift”", never a blank screen; one still being read says so in
+  a quiet line, and one that failed says history is safe. The field sits in the one scrolling column every
+  state shares, so a no-match never rebuilds it and the keyboard stays up; dragging the list puts it away. The
+  calendar button opens a sheet of the months that hold workouts, under pinned year headings, each a
+  `SelectionRow` with its workout count and the current month marked by the ring and check. Choosing one starts
+  the list at that month's last workout and pages older; the subtitle says "from March 2023 and earlier", and a
+  quiet "Back to latest workouts" button returns. A search spans all of history, so the calendar button is
+  hidden while one is showing. It adds no token and no motion.
 - **Selection** (`SelectionRow`, `SelectionCardButtonStyle`, `SelectionIndicator`): selected choices
   take the plate blue ring and `plateBlueSurface`, and the trailing indicator swaps an empty ring
   for a filled check, so the choice is carried by shape as well as colour. A pressed selection

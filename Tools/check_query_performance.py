@@ -102,6 +102,10 @@ WHOLE_HISTORY = {
     # History search reads the names of movements, machines and gyms whole and matches them in
     # Swift, by the movement picker's rules; these are catalogues of hundreds of rows, not history.
     "history search movement names", "history search machine names", "history search gym names",
+    # The month picker lists the months that hold workouts: one start time per finished workout, read
+    # in index order and grouped in Swift, because a month is cut by the lifter's calendar and not
+    # by UTC. It runs when the picker opens, not on a keystroke.
+    "history months",
 }
 
 
@@ -150,6 +154,21 @@ UPGRADED_QUERIES = {
     "history search resolve sessions": (
         'SELECT id, startedAt FROM sessions WHERE id IN (?, ?, ?) AND finishedAt IS NOT NULL',
         ("session-100", "session-101", "session-102"),
+    ),
+    # Jumping to a month (HistoryStore.loadHistory(limit:startedBefore:) and loadMonths): the page
+    # starts at the month's end and walks the history index, in its own order, so none of these
+    # sorts. Counting reads the same index.
+    "history page from a month": (
+        'SELECT * FROM sessions WHERE finishedAt IS NOT NULL AND startedAt < ? ORDER BY startedAt DESC, id DESC LIMIT 50',
+        ("2020-01-01",),
+    ),
+    "history count from a month": (
+        'SELECT count(*) FROM sessions WHERE finishedAt IS NOT NULL AND startedAt < ?',
+        ("2020-01-01",),
+    ),
+    "history months": (
+        'SELECT startedAt FROM sessions WHERE finishedAt IS NOT NULL ORDER BY startedAt DESC',
+        (),
     ),
 }
 

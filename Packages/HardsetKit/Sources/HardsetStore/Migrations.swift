@@ -620,6 +620,24 @@ public nonisolated enum HardsetMigrations {
       .execute(db)
     }
 
+    // Jumping to a month in History. The list reads finished workouts newest first, and from a month
+    // back, `startedAt < ?`, with the id as the tie-break so a page boundary is stable. No index
+    // matched that order: the existing ones lead with the start time alone, or with the finish
+    // time, so each page sorted every finished workout (and the tie-break always needed a sort).
+    // This holds finished rows only, in exactly that order, so the page, its count and the list of
+    // months with data are each read straight off it. Local and non-unique; no synchronized table
+    // changes shape.
+    migrator.registerMigration("v15_historyOrder") { db in
+      try #sql(
+        """
+        CREATE INDEX "sessions_on_historyOrder"
+          ON "sessions"("startedAt" DESC, "id" DESC)
+          WHERE "finishedAt" IS NOT NULL
+        """
+      )
+      .execute(db)
+    }
+
     return migrator
   }
 }

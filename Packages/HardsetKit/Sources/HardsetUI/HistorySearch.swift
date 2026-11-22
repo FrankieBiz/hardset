@@ -58,12 +58,12 @@ struct HistorySearchBar: View {
         HardsetSearchField(text: search.text, prompt: HistoryCopy.searchPrompt)
         if let onJumpToMonth = search.onJumpToMonth {
           HeaderIconButton(
-            systemImage: "calendar", accessibilityLabel: "Jump to a month", action: onJumpToMonth)
+            systemImage: "calendar", accessibilityLabel: HistoryCopy.jumpToMonth, action: onJumpToMonth)
         }
       }
       if let onBackToLatest = search.onBackToLatest {
         Button(action: onBackToLatest) {
-          Label("Back to latest workouts", systemImage: "arrow.up.to.line")
+          Label(HistoryCopy.backToLatest, systemImage: "arrow.up.to.line")
         }
         .buttonStyle(HardsetButtonStyle(.quiet))
       }

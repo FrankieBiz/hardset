@@ -704,6 +704,41 @@ Not verified: no SwiftUI target compiles on Linux. The search field, its focus b
 the list below it changes, Dynamic Type, VoiceOver and the 44 pt targets need a Mac or the macOS
 CI run.
 
+### Jumping to a month
+
+The same finding asked for a way to land near a period instead of scrolling. History now has a
+calendar button that opens the months that hold workouts, newest first under their year.
+Choosing one starts the list at that month's last workout and pages older from there
+(`loadHistory(limit:startedBefore:)`, with the next month's first instant as the bound), and
+"Back to latest workouts" returns to the newest. Only months with data are offered, so a jump
+never lands on an empty month, and the newest month is the newest workouts.
+
+- A month is cut by the lifter's own calendar, not by UTC: a workout at 11:30 pm on the 31st is
+  in the month its owner would say. That is why `loadMonths` reads one start time per finished
+  workout and groups them in Swift; SQL could only cut a month at UTC. It runs when the picker
+  opens, never on a keystroke, and the gate lists it with the whole-history reads.
+- `v15_historyOrder` adds `sessions_on_historyOrder`: `startedAt DESC, id DESC` over finished
+  sessions only. The list's order includes the id tie-break, and no existing index matched it, so
+  each page sorted. With it the page, its count and the month list are read straight off one index.
+  Fixture medians, same 5,000 sessions: a page from a month 0.046 to 0.033 ms with the sort gone,
+  its count 0.124 to 0.042 ms, the month list 1.22 to 0.78 ms. At this size the plan, not the
+  time, is the point. The same index also serves the existing newest-first page, which in a scratch
+  run went from sorting all 5,000 finished sessions (about 0.7 ms) to walking the index and
+  stopping at the limit (about 0.05 ms); that page is not in the gate, because it is a bounded scan
+  of an index rather than a keyed search.
+- The gate runs the page, its count and the month list, and fails without the index ("history page
+  from a month" sorts). `HistoryMonthsTests` pins that every month offered lands on a workout from
+  that month, including workouts on a boundary in a UTC-negative calendar, and that an open workout
+  is not in a month.
+
+Choosing a month hides workouts newer than it until the lifter taps "Back to latest workouts";
+the subtitle says "from March 2023 and earlier" so the list is never read as the whole history.
+A search always spans all of history, so the month button is hidden while a search is showing.
+
+Not verified: the picker sheet, its pinned year headings, selection rows, Dynamic Type and
+VoiceOver reading ("March, 14 workouts" under a "2023" heading) have not been compiled or seen;
+no SwiftUI target builds on Linux.
+
 ## Remaining app-wide work
 
 - Capture Release cold/warm launch, first usable workout, resume, picker, history,

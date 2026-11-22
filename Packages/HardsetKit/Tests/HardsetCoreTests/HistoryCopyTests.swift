@@ -33,4 +33,26 @@ struct HistoryCopyTests {
       #expect(HistoryCopy.searchPrompt.contains(word))
     }
   }
+
+  @Test("A list that starts at a month says so, and says newer workouts are not on it")
+  func anchored() {
+    #expect(HistoryCopy.anchoredSubtitle(month: "March 2023", shown: 1, total: 1)
+      == "1 workout from March 2023 and earlier")
+    #expect(HistoryCopy.anchoredSubtitle(month: "March 2023", shown: 40, total: 40)
+      == "40 workouts from March 2023 and earlier, newest first")
+    #expect(HistoryCopy.anchoredSubtitle(month: "March 2023", shown: 50, total: 120)
+      == "Showing 50 of 120 workouts from March 2023 and earlier")
+    for subtitle in [
+      HistoryCopy.anchoredSubtitle(month: "March 2023", shown: 5, total: 5),
+      HistoryCopy.anchoredSubtitle(month: "March 2023", shown: 5, total: 9),
+    ] {
+      #expect(subtitle.contains("and earlier"))
+    }
+  }
+
+  @Test("A month's row counts its workouts")
+  func monthRow() {
+    #expect(HistoryCopy.workoutCount(1) == "1 workout")
+    #expect(HistoryCopy.workoutCount(14) == "14 workouts")
+  }
 }

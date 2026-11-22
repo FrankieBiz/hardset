@@ -32,4 +32,28 @@ public enum HistoryCopy {
 
   public static let showOlderMatches = "Show older matches"
   public static let readingOlderMatches = "Reading older matches…"
+
+  // MARK: - Jumping to a month
+
+  public static let jumpToMonth = "Jump to a month"
+  public static let backToLatest = "Back to latest workouts"
+  public static let monthSheetLoading = "Reading your months…"
+  public static let monthSheetFailedTitle = "Could not read your months"
+  public static let monthSheetFailedDetail = "Your logged sets are safe. Close this and try again."
+  public static let monthSheetEmptyTitle = "No workouts yet"
+  public static let monthSheetEmptyDetail = "Finished workouts appear here, month by month."
+
+  /// "14 workouts", for a month's row.
+  public static func workoutCount(_ count: Int) -> String {
+    count == 1 ? "1 workout" : "\(count) workouts"
+  }
+
+  /// Under the header when the list starts at a chosen month: where it starts, and how many of the
+  /// workouts from there back are shown. It says "and earlier" because newer workouts are not on
+  /// this list, and the lifter must not read it as the whole history.
+  public static func anchoredSubtitle(month: String, shown: Int, total: Int) -> String {
+    if total == 1 { return "1 workout from \(month) and earlier" }
+    if shown < total { return "Showing \(shown) of \(total) workouts from \(month) and earlier" }
+    return "\(total) workouts from \(month) and earlier, newest first"
+  }
 }

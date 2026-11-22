@@ -522,21 +522,33 @@ public nonisolated struct HistoryStore: Sendable {
 
   /// The newest `limit` finished sessions and the count of all of them, from one snapshot, so the
   /// screen can say "latest 50 of 312" and offer the older ones rather than implying fifty is all.
-  public func loadHistory(limit: Int) async throws -> HistoryPage {
+  ///
+  /// With `startedBefore`, the page starts from there instead: only sessions that started before
+  /// that instant, still newest first, and the count is of those. This is how History lands on a
+  /// month with data (`loadMonths` supplies the instant) without reading every workout newer than it.
+  public func loadHistory(limit: Int, startedBefore bound: Date? = nil) async throws -> HistoryPage {
     try Task.checkCancellation()
     let page = try await database.read { db in
       HistoryPage(
-        sessions: try Self.readRecentSessions(limit: limit, in: db),
-        totalCount: try Session.where { $0.finishedAt.isNot(nil) }.fetchCount(db)
+        sessions: try Self.readRecentSessions(limit: limit, startedBefore: bound, in: db),
+        totalCount: try Self.finished(startedBefore: bound).fetchCount(db)
       )
     }
     try Task.checkCancellation()
     return page
   }
 
-  private static func readRecentSessions(limit: Int, in db: Database) throws -> [SessionSummary] {
-    let sessions = try Session
-      .where { $0.finishedAt.isNot(nil) }
+  /// Finished sessions, and when `bound` is given only those that started before it.
+  private static func finished(startedBefore bound: Date?) -> Where<Session> {
+    let finished = Session.where { $0.finishedAt.isNot(nil) }
+    guard let bound else { return finished }
+    return finished.where { $0.startedAt < bound }
+  }
+
+  private static func readRecentSessions(
+    limit: Int, startedBefore bound: Date? = nil, in db: Database
+  ) throws -> [SessionSummary] {
+    let sessions = try finished(startedBefore: bound)
       .order { ($0.startedAt.desc(), $0.id.desc()) }
       .limit(limit)
       .fetchAll(db)

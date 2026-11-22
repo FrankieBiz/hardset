@@ -18,6 +18,11 @@ import SwiftUI
 /// anything is read, a newer keystroke cancels the read in flight, and the answer is the same list
 /// of workouts, newest first, opening the same receipt. A search that matches nothing says so by
 /// name rather than drawing an empty screen.
+///
+/// A calendar button opens a picker of the months that hold workouts. Choosing one starts the list at
+/// that month's last workout and pages older from there, so a period three years back is two taps
+/// away; "Back to latest workouts" returns to the newest. The month list is read when the picker
+/// opens, not on every appearance of the screen.
 @MainActor
 public struct HistoryScreen: View {
   /// Owns the read. A newer request cancels an older one, and a cancelled or stale completion
@@ -39,6 +44,12 @@ public struct HistoryScreen: View {
   @State private var searchText = ""
   /// How many matches the search reads. Grows a page at a time, and starts over with each query.
   @State private var searchLimit = HistoryScreen.pageSize
+  /// The month the list starts from, when the lifter jumped to one; `nil` starts at the newest.
+  @State private var anchor: HistoryMonth?
+  @State private var isChoosingMonth = false
+  /// Owns the read of the months that hold workouts, so the picker shows a failure rather than an
+  /// empty list, and a slow read is cancelled when the picker closes.
+  @State private var monthsSnapshot = SnapshotLoader<[HistoryMonth]>()
   @Environment(\.scenePhase) private var scenePhase
 
   private let receipts: ReceiptStore?
@@ -117,7 +128,13 @@ public struct HistoryScreen: View {
           unit: unit,
           title: Self.title,
           subtitle: shown.subtitle,
-          search: HistorySearch(text: $searchText, state: shown.state),
+          search: HistorySearch(
+            text: $searchText, state: shown.state,
+            // A search spans all of history, so there is nowhere to jump while one is showing, and
+            // nothing to jump to before a workout has been finished.
+            onJumpToMonth: !isSearching && (listing.totalCount > 0 || anchor != nil)
+              ? { isChoosingMonth = true } : nil,
+            onBackToLatest: !isSearching && anchor != nil ? { jump(to: nil) } : nil),
           onSelect: receipts == nil ? nil : { selectedSession = ReceiptSelection(id: $0.id) },
           onShowOlder: shown.showOlder,
           isLoadingOlder: shown.isLoadingOlder,
@@ -134,7 +151,9 @@ public struct HistoryScreen: View {
     }
     // Keyed on the page size and the reload token, so asking for older workouts, a correction and
     // a return to the foreground each re-read, and a superseded read is cancelled.
-    .task(id: LoadKey(limit: limit, token: reloadToken, revision: dataRevision)) { await load() }
+    .task(id: LoadKey(limit: limit, token: reloadToken, revision: dataRevision, anchor: anchor?.start)) {
+      await load()
+    }
     // Keyed on the words as well, so a keystroke cancels the read, or the pause, of the one before.
     .task(id: SearchKey(query: isSearching ? query : "", limit: searchLimit, token: reloadToken, revision: dataRevision)) {
       await search()
@@ -146,6 +165,17 @@ public struct HistoryScreen: View {
     }
     .onChange(of: scenePhase) { _, phase in
       if phase == .active { reloadToken &+= 1 }
+    }
+    .sheet(isPresented: $isChoosingMonth) {
+      HistoryMonthJumpSheet(
+        content: monthsContent,
+        selected: anchor?.start,
+        onSelect: { month in jump(to: month) },
+        onCancel: { isChoosingMonth = false }
+      )
+      // Read each time the picker opens, so a workout finished since is in it.
+      .task { await loadMonths() }
+      .hardsetSheet()
     }
     .sheet(item: $selectedSession, onDismiss: { receiptDismissed() }) { id in
       if let receipts {
@@ -186,10 +216,38 @@ public struct HistoryScreen: View {
   }
 
   /// Says when the list is a page of more, and how many more. `nil` lets the list state its own
-  /// count when it holds everything.
+  /// count when it holds everything. A list that starts at a month says where, and that newer
+  /// workouts are not on it, so it is never read as the whole history.
   private static func subtitle(_ listing: HistoryListing) -> String? {
+    if let month = listing.anchor {
+      return HistoryCopy.anchoredSubtitle(
+        month: month.formatted(.dateTime.month(.wide).year()),
+        shown: listing.rows.count, total: listing.totalCount)
+    }
     guard listing.hasMore else { return nil }
     return "Latest \(listing.rows.count) of \(listing.totalCount) workouts, newest first"
+  }
+
+  /// Starts the list at `month`, or back at the newest workouts for `nil`. The newest month is the
+  /// newest workouts, so choosing it starts nowhere in particular. The page size starts over, in
+  /// the same change, so the list is read once.
+  private func jump(to month: HistoryMonth?) {
+    let newest = monthsSnapshot.value?.first?.start
+    anchor = month?.start == newest ? nil : month
+    limit = Self.pageSize
+    isChoosingMonth = false
+  }
+
+  private var monthsContent: HistoryMonthJumpSheet.Content {
+    if monthsSnapshot.loadFailed { return .failed }
+    if let months = monthsSnapshot.value { return .months(months) }
+    return .loading
+  }
+
+  private func loadMonths() async {
+    let store = store
+    let calendar = Calendar.current
+    await monthsSnapshot.load { @MainActor in try await store.loadMonths(calendar: calendar) }
   }
 
   private func receiptDismissed() {
@@ -217,9 +275,19 @@ public struct HistoryScreen: View {
   private func load() async {
     let store = store
     let limit = limit
+    let month = anchor
     await snapshot.load { @MainActor in
-      let page = try await store.loadHistory(limit: limit)
-      return HistoryListing(rows: Self.rows(from: page), totalCount: page.totalCount, limit: limit)
+      let page = try await store.loadHistory(limit: limit, startedBefore: month?.end)
+      return HistoryListing(
+        rows: Self.rows(from: page), totalCount: page.totalCount, limit: limit, anchor: month?.start)
+    }
+    // Everything at and before the month was deleted while the list stood on it: fall back to the
+    // newest workouts rather than showing "No workouts yet" over a history that has some.
+    if let month, snapshot.value?.anchor == month.start, snapshot.value?.rows.isEmpty == true,
+      anchor?.start == month.start
+    {
+      anchor = nil
+      self.limit = Self.pageSize
     }
   }
 
@@ -301,6 +369,8 @@ private nonisolated struct HistoryListing: Sendable {
   let rows: [HistoryRow]
   let totalCount: Int
   let limit: Int
+  /// The start of the month the list was read from, or `nil` when it starts at the newest.
+  let anchor: Date?
   var hasMore: Bool { rows.count < totalCount }
 }
 
@@ -318,6 +388,7 @@ private nonisolated struct LoadKey: Hashable, Sendable {
   let limit: Int
   let token: Int
   let revision: Int
+  let anchor: Date?
 }
 
 private nonisolated struct SearchKey: Hashable, Sendable {
