@@ -1,11 +1,13 @@
 import HardsetCore
 import SwiftUI
 
-/// Every movement the lifter can pick, grouped by body part, with how many there are in each.
+/// Every movement the app knows, grouped by body part, with how many there are in each.
 ///
 /// Movements with no body part come first under a warning header, because that is the gap worth
 /// closing: until one is tagged, its sets count toward no muscle and volume says so. Tapping one of
-/// the lifter's own movements opens the editor, tagged or not. A curated movement is the
+/// the lifter's own movements opens the editor, tagged or not. A movement a workout import created
+/// is listed here too, with an "Imported" tag, because this is the only place its body part and
+/// equipment can be set; it opens the same editor, with its name fixed. A curated movement is the
 /// catalogue's finding, shows a "Curated" tag and does not open it, so nothing that looks tappable
 /// does nothing and nothing that is not the lifter's can be retagged.
 ///
@@ -152,6 +154,8 @@ public struct LibraryView: View {
     }
     if entry.isCurated {
       HardsetTag("Curated")
+    } else if entry.isImported {
+      HardsetTag("Imported", systemImage: "square.and.arrow.down")
     } else {
       HardsetTag("Custom", systemImage: "person.crop.circle")
     }

@@ -326,12 +326,16 @@ Selection rows, the unit switch and pickers stay silent.
   control. At
   accessibility sizes a wrapping tag, assumption chip or certainty capsule takes the control radius
   instead of a capsule, so wrapped text stays inside its outline.
-- **Library** (`LibraryView`, `LibraryScreen`): every selectable movement grouped by body part, with a
-  ledger of the count in each at the bottom. Movements with no body part come first under a `warning`
-  header with its `exclamationmark.triangle` symbol, "Needs a body part", because until one is tagged its
-  sets count toward no muscle. A row is a 56 pt `SelectionCardButtonStyle` button for the lifter's own
-  movement, marked "Custom", and opens the editor; a curated movement is a flat card with no tag, because
-  a tag repeated on every row says nothing, and its spoken label still says "Curated". It does
+- **Library** (`LibraryView`, `LibraryScreen`): every movement grouped by body part, with a
+  ledger of the count in each at the bottom. The list is the picker's movements and the ones a workout
+  import created (`CatalogSeeder.libraryExercises`), because the Library is the only place an imported
+  movement's body part and equipment can be set; the picker, search and recent list still leave imported
+  movements out, however they are tagged, so nobody logs today's sets against an imported copy.
+  Movements with no body part come first under a `warning` header with its `exclamationmark.triangle`
+  symbol, "Needs a body part", because until one is tagged its sets count toward no muscle. A row is a
+  56 pt `SelectionCardButtonStyle` button for the lifter's own movement, marked "Custom", or "Imported"
+  for one a workout import created, and opens the editor; a curated movement is a flat card with no
+  tag, because a tag repeated on every row says nothing, and its spoken label still says "Curated". It does
   not open the editor, so nothing that looks tappable does nothing. The footer lists every body part, zeros
   included, in `figure` against `chalkDim` for a zero, each row under a `hairline`. It reads what is
   there: loading is a quiet line, a failed read says so in `HardsetEmptyState`, and neither draws an empty
@@ -346,6 +350,13 @@ Selection rows, the unit switch and pickers stay silent.
   top would be out of sight beside the button it answers; the sheet stays up with everything typed.
   Nothing is inferred from the name, and what is saved is the lifter's own attribution at moderate
   certainty. It adds no token and no motion.
+  An imported movement opens the same sheet with two differences. Its name is plain text with a
+  `caption` saying why it stays (a later import finds the movement by that name, so renaming it would
+  start a second one), and Save says its imported sets will count toward the muscles in Volume. Any
+  movement with no equipment on record, imported or not, opens with no equipment chip selected and a
+  `caption` under "Equipment" saying that no max is estimated until the lifter says what the load is.
+  Saving without choosing leaves the equipment as it was, so naming a body part never declares
+  equipment; only a chip the lifter taps does.
 - **Workout cards** (`WorkoutCardsView`, `WorkoutCard`): the Train tab's saved workouts. The workout done
   longest ago, or never, is the up-next card, in `hardsetCard`, with its name in `title`, "3 movements" in
   `label` and a context line in `provenance`: "Up next · last done 4 days ago · beat 4 of 6 last time".
@@ -595,9 +606,9 @@ Selection rows, the unit switch and pickers stay silent.
   level applies. Settings opens the same disclosure. No new token, no motion.
 - **Lower bounds and muscles the catalogue cannot train yet**: the `caveat` banner "Counts below are
   lower bounds" says the cause and the way out, and is shared by the Volume screen and the map: sets
-  on a movement with no muscles recorded count toward no muscle, a movement the lifter made gets its
-  muscles from a body part set in Library on the Train tab, and an imported movement cannot be given
-  one. The muscles no built-in movement trains directly (`ExerciseCatalog.unauthoredDirectTokens`) are
+  on a movement with no muscles recorded count toward no muscle, and a movement the lifter made, or one
+  a workout import created, gets its muscles from a body part set in Library on the Train tab. The
+  muscles no built-in movement trains directly (`ExerciseCatalog.unauthoredDirectTokens`) are
   not listed under "Nothing logged for", where a zero would blame the lifter; the Volume screen names
   the ones with nothing credited in their own section, "Not counted directly yet", with the reason
   ("This is a gap in the catalogue, not in your training"), and a tile on the map with nothing
