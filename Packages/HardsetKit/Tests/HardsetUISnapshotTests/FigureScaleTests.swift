@@ -24,13 +24,14 @@ struct FigureScaleTests {
   /// which draws the keypad's display and the welcome bar's total and never an estimate.
   @Test func onlyMeasuredRolesAreTooLargeToCarryAnEstimate() {
     let tooLarge = Set(Role.allCases.filter { !$0.mayCarryEstimate })
-    #expect(tooLarge == [.hero, .figureXL, .countdown, .monument])
+    #expect(tooLarge == [.hero, .figureXL, .countdown, .monument, .monumentAside])
   }
 
   @Test func theScaleRolesHaveTheirSizes() {
     #expect(Role.figureXL.baseSize == 44)
     #expect(Role.countdown.baseSize == 64)
     #expect(Role.monument.baseSize == 88)
+    #expect(Role.monumentAside.baseSize == 72)
     // Titles step down below the figures they sit over.
     #expect(Role.display.baseSize == 28)
     #expect(Role.display.baseSize < Role.figureXL.baseSize)
@@ -40,13 +41,24 @@ struct FigureScaleTests {
     let estimate = StatLedger.Item(
       label: "Estimated max", value: "112", unit: "kg", isEstimate: true)
     let measured = StatLedger.Item(label: "Volume", value: "800", unit: "lb")
-    for isMonument in [true, false] {
-      let role = StatLedger.figureRole(for: estimate, isMonument: isMonument)
+    for kind: StatLedger.MonumentKind? in [.subject, .aside, nil] {
+      let role = StatLedger.figureRole(for: estimate, monument: kind)
       #expect(role == .readout)
       #expect(role.mayCarryEstimate)
     }
-    #expect(StatLedger.figureRole(for: measured, isMonument: true) == .monument)
-    #expect(StatLedger.figureRole(for: measured, isMonument: false) == .figureXL)
+    #expect(StatLedger.figureRole(for: measured, monument: .subject) == .monument)
+    #expect(StatLedger.figureRole(for: measured, monument: .aside) == .monumentAside)
+    #expect(StatLedger.figureRole(for: measured, monument: nil) == .figureXL)
+  }
+
+  /// The monument is 88 where the screen's subject is the number and 72 where it is an action, so
+  /// a number never outranks the action on the screen that exists to take it. Pinned so the aside
+  /// cannot drift back up to the subject's size, and so the tiers stay distinct from the
+  /// countdown's 64 pt and the row figure's 44.
+  @Test func anAsideMonumentIsSmallerThanASubjectMonument() {
+    #expect(Role.monumentAside.baseSize < Role.monument.baseSize)
+    #expect(Role.monumentAside.baseSize > Role.countdown.baseSize)
+    #expect(Role.countdown.baseSize > Role.figureXL.baseSize)
   }
 
   /// The three scale roles stop at accessibility1 and every other role keeps growing, measured by
@@ -59,7 +71,7 @@ struct FigureScaleTests {
       renderer.scale = 1
       return try #require(renderer.cgImage).width
     }
-    for role in [Role.figureXL, .countdown, .monument] {
+    for role in [Role.figureXL, .countdown, .monument, .monumentAside] {
       #expect(role.maximumDynamicTypeSize == .accessibility1)
       #expect(try width(role, .accessibility3) == width(role, .accessibility1), "\(role)")
       #expect(try width(role, .accessibility1) > width(role, .large), "\(role)")

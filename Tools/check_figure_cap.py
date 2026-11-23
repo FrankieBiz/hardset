@@ -2,7 +2,7 @@
 """Hold the figure scale's rule: size is earned by being a measurement.
 
 DESIGN.md states it. A number the lifter typed or the app counted may be set at `figureXL` (44 pt),
-`countdown` (64 pt) or `monument` (88 pt). An estimate, whatever formula produced it, is never drawn
+`countdown` (64 pt), or a monument (`monument` 88 pt, `monumentAside` 72 pt). An estimate, whatever formula produced it, is never drawn
 larger than `readout` (28 pt, `Tokens.Text.estimateCeiling`). The type system cannot say which
 numbers are estimates, so this check says where the large roles may appear: only in the files below,
 each of which draws measurements and nothing else at that size. A new use of a large role in any
@@ -24,10 +24,11 @@ TOKENS = SOURCES / "HardsetUI/DesignTokens.swift"
 
 CEILING = 28
 
-# A role named at a call site or in a switch: `.monument`, `.figureXL`, `.countdown`, and `.hero`,
+# A role named at a call site or in a switch: `.monument`, `.monumentAside`, `.figureXL`,
+# `.countdown`, and `.hero`,
 # the 34 pt role that is also above the ceiling. The declarations (`static let figureXL`,
 # `case figureXL`) have no leading dot and are not matched.
-LARGE_ROLE = re.compile(r"\.(monument|figureXL|countdown|hero)\b")
+LARGE_ROLE = re.compile(r"\.(monumentAside|monument|figureXL|countdown|hero)\b")
 
 # Where a large role may be named, and why each use is a measurement. Paths are relative to the
 # Sources directory.

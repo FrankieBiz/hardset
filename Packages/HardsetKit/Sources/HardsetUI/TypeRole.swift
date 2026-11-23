@@ -25,13 +25,17 @@ extension Tokens.Text {
     case figureXL
     /// The rest countdown. 64 pt.
     case countdown
-    /// The one measured figure a screen leads with. 88 pt, at most one per screen.
+    /// The one measured figure a screen leads with, where the screen's subject is the number. 88 pt,
+    /// at most one per screen.
     case monument
+    /// The one measured figure a screen leads with, where the screen's subject is an action and the
+    /// number sits beside it. 72 pt, at most one per screen. Never on the same screen as `monument`.
+    case monumentAside
 
     /// The matching static font, so a role and its static can never disagree.
     ///
-    /// For `figureXL`, `countdown` and `monument` it is the font at the role's base size, which does
-    /// not scale with Dynamic Type; `hardsetText(_:)` is how those roles are set.
+    /// For `figureXL`, `countdown`, `monument` and `monumentAside` it is the font at the role's base
+    /// size, which does not scale with Dynamic Type; `hardsetText(_:)` is how those roles are set.
     public var font: Font {
       switch self {
       case .display: Tokens.Text.display
@@ -49,6 +53,7 @@ extension Tokens.Text {
       case .figureXL: Tokens.Text.figureXL
       case .countdown: Tokens.Text.countdown
       case .monument: Tokens.Text.monument
+      case .monumentAside: Tokens.Text.monumentAside
       }
     }
 
@@ -56,7 +61,7 @@ extension Tokens.Text {
     /// roles are built from the scaled size; every other role is a text style and scales itself.
     func scaledFont(_ size: CGFloat) -> Font {
       switch self {
-      case .figureXL, .countdown, .monument:
+      case .figureXL, .countdown, .monument, .monumentAside:
         Font.system(size: size, weight: .semibold, design: .default)
           .width(.condensed).monospacedDigit()
       default:
@@ -68,7 +73,7 @@ extension Tokens.Text {
     /// size relative to this style, so tracking follows the same curve as the glyphs.
     public var textStyle: Font.TextStyle {
       switch self {
-      case .hero, .countdown, .monument: .largeTitle
+      case .hero, .countdown, .monument, .monumentAside: .largeTitle
       case .display, .readout, .figureXL: .title
       case .setEntry: .title2
       case .title: .title3
@@ -89,6 +94,7 @@ extension Tokens.Text {
       case .figureXL: return 44
       case .countdown: return 64
       case .monument: return 88
+      case .monumentAside: return 72
       default: break
       }
       return switch textStyle {
@@ -106,19 +112,19 @@ extension Tokens.Text {
     }
 
     /// Whether a figure that is an estimate may be drawn in this role: its size at the default
-    /// content size is within `Tokens.Text.estimateCeiling`. False for `hero` and for the three
+    /// content size is within `Tokens.Text.estimateCeiling`. False for `hero` and for the four
     /// scale roles, so a formula's output can never be set at the size of a measurement.
     public var mayCarryEstimate: Bool {
       baseSize <= Tokens.Text.estimateCeiling
     }
 
     /// The largest Dynamic Type size the role grows to, or `nil` for a role that grows with the
-    /// whole range. The three scale roles stop at accessibility1: at 44 to 88 pt they are already
+    /// whole range. The four scale roles stop at accessibility1: at 44 to 88 pt they are already
     /// larger than body text at the biggest setting, and growing further would push a figure wider
     /// than the row or card that holds it. The words around a figure keep scaling.
     public var maximumDynamicTypeSize: DynamicTypeSize? {
       switch self {
-      case .figureXL, .countdown, .monument: .accessibility1
+      case .figureXL, .countdown, .monument, .monumentAside: .accessibility1
       default: nil
       }
     }
@@ -129,7 +135,7 @@ extension Tokens.Text {
     /// own optical tracking at large sizes, and a second value on top would be a guess.
     public var trackingRatio: Double {
       switch self {
-      case .hero, .figureXL, .countdown, .monument: -0.02
+      case .hero, .figureXL, .countdown, .monument, .monumentAside: -0.02
       case .readout: -0.01
       case .caption, .unit: 0.01
       case .display, .title, .headline, .label, .provenance, .sectionHeader, .setEntry, .figure:

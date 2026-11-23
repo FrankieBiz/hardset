@@ -280,7 +280,7 @@ private struct TypeRow: View {
   private var sample: String {
     switch role {
     case .hero, .readout, .setEntry, .figure, .figureXL, .countdown: "132.3 kg"
-    case .monument: "800 lb"
+    case .monument, .monumentAside: "800 lb"
     default: "Chest press"
     }
   }

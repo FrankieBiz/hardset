@@ -21,7 +21,7 @@ the code does yet, so a reader does not look for a screen that has not moved.
   control, Inline control, Panel and the live-session layout below. Train's start screen is rebuilt
   the same way (see Train start screen), and so are Progress, the board and the movement chart,
   Volume and Library.
-- The figure scale is in code (ruling D20): `figureXL`, `countdown` and `monument`, the 28 pt title,
+- The figure scale is in code (ruling D20): `figureXL`, `countdown`, `monument` and `monumentAside`, the 28 pt title,
   the 64 pt set row, the estimate ceiling and its check. It is scale and hierarchy only: it adds no
   glyph, rule, colour or motion. The onboarding demo and the catalogue's set rows keep the compact
   row, and History's row figures, the keypad display and the welcome bar keep their sizes.
@@ -67,7 +67,8 @@ glass; the content beneath it is never glass.
   lifter is answering that question.
 - **Numbers are the hero, and size is earned by being a measurement.** Weights, reps and rest are
   set in SF Pro Condensed with tabular figures: large, narrow and steady, like stamped plates or a
-  scale readout. A number the lifter typed or the app counted is large, up to an 88 pt monument; a
+  scale readout. A number the lifter typed or the app counted is large, up to an 88 pt monument (72
+  where the screen is for an action); a
   number a formula produced is never larger than `readout`, 28 pt, whatever it is and wherever it
   sits (see Figure scale). The biggest figures on a screen are therefore the ones that need no
   caveat, and a lifter can tell a measurement from an estimate across the room by its size before
@@ -173,7 +174,8 @@ System fonts only, so no resource bundle is needed. Every role is a Dynamic Type
 | `unit` | Callout, medium | Unit suffixes beside values |
 | `caption` | Footnote | Supplemental notes only |
 | `sectionHeader` | Subheadline, semibold | Sentence-case section labels; never all caps |
-| `monument` | 88 pt, semibold, condensed, tabular | The one measured figure a screen leads with: at most one per screen |
+| `monument` | 88 pt, semibold, condensed, tabular | The one measured figure a screen leads with, where the screen's subject is the number: Volume. At most one per screen |
+| `monumentAside` | 72 pt, semibold, condensed, tabular | The same figure where the screen's subject is an action: Train. At most one per screen, and never with a `monument` |
 | `countdown` | 64 pt, semibold, condensed, tabular | The rest countdown |
 | `figureXL` | 44 pt, semibold, condensed, tabular | Measured figures in a set row, a `StatLedger` and a receipt's sets |
 | `hero` | Large Title, semibold, condensed, tabular | Keypad display, welcome bar's total |
@@ -181,11 +183,17 @@ System fonts only, so no resource bundle is needed. Every role is a Dynamic Type
 | `setEntry` | Title 2, semibold, condensed, tabular | Keypad quick steps, history's day figure, Volume's per-muscle counts |
 | `figure` | Headline, condensed, tabular | Small figures inside rows and compact ledgers |
 
+**The monument is 88 where the screen's subject is the number, and 72 where the screen's subject is
+the action. On Volume the number is the content; on Train the action is. A number that outranks the
+primary action makes the screen harder to use, which is the opposite of what this signature is for.**
+This is a rule and not a taste: a new screen takes `monument` if the number is what it is for and
+`monumentAside` if it is for something the lifter does, and the size is not adjusted by eye.
+
 Condensed is for figures only; a sentence that holds figures is `title` with tabular digits. The
 system font chooses its own optical size and tracking, so `display` adds none.
 
 Tracking is a ratio of the resolved size, so it follows Dynamic Type: `hero`, `figureXL`,
-`countdown` and `monument` -2%, `readout` -1%, `caption` and `unit` +1%, every other role 0. `hardsetText(_:)` applies a role's
+`countdown`, `monument` and `monumentAside` -2%, `readout` -1%, `caption` and `unit` +1%, every other role 0. `hardsetText(_:)` applies a role's
 font and tracking together from `Tokens.Text.Role`; the static fonts carry no tracking.
 `hardsetText(_:weight:)` applies a weighted variant of a role with the same tracking, so a
 semibold caption keeps its +1%; a static weighted font cannot carry tracking, and no modifier
@@ -193,9 +201,9 @@ chained after `hardsetText(_:)` is used to change its weight.
 
 ### Figure scale
 
-`monument`, `countdown` and `figureXL` are not text styles: each is a point size that scales along
-the curve of the style it is set against (`monument` and `countdown` Large Title, `figureXL`
-Title), and each stops at accessibility1. At 44 to 88 pt they are already larger than body text at
+`monument`, `monumentAside`, `countdown` and `figureXL` are not text styles: each is a point size that
+scales along the curve of the style it is set against (`monument`, `monumentAside` and `countdown`
+Large Title, `figureXL` Title), and each stops at accessibility1. At 44 to 88 pt they are already larger than body text at
 the biggest setting, and growing further would push a figure wider than the row or card holding
 it; the words around a figure keep scaling to accessibility5. The stack and wrap layouts that
 accessibility sizes already use carry the rest.
@@ -203,19 +211,21 @@ accessibility sizes already use carry the rest.
 The rule is `Tokens.Text.estimateCeiling`, 28 pt at the default size, and it is the signature of the
 app, not a detail of it. A figure is a measurement if the lifter typed it or the app counted it: a
 set's weight and reps, a count of working sets, a sum of the loads and reps logged, a countdown to
-a deadline the lifter chose. Those may be `figureXL`, `countdown` or `monument`. A figure is an
+a deadline the lifter chose. Those may be `figureXL`, `countdown`, `monument` or `monumentAside`. A figure is an
 estimate if something was inferred: an Epley one-rep max, a fractional muscle credit, a percentage
 change in either, a trend. Those are `readout` at most, usually smaller, and always beside their
-certainty. `Role.mayCarryEstimate` is false for the three scale roles and for `hero`; the ledger
+certainty. `Role.mayCarryEstimate` is false for the four scale roles and for `hero`; the ledger
 draws an item marked `isEstimate` at `readout` whichever role was asked for; and
 `Tools/check_figure_cap.py`, part of `make check`, names the files that may use a large role, each
 with the reason its numbers are measurements, so that adding a use anywhere else is a visible
 edit to that list and not a drive-by. Progress is the proof: every figure on it is an estimate or a
 comparison of estimates, so none of them leaves the sentence it is in.
 
-One monument per screen and nowhere else: Volume's weekly working-set count and Train's last
-workout volume. A screen with no measured figure to lead with has none; Progress, Library, History
-and the live session have none, and the live session's own largest figure is the rest countdown.
+One monument per screen and nowhere else: Volume's weekly working-set count at 88 pt, where the
+number is the content, and Train's last workout volume at 72 pt, where the action is. A screen with
+no measured figure to lead with has none; Progress, Library, History and the live session have none,
+and the live session's own largest figure is the rest countdown. Progress having none is the rule
+working, not a gap in it: every figure there is an estimate, and an estimate is never a monument.
 
 ## Spacing, radius, stroke
 
@@ -367,10 +377,11 @@ Selection rows, the unit switch and pickers stay silent.
   line, with dividers, if they fit. Four, the ledger once warm-ups are logged, do not fit beside a
   four-digit volume on any phone, so they are always two to a line in aligned columns with no
   dividers, and the layout does not change as the volume crosses 1,000; three too wide for the line
-  fall to the same two columns. At accessibility sizes each takes a line. An item marked `isEstimate` is drawn at `readout`. A ledger may lead with one `monument`,
-  above the columns, when its screen has one: Train's last-workout card leads with its volume and
-  leaves sets and reps in the columns, and with no volume, as in a bodyweight session, it has no
-  monument.
+  fall to the same two columns. At accessibility sizes each takes a line. An item marked `isEstimate` is drawn at `readout`. A ledger may lead with one
+  monument, above the columns, when its screen has one, and says which kind it is (`MonumentKind`):
+  `.subject`, 88 pt, where the screen's subject is the number, and `.aside`, 72 pt, where it is an
+  action. Train's last-workout section leads with its volume as an aside and leaves sets and reps in
+  the columns, and with no volume, as in a bodyweight session, it has no monument.
 - **Empty and loading states**: explain what is missing and what to do next; loading is a quiet line
   of text, not a spinner. An empty slot is drawn with a dashed outline, the app's one mark for
   "nothing here yet": the empty-state socket, the workout editor's "Add movement" slot and the rule
@@ -430,7 +441,8 @@ Selection rows, the unit switch and pickers stay silent.
   reason in `caption` under it, an invitation and not a warning. Its accessible name is unchanged,
   and Voice Control also answers to "Change gym". The last workout is a section label and one
   button: the workout's title (or its date) in `headline`, its length in `figure` with a clock, a
-  chevron, the volume as the screen's one monument (`monument`, 88 pt, with its unit and label)
+  chevron, the volume as the screen's one monument (`monumentAside`, 72 pt, with its unit and label:
+  the subject of this screen is starting a workout, so the number sits beside the action and does not outrank it)
   over a `StatLedger` of working sets and reps at `figureXL`, and the movements in `label` and
   `chalkDim`. With no volume, as in a bodyweight session, there is no monument and the ledger is
   the counts. It is a 56 pt `InlineControlStyle` region that opens the receipt. With no finished

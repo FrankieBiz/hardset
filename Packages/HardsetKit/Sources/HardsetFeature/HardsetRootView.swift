@@ -775,12 +775,14 @@ public struct HardsetRootView: View {
           .font(Tokens.Text.label)
           .foregroundStyle(Tokens.Color.chalkDim)
       } else {
-        // The volume leads at 88 pt when there is one, the screen's one monument: a sum of the
-        // loads and reps the lifter logged, so it is a measurement and earns the size. The counts
-        // sit under it at 44 pt. With no volume, as in a bodyweight session, there is nothing
-        // honest to lead with and the counts are the ledger.
+        // The volume leads when there is one, the screen's one monument: a sum of the loads and
+        // reps the lifter logged, so it is a measurement and earns the size. It is the aside kind,
+        // 72 pt and not 88: this screen's subject is starting a workout, and a number that
+        // outranked the Start button would make it harder to use. The counts sit under it at 44 pt.
+        // With no volume, as in a bodyweight session, there is nothing honest to lead with and the
+        // counts are the ledger.
         let ledger = ledgerItems(summary.volume)
-        StatLedger(ledger.counts, monument: ledger.volume)
+        StatLedger(ledger.counts, monument: ledger.volume, monumentKind: .aside)
       }
 
       if !summary.exerciseNames.isEmpty {

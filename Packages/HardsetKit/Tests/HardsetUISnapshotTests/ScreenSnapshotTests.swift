@@ -349,7 +349,7 @@
       try await Snapshot.capture("root-start-light", style: .light) {
         HardsetRootView(environment: environment, unit: .kilograms)
       }
-      // The last-workout card leads with its volume at 88 pt; at accessibility3 the unit and the
+      // The last-workout section leads with its volume at 72 pt; at accessibility3 the unit and the
       // ledger stack, and the screen scrolls, so the window is tall enough to hold all of it.
       try await Snapshot.capture(
         "root-start-dark-ax3", size: CGSize(width: 402, height: 2600), typeSize: .accessibility3

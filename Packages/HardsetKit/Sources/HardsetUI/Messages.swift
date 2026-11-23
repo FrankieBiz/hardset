@@ -8,7 +8,8 @@ import SwiftUI
 /// should read as one line.
 ///
 /// Every figure is a measurement the lifter typed or the app counted, so each is drawn at
-/// `figureXL`, and `monument` may lead the ledger with one of them at 88 pt. An item that is an
+/// `figureXL`, and a monument may lead the ledger with one of them, at 88 pt where the screen's
+/// subject is the number and 72 pt where it is an action (`MonumentKind`). An item that is an
 /// estimate is drawn at `readout`, the largest an estimate may be, whichever role it would
 /// otherwise have had: the ledger is the component that holds the scale's rule, so a caller cannot
 /// hand it a formula's output and get a headline back.
@@ -30,28 +31,50 @@ public struct StatLedger: View {
     }
   }
 
-  private let items: [Item]
-  private let monument: Item?
-  @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+  /// How a monument stands against the screen it is on. The monument is 88 pt where the screen's
+  /// subject is the number, and 72 pt where the screen's subject is the action. A number that
+  /// outranks the primary action makes the screen harder to use.
+  public enum MonumentKind: Sendable, Hashable {
+    /// The number is the content: Volume's weekly working sets. 88 pt.
+    case subject
+    /// The screen is for an action and the number sits beside it: Train's last-workout volume, under
+    /// the controls that start a workout. 72 pt.
+    case aside
 
-  /// - Parameter monument: A measured figure to lead the ledger at 88 pt, above the columns. It is
-  ///   the one monument its screen has, and it is left to the caller to have no more than one. An
-  ///   estimate passed here is drawn at `readout` like any other estimate.
-  public init(_ items: [Item], monument: Item? = nil) {
-    self.items = items
-    self.monument = monument
+    var role: Tokens.Text.Role {
+      switch self {
+      case .subject: .monument
+      case .aside: .monumentAside
+      }
+    }
   }
 
-  /// The role a figure is drawn in. An estimate is capped at `readout` whatever was asked for.
-  public static func figureRole(for item: Item, isMonument: Bool) -> Tokens.Text.Role {
+  private let items: [Item]
+  private let monument: Item?
+  private let monumentKind: MonumentKind
+  @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
+  /// - Parameter monument: A measured figure to lead the ledger, above the columns. It is the one
+  ///   monument its screen has, and it is left to the caller to have no more than one. An estimate
+  ///   passed here is drawn at `readout` like any other estimate.
+  /// - Parameter monumentKind: Whether the screen's subject is the number or an action.
+  public init(_ items: [Item], monument: Item? = nil, monumentKind: MonumentKind = .subject) {
+    self.items = items
+    self.monument = monument
+    self.monumentKind = monumentKind
+  }
+
+  /// The role a figure is drawn in: a monument of the given kind, or `figureXL` when `monument` is
+  /// nil. An estimate is capped at `readout` whatever was asked for.
+  public static func figureRole(for item: Item, monument: MonumentKind?) -> Tokens.Text.Role {
     if item.isEstimate { return .readout }
-    return isMonument ? .monument : .figureXL
+    return monument?.role ?? .figureXL
   }
 
   public var body: some View {
     VStack(alignment: .leading, spacing: Tokens.Spacing.loose) {
       if let monument {
-        figure(monument, isMonument: true)
+        figure(monument, kind: monumentKind)
           .frame(maxWidth: .infinity, alignment: .leading)
       }
       if !items.isEmpty {
@@ -74,7 +97,7 @@ public struct StatLedger: View {
     if dynamicTypeSize.isAccessibilitySize {
       VStack(alignment: .leading, spacing: Tokens.Spacing.regular) {
         ForEach(items) { item in
-          figure(item, isMonument: false)
+          figure(item, kind: nil)
             .frame(maxWidth: .infinity, alignment: .leading)
         }
       }
@@ -97,9 +120,9 @@ public struct StatLedger: View {
     ) {
       ForEach(Array(stride(from: 0, to: items.count, by: 2)), id: \.self) { start in
         GridRow {
-          figure(items[start], isMonument: false)
+          figure(items[start], kind: nil)
           if start + 1 < items.count {
-            figure(items[start + 1], isMonument: false)
+            figure(items[start + 1], kind: nil)
           }
         }
       }
@@ -112,7 +135,7 @@ public struct StatLedger: View {
       ForEach(items) { item in
         let isFirst = item.id == items.first?.id
         let isLast = item.id == items.last?.id
-        figure(item, isMonument: false)
+        figure(item, kind: nil)
           .padding(.leading, isFirst ? 0 : Tokens.Spacing.regular)
           .padding(.trailing, isLast ? 0 : Tokens.Spacing.regular)
           .overlay(alignment: .leading) {
@@ -128,11 +151,11 @@ public struct StatLedger: View {
     .fixedSize(horizontal: false, vertical: true)
   }
 
-  private func figure(_ item: Item, isMonument: Bool) -> some View {
+  private func figure(_ item: Item, kind: MonumentKind?) -> some View {
     VStack(alignment: .leading, spacing: Tokens.Spacing.hairline) {
       HStack(alignment: .firstTextBaseline, spacing: Tokens.Spacing.tight) {
         Text(item.value)
-          .hardsetText(Self.figureRole(for: item, isMonument: isMonument))
+          .hardsetText(Self.figureRole(for: item, monument: kind))
           .foregroundStyle(Tokens.Color.chalk)
           .lineLimit(1)
           // A figure must show the whole number. This floor is only for a value wider than the
