@@ -1,12 +1,20 @@
 #!/usr/bin/env python3
 """Hold the interaction rules DESIGN.md states, so a drive-by edit cannot quietly break them.
 
-The log moment is one event: a saved set plays one haptic, the clank, and nothing under it, and the
-stamp and the follow beat belong to a set just logged and to nothing else. The type system cannot say
-that, so this reads the sources the way `check_figure_cap.py` does, names the few files each rule is
-about, and fails with the reason. It is deliberately a text check: a rule that has to be changed on
-purpose shows up in the diff where a reviewer will read it, beside the DESIGN.md paragraph that owns
-it.
+Three of the app's signatures are interactions, and each is easy to undo without noticing:
+
+1. The log moment. A saved set plays one haptic, the clank, and nothing under it; the stamp and the
+   second beat belong to a set just logged and to nothing else.
+2. The single-thumb pad traversal. Weight, reps, load steps and corrections are entered on the
+   logger's own keypad. A system text field in that path brings up the system keyboard, which is the
+   thing the pad exists to prevent. The pad's quick steps come from the machine's own increment, and
+   nothing the logger needs is pinned to the top of the screen.
+3. The figure scale: every figure drawn at a monument size can be opened to the working behind it.
+
+The type system cannot say any of this, so this reads the sources the way `check_figure_cap.py`
+does, names the few files each rule is about, and fails with the reason. It is deliberately a text
+check: a rule that has to be changed on purpose shows up in the diff where a reviewer will read it,
+beside the DESIGN.md paragraph that owns it.
 
 Usage: python3 Tools/check_interaction_rules.py
 """
@@ -17,6 +25,34 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 SOURCES = ROOT / "Packages/HardsetKit/Sources"
+
+# Files on the logging path: where weight, reps, a load step, a rest or a correction is entered or
+# a set is logged. A search field in a picker is text and is not here.
+LOGGER_FILES = [
+    "HardsetUI/SessionView.swift",
+    "HardsetUI/SetRowView.swift",
+    "HardsetUI/ExerciseSectionView.swift",
+    "HardsetUI/NumericPad.swift",
+    "HardsetUI/LoadStepSheet.swift",
+    "HardsetUI/SetCorrectionSheet.swift",
+    "HardsetUI/RestBarView.swift",
+    "HardsetFeature/LiveSessionScreen.swift",
+]
+
+# The files the live logger is drawn in, where nothing may be pinned to the top of the screen.
+LIVE_SCREEN_FILES = [
+    "HardsetUI/SessionView.swift",
+    "HardsetUI/SetRowView.swift",
+    "HardsetUI/ExerciseSectionView.swift",
+    "HardsetUI/RestBarView.swift",
+    "HardsetUI/NumericPad.swift",
+]
+
+TEXT_INPUT = re.compile(
+    r"\bTextField\s*\(|\bTextEditor\s*\(|\bSecureField\s*\(|\.keyboardType\s*\(|"
+    r"(?<!Accessibility)FocusState|\.focused\s*\(|\bUITextField\b|\bUITextView\b|\.searchable\s*\("
+)
+PINNED_TOP = re.compile(r"safeAreaInset\s*\(\s*edge:\s*\.top|\.toolbar\b|\bToolbarItem\b")
 
 
 def read(relative: str) -> str:
@@ -100,9 +136,71 @@ def check_stamp_and_follow_scope(failures):
             )
 
 
+def check_no_system_keyboard(failures):
+    """The single-thumb pad traversal: no text input anywhere on the logging path."""
+    for relative in LOGGER_FILES:
+        code = strip_comments(read(relative))
+        hits = sorted(set(m.group(0).strip() for m in TEXT_INPUT.finditer(code)))
+        if hits:
+            failures.append(
+                f"{relative} uses {', '.join(hits)}. Weight, reps, load steps and corrections are "
+                "entered on the logger's own NumericPad; a text input here brings up the system "
+                "keyboard and a cursor to place (DESIGN.md, The single-thumb pad traversal)."
+            )
+
+
+def check_pad_steps(failures):
+    """The pad's quick steps are the machine's, not a hard-coded 2.5 and 5."""
+    pad = strip_comments(read("HardsetUI/NumericPad.swift"))
+    if re.search(r"\[\s*-5\.?0?\s*,\s*-2\.5", pad):
+        failures.append(
+            "NumericPad hard-codes its weight steps. They come from QuickSteps.weight, which uses "
+            "the machine's real increment when one is recorded."
+        )
+    if "QuickSteps.weight(" not in strip_comments(read("HardsetUI/SessionView.swift")):
+        failures.append(
+            "SessionView no longer passes QuickSteps.weight(machineIncrementKg:unit:) to the "
+            "keypad, so the pad would step to loads the machine cannot hold."
+        )
+
+
+def check_step_targets(failures):
+    """A chalky thumb: the row's machine steps and every pad key are logger-height cells."""
+    row = strip_comments(read("HardsetUI/SetRowView.swift"))
+    start = row.find("private func loadAdjustment(")
+    body = row[start : start + 1600] if start >= 0 else ""
+    if "minHeight: Tokens.loggerTapTarget" not in body:
+        failures.append(
+            "SetRowView's load steps no longer use Tokens.loggerTapTarget (56 pt) as their height."
+        )
+    tokens = strip_comments(read("HardsetUI/DesignTokens.swift"))
+    key = tokens[tokens.find("struct HardsetKeyFace") :]
+    if "minHeight: Tokens.loggerTapTarget" not in key[:2400]:
+        failures.append(
+            "HardsetKeyFace no longer uses Tokens.loggerTapTarget (56 pt) as its height, so the "
+            "pad's keys and quick steps would be smaller than a chalky thumb can hit."
+        )
+
+
+def check_nothing_pinned_to_the_top(failures):
+    """A logger control pinned to the top of the screen is out of reach of one thumb."""
+    for relative in LIVE_SCREEN_FILES:
+        code = strip_comments(read(relative))
+        if PINNED_TOP.search(code):
+            failures.append(
+                f"{relative} pins something to the top of the screen. The live logger's header "
+                "scrolls with its content and everything it pins is at the bottom: the rest bar and "
+                "the keypad (DESIGN.md, The single-thumb pad traversal)."
+            )
+
+
 CHECKS = [
     check_one_haptic,
     check_stamp_and_follow_scope,
+    check_no_system_keyboard,
+    check_pad_steps,
+    check_step_targets,
+    check_nothing_pinned_to_the_top,
 ]
 
 

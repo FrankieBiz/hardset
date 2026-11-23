@@ -91,15 +91,24 @@ final class AppScreensUITests: XCTestCase {
     audit(app, screen: "session with a movement")
     row.coordinate(withNormalizedOffset: CGVector(dx: 0.44, dy: 0.5)).tap()
     XCTAssertTrue(app.buttons["Next field"].waitForExistence(timeout: 5))
+    // The single-thumb pad traversal: weight and reps are typed on the logger's own keypad, so the
+    // system keyboard never comes up, with the weight open, after Next, or on the reps.
+    XCTAssertFalse(
+      app.keyboards.firstMatch.exists, "The weight keypad is the logger's own; no system keyboard.")
     for key in ["1", "0", "0"] { app.buttons[key].tap() }
     capture(app, "13-keypad-weight")
     audit(app, screen: "keypad")
+    // One press moves from weight to reps: no cursor to place, no second tap on the reps field.
     app.buttons["Next field"].tap()
     // The same keypad, retargeted: its display now names reps.
     let repsDisplay = app.descendants(matching: .any)
       .matching(NSPredicate(format: "label BEGINSWITH 'Reps'")).firstMatch
     XCTAssertTrue(repsDisplay.waitForExistence(timeout: 3))
+    XCTAssertFalse(
+      app.keyboards.firstMatch.exists, "Next retargets the pad in place; no system keyboard.")
     app.buttons["8"].tap()
+    XCTAssertFalse(
+      app.keyboards.firstMatch.exists, "The reps keypad is the logger's own; no system keyboard.")
     capture(app, "13b-keypad-reps")
     app.buttons["Done"].tap()
     row.coordinate(withNormalizedOffset: CGVector(dx: 0.93, dy: 0.5)).tap()

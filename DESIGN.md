@@ -353,12 +353,66 @@ Selection rows, the unit switch and pickers stay silent.
   the pad's width: no face, no fill and no outline. Pressed, it sinks to 0.96 and dims to 80% on
   `Motion.press` (Reduce Motion drops the scale), as every control with no face of its own does;
   disabled, it dims to 40%. Under Increase Contrast or Button Shapes each key wears the 3:1
-  `controlEdge` outline around its whole cell. The quick steps (−5, −2.5, +2.5, +5) are keys in
-  `chalk`, and Done is an inline control; the one filled control on the pad is its primary action,
-  Next or Log set, which owns the screen's accent while the pad is up (the rows give theirs up, see
-  the set log control). The keypad drops its keys' faces because the screen behind it has none; gym
-  glare and sweaty hands on a face-less key are a device check, and it reverts in one place,
-  `HardsetKeyFace`. The same pad serves the load-step editor.
+  `controlEdge` outline around its whole cell. The quick steps are keys in `chalk`: the machine's own
+  increment as minus two, minus one, plus one and plus two of it, or −5, −2.5, +2.5 and +5 when none is
+  recorded (see The single-thumb pad traversal), and Done is an inline control; the one filled
+  control on the pad is its primary action, Next or Log set, which owns the screen's accent while
+  the pad is up (the rows give theirs up, see the set log control). The keypad drops its keys' faces
+  because the screen behind it has none; gym glare and sweaty hands on a face-less key are a device
+  check, and it reverts in one place, `HardsetKeyFace`. The same pad serves the load-step editor
+  and the receipt's correction sheet, which have no live machine increment in hand and so offer the
+  fallback steps.
+- **The single-thumb pad traversal** (`NumericPad`, the session's keypad sheet, `QuickSteps`): the
+  logger is operated with the thumb of the hand holding the phone, the other hand on the bar. That
+  is a rule with three clauses, each held by a check, so a future change cannot reintroduce what the
+  pad exists to remove.
+  - **No system keyboard, no cursor, ever, on the logging path.** Weight, reps, a load step, a rest
+    and a correction are typed on `NumericPad`, which edits a `NumericEntryBuffer`. No file on that
+    path (`Tools/check_interaction_rules.py` lists them) may declare a text input: `TextField`,
+    `TextEditor`, `SecureField`, `.keyboardType`, `@FocusState`, `.focused`, `.searchable` or a UIKit
+    text view. A keyboard covers half a small screen, puts the digits where the hardware says, and
+    needs a dismiss gesture the free hand is not free to make; a field needs a cursor placed. A
+    search field in a picker, a name or the Health body mass is text and is not on the path. The real
+    app is driven through a workout in CI and asserts that no system keyboard appears with the weight
+    open, after Next, or on the reps (`AppScreensUITests`).
+  - **Weight to reps is one press.** `Next` retargets the same pad in place: the display names the
+    new field, the prefill is selected so the first digit replaces it, and nothing is dismissed and
+    presented again. The last field offers `Log set`, so a changed set is entered and logged without
+    a trip back to the row's check. Type a weight, Next, type the reps, Log set: no cursor and no
+    second tap on the reps field. A set that is already right is one tap on its check.
+  - **The steps are the machine's.** The pad's quick steps are the machine's recorded increment as
+    minus two, minus one, plus one and plus two of it, in the unit the pad shows (`QuickSteps`), and
+    the row's −/+ use the same number, so the pad never steps to a load the equipment cannot hold. A
+    pin stack of 4.5 kg offers −9, −4.5, +4.5 and +9 and, read in pounds, 9.92 and 19.84. With no
+    increment recorded the pad falls back to 2.5 and 5, which claims nothing about the machine, and
+    the row's −/+ stay absent, as they always have, because a stepper on the row would assert a step.
+    Reps move by −1, +1 and +2. A step is a key like the others, a cell the width of its column and
+    56 pt tall, four across at ordinary sizes (about 88 by 56 pt on a 402 pt phone) and two by two at
+    accessibility sizes; the row's steps are 56 pt tall and half the row wide.
+
+  Where everything the logger needs between sets lives, so reach is a property of the layout and not
+  of luck. The header scrolls away with the list, and nothing is pinned to the top: the live screen's
+  pinned things are the rest bar and the keypad, both at the bottom, and the check forbids anything
+  else being pinned to the top.
+
+  | The lifter needs | It lives | Reach |
+  | --- | --- | --- |
+  | Log a set that is right | The check at the trailing edge of its row, 64 pt, in the list | Scrolls into the lower part of the screen; the list is flicked with the same thumb |
+  | Type a weight or reps | The pad, pinned at the bottom; the row's figures open it | Pad top at or below 40% of the screen, every key below that |
+  | Weight to reps, Log set, Done | The pad's footer: Next, Log set and Done, 56 pt | Bottom of the pad, the bottom of the screen |
+  | Step the load | The pad's quick steps, and −/+ under the next row where the machine's step is recorded | Pad; the next row, wherever the list has put it |
+  | Rest: −15, +15, pause, skip, next rest | The rest bar, pinned at the bottom | At or below 60% of the screen |
+  | Machine, movement options, add a set | The card's own header and footer, in the list | Scrolls into reach |
+  | Finish the workout | The end of the list, and Workout options in the header | The end of the list is a flick away; the header menu is a convenience, never the only way |
+  | Change gym, Settings | The gym line in the list, and the header | Not needed to log a set |
+
+  The pinned figures are measured and not assumed: `SingleThumbReachTests` hosts the live session at
+  402 by 874 pt, asks where the keypad and the rest bar actually are, and asserts them, writing every
+  number it measured to `thumb-reach.txt` beside the renders. It does not say where a row is in the
+  list, which is wherever the lifter scrolled it, nor that a given hand reaches a given point: the
+  next-up check at the trailing edge is the right thumb's, and a left-handed lifter crosses the
+  screen to it. Both are device checks (`docs/OWNER-DEVICE-CHECKLIST.md`). It adds no token and no
+  motion.
 - **Knurl** (`KnurlPattern`, `.knurl(opacity:)`): a `Canvas` crosshatch at 8% opacity, the
   `KnurlPattern` default. It fills rectangular bounds, so callers with rounded shapes clip it
   themselves. It is retired from the live session: the rest bar's countdown is drawn directly on

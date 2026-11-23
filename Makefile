@@ -49,7 +49,7 @@ check-contrast: ## Verify the HardsetUI palette meets DESIGN.md's 7:1 text and 3
 check-figure-cap: ## Verify estimates are never drawn above 28 pt: the large figure roles stay in files that draw measurements
 	$(PY) Tools/check_figure_cap.py
 
-check-interaction: ## Verify the interaction rules: one clank per saved set, the stamp and the follow beat only on a set just logged
+check-interaction: ## Verify the interaction rules: one clank per saved set, no system keyboard in the logger, nothing pinned to the top, the pad's steps from the machine
 	$(PY) Tools/check_interaction_rules.py
 
 project: ## Regenerate Hardset.xcodeproj from Tools/generate_project.py

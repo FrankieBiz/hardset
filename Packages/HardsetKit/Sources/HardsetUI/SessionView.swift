@@ -1271,6 +1271,11 @@ public struct SessionView: View {
   private var keypadSheet: some View {
     let target = keypad ?? shownKeypad
     let field = target?.field ?? .weight
+    // The weight steps are the machine's real increment where one is recorded, the same number the
+    // row's −/+ use, so the pad never steps to a load the equipment cannot hold.
+    let machineIncrementKg = target.flatMap { target in
+      exercises.first(where: { $0.id == target.exerciseID })?.machineIncrementKg
+    }
     return ScrollView {
       VStack(spacing: 0) {
         // The keypad covers the bottom of the screen where errors are shown, so a set that fails
@@ -1290,7 +1295,8 @@ public struct SessionView: View {
           onNext: field == .weight ? { advanceToReps() } : nil,
           // A correction has no "Log set": the set is already logged, and Done writes the change.
           onLog: field == .reps && target?.isCorrection != true ? { logFromKeypad() } : nil,
-          canLog: targetedSlot?.draft.isLoggable ?? false
+          canLog: targetedSlot?.draft.isLoggable ?? false,
+          weightSteps: QuickSteps.weight(machineIncrementKg: machineIncrementKg, unit: unit)
         )
         .tourTarget(.keypad)
       }

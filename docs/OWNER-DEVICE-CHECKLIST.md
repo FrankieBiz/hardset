@@ -46,6 +46,17 @@ physical iPhone, in the gym lighting where it matters.
 - [ ] **Next rest.** The row under the rest bar and a drag up on the bar open the lengths, a drag
       down closes them, choosing one changes the next rest and not the running one.
 - [ ] **Keypad** retargets in place between weight and reps, and its keys sink on touch-down.
+- [ ] **Single-thumb traversal.** With the phone in one hand and the other on the bar: tap a weight,
+      type it, press Next, type the reps, press Log set, and never move the thumb to the top half of
+      the screen, never see the system keyboard, never place a cursor. The pad's top edge is at or
+      below 40% of the screen and the rest bar's at or below 60% (CI measures both and writes
+      `thumb-reach.txt`; this is whether it *feels* in reach). The log check sits at the trailing
+      edge, the right thumb's side: say whether a left-handed lifter should be offered the mirror.
+- [ ] **Machine steps.** On a machine with a recorded increment, the pad's quick steps are that step
+      and twice it, the row's −/+ show the same number, and stepping from a typed load lands on a
+      load the stack can hold. In pounds a 4.5 kg stack shows 9.92 and 19.84. On a machine with no
+      increment recorded the pad offers 2.5 and 5 and the row shows no −/+. Every step is hit first
+      time with a chalky thumb.
 - [ ] **Press feel** on the header icon menu (a `Menu` never reports a press, so it is device-only)
       and on the flat control faces, which now step off their surface by fill and carry no outline
       unless Increase Contrast or Button Shapes is on: confirm each reads as a control in daylight.
