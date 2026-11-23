@@ -95,7 +95,7 @@ jobs:
             -only-testing:HardsetTests \
             -skipMacroValidation -skipPackagePluginValidation \
             CODE_SIGNING_ALLOWED=NO \
-            2>&1 | tee app-test.log | grep -E "error:|TEST (SUCCEEDED|FAILED)|Test run" || true
+            2>&1 | tee app-test.log | grep -E "error:|TEST (SUCCEEDED|FAILED)|Test run|✘|recorded an issue" || true
           grep -q "TEST SUCCEEDED" app-test.log
           grep -Eq 'Test run with [1-9][0-9]* tests? in [1-9][0-9]* suites? passed' app-test.log
 
@@ -112,7 +112,7 @@ jobs:
             -only-testing:HardsetUISnapshotTests \
             -parallel-testing-enabled NO \
             -skipMacroValidation -skipPackagePluginValidation \
-            2>&1 | tee ../../snapshot-test.log | grep -E "error:|TEST (SUCCEEDED|FAILED)|Test run" || true
+            2>&1 | tee ../../snapshot-test.log | grep -E "error:|TEST (SUCCEEDED|FAILED)|Test run|✘|recorded an issue" || true
           ls -la ../../snapshots
           grep -q "TEST SUCCEEDED" ../../snapshot-test.log
 
