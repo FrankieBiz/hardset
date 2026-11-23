@@ -60,7 +60,7 @@ A local-only training log for evidence-based lifters. Honest certainty on estima
 
 ## 3. Description
 
-Limit: 4000 characters. This is 3,468. Plain text; the blank lines are intentional.
+Limit: 4000 characters. This is 3,485. Plain text; the blank lines are intentional.
 
 ```text
 Hardset is a local-only training log for evidence-based lifters. It keeps your workouts on your iPhone, shows where every number comes from, and refuses to invent a target when the research has not settled one.
