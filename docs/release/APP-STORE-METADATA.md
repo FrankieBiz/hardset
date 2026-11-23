@@ -1,9 +1,9 @@
 # Hardset — App Store Connect metadata
 
 Everything App Store Connect asks for, written as text the owner can paste. Values that
-depend on the developer account or on hosting are marked **PLACEHOLDER** in a way that
-cannot be mistaken for final. Character limits were counted with `python3 len()` on the
-exact strings below.
+depend on the developer account are marked **PLACEHOLDER** in a way that cannot be
+mistaken for final. Character limits were counted with `python3 len()` on the exact
+strings below.
 
 Verified against `origin/main` at `31f7c45` unless a line says otherwise. The code
 verification notes in §9 are part of this document: the privacy answer that Apple reads
@@ -191,7 +191,7 @@ Question-by-question:
 | Data linked to the user | Not applicable | Nothing is collected. |
 | Data used to track | No | Nothing is collected or tracked. |
 
-**Privacy Policy URL:** `PLACEHOLDER — the published privacy.html URL` (see §8).
+**Privacy Policy URL:** `https://frankiebiz.github.io/hardset/privacy.html` (see §8).
 
 ### 6.2 What the manifest says
 
@@ -281,18 +281,20 @@ research citations are bibliographic facts, not reproduced text.
 
 ## 8. URLs and hosting
 
-Hosting is not chosen yet. These are the only placeholders in this kit. App Store Connect
-will not accept the submission until they are real, public HTTPS URLs.
+Hosting is decided: **GitHub Pages**, free, serving the `/site` folder from `main` in
+`FrankieBiz/hardset`. These are the final URLs; no further hosting decision is open.
 
 | App Store Connect field | Value |
 | --- | --- |
-| Marketing URL | `PLACEHOLDER — https://<host>/` (the site root) |
-| Support URL | `PLACEHOLDER — https://<host>/support.html` |
-| Privacy Policy URL | `PLACEHOLDER — https://<host>/privacy.html` |
+| Marketing URL | `https://frankiebiz.github.io/hardset/` |
+| Support URL | `https://frankiebiz.github.io/hardset/support.html` |
+| Privacy Policy URL | `https://frankiebiz.github.io/hardset/privacy.html` |
 
-The publish steps, including the GitHub Pages default and the owner-only decision, are in
-`site/README.md`. After publishing, replace the three placeholders here and in App Store
-Connect in the same sitting so the document and the listing cannot drift.
+The only remaining hosting action is the owner pressing Publish: enable Pages for this
+repository with **Settings → Pages → Deploy from a branch → `main` → `/site`**. The exact
+steps are in `site/README.md`. Until that is done the URLs return 404; the files and links
+need no change. A custom domain can be added later without changing any page, and would
+only require updating the three values above and in App Store Connect.
 
 The site's copy is final for the 1.0 decision, subject to the Apple Health verification
 in §9.1: local-only, no account, no server, CSV/JSON/SQLite exports with JSON/CSV restore,
@@ -420,7 +422,7 @@ is expected, because it is a brand asset rather than a screen.
 - [ ] Primary and secondary category set.
 - [ ] Age rating questionnaire answered; 4+ expected.
 - [ ] App Privacy "Data Not Collected" selected; §9.3 is ruled (Purchases: Not collected).
-- [ ] Privacy Policy URL, Support URL, and Marketing URL replaced with live HTTPS URLs.
+- [ ] GitHub Pages published; the three URL fields are already set to the live GitHub Pages URLs.
 - [ ] Review notes pasted; contact phone filled.
 - [ ] Export compliance answered.
 - [ ] Content rights answered.

@@ -29,50 +29,40 @@ Open `http://localhost:8000/`, then check 360 px and 1440 px wide with no
 horizontal scroll, keyboard focus visible on every link, and the policy and
 support pages reachable from every page.
 
-## Publish (GitHub Pages, the default)
+## Publish (GitHub Pages, this repository)
 
-**Publishing waits for the owner.** Do not create the repository, enable Pages,
-or point a domain at this site until Frankie approves the host, the domain, and
-the final copy. The site copy is ready for that review; the release decision and
-the Apple Health gate in `APP-STORE-METADATA.md` §9.1 are not.
+Hosting is decided: **GitHub Pages**, free, serving the `site/` folder from `main` in
+`FrankieBiz/hardset`. The public URLs are:
 
-A dedicated repository keeps the site separate from the app source and from the
-developer's WebGL portfolio, which is decision D6. GitHub Pages serves a project
-site at `https://<account>.github.io/<repo>/`; every link here is relative, so it
-works at that path or at a custom domain root.
+- <https://frankiebiz.github.io/hardset/>
+- <https://frankiebiz.github.io/hardset/privacy.html>
+- <https://frankiebiz.github.io/hardset/support.html>
 
-1. Decide the host and, if any, the custom domain. Record the decision in the
-   launch notes. The default is a public GitHub repository named `hardset-site`
-   owned by `FrankieBiz`.
-2. Create the empty public repository (no README, no license) and clone it.
-3. Copy the four **public** files to the repository root: `index.html`,
-   `privacy.html`, `support.html` and `styles.css`. Do not copy the `site/` folder,
-   and do not publish this `README.md`: it is the operator's checklist, not site
-   content.
-4. Commit and push to `main`. Use the repository's normal commit identity.
-5. In the repository: **Settings → Pages → Build and deployment**. Set
-   **Source** to **Deploy from a branch**, **Branch** to `main`, **Folder** to
-   `/ (root)`, and save.
-6. Wait for the deployment to finish. The URL is shown on the Pages settings
-   page, for example `https://frankiebiz.github.io/hardset-site/`.
-7. Open `/`, `/privacy.html` and `/support.html` on the published site. Confirm
-   all three load over HTTPS, the relative links work, and the pages still read
-   at 360 px and 1440 px with no horizontal scroll.
-8. Optional custom domain: add a file named `CNAME` at the repository root
-   containing only the domain (for example `hardset.app`), configure the DNS
-   records GitHub documents for that domain, then enable **Enforce HTTPS** in
-   Pages settings. Do not add `CNAME` before the domain exists.
-9. Put the final URLs into App Store Connect and into
-   `docs/release/APP-STORE-METADATA.md`:
-   - Marketing URL: the site root.
-   - Support URL: `<site>/support.html`.
-   - Privacy Policy URL: `<site>/privacy.html`.
-10. Re-check the published pages after any edit. There is no cache-busting step;
-    GitHub Pages serves the new commit after its deployment finishes.
+The only remaining step is the owner pressing Publish. Until Pages is enabled, those URLs
+return 404; the files and their relative links need no change.
 
-If the owner prefers a different static host, the same four files work unchanged.
-Keep the paths `privacy.html` and `support.html`, or update both the links in the
-pages and the URLs in App Store Connect.
+1. In GitHub, open **Settings → Pages → Build and deployment**.
+2. Set **Source** to **Deploy from a branch**.
+3. Set **Branch** to `main` and **Folder** to `/site`. Save.
+4. Or do the same from the CLI:
+
+   ```bash
+   gh api repos/FrankieBiz/hardset/pages -X POST \
+     -f "source[branch]=main" -f "source[path]=/site"
+   ```
+
+5. Wait for the Pages deployment to finish, then open all three URLs above. Confirm
+   `privacy.html` and `support.html` resolve at those exact paths (not 404) and every
+   relative link works.
+6. A custom domain can be added later in the Pages settings without changing the pages or
+   their relative links. If one is added, update the three URLs in App Store Connect and
+   in `docs/release/APP-STORE-METADATA.md` at that time.
+7. Re-check the published pages after any edit. GitHub Pages serves the new commit after
+   its deployment finishes.
+
+The pages themselves contain no placeholder copy. The three App Store Connect values are
+already filled in `docs/release/APP-STORE-METADATA.md`; pressing Publish is the only
+hosting blocker left.
 
 ## Before publishing
 
