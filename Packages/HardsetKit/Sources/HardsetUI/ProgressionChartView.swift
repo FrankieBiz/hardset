@@ -47,6 +47,7 @@ public struct ProgressionChartView: View {
   private let assumesAddedLoad: Bool
   @State private var metric: ProgressionMetric
   @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+  @Environment(\.accessibilityReduceMotion) private var reduceMotion
   /// Grows with the axis labels, so larger text does not squeeze the plot itself.
   @ScaledMetric(relativeTo: .footnote) private var plotHeight: CGFloat = 220
 
@@ -120,10 +121,7 @@ public struct ProgressionChartView: View {
           style: .quiet
         )
       } else {
-        HardsetSegmentedControl(
-          selection: $metric,
-          segments: metricOrder.map { HardsetSegment(metricLabel($0), value: $0) }
-        )
+        metricSwitch
 
         if assumesAddedLoad {
           Text(ExerciseModality.unknownLoadAssumption)
@@ -188,6 +186,51 @@ public struct ProgressionChartView: View {
   }
 
   private var metricUnit: String { metric == .repsAtTopLoad ? "reps" : unit.abbreviation }
+
+  // MARK: - Metric switch
+
+  /// Which metric is plotted, as words: the chosen one in `chalk` with a 2 pt rule under it, the
+  /// other in `chalkDim`, as the rest bar marks its chosen length. The shared segmented control
+  /// filled the chosen segment with `plateBlueFill`, which put a blue block on a screen that has no
+  /// primary action to own an accent, and in the same blue as a second machine's line, so the
+  /// selection read as a key to that series. The choice is carried by value and a mark, never a hue,
+  /// and the `isSelected` trait says it to VoiceOver. Each choice is an inline control, so Increase
+  /// Contrast and Button Shapes outline it. At accessibility sizes the choices stack, so a label
+  /// that says which metric it is never truncates.
+  private var metricSwitch: some View {
+    let layout =
+      dynamicTypeSize.isAccessibilitySize
+      ? AnyLayout(VStackLayout(alignment: .leading, spacing: Tokens.Spacing.tight))
+      : AnyLayout(HStackLayout(alignment: .center, spacing: Tokens.Spacing.section))
+    return layout {
+      ForEach(metricOrder, id: \.self) { option in
+        let isSelected = option == metric
+        Button {
+          withAnimation(Tokens.Motion.adaptive(Tokens.Motion.state, reduceMotion: reduceMotion)) {
+            metric = option
+          }
+        } label: {
+          Text(metricLabel(option))
+            .hardsetText(.label, weight: .semibold)
+            .foregroundStyle(isSelected ? Tokens.Color.chalk : Tokens.Color.chalkDim)
+            .multilineTextAlignment(.leading)
+            .fixedSize(horizontal: !dynamicTypeSize.isAccessibilitySize, vertical: true)
+            .overlay(alignment: .bottom) {
+              if isSelected {
+                Rectangle()
+                  .fill(Tokens.Color.chalk)
+                  .frame(height: Tokens.Stroke.selected)
+                  .offset(y: Tokens.Spacing.tight)
+                  .accessibilityHidden(true)
+              }
+            }
+        }
+        .buttonStyle(InlineControlStyle(alignment: .leading))
+        .accessibilityAddTraits(isSelected ? [.isSelected] : [])
+      }
+    }
+    .frame(maxWidth: .infinity, alignment: .leading)
+  }
 
   // MARK: - Metric header
 
