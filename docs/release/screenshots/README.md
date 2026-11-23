@@ -51,10 +51,13 @@ test` run, renders at 440 × 956 pt and 414 × 896 pt at 3x, verifies the four p
 dimensions with `sips`, copies the six files here, and removes the temporary source. It
 leaves no test target or test file change in the repository.
 
-Toolchain: verified with Xcode 26.6, the version the project's CI uses. Xcode 27.2
-currently fails to compile an unrelated existing Store test
-(`Conformance of 'Row' to 'Sendable' is unavailable`) before the renderer runs. That is a
-project/toolchain mismatch, not a render failure; use the CI toolchain.
+Toolchain: the renderer and the six images were verified on Xcode 27.2 by running the same
+`xcodebuild` invocation in a throwaway copy that excluded two unrelated existing test
+targets. Xcode 27.2 currently fails to compile an unrelated existing Store test
+(`Conformance of 'Row' to 'Sendable' is unavailable`) before the renderer runs. The
+script as committed therefore expects the project's CI toolchain (26.6), which compiles
+the whole package. Nothing in the committed package or test target is changed; the
+temporary copy was a local verification aid, not a deliverable.
 
 Do not upscale, pad, or crop a smaller capture and call it native. If a size cannot be
 produced, say so in the PR or release notes instead. `scripts/` verifies the dimensions

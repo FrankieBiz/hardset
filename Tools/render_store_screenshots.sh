@@ -19,10 +19,12 @@
 #   HARDSET_STORE_SHOT_DESTINATION  xcodebuild destination (default iPhone 17 simulator)
 #   HARDSET_STORE_SHOT_KEEP_TEMP    set to 1 to keep the raw captures and the log
 #
-# Toolchain note: this was verified with Xcode 26.6, the version the project's CI uses.
-# Xcode 27.2 currently fails to compile an unrelated existing Store test
-# ("Conformance of 'Row' to 'Sendable' is unavailable") before the renderer runs. That
-# is a project/toolchain mismatch, not a renderer result; use the CI toolchain.
+# Toolchain note: the renderer and the six images were verified on Xcode 27.2 by running
+# this same xcodebuild invocation in a throwaway copy that excluded two unrelated existing
+# test targets. Xcode 27.2 fails to compile an existing Store test
+# ("Conformance of 'Row' to 'Sendable' is unavailable") before the renderer runs, so the
+# script as committed is intended for the project's CI toolchain (26.6), which compiles
+# the whole package. Nothing in the committed package or test target is changed.
 
 set -euo pipefail
 
