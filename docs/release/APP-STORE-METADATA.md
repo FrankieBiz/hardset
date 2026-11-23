@@ -27,6 +27,24 @@ and the code that ships must agree, and one of them currently needs a release de
 | Copyright | `© 2026 Frankie Bisignano` | App Store Connect "Copyright" field. |
 | Operator | Frankie Bisignano, `frankabisignano@gmail.com` | Public support and privacy contact. |
 | Price | Free download | The one-time Lifetime In-App Purchase is the only paid item. |
+| Availability | All territories where the app is sold | Do not submit to the EU store before the trader declaration in `RELEASE-RUNBOOK.md` §11. |
+| Pre-order | No | The app is submitted when the membership and the build are ready. |
+| What's New (1.0) | `First release.` | App Store Connect shows this only for an update; harmless to fill. |
+| Demo account | Not required | There is no account or login. |
+
+### 1.1 In-App Purchase record
+
+| Field | Value |
+| --- | --- |
+| Type | Non-consumable |
+| Product ID | `com.hardset.app.lifetime` |
+| Reference name | `Hardset Lifetime` |
+| Display name (English U.S.) | `Hardset Lifetime` |
+| Description | `Unlocks the deep muscle map. One purchase, no subscription.` |
+| Launch price | **$19.99** |
+| Standing price | **$29.99** after the launch period (D17) |
+| Review screenshot | `docs/release/screenshots/6.9/02-volume.png`, or a capture of Settings → Hardset Lifetime |
+| Status | Create it in App Store Connect and make it match `LifetimeAccess.productID`; see `RELEASE-RUNBOOK.md` §6. This is a blocking step. |
 
 ---
 
@@ -208,7 +226,9 @@ comments in this kit; correct them when the Health decision in §9.1 is executed
 ## 7. App Review information
 
 **Contact:** Frankie Bisignano · `frankabisignano@gmail.com` · **PLACEHOLDER — phone
-number** (App Store Connect requires one; use a number the owner will answer).
+number** (App Store Connect requires one; use a number the owner will answer). **Demo
+account: not required; there is no account or login.** **Privacy Choices URL: not
+applicable** (no tracking, no data sale, no account).
 
 **Review notes (paste):**
 

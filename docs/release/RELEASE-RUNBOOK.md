@@ -358,4 +358,4 @@ before declaring.
 7. Run all ten purchase tests.
 8. Paste the metadata, upload the native screenshots, attach the IAP, submit.
 9. Declare EU trader status.
-10. Release at $19.99; move to $29.99 after the launch period.
+10. Release the Lifetime at $19.99; move it to $29.99 after the launch period.
