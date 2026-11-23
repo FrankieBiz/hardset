@@ -48,12 +48,9 @@
           .environment(\.dynamicTypeSize, typeSize)
       )
       host.overrideUserInterfaceStyle = .dark
-      // In a window scene, so the keypad's real sheet can present instead of being stranded in a
-      // detached window. The test runner normally has one; a plain window is the fallback.
-      let scene = UIApplication.shared.connectedScenes
-        .compactMap { $0 as? UIWindowScene }.first
-      let window = scene.map { UIWindow(windowScene: $0) } ?? UIWindow()
-      window.frame = CGRect(origin: .zero, size: size)
+      // The same plain 402 by 874 window the old tour-tagged measurement used. The pad is drawn
+      // inline for this check, so no scene is needed and the safe-area reading matches that harness.
+      let window = UIWindow(frame: CGRect(origin: .zero, size: size))
       window.overrideUserInterfaceStyle = .dark
       window.rootViewController = host
       window.makeKeyAndVisible()
