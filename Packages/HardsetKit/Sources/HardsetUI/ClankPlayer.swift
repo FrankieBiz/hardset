@@ -29,6 +29,21 @@ public final class ClankPlayer {
 
   public init() {}
 
+  /// Builds and starts the haptic engine ahead of the first set, so the clank is not the call that
+  /// pays for starting it. The clank is the anchor of the log moment (`LogMoment`): a first set
+  /// whose haptic lands after its stamp would feel like two events. Safe to call repeatedly and where
+  /// haptics are unavailable; failure is silent, as it is in `play()`.
+  public func prepare() {
+    #if canImport(CoreHaptics)
+      guard CHHapticEngine.capabilitiesForHardware().supportsHaptics else { return }
+      do {
+        _ = try startedEngine()
+      } catch {
+        engine = nil
+      }
+    #endif
+  }
+
   /// Plays the pattern, or the fallback impact when the pattern cannot play.
   public func play() {
     #if canImport(CoreHaptics)
@@ -38,12 +53,19 @@ public final class ClankPlayer {
   }
 
   #if canImport(CoreHaptics)
+    /// The engine, built if there is none and started. Starting one that is already running is
+    /// cheap, and one the system stopped to save power is brought back.
+    private func startedEngine() throws -> CHHapticEngine {
+      let engine = try self.engine ?? CHHapticEngine()
+      self.engine = engine
+      try engine.start()
+      return engine
+    }
+
     private func playPattern() -> Bool {
       guard CHHapticEngine.capabilitiesForHardware().supportsHaptics else { return false }
       do {
-        let engine = try self.engine ?? CHHapticEngine()
-        self.engine = engine
-        try engine.start()
+        let engine = try startedEngine()
         let transient = CHHapticEvent(
           eventType: .hapticTransient,
           parameters: [

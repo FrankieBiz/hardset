@@ -80,8 +80,9 @@ glass; the content beneath it is never glass.
   a saved value never imitate a button. The live session goes further: no input is boxed, a control
   may be only its label, and the outline returns under Increase Contrast and Button Shapes.
 - **Restraint everywhere except the log tap.** The one memorable moment is logging a set: the
-  check stamps in with a short spring and a success haptic, and the row settles into its logged
-  state. Nothing else moves without being asked.
+  check stamps in with a short spring and the clank, the row settles into its logged state, and the
+  rest bar and marks arrive just after, as one event (see The log moment). Nothing else moves
+  without being asked.
 
 ## Palette
 
@@ -262,6 +263,7 @@ working, not a gap in it: every figure there is an estimate, and an estimate is 
 | `Motion.state` | spring, response 0.30, damping 1.0 | Selection, segment indicator, row state |
 | `Motion.reveal` | 280 ms ease-out | Banners and inline confirmations appearing |
 | `Motion.stamp` | 300 ms spring, bounce 0.3 | The log check, and nothing else |
+| `Motion.follow(reduceMotion:)` | `Motion.reveal` started 120 ms after the stamp; none under Reduce Motion | The second beat of the log moment: the "+1 rep" mark, the rest bar and the record notice |
 | `Motion.fling(initialVelocity:)` | spring, response 0.35, damping 0.80 | Gesture release only, carrying the gesture's velocity |
 | `zoom` (no Swift symbol; `navigationTransition(.zoom)` at the call site) | system zoom transition | A card growing into its screen and back |
 
@@ -275,16 +277,60 @@ spring are dropped and only the fill or opacity changes, instantly or with `Moti
 
 In practice: a message or inline confirmation arrives with an insertion-only opacity transition
 carrying `Motion.reveal`, and no animated transaction, so what it displaces moves at once and it
-leaves at once. A logged row's field faces are layers whose opacity fades on `Motion.state`; the
-row's height is never animated.
+leaves at once. A logged row's figures go from `chalkDim` to `chalk` in the frame the set is saved,
+with no fade, and the row's height is never animated.
 
-Haptics follow the same restraint, and each has a name in `Tokens.Haptic`: `clank`, `success`,
-`error`, `selection` and `warning`. `clank` is the weighty tap of a plate meeting a bar: a CoreHaptics
+### The log moment
+
+The one signature of the app is not a spring and not a haptic; it is one event that a lifter at a
+machine perceives as a single thing, the plate meeting the bar. `LogMoment`
+(`Packages/HardsetKit/Sources/HardsetCore/LogMoment.swift`) writes it down as data, the interface
+reads its numbers from there, and `LogMomentTests` pins them. It has two beats.
+
+| Beat | When | What |
+| --- | --- | --- |
+| Contact | The frame the row is marked logged, which is after the write succeeded | The clank (the one haptic), the seal's stamp on `Motion.stamp`, the figures to full `chalk`, the screen's one accent moving to the next set that can be logged. Cuts and the one spring; nothing fades |
+| Follow | 120 ms later, one delay for all of it | The "+1 rep" mark, the rest bar, the record notice and the one-time correction hint fade in on `Motion.reveal`. Layout is already final and nothing slides |
+
+The follow beat waits because those things are information about the set and not the set being
+stamped: arriving with it, they competed with it on three clocks (a spring, a fade and a hard cut).
+120 ms is inside the stamp's own 300 ms, so the two overlap, and the whole moment is over inside
+0.45 s (`LogMoment.settleCeiling`). The seal reaches its full size a little after the follow beat
+begins, so the eye lands on the stamp first.
+
+Rules, each of which a future change has to break on purpose:
+
+- **One haptic, and it is the clank.** There is no `success` haptic under it: two patterns on one
+  instant felt like one doubled tap and are not what is wanted. `Tokens.Haptic` has no `success`.
+  `ClankPlayer.play()` is called from the row's `isLogged` false to true change, once, and from
+  nowhere else in the logging path; the Welcome bar's plate landing is its only other use. The
+  session prepares the engine when it appears, so the first set's clank is not late.
+- **Never before the save.** The row is marked logged only by `SessionCoordinator.logSet`, after
+  the store has written the set; a refused write leaves the row unlogged and starts no rest, so it
+  has no contact. An undo, and a row that appears already logged after a recovery, change nothing
+  and play nothing.
+- **Reduce Motion keeps the meaning.** One beat, no spring, no fade, no delay: the seal, the mark,
+  the rest bar and the notice appear together in the frame the set is saved, and the clank is
+  unchanged, because it now carries what the motion no longer does.
+- **Nothing else is this theatrical.** No other control stamps, springs with bounce, or sequences a
+  second beat. A new use of `Motion.stamp` or of `hardsetArrival(beat: .follow)` outside the set a
+  lifter just logged is a change to this section first. A failure, a stale-workout notice and every
+  other message stay on the plain reveal.
+
+What this does not claim: that it feels right. The sequence and the Reduce Motion variant are
+checked as data and in the code; the felt alignment of the clank with the stamp is a device check
+(`docs/OWNER-DEVICE-CHECKLIST.md`), and the seal's first full size lands about 150 ms after the
+haptic, which is the number to tune against `LogMoment.followDelay` if the device says the two feel
+apart.
+
+Haptics follow the same restraint, and each has a name in `Tokens.Haptic`: `clank`, `error`,
+`selection` and `warning`. `clank` is the weighty tap of a plate meeting a bar: a CoreHaptics
 pattern (a transient at intensity 1.0 and sharpness 0.6, then a 40 ms low rumble) played by
 `ClankPlayer`, which falls back to the heavy system impact where CoreHaptics is unavailable, and
 which `Tokens.Haptic.clank` names for a view that plays it through `.sensoryFeedback`. Saving a set
-plays `clank` under `success` (the row plays both when it is marked logged, so a failed write plays
-neither), and the Welcome bar's plate landing is the only other place `clank` is used. `error`
+plays `clank` and nothing with it (the row plays it when it is marked logged, so a failed write
+plays nothing; see the log moment above), and the Welcome bar's plate landing is the only other
+place `clank` is used. `error`
 follows every failed command, a repeated failure included. `selection` answers the row's machine
 step and the rest bar's −15, +15, pause, skip and next-rest choices. `warning`
 marks a rest that ran out on its own when no alarm can mark it (alarms denied or unavailable).
@@ -638,7 +684,7 @@ Selection rows, the unit switch and pickers stay silent.
 - **Pitch pages** (`PitchPage`, `PitchSetRowPage`, `PitchEstimatePage`, `PitchRestPage`): three
   pages with one anatomy, a `title` headline, two lines in `label` and one live element that is the
   real component, never a picture. "One tap per set" is a real set row prefilled from last time; its
-  tap plays `clank` then the row's own `success`. "Honest numbers" is the engine's estimate for the
+  tap plays the log moment, the stamp and the one `clank`. "Honest numbers" is the engine's estimate for the
   same 60 kg set at 1, 3, 12 and 15 reps, so the badge walks high (the single, which is measured and
   the only High), moderate, low and not evaluated because `StrengthMath` says so. "Rest that keeps
   time" is the real rest bar over a `DemoRestTimer`,
@@ -725,8 +771,8 @@ Selection rows, the unit switch and pickers stay silent.
   round `plateGreen` `checkmark.circle.fill`. A square logs a set and a circle is a set that is
   logged, so logged and next up differ by shape, not only by hue. Nothing is dashed, knurled or
   boxed, and a logged row has no tint. The stamp is the seal scaling in from 0.6 on `Motion.stamp`
-  as the unlogged glyph fades out, and the one flourish on the screen; with Reduce Motion it simply
-  appears. At accessibility sizes the control also reads "Log set" or "Logged" in `chalk`, and
+  as the unlogged glyph fades out, and the one flourish on the screen, the contact of the log moment
+  (see The log moment); with Reduce Motion it simply appears. At accessibility sizes the control also reads "Log set" or "Logged" in `chalk`, and
   VoiceOver hears "next to log" on the next-up row. Voice Control answers to "Set 2", "Log set 2",
   and, on the next-up row, "Log set".
 - **Press feedback on self-drawn controls** (`HardsetPressStyle` and the set row's own styles): flat

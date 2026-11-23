@@ -455,6 +455,9 @@ private enum MotionCatalog {
     TokenFact(name: "Motion.reveal", value: "easeOut, 0.28 s"),
     TokenFact(name: "Motion.stamp", value: "spring, duration 0.3, bounce 0.3"),
     TokenFact(
+      name: "Motion.follow",
+      value: "the reveal, delayed 0.12 s after the stamp; instant under Reduce Motion"),
+    TokenFact(
       name: "Motion.fling",
       value: "interpolating spring, response 0.35, damping ratio 0.80, initialVelocity 0"),
   ]
@@ -463,7 +466,6 @@ private enum MotionCatalog {
     TokenFact(
       name: "Haptic.clank",
       value: "CoreHaptics transient + 40 ms rumble; heavy system impact fallback"),
-    TokenFact(name: "Haptic.success", value: "success"),
     TokenFact(name: "Haptic.error", value: "error"),
     TokenFact(name: "Haptic.selection", value: "selection"),
     TokenFact(name: "Haptic.warning", value: "warning"),

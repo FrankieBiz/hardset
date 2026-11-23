@@ -14,7 +14,7 @@ physical iPhone, in the gym lighting where it matters.
       four seconds: it loads one 20 kg plate a side by itself, and a touch takes over at once.
 - [ ] A horizontal swipe on the bar loads or unloads and never turns the page; a swipe anywhere
       else turns it.
-- [ ] **Pitch pages.** The set row logs with a stamp, `clank` under `success`. The estimate's four
+- [ ] **Pitch pages.** The set row logs with a stamp and one `clank`. The estimate's four
       segments read high, moderate, low, not evaluated. The rest bar counts down and −15, +15, pause
       and skip each answer with a selection tick.
 - [ ] **Tour.** The staged phone is legible at its size and nothing is cropped. The callout card on
@@ -29,8 +29,18 @@ physical iPhone, in the gym lighting where it matters.
 
 ## The daily app
 
-- [ ] **Log tap.** `clank` under `success` is heavy once, not twice: if it reads as a double buzz,
-      lower the clank's intensity in `ClankPlayer` before anything else.
+- [ ] **Log tap, the log moment.** One tap on the check is one event: the clank and the stamp begin
+      together, and about a tenth of a second later the rest bar, the "+1 rep" mark and any record
+      notice fade in as one. Check that: (1) the clank is one tap, not two, and nothing buzzes under
+      it (there is no success haptic any more); (2) the *first* set of a fresh launch clanks as
+      crisply as the tenth, because the session starts the haptic engine ahead of it; (3) the clank
+      and the seal feel like the same instant. The seal first reaches its full size about 150 ms
+      after the haptic, so if the two feel apart, tune `LogMoment.followDelay` and the seal's
+      spring together, not the haptic alone; (4) a log from the keypad's "Log set" reads the same
+      as one from the row's check, with the sheet leaving as the bar arrives; (5) with Reduce Motion
+      on, the seal, the mark and the rest bar appear at once with the clank and nothing travels;
+      (6) a write that fails plays nothing and stamps nothing. If the clank reads as too heavy,
+      lower its intensity in `ClankPlayer` before anything else.
 - [ ] **Auto rest.** A movement you have chosen a rest for starts that rest when a working set is
       saved; a warm-up starts none; a movement with no remembered rest starts none and asks once.
 - [ ] **Next rest.** The row under the rest bar and a drag up on the bar open the lengths, a drag
