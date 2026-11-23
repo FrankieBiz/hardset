@@ -242,7 +242,10 @@ public struct SessionView: View {
           discardMessage: discardMessage,
           onDiscard: onDiscard
         )
-        .keypadSheetPresentation(isPresented: isKeypadPresented, onDismiss: keypadDidDismiss) {
+        .keypadSheetPresentation(
+          isPresented: isKeypadPresented, onDismiss: keypadDidDismiss,
+          inlineHeight: reachTargets == nil ? nil : padHeight
+        ) {
           keypadSheet
         }
       )
@@ -1564,31 +1567,72 @@ private struct KeypadTarget: Hashable {
 /// Presents the keypad from inside its own modifier body, so the screen's already large view
 /// builder is not asked to solve the sheet's generic presentation alongside everything else.
 /// Behaviour is the same as a `sheet(isPresented:onDismiss:content:)` on the screen itself.
+///
+/// `inlineHeight` is for the reach check only: with a height, the pad is drawn as a bottom panel
+/// inside the screen so its frame can be measured in the window. With `nil` — every shipped path —
+/// it is the real sheet.
 private struct KeypadSheetPresentation<Sheet: View>: ViewModifier {
-  let isPresented: Binding<Bool>
+  @Binding var isPresented: Bool
   let onDismiss: () -> Void
+  let inlineHeight: CGFloat?
   let sheet: () -> Sheet
 
   init(
-    isPresented: Binding<Bool>, onDismiss: @escaping () -> Void,
+    isPresented: Binding<Bool>, onDismiss: @escaping () -> Void, inlineHeight: CGFloat?,
     @ViewBuilder sheet: @escaping () -> Sheet
   ) {
-    self.isPresented = isPresented
+    _isPresented = isPresented
     self.onDismiss = onDismiss
+    self.inlineHeight = inlineHeight
     self.sheet = sheet
   }
 
   func body(content: Content) -> some View {
-    content.sheet(isPresented: isPresented, onDismiss: onDismiss, content: sheet)
+    if let inlineHeight {
+      content
+        .overlay(alignment: .bottom) {
+          if isPresented {
+            InlineKeypadSurface(height: inlineHeight, content: sheet)
+              .transition(.move(edge: .bottom).combined(with: .opacity))
+          }
+        }
+        .onChange(of: isPresented) { old, new in
+          if old && !new { onDismiss() }
+        }
+    } else {
+      content.sheet(isPresented: $isPresented, onDismiss: onDismiss, content: sheet)
+    }
+  }
+}
+
+/// The panel the keypad is measured on in the reach check: steel, with the card radius on its top
+/// corners and a hairline rim, at the same height the real sheet would take. It never ships.
+private struct InlineKeypadSurface<Content: View>: View {
+  let height: CGFloat
+  @ViewBuilder let content: () -> Content
+
+  var body: some View {
+    let shape = UnevenRoundedRectangle(
+      topLeadingRadius: Tokens.Radius.card, bottomLeadingRadius: 0, bottomTrailingRadius: 0,
+      topTrailingRadius: Tokens.Radius.card)
+    content()
+      .hardsetControlSurface(.steel)
+      .frame(maxWidth: .infinity)
+      .frame(height: height)
+      .background(Tokens.Color.steel, in: shape)
+      .overlay { shape.strokeBorder(Tokens.Color.hairline, lineWidth: Tokens.Stroke.hairline) }
+      .clipShape(shape)
   }
 }
 
 extension View {
   fileprivate func keypadSheetPresentation<Sheet: View>(
-    isPresented: Binding<Bool>, onDismiss: @escaping () -> Void,
+    isPresented: Binding<Bool>, onDismiss: @escaping () -> Void, inlineHeight: CGFloat?,
     @ViewBuilder sheet: @escaping () -> Sheet
   ) -> some View {
-    modifier(KeypadSheetPresentation(isPresented: isPresented, onDismiss: onDismiss, sheet: sheet))
+    modifier(
+      KeypadSheetPresentation(
+        isPresented: isPresented, onDismiss: onDismiss, inlineHeight: inlineHeight, sheet: sheet))
   }
 }
 
