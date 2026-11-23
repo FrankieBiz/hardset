@@ -32,9 +32,16 @@ public enum SetRowField: Hashable, Sendable {
 /// at ordinary sizes, and a stack at accessibility sizes, where the values take the full width and
 /// carry their own labels.
 ///
-/// The figures are the content. Weight and reps are the largest text on the card, set against a
-/// quiet multiply sign; the ordinal and last time are small and dim; nothing is boxed, tinted or
-/// outlined, and a hairline exists only between rows.
+/// The figures are the content. Weight and reps are the largest text on the card, at `figureXL`
+/// (44 pt) in a 64 pt row, set against a quiet multiply sign; the ordinal and last time are small and
+/// dim; nothing is boxed, tinted or outlined, and a hairline exists only between rows. They are
+/// numbers the lifter typed, so they are measurements and earn the size; an estimate on the same
+/// screen is never drawn this large.
+///
+/// A row that carries its own labels (`showsInlineLabels`) has no column header to name its
+/// columns and puts a unit beside each figure, which the 44 pt figures leave no room for on a
+/// narrow host such as a pitch page. It keeps the compact `readout` size and 56 pt row it always
+/// had.
 public struct SetRowView: View {
   @Binding private var draft: SetEntryDraft
   @State private var adjustmentFeedback = 0
@@ -143,6 +150,14 @@ public struct SetRowView: View {
 
   /// True at accessibility text sizes, where five columns cannot share one line legibly.
   private var isStacked: Bool { dynamicTypeSize.isAccessibilitySize }
+
+  /// The role the weight and reps are drawn in. See the type's documentation for the compact case.
+  private var figureRole: Tokens.Text.Role { showsInlineLabels ? .readout : .figureXL }
+
+  /// The height of the row's tap regions: 64 pt for the 44 pt figures, 56 pt for the compact row.
+  private var regionHeight: CGFloat {
+    showsInlineLabels ? Tokens.loggerTapTarget : SetRowMetrics.rowHeight
+  }
 
   /// Whether the figures take a tap. An unsaved row's always do, with a host to open the keypad; a
   /// saved row's do only where the host can write a correction.
@@ -275,7 +290,12 @@ public struct SetRowView: View {
       HStack(alignment: .firstTextBaseline, spacing: 0) {
         valueField(.weight, suffix: showsInlineLabels ? unit.abbreviation : nil, alignment: .trailing)
         multiplySign
+        // Reps sit in a fixed column and the weight takes the rest. Weight is the wider figure,
+        // "227.5" against "12", and an equal split gave it less room than it needed at 44 pt. The
+        // multiply sign is still one axis down the list because the column is the same width in
+        // every row, and the column header draws the same one.
         valueField(.reps, suffix: showsInlineLabels ? "reps" : nil, alignment: .leading)
+          .frame(width: showsInlineLabels ? nil : SetRowMetrics.repsWidth)
       }
 
       logButton
@@ -291,7 +311,7 @@ public struct SetRowView: View {
       previousColumn
         .frame(width: SetRowMetrics.previousWidth, alignment: .leading)
     }
-    .frame(minHeight: Tokens.loggerTapTarget)
+    .frame(minHeight: regionHeight)
     .contentShape(Rectangle())
     if !canEditFigures {
       columns
@@ -505,7 +525,7 @@ public struct SetRowView: View {
     } label: {
       SetRowFieldValue(
         text: displayText(field), suffix: suffix, state: shown, isLogged: isLogged,
-        alignment: alignment)
+        alignment: alignment, role: figureRole, minHeight: regionHeight)
     }
     // Presses dim and sink through the field's own style: with no face to darken, the figure
     // itself takes the press, as every control that draws no fill of its own does.
@@ -532,7 +552,8 @@ public struct SetRowView: View {
     Button(action: onLog) {
       EmptyView()
     }
-    .buttonStyle(SetReadoutStyle(state: logState))
+    .buttonStyle(
+      SetReadoutStyle(state: logState, regionHeight: isStacked ? Tokens.loggerTapTarget : regionHeight))
     // The same predicate the store enforces. There is no second definition of "complete".
     .disabled(!draft.isLoggable || isLogged)
     .accessibilityLabel(isLogged ? "Logged" : "Log set")
@@ -681,6 +702,10 @@ struct SetRowFieldValue: View {
   /// Where the figure sits in its column. A row sets weight against the multiply sign from the
   /// left and reps from the right, so the sign is one axis down the card; the catalogue centres.
   var alignment: Alignment = .center
+  /// The figure's role: `figureXL` for a measurement in a full row, `readout` for the compact row.
+  var role: Tokens.Text.Role = .figureXL
+  /// The field's tap region: 64 pt for the 44 pt figures, 56 pt for the compact row.
+  var minHeight: CGFloat = SetRowMetrics.rowHeight
 
   private var isEditing: Bool { state == .editing }
 
@@ -699,21 +724,22 @@ struct SetRowFieldValue: View {
   var body: some View {
     HStack(alignment: .firstTextBaseline, spacing: Tokens.Spacing.tight) {
       HStack(alignment: .firstTextBaseline, spacing: 0) {
-        // The largest thing on the card: the readout role, set tight and tabular, so a column of
+        // The largest thing on the card: the figure role, set tight and tabular, so a column of
         // weights lines up digit under digit.
         Text(shown)
-          .hardsetText(.readout)
+          .hardsetText(role)
           .foregroundStyle(figureColor)
-          // Condensed tabular figures fit a pound value such as "132.28" at full size on a 375 pt
-          // phone. The mild floor below exists only so an extreme value shrinks a little rather
-          // than truncating: a number cut to "132.…" is worse than one drawn slightly smaller.
+          // Condensed tabular figures at 44 pt fit "227.5" in the weight column of a 402 pt phone,
+          // and "132.28" with the floor below. The floor exists only so a long value shrinks a
+          // little rather than truncating, as it does on a 375 pt phone: a number cut to "132.…"
+          // is worse than one drawn slightly smaller. The compact size keeps its shallower floor.
           .lineLimit(1)
-          .minimumScaleFactor(0.85)
+          .minimumScaleFactor(role == .readout ? 0.85 : 0.7)
         if isEditing {
           // The caret is the vertical bar glyph at the figure's own size, so it is as tall as the
           // digits at every Dynamic Type size without a measured frame.
           Text("|")
-            .hardsetText(.readout, weight: .light)
+            .hardsetText(role, weight: .light)
             .foregroundStyle(Tokens.Color.chalk)
             .accessibilityHidden(true)
         }
@@ -734,7 +760,7 @@ struct SetRowFieldValue: View {
           .foregroundStyle(Tokens.Color.chalkDim)
       }
     }
-    .frame(maxWidth: .infinity, minHeight: Tokens.loggerTapTarget, alignment: alignment)
+    .frame(maxWidth: .infinity, minHeight: minHeight, alignment: alignment)
   }
 
   /// A rule under an empty field would be as wide as its caret; this keeps it a visible line.
@@ -846,13 +872,17 @@ enum SetLogState: Sendable {
 struct SetLogControlFace: View {
   private let state: SetLogState
   private let isPressed: Bool
+  private let regionHeight: CGFloat
 
   @Environment(\.dynamicTypeSize) private var dynamicTypeSize
   @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
-  init(state: SetLogState, isPressed: Bool) {
+  /// - Parameter regionHeight: The control's tap region. It matches the row it sits in, 64 pt for
+  ///   the 44 pt figures; the glyph inside stays one size.
+  init(state: SetLogState, isPressed: Bool, regionHeight: CGFloat = Tokens.loggerTapTarget) {
     self.state = state
     self.isPressed = isPressed
+    self.regionHeight = regionHeight
   }
 
   private var isStacked: Bool { dynamicTypeSize.isAccessibilitySize }
@@ -891,7 +921,7 @@ struct SetLogControlFace: View {
       }
       .frame(
         maxWidth: isStacked ? .infinity : Tokens.loggerTapTarget,
-        minHeight: Tokens.loggerTapTarget,
+        minHeight: regionHeight,
         alignment: isStacked ? .leading : .center
       )
       .frame(width: isStacked ? nil : Tokens.loggerTapTarget)
@@ -952,20 +982,22 @@ struct SetLogControlFace: View {
 /// its own here; this style only animates the press.
 private struct SetReadoutStyle: ButtonStyle {
   let state: SetLogState
+  let regionHeight: CGFloat
 
   func makeBody(configuration: ButtonStyleConfiguration) -> some View {
-    SetReadoutBody(configuration: configuration, state: state)
+    SetReadoutBody(configuration: configuration, state: state, regionHeight: regionHeight)
   }
 }
 
 private struct SetReadoutBody: View {
   let configuration: ButtonStyleConfiguration
   let state: SetLogState
+  let regionHeight: CGFloat
 
   @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
   var body: some View {
-    SetLogControlFace(state: state, isPressed: configuration.isPressed)
+    SetLogControlFace(state: state, isPressed: configuration.isPressed, regionHeight: regionHeight)
       .animation(
         Tokens.Motion.adaptive(Tokens.Motion.press, reduceMotion: reduceMotion),
         value: configuration.isPressed

@@ -209,9 +209,15 @@ public struct RestBarView: View {
     }
   }
 
-  /// The countdown and what it is resting after.
+  /// The countdown and what it is resting after. Side by side at ordinary sizes; at accessibility
+  /// sizes the words drop under the figure, because the 64 pt countdown grows with Dynamic Type up
+  /// to its cap and would leave "Chest press, set 2" a sliver of the bar to wrap in.
   private var status: some View {
-    HStack(alignment: .firstTextBaseline, spacing: Tokens.Spacing.regular) {
+    let layout =
+      dynamicTypeSize.isAccessibilitySize
+      ? AnyLayout(VStackLayout(alignment: .leading, spacing: Tokens.Spacing.snug))
+      : AnyLayout(HStackLayout(alignment: .firstTextBaseline, spacing: Tokens.Spacing.regular))
+    return layout {
       countdown
       VStack(alignment: .leading, spacing: Tokens.Spacing.hairline) {
         Text(state.isRunning ? "Resting" : "Paused")
@@ -231,8 +237,9 @@ public struct RestBarView: View {
 
   /// The countdown, in `chalk` whether it runs or is paused: the paused state is carried by the
   /// word "Paused" and the play key, never by a dimmer colour. It is drawn straight on the panel,
-  /// with no tile or texture behind it: the figure is the largest on the screen and needs nothing
-  /// to stand on.
+  /// with no tile or texture behind it: at 64 pt it is the largest figure on the live session and
+  /// needs nothing to stand on. A countdown is the clock's own measurement of a deadline the
+  /// lifter chose, so it is one of the figures that earns the size.
   @ViewBuilder private var countdown: some View {
     switch state {
     case .idle:
@@ -241,13 +248,13 @@ public struct RestBarView: View {
       // System-rendered from the deadline. Costs zero updates and survives backgrounding,
       // because there is nothing of ours to keep running.
       Text(timerInterval: referenceDate...max(endsAt, referenceDate), countsDown: true)
-        .hardsetText(.hero)
+        .hardsetText(.countdown)
         .foregroundStyle(Tokens.Color.chalk)
         .lineLimit(1)
         .fixedSize()
     case .paused(let remaining):
       Text(remaining.clockString)
-        .hardsetText(.hero)
+        .hardsetText(.countdown)
         .foregroundStyle(Tokens.Color.chalk)
         .lineLimit(1)
         .fixedSize()

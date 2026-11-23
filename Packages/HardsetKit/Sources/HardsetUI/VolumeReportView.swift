@@ -43,6 +43,8 @@ public struct VolumeReportView: View {
   /// has no working to show, and the figure is then plain text.
   private let onShowWorking: ((Muscle) -> Void)?
 
+  @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
   public init(
     report: MuscleVolumeReport,
     excludedFromGaps: Set<Muscle> = [],
@@ -166,10 +168,17 @@ public struct VolumeReportView: View {
     VStack(alignment: .leading, spacing: Tokens.Spacing.regular) {
       // The total is exact even when the per-muscle figures are not: unattributed sets are still
       // working sets, they just cannot be credited to a muscle. So no "≥" here.
-      HStack(alignment: .firstTextBaseline, spacing: Tokens.Spacing.snug) {
+      //
+      // It is this screen's monument, 88 pt, because it is the one figure here that is a count of
+      // what the lifter logged. The per-muscle figures below are fractional credits, an adopted
+      // convention, so they stay small. At accessibility sizes the sentence drops under the figure
+      // rather than wrapping in what the figure leaves.
+      countLayout {
         Text(report.hardSets, format: .number)
-          .hardsetText(.hero)
+          .hardsetText(.monument)
           .foregroundStyle(Tokens.Color.chalk)
+          .lineLimit(1)
+          .minimumScaleFactor(0.5)
         Text(verbatim: "\(report.hardSets == 1 ? "working set" : "working sets") \(period)")
           .font(Tokens.Text.unit)
           .foregroundStyle(Tokens.Color.chalkDim)
@@ -196,6 +205,12 @@ public struct VolumeReportView: View {
         .buttonStyle(InlineControlStyle(alignment: .leading))
       }
     }
+  }
+
+  private var countLayout: AnyLayout {
+    dynamicTypeSize.isAccessibilitySize
+      ? AnyLayout(VStackLayout(alignment: .leading, spacing: Tokens.Spacing.snug))
+      : AnyLayout(HStackLayout(alignment: .firstTextBaseline, spacing: Tokens.Spacing.snug))
   }
 
   /// Says what is wrong, that it is not the lifter's miscount, and where the part that can be fixed

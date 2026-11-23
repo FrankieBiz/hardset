@@ -279,7 +279,8 @@ private struct TypeRow: View {
   /// Figure roles are shown with a weight, since they exist for numbers; the rest with a name.
   private var sample: String {
     switch role {
-    case .hero, .readout, .setEntry, .figure: "132.3 kg"
+    case .hero, .readout, .setEntry, .figure, .figureXL, .countdown: "132.3 kg"
+    case .monument, .monumentAside: "800 lb"
     default: "Chest press"
     }
   }

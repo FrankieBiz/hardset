@@ -315,25 +315,63 @@ public enum Tokens {
   /// face had to shrink it to 60% -- about 12 pt -- to avoid wrapping. Condensed is for figures
   /// only: a sentence that happens to hold figures is `title` with tabular digits.
   public enum Text {
-    /// Tab screen headers. Bold, in the system's standard width: the system font applies its own
-    /// optical size and tracking, so none is added. Condensed is kept for the figures beneath it.
-    public static let display = Font.system(.largeTitle, design: .default, weight: .bold)
+    /// Tab screen headers. Semibold at Title size (28 pt), in the system's standard width: the
+    /// system font applies its own optical size and tracking, so none is added. A title is the word
+    /// that names a screen and a figure is its content, so the title steps down below the figures
+    /// it sits over instead of competing with them. Condensed is kept for the figures beneath it.
+    public static let display = Font.system(.title, design: .default, weight: .semibold)
     /// Sheet headers, hero card titles, and a sentence that holds figures. Standard width:
     /// expanded width is retired, and the condensed face is kept for figures.
     public static let title = Font.system(.title3, design: .default, weight: .semibold)
     /// Card and row titles, primary button labels, and emphasised labels.
     public static let headline = Font.headline
 
-    /// The rest countdown and the keypad's display. The biggest figure on any screen.
+    /// The keypad's display and the welcome bar's total.
     public static let hero = Font.system(.largeTitle, design: .default, weight: .semibold)
       .width(.condensed).monospacedDigit()
     /// Numeric readouts use a monospaced digit width so a ticking value does not reflow.
+    ///
+    /// This is the largest a figure may be when it is not a measurement. See `estimateCeiling`.
     public static let readout = Font.system(.title, design: .default, weight: .semibold)
       .width(.condensed).monospacedDigit()
     public static let setEntry = Font.system(.title2, design: .default, weight: .semibold)
       .width(.condensed).monospacedDigit()
     /// Small figures inside rows and ledgers: "last time" values, counts, durations.
     public static let figure = Font.system(.headline, design: .default, weight: .semibold)
+      .width(.condensed).monospacedDigit()
+
+    // MARK: Scale
+
+    /// The largest a figure may be, in points at the default content size, when the number is an
+    /// estimate and not a measurement: an Epley one-rep max, a fractional muscle credit, a change
+    /// in either. A formula's output can be wrong in ways a lifter cannot see, so it is never drawn
+    /// larger than a number the lifter typed or the app counted.
+    ///
+    /// The four figure roles below, `figureXL`, `countdown`, `monument` and `monumentAside`, are for
+    /// measurements only, and `Role.mayCarryEstimate` is false for each of them. That is the
+    /// scale's whole argument: size is earned by being measured, so the biggest numbers on a screen
+    /// are the ones that can be trusted without a caveat. `Tools/check_figure_cap.py` holds each of
+    /// the three to the files that draw measurements.
+    public static let estimateCeiling: CGFloat = 28
+
+    /// A figure the lifter typed or the app counted, in a set row or a ledger: 44 pt. Fixed point
+    /// sizes in this block do not scale; `hardsetText(_:)` scales them with Dynamic Type, up to the
+    /// role's `maximumDynamicTypeSize`, and is the way to set them.
+    static let figureXL = Font.system(size: 44, weight: .semibold, design: .default)
+      .width(.condensed).monospacedDigit()
+    /// The rest countdown, the one number read at arm's length mid-set: 64 pt.
+    static let countdown = Font.system(size: 64, weight: .semibold, design: .default)
+      .width(.condensed).monospacedDigit()
+    /// The one measured figure a screen leads with, at most one per screen: 88 pt. The monument is 88
+    /// where the screen's subject is the number, and `monumentAside` is 72 where the screen's subject
+    /// is the action. Weekly working sets on Volume, where the number is the content. A screen with
+    /// no measured figure to lead with has none.
+    static let monument = Font.system(size: 88, weight: .semibold, design: .default)
+      .width(.condensed).monospacedDigit()
+    /// The monument on a screen whose subject is an action: 72 pt. The last workout's volume on Train,
+    /// where the primary action is starting a workout and a number that outranked it would make the
+    /// screen harder to use.
+    static let monumentAside = Font.system(size: 72, weight: .semibold, design: .default)
       .width(.condensed).monospacedDigit()
 
     public static let label = Font.body

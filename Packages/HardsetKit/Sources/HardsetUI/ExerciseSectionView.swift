@@ -381,7 +381,7 @@ public struct ExerciseSectionView: View {
         Color.clear
           .frame(width: SetRowMetrics.multiplyWidth, height: 1)
         Text("Reps")
-          .frame(maxWidth: .infinity, alignment: .leading)
+          .frame(width: SetRowMetrics.repsWidth, alignment: .leading)
       }
       Color.clear
         .frame(width: Tokens.loggerTapTarget, height: 1)

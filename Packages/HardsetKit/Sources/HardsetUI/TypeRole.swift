@@ -21,8 +21,21 @@ extension Tokens.Text {
     case readout
     case setEntry
     case figure
+    /// A figure the lifter typed or the app counted, in a set row or a ledger. 44 pt.
+    case figureXL
+    /// The rest countdown. 64 pt.
+    case countdown
+    /// The one measured figure a screen leads with, where the screen's subject is the number. 88 pt,
+    /// at most one per screen.
+    case monument
+    /// The one measured figure a screen leads with, where the screen's subject is an action and the
+    /// number sits beside it. 72 pt, at most one per screen. Never on the same screen as `monument`.
+    case monumentAside
 
     /// The matching static font, so a role and its static can never disagree.
+    ///
+    /// For `figureXL`, `countdown`, `monument` and `monumentAside` it is the font at the role's base
+    /// size, which does not scale with Dynamic Type; `hardsetText(_:)` is how those roles are set.
     public var font: Font {
       switch self {
       case .display: Tokens.Text.display
@@ -37,6 +50,22 @@ extension Tokens.Text {
       case .readout: Tokens.Text.readout
       case .setEntry: Tokens.Text.setEntry
       case .figure: Tokens.Text.figure
+      case .figureXL: Tokens.Text.figureXL
+      case .countdown: Tokens.Text.countdown
+      case .monument: Tokens.Text.monument
+      case .monumentAside: Tokens.Text.monumentAside
+      }
+    }
+
+    /// The font at a size already scaled for the current Dynamic Type setting. The three scale
+    /// roles are built from the scaled size; every other role is a text style and scales itself.
+    func scaledFont(_ size: CGFloat) -> Font {
+      switch self {
+      case .figureXL, .countdown, .monument, .monumentAside:
+        Font.system(size: size, weight: .semibold, design: .default)
+          .width(.condensed).monospacedDigit()
+      default:
+        font
       }
     }
 
@@ -44,8 +73,8 @@ extension Tokens.Text {
     /// size relative to this style, so tracking follows the same curve as the glyphs.
     public var textStyle: Font.TextStyle {
       switch self {
-      case .display, .hero: .largeTitle
-      case .readout: .title
+      case .hero, .countdown, .monument, .monumentAside: .largeTitle
+      case .display, .readout, .figureXL: .title
       case .setEntry: .title2
       case .title: .title3
       case .headline, .figure: .headline
@@ -59,7 +88,16 @@ extension Tokens.Text {
     /// The default point size of `textStyle` at the standard content size. It seeds the scaled
     /// size the tracking is computed from, so the result matches the rendered glyphs.
     public var baseSize: CGFloat {
-      switch textStyle {
+      switch self {
+      // The three scale roles are not a text style's size; they scale along the curve of the
+      // style they are set against, from their own size.
+      case .figureXL: return 44
+      case .countdown: return 64
+      case .monument: return 88
+      case .monumentAside: return 72
+      default: break
+      }
+      return switch textStyle {
       case .largeTitle: 34
       case .title: 28
       case .title2: 22
@@ -73,13 +111,31 @@ extension Tokens.Text {
       }
     }
 
+    /// Whether a figure that is an estimate may be drawn in this role: its size at the default
+    /// content size is within `Tokens.Text.estimateCeiling`. False for `hero` and for the four
+    /// scale roles, so a formula's output can never be set at the size of a measurement.
+    public var mayCarryEstimate: Bool {
+      baseSize <= Tokens.Text.estimateCeiling
+    }
+
+    /// The largest Dynamic Type size the role grows to, or `nil` for a role that grows with the
+    /// whole range. The four scale roles stop at accessibility1: at 44 to 88 pt they are already
+    /// larger than body text at the biggest setting, and growing further would push a figure wider
+    /// than the row or card that holds it. The words around a figure keep scaling.
+    public var maximumDynamicTypeSize: DynamicTypeSize? {
+      switch self {
+      case .figureXL, .countdown, .monument, .monumentAside: .accessibility1
+      default: nil
+      }
+    }
+
     /// Tracking as a fraction of the text size. Large condensed figures tighten slightly so the
     /// stamped figures sit as one plate; the small roles open slightly for legibility. Every
     /// other role keeps the font's own spacing, `display` included: the system font applies its
     /// own optical tracking at large sizes, and a second value on top would be a guess.
     public var trackingRatio: Double {
       switch self {
-      case .hero: -0.02
+      case .hero, .figureXL, .countdown, .monument, .monumentAside: -0.02
       case .readout: -0.01
       case .caption, .unit: 0.01
       case .display, .title, .headline, .label, .provenance, .sectionHeader, .setEntry, .figure:
@@ -106,7 +162,7 @@ public struct HardsetTextModifier: ViewModifier {
 
   public func body(content: Content) -> some View {
     content
-      .font(role.font)
+      .font(role.scaledFont(size))
       .tracking(size * role.trackingRatio)
   }
 }
@@ -131,7 +187,7 @@ struct HardsetWeightedTextModifier: ViewModifier {
 
   func body(content: Content) -> some View {
     content
-      .font(role.font.weight(weight))
+      .font(role.scaledFont(size).weight(weight))
       .tracking(size * role.trackingRatio)
   }
 }
@@ -139,11 +195,22 @@ struct HardsetWeightedTextModifier: ViewModifier {
 extension View {
   /// Sets the text's font and size-proportional tracking from a design-system type role.
   public func hardsetText(_ role: Tokens.Text.Role) -> some View {
-    modifier(HardsetTextModifier(role: role))
+    modifier(HardsetTextModifier(role: role)).hardsetDynamicTypeCap(role)
   }
 
   /// Sets the text from a design-system type role at the given weight, with the role's tracking.
   public func hardsetText(_ role: Tokens.Text.Role, weight: Font.Weight) -> some View {
-    modifier(HardsetWeightedTextModifier(role: role, weight: weight))
+    modifier(HardsetWeightedTextModifier(role: role, weight: weight)).hardsetDynamicTypeCap(role)
+  }
+
+  /// Stops the role's growth at its `maximumDynamicTypeSize`. Applied outside the modifier that
+  /// reads the scaled size, so the size it reads is the capped one.
+  @ViewBuilder
+  func hardsetDynamicTypeCap(_ role: Tokens.Text.Role) -> some View {
+    if let cap = role.maximumDynamicTypeSize {
+      dynamicTypeSize(...cap)
+    } else {
+      self
+    }
   }
 }
