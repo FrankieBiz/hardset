@@ -102,6 +102,7 @@ primary appearance; light is derived from the same roles and held to the same fl
 | `steelPressed` | `#111216` | `#E6E6EB` | Momentary pressed fill, darker than `steelRaised` so a press sinks, and distinct from both `steel` and `canvas` so a pressed control with no outline keeps a visible face |
 | `hairline` | `#2E3039` | `#DEDEE4` | Decorative separators inside a card; never a boundary |
 | `controlEdge` | `#7B7E8C` | `#7E8190` | The outline of an input, and of every control under Increase Contrast or Button Shapes |
+| `gaugeTrack` | `#5C5C65` | `#888892` | The unfilled part of a gauge that carries meaning: the first-launch pager's inactive segments. At least 3:1 on `canvas` in every appearance; drawn on `canvas` only |
 | `chalk` | `#F3F3F5` | `#141519` | Chalk / graphite body text and values |
 | `chalkDim` | `#B6B8C3` | `#4B4D58` | Supporting text, units, provenance |
 | `plateBlue` | `#6FB7FF` | `#084A95` | The 20 kg plate: actions, focus, selection, next up |
@@ -144,6 +145,18 @@ green, yellow and red plates, `warning` and their surfaces keep their normal val
 clear the floor. Under Increase Contrast `canvas`, `steel` and `steelRaised` are one colour, so the
 fill step is gone and every control wears its `controlEdge`. Resolution happens live from the trait
 collection, in code, with no asset catalogue.
+
+`gaugeTrack` is the one boundary-grade colour with no Increase Contrast pair, on purpose. A gauge's
+unfilled part is required information, so it is held to 3:1 on `canvas` and cannot be `hairline`, which
+is decoration and was 1.54:1 dark and 1.20:1 light when the pager drew its segments with it (ruling
+D22). It measures 3.06:1 dark, 3.15:1 light, 3.17:1 dark and 3.51:1 light under Increase Contrast.
+`controlEdge` would clear 3:1 as well, but its Increase Contrast pair (`#9B9BA5` / `#595964`) is
+loud against pure black and white and leaves the `plateBlue` indicator, in its own Increase Contrast
+pair, at about 1.7:1 and 1.6:1 against it: the indicator would read as the quieter segment at the
+setting a low-vision lifter turns on. Against `gaugeTrack` the indicator is 3.12:1 dark and 2.47:1
+light, and 4.08:1 and 3.20:1 under Increase Contrast. A deep-blue indicator cannot also be 3:1 from a
+mid-grey track on the light canvas while the track is 3:1 from the canvas, so the pair is held to
+its order and not to 3:1 (`Tools/check_contrast.py`).
 
 Certainty maps high → `plateGreen`, moderate → `plateYellow`, low → `warning`, unevaluated →
 `chalkDim`, always with its word and symbol so colour is never the only carrier. On the live
@@ -778,9 +791,12 @@ Selection rows, the unit switch and pickers stay silent.
   the only High), moderate, low and not evaluated because `StrengthMath` says so. "Rest that keeps
   time" is the real rest bar over a `DemoRestTimer`,
   an in-memory timer with no alarm, whose controls give the selection haptic. The first-launch pager
-  shows three short `hairline` segments above the primary button, the active one `plateBlue`,
-  sliding on `Motion.state`; like the segmented control's indicator it is one shape moved between
-  two places inside its row.
+  shows three short segments above the primary button, the active one `plateBlue` and the others
+  `gaugeTrack`, sliding on `Motion.state`; like the segmented control's indicator it is one shape moved
+  between two places inside its row. The segments are information (they say how much of the
+  introduction is left, and "Page N of 3" says the same to VoiceOver), so they clear 3:1 and are
+  never `hairline`. The gauge is not a control, and the accessibility audit's hit-area line on it is a
+  false positive that is not suppressed.
 - **Tour** (`TourStage`, `SpotlightOverlay`, `CalloutCard`, `tourTarget`, `TourStaging`): the real
   root view in the staged phone, asked into each state through the `TourStaging` environment value
   the real screens read, with the controls it points at tagged in place. The spotlight is the

@@ -186,7 +186,12 @@ private struct WelcomePage: View {
 /// through Next, Skip or a swipe of the pager. So assistive technology is offered a progress indicator with a label and
 /// a value, "Introduction", "Page 1 of 3", and no action and no adjustable trait. Exposed as a bare
 /// labelled node it had no role at all, and the accessibility audit read that 4 pt node as a target
-/// too small to hit (`docs/KNOWN-ISSUES.md` #3).
+/// too small to hit. The audit still reports the frame of this node, which is a false positive for
+/// a gauge with nothing to hit.
+///
+/// The inactive segments are required information, since they say how much of the introduction is
+/// left, so they are `gaugeTrack` and not the decorative `hairline` (ruling D22): 3:1 or more on
+/// `canvas` in every appearance, with the active segment still the stronger of the two.
 struct PitchProgress: View {
   /// What the gauge measures. A gauge's label names it; where it stands is its value.
   static let accessibilityLabel = "Introduction"
@@ -206,7 +211,7 @@ struct PitchProgress: View {
     HStack(spacing: Tokens.Spacing.snug) {
       ForEach(0..<count, id: \.self) { position in
         ZStack {
-          Rectangle().fill(Tokens.Color.hairline)
+          Rectangle().fill(Tokens.Color.gaugeTrack)
           if position == index {
             Rectangle()
               .fill(Tokens.Color.plateBlue)

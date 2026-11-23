@@ -87,6 +87,23 @@ public enum Tokens {
     public static let controlEdge = swatch(
       light: 0x7E8190, dark: 0x7B7E8C, highLight: 0x595964, highDark: 0x9B9BA5
     )
+    /// The unfilled part of a gauge that says where the lifter stands: the inactive segments of the
+    /// first-launch pages' three-segment progress.
+    ///
+    /// Required information, so not `hairline`, which is for decoration and measures 1.54:1 on dark
+    /// `canvas` and 1.20:1 on light (ruling D22). At least 3:1 on `canvas` in all four appearances:
+    /// 3.06 dark, 3.15 light, 3.17 dark and 3.51 light under Increase Contrast.
+    ///
+    /// One pair with no Increase Contrast override, on purpose. `controlEdge`'s own Increase Contrast
+    /// pair is made loud against pure black and white, and `plateBlue`'s is not far from it, so the
+    /// active segment would sit at about 1.7:1 and 1.6:1 against the inactive ones: the indicator
+    /// would read as the quieter of the two at the setting a low-vision lifter turns on. Against this
+    /// pair the `plateBlue` segment is 3.12:1 dark and 2.47:1 light, and 4.08:1 and 3.20:1 under
+    /// Increase Contrast. `Tools/check_contrast.py` gates both the 3:1 and that order.
+    ///
+    /// Drawn on `canvas` only. On dark `steel` it measures 2.60:1, which is why the gate does not
+    /// list `steel`.
+    public static let gaugeTrack = swatch(light: 0x888892, dark: 0x5C5C65)
 
     // MARK: Chalk: text
 
