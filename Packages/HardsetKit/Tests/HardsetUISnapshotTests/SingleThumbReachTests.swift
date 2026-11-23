@@ -102,6 +102,35 @@
       }
     }
 
+    /// The pad with a machine's own steps, for review: a 4.5 kg pin stack in kilograms, the same
+    /// stack in pounds, and the fallback when no increment is recorded. The widest step, "−19.84", is
+    /// the one that has to fit its key at the largest ordinary size and at accessibility sizes.
+    @Test func rendersTheMachineSteps() async throws {
+      func pad(_ unit: WeightUnit, _ incrementKg: Double?) -> some View {
+        NumericPad(
+          buffer: .constant(
+            NumericEntryBuffer(value: 102.5, maximumIntegerDigits: 4, maximumFractionDigits: 2)),
+          title: "Weight", context: "Leg Press · Set 2", unit: unit.abbreviation,
+          onDone: {}, onNext: {},
+          weightSteps: QuickSteps.weight(machineIncrementKg: incrementKg, unit: unit))
+      }
+      let size = CGSize(width: 402, height: 520)
+      try await Snapshot.capture("keypad-machine-step-kg-dark", size: size) { pad(.kilograms, 4.5) }
+      try await Snapshot.capture("keypad-machine-step-lb-dark", size: size) { pad(.pounds, 4.5) }
+      try await Snapshot.capture("keypad-machine-step-lb-light", size: size, style: .light) {
+        pad(.pounds, 4.5)
+      }
+      try await Snapshot.capture("keypad-fallback-steps-dark", size: size) { pad(.kilograms, nil) }
+      try await Snapshot.capture(
+        "keypad-machine-step-lb-dark-xxxl", size: CGSize(width: 402, height: 560),
+        typeSize: .xxxLarge
+      ) { pad(.pounds, 4.5) }
+      try await Snapshot.capture(
+        "keypad-machine-step-lb-dark-ax3", size: CGSize(width: 402, height: 900),
+        typeSize: .accessibility3
+      ) { pad(.pounds, 4.5) }
+    }
+
     /// The targets a chalky thumb has to hit: every key and quick step is a logger-height cell, and
     /// the row's machine steps use the same floor. Pinned as numbers so a change to a cell's height
     /// is a change to this test first.
