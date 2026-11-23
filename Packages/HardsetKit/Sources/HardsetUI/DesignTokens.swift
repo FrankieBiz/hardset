@@ -66,12 +66,6 @@ public enum Tokens {
     public static let steelPressed = swatch(
       light: 0xE6E6EB, dark: 0x111216, highLight: 0xE6E6EA, highDark: 0x26262B
     )
-    /// Retired with the machined face it lit. Nothing draws a raised edge any more.
-    ///
-    /// Kept for one reader only: `ScaledPhoneFrame`, which was held out of the phase that retired
-    /// the machined skin and still draws its rim with this value. When that file is next edited
-    /// its rim becomes `hairline` and this token is deleted. Do not use it anywhere else.
-    public static let edgeLight = swatch(light: 0xFCFCFD, dark: 0x30333C)
     /// Subtle charcoal hairline for separators inside a card or grouped rows, and the card's
     /// outline under Increase Contrast.
     ///

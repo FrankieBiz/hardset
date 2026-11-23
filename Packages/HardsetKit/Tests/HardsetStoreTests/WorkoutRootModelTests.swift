@@ -766,7 +766,7 @@ struct WorkoutRootModelTests {
     #expect(live.exercises.map(\.exerciseID) == [f.press])
   }
 
-  /// The same rule the rotation and Apple Health use: a workout the lifter did holds a working set.
+  /// The same rule the rotation and "Repeat last workout" use: a workout the lifter did holds a working set.
   /// An accidental Start finished empty must not become "Repeat last workout", which would start
   /// the lifter on nothing in place of the workout they last trained.
   @Test("Repeat last workout skips a workout finished with no working set")

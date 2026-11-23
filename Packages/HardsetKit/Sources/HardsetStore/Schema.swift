@@ -142,8 +142,8 @@ nonisolated struct BodyweightEntry: Hashable, Identifiable, Sendable {
   let id: UUID
   var weightKg = 0.0
   var measuredAt = Date(timeIntervalSince1970: 0)
-  /// Always "manual" in v1. Present so a future HealthKit-sourced row is distinguishable
-  /// without a schema change -- adding a column later is allowed, renaming one is not.
+  /// Always "manual" in v1. Present so a future source is distinguishable without a schema
+  /// change -- adding a column later is allowed, renaming one is not.
   var enteredBy = "manual"
 }
 
@@ -153,6 +153,8 @@ nonisolated struct BodyweightEntry: Hashable, Identifiable, Sendable {
 // wipe only empties *registered* tables, so keeping these out of the sync list also keeps
 // them safe from `deleteLocalData()`.
 
+/// Retained on purpose: the table is part of the permanent schema, and devices that ran the
+/// Apple Health build carry rows in it even though no feature reads or writes it now.
 @Table("deviceHealthSamples")
 nonisolated struct DeviceHealthSample: Hashable, Identifiable, Sendable {
   let id: UUID

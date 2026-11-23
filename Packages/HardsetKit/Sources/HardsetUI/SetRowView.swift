@@ -568,8 +568,8 @@ public struct SetRowView: View {
     .onChange(of: isLogged) { old, new in
       if LogMoment.isContact(from: old, to: new) { ClankPlayer.shared.play() }
     }
-    // The tour points at the check of the first set still to log.
-    .tourTarget(.logCheck, isActive: isNext && !isLogged)
+    // The reach check measures the first set still to log.
+    .reachTarget(.logCheck, isActive: isNext && !isLogged)
   }
 
   private var logState: SetLogState {

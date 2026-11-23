@@ -14,8 +14,8 @@ import SwiftUI
 /// typo'd name or a gym the lifter has left would otherwise stay at the top of those lists forever.
 ///
 /// Order follows what the lifter owns first: the unit every number is read in, where the workouts
-/// live and how to take a copy, then the equipment they added, the optional Health link, the
-/// methods, and last the optional purchase.
+/// live and how to take a copy, then the equipment they added, the methods, and last the optional
+/// purchase.
 ///
 /// The methodology disclosures sit here too, one tap away from anywhere in the app. They are not
 /// settings, but this is the screen a lifter opens when they want to know how the app works, and
@@ -27,33 +27,27 @@ public struct SettingsSheet: View {
   /// to present at once.
   @State private var disclosure: Disclosure?
   private let lifetime = LifetimeAccess.shared
-  private let health: DeviceHealthStore?
   private let transfer: DataTransferStore?
   private let sync: SyncStatus?
   private let gyms: GymStore?
   private let onDataChanged: (() -> Void)?
-  private let onShowTour: (() -> Void)?
   private let onDone: () -> Void
 
   /// - Parameters:
   ///   - gyms: When given, Settings offers renaming and removing gyms and machines.
   ///   - onDataChanged: Called after Settings changes saved data: an import that wrote workouts, or
   ///     a gym or machine renamed or removed. Screens showing that data re-read it.
-  ///   - onShowTour: When given, Settings offers "Show the tour again" and calls this, which is
-  ///     expected to close Settings and replay the first-launch sequence.
   public init(
     useImperial: Binding<Bool>, transfer: DataTransferStore? = nil,
-    health: DeviceHealthStore? = nil, sync: SyncStatus? = nil, gyms: GymStore? = nil,
-    onDataChanged: (() -> Void)? = nil, onShowTour: (() -> Void)? = nil,
+    sync: SyncStatus? = nil, gyms: GymStore? = nil,
+    onDataChanged: (() -> Void)? = nil,
     onDone: @escaping () -> Void
   ) {
     self._useImperial = useImperial
-    self.health = health
     self.transfer = transfer
     self.sync = sync
     self.gyms = gyms
     self.onDataChanged = onDataChanged
-    self.onShowTour = onShowTour
     self.onDone = onDone
   }
 
@@ -73,11 +67,7 @@ public struct SettingsSheet: View {
               onDataChanged: { onDataChanged?() })
           }
           if let gyms { gymsSection(gyms) }
-          #if os(iOS)
-          if let health { HealthSettingsSection(store: health, unit: unit) }
-          #endif
           methodologySection
-          if let onShowTour { tourSection(onShowTour) }
           // The optional purchase comes after everything the lifter already owns.
           LifetimePurchaseSection(access: lifetime)
         }
@@ -150,7 +140,6 @@ public struct SettingsSheet: View {
       .padding(Tokens.Spacing.loose)
       .frame(maxWidth: .infinity, alignment: .leading)
       .hardsetCard()
-      .tourTarget(.settingsUnits)
 
       // Stated because it is the reason switching never corrupts anything, and because a
       // lifter who has logged in one unit deserves to know the other view is a conversion,
@@ -242,35 +231,6 @@ public struct SettingsSheet: View {
       }
       .buttonStyle(DisclosureRowButtonStyle())
       .accessibilityHint("Opens your gyms and their machines")
-    }
-  }
-
-  // MARK: - Tour
-
-  private func tourSection(_ show: @escaping () -> Void) -> some View {
-    VStack(alignment: .leading, spacing: Tokens.Spacing.snug) {
-      SectionLabel("Tour")
-      Button(action: show) {
-        HStack(spacing: Tokens.Spacing.regular) {
-          VStack(alignment: .leading, spacing: Tokens.Spacing.hairline) {
-            Text("Show the tour again")
-              .font(Tokens.Text.headline)
-              .foregroundStyle(Tokens.Color.chalk)
-            Text("The welcome, the three pitches and the walk through the app.")
-              .font(Tokens.Text.caption)
-              .foregroundStyle(Tokens.Color.chalkDim)
-          }
-          .multilineTextAlignment(.leading)
-          .frame(maxWidth: .infinity, alignment: .leading)
-
-          Image(systemName: "chevron.right")
-            .font(Tokens.Text.caption.weight(.semibold))
-            .foregroundStyle(Tokens.Color.chalkDim)
-            .accessibilityHidden(true)
-        }
-      }
-      .buttonStyle(DisclosureRowButtonStyle())
-      .accessibilityHint("Closes Settings and plays the tour")
     }
   }
 

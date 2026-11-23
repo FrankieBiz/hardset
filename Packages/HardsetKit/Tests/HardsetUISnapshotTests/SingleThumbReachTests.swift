@@ -10,9 +10,9 @@
   ///
   /// DESIGN.md says everything the logger pins is in the lower part of the screen, and that nothing a
   /// lifter needs between sets is out of reach of the thumb that holds the phone. This hosts the live
-  /// session at 402 by 874 points, the size of the phones it is built for, asks the tour's target
-  /// registry where the keypad, the rest bar and the next set's check actually are, and asserts the
-  /// two things that are pinned. It writes every number it measured to `thumb-reach.txt` beside the
+  /// session at 402 by 874 points, the size of the phones it is built for, asks the reach registry
+  /// where the keypad, the rest bar and the next set's check actually are, and asserts the two things
+  /// that are pinned. It writes every number it measured to `thumb-reach.txt` beside the
   /// renders, so a reviewer reads the figures and not only the verdict.
   ///
   /// What it does not and cannot say: where a row is in the scrolling list, because that is wherever
@@ -31,23 +31,29 @@
     /// accessibility3 and left a sliver of the list to log in; the upper half is the list's.
     static let pinnedStackCeiling: CGFloat = 0.50
 
-    /// Hosts `content` in a window of `size`, lets it settle, and returns where the tour's targets
+    /// Hosts `content` in a window of `size`, lets it settle, and returns where the reach targets
     /// are in window coordinates. Read before the window goes away, because a view that disappears
     /// forgets what it reported.
     private static func measure<Content: View>(
       size: CGSize = Snapshot.phone,
       typeSize: DynamicTypeSize = .large,
+      opensKeypad: Bool = false,
       @ViewBuilder _ content: () -> Content
-    ) async throws -> [TourTarget: CGRect] {
-      let registry = TourTargets()
+    ) async throws -> [ReachTarget: CGRect] {
+      let registry = ReachTargets(opensKeypad: opensKeypad)
       let host = UIHostingController(
         rootView: content()
-          .environment(\.tourTargets, registry)
+          .environment(\.reachTargets, registry)
           .environment(\.colorScheme, .dark)
           .environment(\.dynamicTypeSize, typeSize)
       )
       host.overrideUserInterfaceStyle = .dark
-      let window = UIWindow(frame: CGRect(origin: .zero, size: size))
+      // In a window scene, so the keypad's real sheet can present instead of being stranded in a
+      // detached window. The test runner normally has one; a plain window is the fallback.
+      let scene = UIApplication.shared.connectedScenes
+        .compactMap { $0 as? UIWindowScene }.first
+      let window = scene.map { UIWindow(windowScene: $0) } ?? UIWindow()
+      window.frame = CGRect(origin: .zero, size: size)
       window.overrideUserInterfaceStyle = .dark
       window.rootViewController = host
       window.makeKeyAndVisible()
@@ -56,8 +62,8 @@
       try await Task.sleep(for: .milliseconds(800))
       host.view.layoutIfNeeded()
 
-      var rects: [TourTarget: CGRect] = [:]
-      for target in [TourTarget.keypad, .restBar, .logCheck, .recordNotice] {
+      var rects: [ReachTarget: CGRect] = [:]
+      for target in [ReachTarget.keypad, .restBar, .logCheck, .recordNotice] {
         if let rect = registry.rect(for: target) { rects[target] = rect }
       }
       window.isHidden = true
@@ -75,9 +81,8 @@
     @Test func theKeypadIsBelowTheReachFloorAndTheRestBarIsAtTheBottom() async throws {
       let height = Snapshot.phone.height
 
-      let withKeypad = try await Self.measure {
+      let withKeypad = try await Self.measure(opensKeypad: true) {
         Fixtures.session(pinned: false)
-          .environment(\.tourStaging, TourStaging(opensKeypad: true, presentsSheetsInline: true))
       }
       let keypad = try #require(withKeypad[.keypad], "The staged keypad reported no frame.")
       #expect(

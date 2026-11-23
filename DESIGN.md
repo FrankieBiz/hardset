@@ -31,12 +31,12 @@ the code does yet, so a reader does not look for a screen that has not moved.
 - Not yet in code, so the bullets below that name these describe where they are going: whatever a
   screen draws for itself instead of through the kit. That is the scorecard headline's type role, the
   deep muscle map, and the
-  onboarding and tour surfaces. It also includes three private outlined-card button styles that each draw their own
+  onboarding surfaces. It also includes three private outlined-card button styles that each draw their own
   stroke: the History row, the Settings disclosure row and the receipt's link row, plus the
   methodology citation card. A screen that uses the kit picks up the new look with no change; one that draws its own
   face or stroke keeps the old one until it is migrated.
 - The keypad keys keep their `controlEdge` outline until the keypad has had its device check; see
-  Keys. `ScaledPhoneFrame` still reads the retired `edgeLight`; see the palette notes.
+  Keys.
 
 ## Point of view
 
@@ -49,8 +49,8 @@ the colours are a calibration standard, not decoration: red 25 kg, blue 20 kg, y
 steps of graphite and chalk that separate by fill rather than by line, and its figures are the
 stamped numerals on a plate. The semantic colours (logged green, record gold, caveat amber, failure
 red, action blue) are not arbitrary; they carry a story the lifter already knows. The chrome that
-floats above the content, the tab bar, sheet toolbars and the tour callout, is the system's own
-glass; the content beneath it is never glass.
+floats above the content, the tab bar and sheet toolbars, is the system's own glass; the content
+beneath it is never glass.
 
 - **Colour is evidence, never decoration.** Hue appears only when it says something, and it is a
   plate colour: an action you can take (plate blue), a set that is saved (plate green), a record
@@ -127,9 +127,7 @@ directly on `canvas` takes `controlFillOnCanvas`, because light `steelRaised` on
 1.04:1. `steelPressed` is below the original proposal in dark (`#111216`, not `#1B1C22`): with no outline, the
 proposed value was 1.01:1 against `steel`, so a pressed control inside a card lost its face; this one is 1.09:1
 against `steel`, 1.08:1 against `canvas` and still darker than `steelRaised`. The machined edge colours `edgeLight` and `edgeShadow` are retired with the raised face they
-drew. `edgeShadow` is deleted. `edgeLight` is still defined for one reader, the staged phone's rim in
-`ScaledPhoneFrame`, which was held out of the phase that retired the machined skin; that rim becomes
-`hairline` and the token is deleted when the file next changes. Nothing else uses it.
+drew, and both tokens are deleted.
 
 The earlier names (`background`, `surface`, `surfaceRaised`, `surfacePressed`, `border`,
 `controlBorder`, `textPrimary`, `textSecondary`, `accent`, `accentFill`, `accentFillPressed`,
@@ -302,8 +300,8 @@ working, not a gap in it: every figure there is an estimate, and an estimate is 
 
 ## Materials and elevation
 
-- System glass is for the chrome the system draws and the one floating callout: the tab bar, sheet
-  toolbars and the tour callout. It is never `.interactive()`.
+- System glass is for the chrome the system draws: the tab bar and sheet toolbars. It is never
+  `.interactive()`.
 - Everything the lifter reads to do the work is opaque: rows, cards, figures, and the rest bar,
   whose countdown is the one number read at arm's length under gym glare. Text on glass cannot be
   gated by `Tools/check_contrast.py`, which measures opaque pairs and could only model glass, so a
@@ -429,7 +427,7 @@ Selection rows, the unit switch and pickers stay silent.
     `TextEditor`, `SecureField`, `.keyboardType`, `@FocusState`, `.focused`, `.searchable` or a UIKit
     text view. A keyboard covers half a small screen, puts the digits where the hardware says, and
     needs a dismiss gesture the free hand is not free to make; a field needs a cursor placed. A
-    search field in a picker, a name or the Health body mass is text and is not on the path. The real
+    search field in a picker or a name is text and is not on the path. The real
     app is driven through a workout in CI and asserts that no system keyboard appears with the weight
     open, after Next, or on the reps (`AppScreensUITests`).
   - **Weight to reps is one press.** `Next` retargets the same pad in place: the display names the
@@ -647,8 +645,8 @@ Selection rows, the unit switch and pickers stay silent.
   lifter in a hurry cannot take it for starting one (`WorkoutCardActions`). Nothing is claimed that
   was not measured: "beat 4 of 6" appears only when something was compared, and only on the workout
   it belongs to. The order is the rotation, never a schedule or a streak. A workout counts as done,
-  for the rotation, the last-done day, "last time" and "Repeat last workout", and for Apple Health
-  alike, only when it finished with a working set: an accidental Start finished with nothing logged,
+  for the rotation, the last-done day, "last time" and "Repeat last workout" alike, only when it
+  finished with a working set: an accidental Start finished with nothing logged,
   or with warm-ups only, leaves all of them where they were. At accessibility sizes a row's controls
   stack under its text. It adds no token and no motion.
 - **Workout editor** (`WorkoutEditorView`, `WorkoutEditorScreen`, `WorkoutDraft`): a name field in
@@ -817,15 +815,6 @@ Selection rows, the unit switch and pickers stay silent.
   loads one 20 kg plate per side on its own, and any touch takes over. Reduce Motion draws it
   already loaded and swaps the stack instantly. The shaft is the one place the knurl is drawn as a
   texture, because it carries no text.
-- **Staged phone** (`ScaledPhoneFrame`): a real screen laid out at phone size (402 by 874 pt) and
-  scaled down onto a `steel` plate with a hairline `edgeLight` rim; the first-launch tour stages
-  the app's own screens in it, built from `TourFixtures`. The tour gives it 78% of the screen's
-  width. A frame that is not interactive is inert to touch and marked hidden from VoiceOver; an
-  interactive one, for the steps that ask the lifter to tap, is neither. The marking does not reach the
-  staged roots' UIKit-hosted tab bars: XCUITest still lists two of them at every inert tour step (open
-  finding, CI run 44755327282, recorded in `docs/KNOWN-ISSUES.md`; a hosting controller changed the
-  roots' appearance and a single hidden leaf changed nothing), so how VoiceOver reads the tour is for
-  a device. It adds no token and no motion.
 - **Pitch pages** (`PitchPage`, `PitchSetRowPage`, `PitchEstimatePage`, `PitchRestPage`): three
   pages with one anatomy, a `title` headline, two lines in `label` and one live element that is the
   real component, never a picture. "One tap per set" is a real set row prefilled from last time; its
@@ -840,17 +829,6 @@ Selection rows, the unit switch and pickers stay silent.
   introduction is left, and "Page N of 3" says the same to VoiceOver), so they clear 3:1 and are
   never `hairline`. The gauge is not a control, and the accessibility audit's hit-area line on it is a
   false positive that is not suppressed.
-- **Tour** (`TourStage`, `SpotlightOverlay`, `CalloutCard`, `tourTarget`, `TourStaging`): the real
-  root view in the staged phone, asked into each state through the `TourStaging` environment value
-  the real screens read, with the controls it points at tagged in place. The spotlight is the
-  canvas at 70% with one rounded hole that moves between targets on `Motion.state`; it is drawn, not
-  laid out, so it joins the segmented control's indicator as a documented exception to "only
-  transform and opacity animate". Touches outside the hole are swallowed, and only step two, the
-  staged set's check, lets one through. A system sheet always presents over the whole window, so
-  inside the staged phone the keypad, machine picker and Settings draw inline (`stagedSheet`): the
-  sheet's content is the real content, on a `steel` surface with the card radius and a `hairline`
-  rim. The callout is the one floating element on system glass besides the toolbars, and sits in
-  the half of the phone the target is not in. Both Reduce Motion paths drop the hole's travel.
 - **Setup** (`SetupPage`): "Before your first set." Two selection rows for the unit, which edit the
   stored preference in place, and the gym: existing gyms as selection rows with one preselected, or
   for a new lifter one name field that may stay blank. A failed save stays on the page with the
@@ -908,7 +886,7 @@ Selection rows, the unit switch and pickers stay silent.
   `chalkDim` with an inline "Got it": not a modal, not a banner, no colour, the insertion-only
   reveal on `Motion.reveal` (instant under Reduce Motion), wrapped and with the dismissal below it
   at accessibility sizes. It is drawn only once a set is saved, only where a correction can be
-  written, never over the keypad, an error or a new record, and never in the tour's staged phone.
+  written, never over the keypad, an error or a new record.
   It is spent when it is drawn, not when it is dismissed (`HintPreferences`, a device preference),
   and opening a saved figure to correct it dismisses it too.
 - **Set log control**: four states, never confused, each one SF Symbol of one weight and one size,
@@ -1070,8 +1048,7 @@ components rather than native spinners.
   "Next rest" row, and a drag up on the bar, open a row of lengths for the movement's next rest; it
   appears by an insertion-only opacity reveal like any message, because a height that animated would
   slide the set rows above it.
-- Settings adds file import/export, optional Apple Health and a StoreKit Lifetime
-  section. Reuse existing spacing, typography, buttons and semantic error colours.
+- Settings adds file import/export and a StoreKit Lifetime section. Reuse existing spacing, typography, buttons and semantic error colours.
   Import previews state unknown equipment and unit/time-zone interpretation before
   saving. Busy operations disable their controls and expose native progress.
 - History opens a static receipt of committed sets. It states equipment provenance,

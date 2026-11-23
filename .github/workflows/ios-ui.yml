@@ -41,11 +41,11 @@ jobs:
           set -o pipefail
           swift build --package-path Packages/HardsetKit 2>&1 | tee macos-build.log | tail -40
 
-      - name: Test portability, receipt, Health storage and retry guarantees
+      - name: Test portability, receipt, retained schema and retry guarantees
         run: |
           set -o pipefail
           swift test --package-path Packages/HardsetKit \
-            --filter 'CSVDocumentTests|SetCommandTests|DataTransferTests|RestJournalTests|ReceiptStoreTests|DeviceHealthStoreTests|MachineIncrementTests|ProgressionStoreTests' \
+            --filter 'CSVDocumentTests|SetCommandTests|DataTransferTests|RestJournalTests|ReceiptStoreTests|RetainedDeviceTableTests|MachineIncrementTests|ProgressionStoreTests' \
             2>&1 | tee portable-feature-tests.log | tail -50
 
       # The snapshot target only compiles for the iOS Simulator, and the render step further down is

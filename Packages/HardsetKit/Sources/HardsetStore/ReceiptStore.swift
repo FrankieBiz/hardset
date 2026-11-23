@@ -172,8 +172,7 @@ public nonisolated struct ReceiptStore: Sendable {
   /// with `deleteSet`. Children are deleted
   /// explicitly before the session rather than left to the schema's cascade, so the write states
   /// everything it removes. History, weekly volume, load history and record baselines all read
-  /// the remaining rows, so each reflects the deletion on its next load. A copy already sent to
-  /// Apple Health is not this store's to remove.
+  /// the remaining rows, so each reflects the deletion on its next load.
   ///
   /// - Throws: `ReceiptError.sessionNotFound`, or `.sessionNotFinished` for an open workout,
   ///   which belongs to the live session's own discard path.

@@ -238,10 +238,9 @@ public nonisolated enum HardsetMigrations {
 
       // MARK: Bodyweight
       //
-      // User-TYPED bodyweight only. The table exists locally but is deliberately NOT registered
+      // User-typed bodyweight only. The table exists locally but is deliberately NOT registered
       // with the SyncEngine (see `deferredSyncTableNames` and DECISIONS.md §5): a bodyweight tied
-      // to an identity is personal health information however it was entered. Anything read out
-      // of HealthKit goes to "deviceHealthSamples" instead -- see that table's note.
+      // to an identity is personal health information however it was entered.
       try #sql(
         """
         CREATE TABLE "bodyweightEntries" (
@@ -257,13 +256,13 @@ public nonisolated enum HardsetMigrations {
       // MARK: Device-local tables -- NEVER synchronized
       //
       // App Review guideline 5.1.3(ii): apps may not store personal health information in
-      // iCloud. Any value derived from HealthKit therefore lives here, on one device, and
-      // is re-read per device rather than synchronized.
+      // iCloud. Device-local data therefore lives here, on one device, and is re-read per
+      // device rather than synchronized. The "device" prefix is asserted against the sync
+      // registration in `SchemaTests`.
       //
-      // HealthKit is out of v1 scope, but the table and the naming boundary are created now
-      // on purpose: adding a table later is permitted, whereas discovering that someone
-      // added a `sleepHours` column to a *synchronized* table is a rejection. The "device"
-      // prefix is asserted against the sync registration in `SchemaTests`.
+      // "deviceHealthSamples" is retained on purpose after Apple Health was removed from 1.0:
+      // it is part of the permanent schema, and devices that ran a build with that feature
+      // still carry rows in it. Do not drop it.
       try #sql(
         """
         CREATE TABLE "deviceHealthSamples" (

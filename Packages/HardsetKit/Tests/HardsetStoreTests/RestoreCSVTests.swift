@@ -101,7 +101,7 @@ struct RestoreCSVTests {
     let destination = try freshInstall()
     _ = try await restore(try await exportCSV(source), into: destination)
 
-    // Never carried: saved workouts, body mass, Health copies.
+    // Never carried: saved workouts, body mass, device samples.
     for table in ["workoutTemplates", "templateExercises", "bodyweightEntries", "deviceHealthSamples"] {
       #expect(try await count(destination, table) == 0, "\(table)")
     }

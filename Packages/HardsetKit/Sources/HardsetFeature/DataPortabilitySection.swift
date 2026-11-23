@@ -80,7 +80,7 @@ struct DataPortabilitySection: View {
           .foregroundStyle(exportFailed ? Tokens.Color.plateRed : Tokens.Color.chalkDim)
           .fixedSize(horizontal: false, vertical: true)
       }
-      Text("JSON and SQLite include every table, including Apple Health data you chose to copy. Share exports only where you intend.")
+      Text("JSON and SQLite include every table. Share exports only where you intend.")
         .font(Tokens.Text.caption)
         .foregroundStyle(Tokens.Color.chalkDim)
         .fixedSize(horizontal: false, vertical: true)
@@ -254,7 +254,7 @@ struct DataPortabilitySection: View {
       if restore.bodyweightEntries > 0 {
         also.append("\(restore.bodyweightEntries) body mass \(restore.bodyweightEntries == 1 ? "entry" : "entries")")
       }
-      notes.append("Also in this file: \(also.joined(separator: " and ")), restored where they are not already here. Apple Health data in an export is not restored; copy it again from Health in Settings.")
+      notes.append("Also in this file: \(also.joined(separator: " and ")), restored where they are not already here.")
     }
     if restore.unfinishedWorkouts > 0 {
       notes.append("\(restore.unfinishedWorkouts) \(restore.unfinishedWorkouts == 1 ? "workout was" : "workouts were") still open when this file was made and will be left out. Finish \(restore.unfinishedWorkouts == 1 ? "it" : "them") in Hardset and export again to keep \(restore.unfinishedWorkouts == 1 ? "it" : "them").")

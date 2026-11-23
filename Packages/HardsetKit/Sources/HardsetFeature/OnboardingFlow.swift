@@ -3,14 +3,12 @@ import HardsetStore
 import HardsetUI
 import SwiftUI
 
-/// The first launch as one horizontal pager: Welcome, three pitch pages, the Tour, then Setup.
+/// The first launch as one horizontal pager: Welcome, three pitch pages, then Setup.
 ///
 /// All of its state is in `OnboardingModel`, which the pager's selection is bound to, so a swipe and
 /// a button press are the same change. "Skip" is a visible control from the second page on and
 /// always lands on Setup; the welcome bar owns horizontal drags inside its own region, so a swipe
 /// there loads a plate and a swipe anywhere else turns the page.
-///
-/// A replay from Settings uses the same flow without Setup and ends by calling `onFinish`.
 @MainActor
 public struct OnboardingFlow: View {
   @State private var model: OnboardingModel
@@ -22,17 +20,14 @@ public struct OnboardingFlow: View {
   /// - Parameters:
   ///   - useImperial: The app's stored unit preference. Setup edits it in place.
   ///   - startingPage: The page shown first, for a capture.
-  ///   - startingTourStep: The tour step shown first, for a capture.
-  ///   - onFinish: Called with the gym Setup settled on, or `nil` when none was named or this is a
-  ///     replay, once the lifter has finished or skipped to the end.
+  ///   - onFinish: Called with the gym Setup settled on, or `nil` when none was named, once the
+  ///     lifter has finished or skipped to the end.
   public init(
-    gyms: GymStore, useImperial: Binding<Bool>, mode: OnboardingModel.Mode = .firstLaunch,
-    startingPage: OnboardingModel.Page = .welcome,
-    startingTourStep: OnboardingModel.TourStep = .train, onFinish: @escaping (GymID?) -> Void
+    gyms: GymStore, useImperial: Binding<Bool>,
+    startingPage: OnboardingModel.Page = .welcome, onFinish: @escaping (GymID?) -> Void
   ) {
     _model = State(
-      initialValue: OnboardingModel(
-        gyms: gyms, mode: mode, startingPage: startingPage, startingTourStep: startingTourStep))
+      initialValue: OnboardingModel(gyms: gyms, startingPage: startingPage))
     _useImperial = useImperial
     self.onFinish = onFinish
   }
@@ -43,26 +38,9 @@ public struct OnboardingFlow: View {
     VStack(spacing: 0) {
       topBar
       pager
-        // The tour is drawn over the pager's empty tour page, not inside it. Its staged phone holds
-        // real root views with tab views of their own, and a tab view inside a page-style tab view
-        // is a UIKit tab bar controller inside a page controller, which does not hold together:
-        // the pager jumped on to Setup as the tour appeared.
-        .overlay {
-          if model.page == .tour {
-            TourStage(model: model, unit: unit)
-              .background(Tokens.Color.canvas)
-              .transition(.opacity)
-          }
-        }
-        .animation(
-          Tokens.Motion.adaptive(Tokens.Motion.reveal, reduceMotion: reduceMotion),
-          value: model.page == .tour)
       footer
     }
     .background(Tokens.Color.canvas.ignoresSafeArea())
-    .onChange(of: model.isReplayFinished) { _, finished in
-      if finished { onFinish(nil) }
-    }
   }
 
   // MARK: - Chrome
@@ -85,13 +63,6 @@ public struct OnboardingFlow: View {
   /// A fixed-height row, so the pages do not jump when "Skip" arrives on the second page.
   private var topBar: some View {
     HStack {
-      // A replay is presented full screen, and Welcome offers no Skip, so it needs a way out that
-      // does not require walking the tour again.
-      if case .replay = model.mode {
-        Button("Close") { onFinish(nil) }
-          .buttonStyle(HardsetButtonStyle(.quiet, fullWidth: false))
-          .accessibilityLabel("Close the tour")
-      }
       Spacer()
       if model.canSkip {
         Button("Skip") { model.skip() }
@@ -115,7 +86,7 @@ public struct OnboardingFlow: View {
           namespace: progressNamespace)
         footerButton("Next")
       }
-    case .tour, .setup:
+    case .setup:
       EmptyView()
     }
   }
@@ -139,7 +110,6 @@ public struct OnboardingFlow: View {
     case .pitchSetRow: PitchSetRowPage(unit: unit)
     case .pitchEstimate: PitchEstimatePage(unit: unit)
     case .pitchRest: PitchRestPage()
-    case .tour: Color.clear
     case .setup:
       SetupPage(model: model, useImperial: $useImperial) {
         onFinish(model.chosenGymID)

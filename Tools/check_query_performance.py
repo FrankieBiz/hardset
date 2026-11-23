@@ -17,7 +17,7 @@ ROOT = Path(__file__).resolve().parents[1]
 MIGRATIONS = ROOT / "Packages/HardsetKit/Sources/HardsetStore/Migrations.swift"
 
 # The one rule for a session that counts as a workout done, as `Session.TableColumns.isCounted` writes
-# it: the rotation, "Repeat last workout" and Apple Health all use it.
+# it: the rotation and "Repeat last workout" use it.
 COUNTED = "EXISTS (SELECT * FROM loggedSets WHERE loggedSets.sessionID = sessions.id AND NOT loggedSets.isWarmup)"
 
 # Same predicates and ordering as VolumeStore, ProgressionStore and LoggerStore.

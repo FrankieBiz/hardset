@@ -275,7 +275,6 @@ public struct VolumeReportView: View {
         }
       }
       .frame(maxWidth: .infinity, alignment: .leading)
-      .tourTarget(.volumeFigures)
     }
   }
 
