@@ -75,27 +75,46 @@ change was made to the screen or to the palette, because nothing was found to fi
 
 **Where.** The three-segment progress above the Next button on the pitch pages (`PitchProgress`).
 
-**What was reported.** The audit reports "Page N of 3" at `(151, 744, 100, 4)`, at an ordinary text size
-and at accessibility size XL (`(151, 736, 100, 4)`), as a hit area that is too small, with the detail
-"The size of this SwiftUI.AccessibilityNode is too small for user to interact" (CI run 45075709250 on
-main, `accessibility-audit-onboarding.txt` and `accessibility-audit-onboarding-ax.txt`; first seen in
-run 44755327282).
+**What is reported.** The audit reports the row as a hit area that is too small, at `(151, 744, 100, 4)`
+at an ordinary text size and at `(151, 736, 100, 4)` at accessibility size XL, with the detail "The size
+of this SwiftUI.AccessibilityNode is too small for user to interact" (first seen in run 44755327282;
+on main in run 45075709250, `accessibility-audit-onboarding.txt` and
+`accessibility-audit-onboarding-ax.txt`).
 
-**Why it was a false positive, and what was wrong instead.** The row is not a control: nothing happens
-when a segment is touched, and the page turns only through Next and Skip, so there is no target to
-enlarge. What was wrong was its role. It was exposed as a bare labelled node, element type `other`
-(type 1 in the report) with no trait, and the audit treats an `other` node it cannot classify as
-something a user might interact with and measures its frame. A gauge should say it is one.
-`PitchProgress` now offers a progress indicator through `accessibilityRepresentation`: label
-"Introduction", value "Page N of 3", no action and no adjustable trait. The drawing is unchanged.
-
-**Tried before.** Raising the row's frame to 44 pt above the segments and taking the height back from the
-layout (`45afb77`). The audit's frame did not change, and the change was reverted in `fb3caf7`. That was
-the wrong fix in any case: it would have made a gauge look like a target.
-
-**How it is held.** `PitchProgressAccessibilityTests` pins the label and the value, and
+**What it is.** A gauge, not a control: nothing happens when a segment is touched, and the page turns
+only through Next and Skip, so there is no target to enlarge. On main it was exposed as a bare labelled
+node, element type `other` (type 1 in the report) with no trait. It is now a progress indicator through
+`accessibilityRepresentation`: label "Introduction", value "Page N of 3", no action and no adjustable
+trait, with the drawing unchanged. `PitchProgressAccessibilityTests` pins the label and the value, and
 `testOnboardingJourneyDark` (`assertPitchProgress`) asserts on each pitch page that the element is a
-progress indicator carrying them.
+progress indicator carrying them; that journey passed in CI run 45098584272.
 
-**Still open.** Whether the audit stops reporting the row is shown only by the next CI audit of the
-onboarding journey. This entry is removed when that audit has no "Page N of 3" line.
+**What the audit did with the gauge.** It still reports the hit area, now on the progress indicator
+(type 35, id `pitch-progress`, label "Introduction", the same frames), on all three pitch pages at
+accessibility size and on the first at an ordinary size (run 45098584272). So the audit applies its
+hit-area check to this node by its frame whatever its role. Hypothesising that it skipped elements it
+could classify as non-interactive was wrong. For a gauge the reading is a false positive: there is
+nothing to hit. The audit is not told to ignore it, so the report keeps showing it.
+
+**New in the same run: "Contrast failed" on the same node.** As an `other` node the row was never
+contrast-checked; as a progress indicator it is. The active segment is `plateBlue` on `canvas` (9.55:1
+dark, 7.76:1 light), but the two inactive segments are `hairline` on `canvas`, 1.54:1 dark and 1.20:1
+light, under the 3:1 that WCAG 1.4.11 asks of a graphic needed to read the content. Whether "of 3" is
+needed to read the gauge, when VoiceOver gets it as the value and the active segment carries the
+position, is a design question. Raising the inactive segments to a 3:1 colour would change the
+drawing that `DESIGN.md` specifies ("three short `hairline` segments"), so it was not done here. This is
+recorded as a probable real finding, not dismissed.
+
+**Tried, and why each failed.**
+
+1. Raising the row's frame to 44 pt above the segments and taking the height back from the layout
+   (`45afb77`). The audit's frame did not change, and the change was reverted in `fb3caf7`. It was the
+   wrong fix in any case: it would have made a gauge look like a target.
+2. Gauge semantics (this entry's "What it is"). Right for assistive technology, and held by tests, but
+   the audit's report did not change.
+
+**Open question.** Keep the gauge and accept the hit-area line as a documented false positive, or take
+the row out of the accessibility tree (decorative) and carry "Page N of 3" on an element that is already
+a reasonable size, such as the page's heading. The second route would also end the audit's contrast
+line, because a hidden decoration is not checked, but not the question of whether sighted lifters can
+see the inactive segments. That is a design decision either way.
