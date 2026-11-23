@@ -182,6 +182,53 @@ def check_step_targets(failures):
         )
 
 
+# Where a monument is drawn, and the Worked-from hookup that makes its figure inspectable. A monument
+# is a figure drawn at 88 or 72 pt, which is earned only by being a measurement; a measurement a
+# lifter cannot open to the sets behind it is exactly what the product refuses.
+MONUMENT_DRAWN_IN = {
+    "HardsetUI/VolumeReportView.swift": ("onShowTotalWorking", "WorkedFromButton("),
+    "HardsetFeature/HardsetRootView.swift": ("WorkedFromButton(", "WorkedFromSheet("),
+}
+# Files that define or catalogue the monument roles, which draw no figure of their own.
+MONUMENT_DEFINITIONS = {
+    "HardsetUI/TypeRole.swift",
+    "HardsetUI/DesignTokens.swift",
+    "HardsetUI/Messages.swift",
+    "HardsetUI/TokenCatalogView.swift",
+}
+MONUMENT_USE = re.compile(r"\.monument\b|\.monumentAside\b|\bmonument:\s*[A-Za-z_]")
+
+
+def check_monuments_are_inspectable(failures):
+    """Every monument opens "Worked from": a new one cannot land without its working."""
+    for path in swift_files():
+        relative = path.relative_to(SOURCES).as_posix()
+        if relative in MONUMENT_DEFINITIONS or relative.endswith("CatalogView.swift"):
+            continue
+        code = strip_comments(path.read_text())
+        if not MONUMENT_USE.search(code):
+            continue
+        hookups = MONUMENT_DRAWN_IN.get(relative)
+        if hookups is None:
+            failures.append(
+                f"{relative} draws a monument, and is not in MONUMENT_DRAWN_IN. A monument is a "
+                "measured figure at 88 or 72 pt and must open Worked from: give it a derivation in "
+                "Core (see WorkingSetCountWorking and SessionVolumeWorking), a control that opens "
+                "it, and add the file here (DESIGN.md, Inspectable figures)."
+            )
+        elif not all(hook in code for hook in hookups):
+            missing = [hook for hook in hookups if hook not in code]
+            failures.append(
+                f"{relative} draws a monument and no longer has its Worked from hookup "
+                f"({', '.join(missing)}). A large number the lifter cannot open to the sets behind "
+                "it is exactly what the product refuses."
+            )
+    for relative in MONUMENT_DRAWN_IN:
+        code = strip_comments(read(relative))
+        if not MONUMENT_USE.search(code):
+            print(f"note: {relative} no longer draws a monument; it can leave MONUMENT_DRAWN_IN.")
+
+
 def check_nothing_pinned_to_the_top(failures):
     """A logger control pinned to the top of the screen is out of reach of one thumb."""
     for relative in LIVE_SCREEN_FILES:
@@ -200,6 +247,7 @@ CHECKS = [
     check_no_system_keyboard,
     check_pad_steps,
     check_step_targets,
+    check_monuments_are_inspectable,
     check_nothing_pinned_to_the_top,
 ]
 

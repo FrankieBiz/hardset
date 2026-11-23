@@ -75,9 +75,12 @@ physical iPhone, in the gym lighting where it matters.
       a neutral note and no celebration. In pounds, correcting only the reps leaves the weight
       exactly as saved. After a correction, History's volume, the movement's chart and the Progress
       tab agree with it. "Remove a set…" still deletes.
-- [ ] **Volume.** Each muscle carries its own certainty; none speaks for the whole report.
-- [ ] **Train.** The last-workout card opens its receipt. With no history the start screen says
-      "No sessions yet".
+- [ ] **Volume.** Each muscle carries its own certainty; none speaks for the whole report. The
+      88 pt weekly count has "Worked from" under it: it opens a line per movement that adds up to the
+      figure, with warm-ups under "Left out", and says it is counted and not estimated.
+- [ ] **Train.** The last-workout card opens its receipt, and the "Worked from" beneath it opens a
+      line per set (weight × reps = its volume) whose sum is the 72 pt figure, with warm-ups under
+      "Left out". With no history the start screen says "No sessions yet".
 
 ## Decisions that are the owner's
 

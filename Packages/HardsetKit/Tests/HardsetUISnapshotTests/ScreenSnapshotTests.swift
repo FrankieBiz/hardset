@@ -650,7 +650,8 @@
         excludedFromGaps: ExerciseCatalog.unauthoredDirectTokens,
         title: "This week",
         subtitle: "Last 7 days",
-        onExplainCounting: {}
+        onExplainCounting: {},
+        onShowTotalWorking: {}
       )
     }
 
@@ -673,7 +674,8 @@
         onExplainCounting: {},
         onShowSettings: {},
         onEarlier: {},
-        onShowWorking: { _ in }
+        onShowWorking: { _ in },
+        onShowTotalWorking: {}
       )
     }
 

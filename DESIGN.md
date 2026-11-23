@@ -25,6 +25,8 @@ the code does yet, so a reader does not look for a screen that has not moved.
   the 64 pt set row, the estimate ceiling and its check. It is scale and hierarchy only: it adds no
   glyph, rule, colour or motion. The onboarding demo and the catalogue's set rows keep the compact
   row, and History's row figures, the keypad display and the welcome bar keep their sizes.
+- The two monuments open "Worked from" (see Inspectable figures). Three capped estimates do not yet,
+  and the audit there says which.
 - Not yet in code, so the bullets below that name these describe where they are going: whatever a
   screen draws for itself instead of through the kit. That is the scorecard headline's type role, the
   deep muscle map, and the
@@ -221,6 +223,38 @@ draws an item marked `isEstimate` at `readout` whichever role was asked for; and
 with the reason its numbers are measurements, so that adding a use anywhere else is a visible
 edit to that list and not a drive-by. Progress is the proof: every figure on it is an estimate or a
 comparison of estimates, so none of them leaves the sentence it is in.
+
+### Inspectable figures
+
+The scale has a second half: a large number the lifter cannot inspect is exactly what the product
+refuses. So every monument opens "Worked from", and every capped estimate should too, through the same
+`WorkedFromSheet` and a derivation in Core that runs the same inputs through the same functions the
+figure came from, so the sheet cannot say what the figure did not do.
+`Tools/check_interaction_rules.py` fails the build when a file draws a monument without its hookup,
+and when a new file draws one at all until the file is added to its list with the derivation that
+explains it.
+
+The audit, every figure the app draws above body size or capped as an estimate, as of this pass:
+
+| Surface | Figure | Kind | Size | Opens Worked from |
+| --- | --- | --- | --- | --- |
+| Volume | Weekly count of working sets | Counted | `monument` 88 | Yes. `WorkingSetCountWorking`: a line per movement, warm-ups under Left out, equal to the report's own count |
+| Train | Last workout's volume | Summed | `monumentAside` 72 | Yes. `SessionVolumeWorking`: a line per set as weight × reps, warm-ups under Left out, equal to the history summary's volume (a Store test holds them equal) |
+| Volume | A muscle's weekly count; a map tile | Estimate (fractional credit) | `setEntry` 22 | Yes. `MuscleCountWorking` |
+| Progress chart | A machine's latest estimated max; a record star | Estimate; derived | legend figure | Yes. `EstimateWorking`, `RecordWorking` |
+| Receipt | A record on a set; the scorecard's record line | Derived | 17 | Yes. `RecordWorking` |
+| Rest bar | The countdown | A deadline the lifter chose | `countdown` 64 | Not applicable: nothing was worked out |
+| Live session, receipt, Train | Weight and reps of a set; the live "This workout" ledger | Typed or counted | `figureXL` 44 | Not applicable for a typed figure; the ledger's sets are the list above it |
+| Progress board | A row's six-week change in estimated max, and the Most improved strip | Estimate | 17 | **Not in place.** The row opens the movement's chart, where the legend's estimate opens its working |
+| Receipt | The scorecard's "Biggest gain … estimated max" | Estimate | 17 | **Not in place.** The scorecard is drawn into the shared image, which holds no controls |
+| Live session | The record notice for an estimated max | Estimate | 17 | **Not in place** |
+| Onboarding | The pitch's estimate for a fixed 60 kg set | A demonstration | `readout` 28 | Exempt: no history to open; the arithmetic is the lesson |
+
+Nothing above 28 pt is an estimate, which `Role.mayCarryEstimate`, the ledger and `check_figure_cap.py`
+hold. The three rows marked not in place are capped estimates, so the size rule holds for them and
+the inspectability rule does not yet: each needs a derivation of a comparison (two estimates, or an
+estimate and the record it beat) that Core does not have, and a control placed where the surface has
+room for one. They are listed here so they are found.
 
 One monument per screen and nowhere else: Volume's weekly working-set count at 88 pt, where the
 number is the content, and Train's last workout volume at 72 pt, where the action is. A screen with
@@ -545,8 +579,9 @@ Selection rows, the unit switch and pickers stay silent.
   the subject of this screen is starting a workout, so the number sits beside the action and does not outrank it)
   over a `StatLedger` of working sets and reps at `figureXL`, and the movements in `label` and
   `chalkDim`. With no volume, as in a bodyweight session, there is no monument and the ledger is
-  the counts. It is a 56 pt `InlineControlStyle` region that opens the receipt. With no finished
-  workout, "No sessions yet" is left-aligned type under the same hairline and no symbol. The one
+  the counts. It is a 56 pt `InlineControlStyle` region that opens the receipt, and beneath it, as
+  its own control and never inside it, an inline "Worked from" opens the sets the volume was summed
+  from. With no finished workout, "No sessions yet" is left-aligned type under the same hairline and no symbol. The one
   accent is the primary Start: the up-next workout's when one is saved, the empty "Start workout"
   otherwise. It adds no token and no motion.
 - **Workout cards** (`WorkoutCardsView`, `WorkoutCard`): the Train tab's saved workouts, drawn without
@@ -878,7 +913,8 @@ Selection rows, the unit switch and pickers stay silent.
   it, with space between rows and no card, so the count is the biggest thing in the row. At accessibility
   sizes the name, the count and the phrase each take a line. The week's total is the screen's
   `monument`, 88 pt and stacked above its sentence at accessibility sizes, because it is the one
-  figure here that is a count of what was logged; the per-muscle counts are fractional credits, an
+  figure here that is a count of what was logged, and an inline "Worked from" under it opens the sets it
+  was counted from (`WorkingSetCountWorking`); the per-muscle counts are fractional credits, an
   adopted convention, so they stay in `setEntry`. The window
   controls "Earlier" and "Later" and "How sets are counted" are inline controls in `chalk`, with "Later"
   dimmed to 40% on the newest window; the two window controls stack one above the other when they

@@ -89,6 +89,15 @@ class InteractionRulesTests(unittest.TestCase):
         )
         self.assertTrue(any("HardsetKeyFace" in f for f in self.failures()))
 
+    def test_a_monument_without_its_worked_from_fails(self):
+        path = self.sources / "HardsetUI/VolumeReportView.swift"
+        path.write_text(path.read_text().replace("onShowTotalWorking", "onShowSomethingElse"))
+        self.assertTrue(any("Worked from hookup" in f for f in self.failures()))
+
+    def test_a_new_monument_in_an_unlisted_file_fails(self):
+        self.append("HardsetUI/HistoryView.swift", "let big = Text(\"1\").hardsetText(.monument)")
+        self.assertTrue(any("not in MONUMENT_DRAWN_IN" in f for f in self.failures()))
+
     def test_a_top_pinned_control_in_the_session_fails(self):
         self.append(
             "HardsetUI/SessionView.swift",

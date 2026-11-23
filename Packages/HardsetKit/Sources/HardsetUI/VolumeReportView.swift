@@ -42,6 +42,7 @@ public struct VolumeReportView: View {
   /// Opens the working behind a muscle's count, from the figure on its row. `nil` where the screen
   /// has no working to show, and the figure is then plain text.
   private let onShowWorking: ((Muscle) -> Void)?
+  private let onShowTotalWorking: (() -> Void)?
 
   @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
@@ -55,7 +56,8 @@ public struct VolumeReportView: View {
     onShowSettings: (() -> Void)? = nil,
     onEarlier: (() -> Void)? = nil,
     onLater: (() -> Void)? = nil,
-    onShowWorking: ((Muscle) -> Void)? = nil
+    onShowWorking: ((Muscle) -> Void)? = nil,
+    onShowTotalWorking: (() -> Void)? = nil
   ) {
     self.report = report
     self.excludedFromGaps = excludedFromGaps
@@ -67,6 +69,7 @@ public struct VolumeReportView: View {
     self.onEarlier = onEarlier
     self.onLater = onLater
     self.onShowWorking = onShowWorking
+    self.onShowTotalWorking = onShowTotalWorking
   }
 
   public var body: some View {
@@ -186,6 +189,14 @@ public struct VolumeReportView: View {
       }
       .accessibilityElement(children: .ignore)
       .accessibilityLabel(Text("^[\(report.hardSets) working set](inflect: true) \(period)"))
+
+      // The monument is a number the lifter cannot be asked to take on trust: it opens the sets it
+      // was counted from, and the warm-ups that were left out.
+      if let onShowTotalWorking {
+        WorkedFromButton("Worked from", style: .inline, action: onShowTotalWorking)
+          .accessibilityLabel("Worked from, working sets")
+          .accessibilityHint("Shows the sets this count was made from")
+      }
 
       // The lower-bound statement is not a footnote. If some sets could not be attributed, every
       // number below is a floor, and saying so is the whole point of the coverage field.
