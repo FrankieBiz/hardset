@@ -183,7 +183,7 @@ Question-by-question:
 | Browsing History | Not collected | No browser. |
 | Search History | Not collected | The movement search is local and is not recorded off device. |
 | Identifiers | Not collected | No user ID, device ID, or advertising identifier. |
-| Purchases | Not collected | See §9.3. StoreKit is read on device; there is no server-side purchase record held by Hardset. |
+| Purchases | Not collected | Ruled 23 November 2026; see §9.3. StoreKit is read on device and there is no server-side purchase record held by Hardset. |
 | Usage Data | Not collected | No analytics or product-interaction SDK. |
 | Diagnostics | Not collected | No crash or performance SDK; Apple's own diagnostics are under Apple's policy. |
 | Tracking | No | `NSPrivacyTracking` is false; no tracking domains; no ATT prompt. |
@@ -320,7 +320,8 @@ on `31f7c45`:
 - `Hardset/Info.plist` carries `NSHealthShareUsageDescription` and
   `NSHealthUpdateUsageDescription`.
 
-This is a release blocker for the copy, not a copy problem. Before the 1.0 archive:
+This is a release blocker for the copy, not a copy problem. D25 stands: the removal is a
+separate stream, and this kit does not touch app code. Before the 1.0 archive:
 
 1. Remove the `HardsetHealth` target and its `HardsetFeature` dependency, or exclude it
    from the 1.0 build.
@@ -329,10 +330,8 @@ This is a release blocker for the copy, not a copy problem. Before the 1.0 archi
 3. Re-run the app privacy check and this document. The "Data Not Collected" answer is
    unchanged either way, because local Health access is not collection. The site's
    "Apple Health" section and the support FAQ are the parts that must match.
-4. If the owner decides to ship HealthKit in 1.0 instead, do not submit the current site
-   copy: replace the Health sections with the draft's optional-Health text, keep the
-   App Privacy answer at "Data Not Collected" only while the data stays local, and add
-   the permission strings to the review notes.
+4. Do not submit until that separate removal has landed. Do not rewrite the site or the
+   description to include Apple Health in 1.0; D25 is the decision of record.
 
 ### 9.2 The privacy manifest and the App Privacy answer
 
@@ -343,19 +342,19 @@ CloudKit database are stale for this local-only build. That is a documentation d
 the app target, not a disagreement that changes the answer; correct the comments when the
 Health change touches the target.
 
-### 9.3 Purchase history: the repository's own note disagrees with the answer
+### 9.3 Purchase history: the older note is superseded
 
 `DECISIONS.md` §6 says: "Purchase history still must be disclosed in the App Store Connect
-questionnaire, where the inheritance rule does not apply." The manifest declares no
-collected data, and `LifetimeAccess` reads StoreKit on the device with no server. Under
-Apple's current definition ("processed only on device is not collected"), purchase
-history is not collected by Hardset. The two statements cannot both be right.
+questionnaire, where the inheritance rule does not apply." That line predates the removal
+of RevenueCat and is **superseded** by the owner's ruling of 23 November 2026. The ruling
+is **Purchases: Not collected**.
 
-The kit's answer is **Purchases: Not collected**, because that is what the code and
-manifest support. If the owner prefers the conservative reading in `DECISIONS.md`, the
-alternative answer is **Purchases → Purchase History**, not linked to identity, used for
-app functionality, not used for tracking. Do not submit until the owner has picked one and
-the choice is written here. This does not affect the app's behavior.
+Apple defines collection as transmitting data off the device in a way that lets the
+developer or a third party access it. Hardset has no server, no analytics, and no
+StoreKit server call. `LifetimeAccess` reads `Transaction.currentEntitlements` and
+`Transaction.updates` on the device; the transaction is verified and finished on the
+device. There is nothing to disclose. Do not re-open this question or add a Purchase
+History entry; the answer in §6.1 is final for 1.0.
 
 ### 9.4 The bundle ID and the product ID do not share a prefix
 
@@ -404,11 +403,14 @@ transparency. The PNG carries no embedded ICC profile; treat it as sRGB and let 
 Connect confirm on upload. If it warns about the profile, re-export with an explicit sRGB
 profile rather than changing the artwork.
 
-**Recommendation for the final asset: do not invent one in this kit.** If the owner has
-no final design before 1.0, the interim icon is legible at small sizes, not misleading,
-and may ship; the script says it is a stand-in and nothing in the kit presents it as
-final. A final icon should be a deliberate mark built from the app's own visual signature
-(D21, the Scale) and palette, not another gradient object:
+**Decision for 1.0: ship the interim asset.** This is deliberate, not a gap. The asset is
+legible at small sizes and is not misleading, and it is what 1.0 ships. The owner is
+commissioning a proper mark separately, built from D21's Scale and tested at 29 and 60 px.
+This kit does not design, generate, or replace it; nothing here should be read as a
+pending icon task.
+
+The separate commission should be a deliberate mark built from the app's own visual
+signature and palette, not another gradient object:
 
 - One idea, readable at 29 px and 60 px: a stamped measurement numeral, a single
   calibrated plate, or the selector pin on a stack, not all three at once.
@@ -421,8 +423,8 @@ final. A final icon should be a deliberate mark built from the app's own visual 
 - Replace it in a dedicated icon change with a new build; do not swap the PNG inside a
   release that is already in review.
 
-The icon is the only store asset not produced by `Tools/render_store_screenshots.sh` and
-the only one still explicitly labelled interim.
+The icon is the only store asset not produced by `Tools/render_store_screenshots.sh`; that
+is expected, because it is a brand asset rather than a screen.
 
 ---
 
@@ -431,11 +433,12 @@ the only one still explicitly labelled interim.
 - [ ] App name, subtitle, promotional text, description, and keywords pasted exactly.
 - [ ] Primary and secondary category set.
 - [ ] Age rating questionnaire answered; 4+ expected.
-- [ ] App Privacy "Data Not Collected" selected; §9.3 resolved by the owner.
+- [ ] App Privacy "Data Not Collected" selected; §9.3 is ruled (Purchases: Not collected).
 - [ ] Privacy Policy URL, Support URL, and Marketing URL replaced with live HTTPS URLs.
 - [ ] Review notes pasted; contact phone filled.
 - [ ] Export compliance answered.
 - [ ] Content rights answered.
+- [ ] Icon: the interim asset is the deliberate 1.0 choice; no replacement in this kit.
 - [ ] Screenshots uploaded from `docs/release/screenshots/` (see its README).
 - [ ] In-App Purchase created and attached (see `RELEASE-RUNBOOK.md`).
 - [ ] EU trader status answered (see `RELEASE-RUNBOOK.md`).

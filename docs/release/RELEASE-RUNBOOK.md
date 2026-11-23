@@ -88,11 +88,12 @@ but do not submit to the EU store without it.
 
 ---
 
-## 3. Remove Apple Health for 1.0, or revise the public copy (BLOCKING)
+## 3. Remove Apple Health for 1.0 (BLOCKING)
 
 Decision D25 says Apple Health is removed from 1.0. The public site, the description and
 the App Privacy answer in this kit are written for that 1.0. The current branch still
-links HealthKit; `docs/release/APP-STORE-METADATA.md` §9.1 lists the exact files. Before
+links HealthKit; `docs/release/APP-STORE-METADATA.md` §9.1 lists the exact files. D25
+stands and the removal is a separate stream; this kit does not touch app code. Before
 archiving:
 
 1. Remove the `HardsetHealth` target and its `HardsetFeature` dependency (or exclude it
@@ -103,11 +104,11 @@ archiving:
 3. Re-check `site/privacy.html`, `site/support.html`, the description, and the App Privacy
    answer. The "Data Not Collected" answer stays correct either way because local access
    is not collection; the Health sections must match the build.
-4. If the owner decides instead to ship HealthKit in 1.0, **stop** and revise the site and
-   `APP-STORE-METADATA.md` before archiving. Do not submit a policy that says the app does
-   not connect to Health while the build offers it.
+4. Do not submit until that removal has landed. Do not ship HealthKit in 1.0 or rewrite
+   the public copy to include it; a future decision that changes D25 must revise this
+   runbook and the site first.
 
-Record the decision and the commit that implements it here: **PLACEHOLDER — commit/date**.
+Record the removal's commit and date here: **PLACEHOLDER — commit/date**.
 
 ---
 
