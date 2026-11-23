@@ -110,6 +110,60 @@
       .background(Tokens.Color.canvas)
     }
 
+    /// A card with a keypad host behind it: `onBeginEditing` is what makes a figure editable, and a
+    /// row can be told which field the keypad is on.
+    private static func editableCard(
+      _ state: ExerciseLogState,
+      unit: WeightUnit = .kilograms,
+      editingSlot: Int? = nil,
+      field: SetRowField? = nil,
+      text: String? = nil
+    ) -> some View {
+      ScrollView {
+        ExerciseSectionView(
+          state: .constant(state),
+          unit: unit,
+          onLogSet: { _ in },
+          onSelectMachine: {},
+          onShowHistory: {},
+          editingSlotID: editingSlot.map { state.slots[$0].id },
+          editingField: field,
+          editingText: text,
+          onBeginEditing: { _, _ in }
+        )
+        .padding(Tokens.Spacing.regular)
+      }
+      .background(Tokens.Color.canvas)
+    }
+
+    /// The states the other captures cannot reach. A card with no keypad host draws read-only rows,
+    /// and a read-only figure is never outlined or underlined, so these are the ones that are, at
+    /// the 44 pt figure size: an editable figure at rest, the outline Increase Contrast draws around
+    /// it, the caret and underline while it is typed into in each field, and a long pound value
+    /// being typed on the narrowest phone.
+    @Test func editableRows() async throws {
+      let state = Fixtures.legPress()
+      try await Snapshot.capture("kit-exercise-editable-dark", size: Self.size) {
+        Self.editableCard(state)
+      }
+      try await Snapshot.capture("kit-exercise-editable-dark-contrast", size: Self.size, contrast: .high) {
+        Self.editableCard(state)
+      }
+      try await Snapshot.capture("kit-exercise-editing-weight-dark", size: Self.size) {
+        Self.editableCard(state, editingSlot: 2, field: .weight, text: "102.5")
+      }
+      try await Snapshot.capture(
+        "kit-exercise-editing-reps-dark-contrast", size: Self.size, contrast: .high
+      ) {
+        Self.editableCard(state, editingSlot: 2, field: .reps, text: "12")
+      }
+      try await Snapshot.capture(
+        "kit-exercise-editing-pounds-dark-375", size: CGSize(width: 375, height: 720)
+      ) {
+        Self.editableCard(state, unit: .pounds, editingSlot: 2, field: .weight, text: "132.28")
+      }
+    }
+
     /// The leg-press card, the default state: a link title, a set machine chip with its step, one
     /// logged set, a warm-up row, and no rest control or menu.
     @Test func legPressCard() async throws {
