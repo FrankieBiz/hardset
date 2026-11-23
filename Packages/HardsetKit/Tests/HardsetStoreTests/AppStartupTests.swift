@@ -9,7 +9,7 @@ import Testing
 
 @Suite("App startup prepares and retains one resource set")
 struct AppStartupTests {
-  enum Failure: Error { case unavailable, timedOut }
+  enum Failure: Error { case unavailable }
 
   nonisolated final class Resource: Sendable {}
 
@@ -52,12 +52,17 @@ struct AppStartupTests {
     let calls = Mutex(0)
     let entered = AsyncStream<Void>.makeStream()
     let secondEntered = AsyncStream<Void>.makeStream()
+    // Preparation is held until the test releases it, and only by that signal. A wall-clock bound
+    // here made the test fail whenever a loaded machine took longer than the bound to reach the
+    // release, which says nothing about startup. The wait runs on the startup's own dispatch queue,
+    // not the cooperative pool, so holding it cannot starve the tasks that signal it, and the
+    // `defer` releases it on every exit from the test.
     let release = DispatchSemaphore(value: 0)
     defer { release.signal() }
     let startup = AppStartup {
       calls.withLock { $0 += 1 }
       entered.continuation.yield(())
-      guard release.wait(timeout: .now() + 5) == .success else { throw Failure.timedOut }
+      release.wait()
       return 42
     }
     let first = Task { await startup.start() }

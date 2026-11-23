@@ -181,7 +181,22 @@ private struct WelcomePage: View {
 /// Three short segments above the pitch pages' button. The active one is plate blue and slides to
 /// the next on `Motion.state`; a `matchedGeometryEffect` moves one shape between segments inside
 /// this row and never changes its layout.
-private struct PitchProgress: View {
+///
+/// It is a gauge, not a control: nothing happens when a segment is touched, and the page turns
+/// through Next, Skip or a swipe of the pager. So assistive technology is offered a progress indicator with a label and
+/// a value, "Introduction", "Page 1 of 3", and no action and no adjustable trait. Exposed as a bare
+/// labelled node it had no role at all, and the accessibility audit read that 4 pt node as a target
+/// too small to hit (`docs/KNOWN-ISSUES.md` #3).
+struct PitchProgress: View {
+  /// What the gauge measures. A gauge's label names it; where it stands is its value.
+  static let accessibilityLabel = "Introduction"
+  static let accessibilityIdentifier = "pitch-progress"
+
+  /// Where the lifter is, in the words the page count is read in: "Page 1 of 3".
+  static func accessibilityValue(index: Int, count: Int) -> String {
+    "Page \(index + 1) of \(count)"
+  }
+
   let index: Int
   let count: Int
   let namespace: Namespace.ID
@@ -202,7 +217,12 @@ private struct PitchProgress: View {
       }
     }
     .animation(Tokens.Motion.adaptive(Tokens.Motion.state, reduceMotion: reduceMotion), value: index)
-    .accessibilityElement(children: .ignore)
-    .accessibilityLabel("Page \(index + 1) of \(count)")
+    .accessibilityRepresentation {
+      ProgressView(value: Double(index + 1), total: Double(count)) {
+        Text(Self.accessibilityLabel)
+      }
+      .accessibilityValue(Self.accessibilityValue(index: index, count: count))
+    }
+    .accessibilityIdentifier(Self.accessibilityIdentifier)
   }
 }
