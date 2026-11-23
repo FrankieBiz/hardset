@@ -10,29 +10,36 @@ import SwiftUI
 /// The same view is rendered into the shared image, so it holds no controls of its own. The
 /// exceptions are `onDeleteLine` and `onCorrectLine`: a screen correcting a past workout passes one
 /// of them while editing, and each set then shows a delete or a correct control. The share renderer
-/// never passes either. `onExplainRecords` is the same kind of exception: it shows the control that
-/// opens the working behind a record, and the share renderer never passes it.
+/// never passes either. `onExplainRecords` and `onExplainGain` are the same kind of exception: each
+/// shows a control that opens the working behind a record, or behind the scorecard's biggest gain, and
+/// the share renderer never passes either.
 public struct WorkoutReceiptView: View {
   private let receipt: WorkoutReceipt
   private let unit: WeightUnit
   private let onDeleteLine: ((WorkoutReceipt.Line) -> Void)?
   private let onCorrectLine: ((WorkoutReceipt.Line) -> Void)?
   private let onExplainRecords: ((WorkoutReceipt.Line?) -> Void)?
+  private let onExplainGain: (() -> Void)?
 
   /// - Parameter onExplainRecords: Opens the working behind a record: for one set when given a line,
   ///   for the whole workout when given `nil`. Like `onDeleteLine`, a screen passes it and the share
   ///   renderer never does, so the shared image holds no control.
+  /// - Parameter onExplainGain: Opens the working behind the scorecard's biggest gain: this workout's
+  ///   sets, last time's, and what was left out. Drawn only where the gain carries the sets it was
+  ///   computed from, and, like the others, never in the shared image.
   public init(
     receipt: WorkoutReceipt, unit: WeightUnit,
     onDeleteLine: ((WorkoutReceipt.Line) -> Void)? = nil,
     onCorrectLine: ((WorkoutReceipt.Line) -> Void)? = nil,
-    onExplainRecords: ((WorkoutReceipt.Line?) -> Void)? = nil
+    onExplainRecords: ((WorkoutReceipt.Line?) -> Void)? = nil,
+    onExplainGain: (() -> Void)? = nil
   ) {
     self.receipt = receipt
     self.unit = unit
     self.onDeleteLine = onDeleteLine
     self.onCorrectLine = onCorrectLine
     self.onExplainRecords = onExplainRecords
+    self.onExplainGain = onExplainGain
   }
 
   public var body: some View {
@@ -136,6 +143,11 @@ public struct WorkoutReceiptView: View {
           }
         }
         .accessibilityElement(children: .combine)
+        // Its own control beneath the combined line, so the line is one sentence to VoiceOver and the
+        // control is reachable on its own. Offered only for a gain that carries its sets.
+        if let onExplainGain, card.biggestGain?.basis != nil {
+          WorkedFromButton("Worked from this gain") { onExplainGain() }
+        }
       }
 
       VStack(alignment: .leading, spacing: 0) {

@@ -25,6 +25,10 @@ public struct WorkedFromButton: View {
     case quiet
     /// `chalk` words and the glyph with no face, for a screen that has dropped its containers.
     case inline
+    /// `provenance` words in `chalkDim` and the glyph with no face, for a control that sits beside a
+    /// figure in a list or a panel and must not outweigh the headline above it: a Progress row's
+    /// change and the live record notice.
+    case compact
   }
 
   private let title: String
@@ -54,6 +58,13 @@ public struct WorkedFromButton: View {
         Label(title, systemImage: WorkedFromSheet.glyph)
           .font(Tokens.Text.headline)
           .foregroundStyle(Tokens.Color.chalk)
+      }
+      .buttonStyle(InlineControlStyle(alignment: .leading))
+    case .compact:
+      Button(action: action) {
+        Label(title, systemImage: WorkedFromSheet.glyph)
+          .font(Tokens.Text.provenance)
+          .foregroundStyle(Tokens.Color.chalkDim)
       }
       .buttonStyle(InlineControlStyle(alignment: .leading))
     }

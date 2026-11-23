@@ -94,6 +94,22 @@ class InteractionRulesTests(unittest.TestCase):
         path.write_text(path.read_text().replace("onShowTotalWorking", "onShowSomethingElse"))
         self.assertTrue(any("Worked from hookup" in f for f in self.failures()))
 
+    def test_a_capped_estimate_without_its_worked_from_fails(self):
+        for relative, hook in [
+            ("HardsetUI/ProgressBoardView.swift", "onShowChangeWorking"),
+            ("HardsetUI/WorkoutReceiptView.swift", "onExplainGain"),
+            ("HardsetUI/SessionView.swift", "onExplainRecords"),
+            ("HardsetFeature/LiveSessionScreen.swift", "RecordWorking.liveAccount"),
+        ]:
+            with self.subTest(relative):
+                path = self.sources / relative
+                original = path.read_text()
+                path.write_text(original.replace(hook, "somethingElse"))
+                self.assertTrue(
+                    any(relative in f and "Worked from hookup" in f for f in self.failures())
+                )
+                path.write_text(original)
+
     def test_a_new_monument_in_an_unlisted_file_fails(self):
         self.append("HardsetUI/HistoryView.swift", "let big = Text(\"1\").hardsetText(.monument)")
         self.assertTrue(any("not in MONUMENT_DRAWN_IN" in f for f in self.failures()))

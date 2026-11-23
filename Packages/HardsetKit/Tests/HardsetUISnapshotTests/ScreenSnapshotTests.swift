@@ -58,7 +58,11 @@
         beatenCount: 3, comparedCount: 5, recordMovementCount: 2,
         biggestGain: .init(
           key: key(), exerciseName: "Incline Press", fraction: 0.0625, metric: .estimatedMax,
-          certainty: .moderate))
+          certainty: .moderate,
+          basis: ScorecardInput(
+            key: key(), exerciseName: "Incline Press",
+            currentSets: [PriorSetRecord(weightKg: 80, reps: 9, completedAt: .distantPast)],
+            previousSets: [PriorSetRecord(weightKg: 80, reps: 8, completedAt: .distantPast)])))
       let receipt = WorkoutReceipt(
         id: SessionID(), title: "Push", startedAt: Date(timeIntervalSince1970: 1793527200),
         finishedAt: Date(timeIntervalSince1970: 1793530800),
@@ -77,6 +81,12 @@
       }
       try await Snapshot.capture("receipt-scorecard-dark-ax3", typeSize: .accessibility3) {
         ScrollView { WorkoutReceiptView(receipt: receipt, unit: .kilograms) }
+          .background(Tokens.Color.canvas)
+      }
+      // On the screen, where the gain opens the sets it was worked from. The renders above are what
+      // the shared image holds, which never has the control.
+      try await Snapshot.capture("receipt-scorecard-working-dark-375", size: Snapshot.narrow) {
+        ScrollView { WorkoutReceiptView(receipt: receipt, unit: .kilograms, onExplainGain: {}) }
           .background(Tokens.Color.canvas)
       }
     }
@@ -618,7 +628,10 @@
         onAddExercise: {},
         onSelectMachine: { _ in },
         onShowHistory: { _ in },
-        onShowSettings: {}
+        onShowSettings: {},
+        // As in the app, where a record notice can open the working behind its records. It is also
+        // what lets the notice collapse to one line at accessibility sizes.
+        onExplainRecords: pinned ? {} : nil
       )
     }
 

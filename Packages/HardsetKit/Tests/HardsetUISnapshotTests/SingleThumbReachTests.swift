@@ -26,12 +26,17 @@
     static let keypadFloor: CGFloat = 0.40
     /// The rest bar and its four 56 pt controls are the bottom of the screen.
     static let restBarFloor: CGFloat = 0.60
+    /// At an accessibility size the record notice and the rest bar together may cover at most this
+    /// fraction of the screen. Before they were capped they covered about eighty percent at
+    /// accessibility3 and left a sliver of the list to log in; the upper half is the list's.
+    static let pinnedStackCeiling: CGFloat = 0.50
 
     /// Hosts `content` in a window of `size`, lets it settle, and returns where the tour's targets
     /// are in window coordinates. Read before the window goes away, because a view that disappears
     /// forgets what it reported.
     private static func measure<Content: View>(
       size: CGSize = Snapshot.phone,
+      typeSize: DynamicTypeSize = .large,
       @ViewBuilder _ content: () -> Content
     ) async throws -> [TourTarget: CGRect] {
       let registry = TourTargets()
@@ -39,6 +44,7 @@
         rootView: content()
           .environment(\.tourTargets, registry)
           .environment(\.colorScheme, .dark)
+          .environment(\.dynamicTypeSize, typeSize)
       )
       host.overrideUserInterfaceStyle = .dark
       let window = UIWindow(frame: CGRect(origin: .zero, size: size))
@@ -51,7 +57,7 @@
       host.view.layoutIfNeeded()
 
       var rects: [TourTarget: CGRect] = [:]
-      for target in [TourTarget.keypad, .restBar, .logCheck] {
+      for target in [TourTarget.keypad, .restBar, .logCheck, .recordNotice] {
         if let rect = registry.rect(for: target) { rects[target] = rect }
       }
       window.isHidden = true
@@ -99,6 +105,46 @@
         ].joined(separator: "\n")
         try report.write(
           to: directory.appendingPathComponent("thumb-reach.txt"), atomically: true, encoding: .utf8)
+      }
+    }
+
+    /// A lifter at the largest text sizes must always be able to see and reach the set they are
+    /// logging. The record notice and the rest bar are pinned over the list, so what they cover is what
+    /// the list loses: this hosts the session with a notice and a running rest at accessibility3 and
+    /// accessibility5 and asserts the stack takes no more than half the screen, writing every number
+    /// to `pinned-stack.txt`. It cannot say that a given row is on screen, which is wherever the lifter
+    /// scrolled it, but it does say how much window the list keeps.
+    @Test(arguments: [DynamicTypeSize.accessibility3, DynamicTypeSize.accessibility5])
+    func thePinnedStackLeavesRoomToLogAtAccessibilitySizes(typeSize: DynamicTypeSize) async throws {
+      let height = Snapshot.phone.height
+      let rects = try await Self.measure(typeSize: typeSize) { Fixtures.session(pinned: true) }
+      let restBar = try #require(rects[.restBar], "The rest bar reported no frame.")
+      let notice = try #require(rects[.recordNotice], "The record notice reported no frame.")
+
+      let top = min(notice.minY, restBar.minY)
+      let covered = (height - top) / height
+      #expect(
+        covered <= Self.pinnedStackCeiling,
+        "The notice and the rest bar cover \(Int((covered * 100).rounded()))% of the screen at \(typeSize), above \(Int(Self.pinnedStackCeiling * 100))%."
+      )
+      // One line for the notice: a count and a close mark, never a sentence per record.
+      #expect(
+        notice.height <= height * 0.15,
+        "The record notice is \(Int(notice.height)) pt tall at \(typeSize); it should be one line.")
+
+      if let directory = Snapshot.directory {
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let report = [
+          "Pinned stack at \(typeSize), measured on a \(Int(Snapshot.phone.width)) by \(Int(height)) window.",
+          "Asserted: the record notice and the rest bar cover at most \(Int(Self.pinnedStackCeiling * 100))% of the screen.",
+          "covered: \(Int((covered * 100).rounded()))% (top edge of the stack at y \(Int(top)))",
+          Self.line("record notice (collapsed: a count and a close mark)", notice, height: height),
+          Self.line("rest bar (countdown and the four controls)", restBar, height: height),
+          Self.line("next set's log check, at the list's opening scroll position, not asserted", rects[.logCheck], height: height),
+        ].joined(separator: "\n")
+        try report.write(
+          to: directory.appendingPathComponent("pinned-stack-\(String(describing: typeSize)).txt"),
+          atomically: true, encoding: .utf8)
       }
     }
 

@@ -18,6 +18,11 @@ import SwiftUI
 /// halves says so on both rows, and the board says once, above its rows, why a lift can appear
 /// twice. No two names are guessed to be one movement.
 ///
+/// A change that has one carries a quiet "Worked from" control beside its certainty phrase, as its own
+/// control beneath the row's button, that opens the sets the change was worked from: the latest
+/// session, the baseline five to seven weeks before it, and everything left out. The change is a
+/// ratio of two estimates, so it is never a number to take on trust.
+///
 /// The words come from `ProgressCopy` and the grouping from `ProgressBoard`, both tested without a
 /// view; this draws them. The sparkline is decoration for the eye and is hidden from VoiceOver,
 /// which reads the sentence instead.
@@ -36,19 +41,38 @@ public struct ProgressBoardView: View {
   private let subtitle: String?
   private let onSelect: (ProgressBoard.Row) -> Void
   private let onShowSettings: (() -> Void)?
+  private let onShowChangeWorking: ((ProgressBoard.Row) -> Void)?
+  private let workingFailure: WorkingFailure?
   /// Read once from the board, not per row: how an imported row and the logged row beside it relate.
   private let sourceNotes: [ProgressionKey: String]
 
   @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
+  /// Why a row's working could not be opened, and for which row, so the line is drawn under the control
+  /// that was tapped and not somewhere off screen.
+  public struct WorkingFailure: Equatable, Sendable {
+    public let key: ProgressionKey
+    public let message: String
+
+    public init(key: ProgressionKey, message: String) {
+      self.key = key
+      self.message = message
+    }
+  }
+
   /// - Parameters:
   ///   - onSelect: Opens a movement's progress screen.
   ///   - onShowSettings: Draws the Settings button in the header, as the other tabs do.
+  ///   - onShowChangeWorking: Opens the working behind a row's six-week change. With it, every row
+  ///     that has a change draws a "Worked from" control; without it, none does.
+  ///   - workingFailure: Says why the last request for a working failed, under that row's control.
   public init(
     board: ProgressBoard,
     title: String? = nil,
     subtitle: String? = nil,
     onShowSettings: (() -> Void)? = nil,
+    onShowChangeWorking: ((ProgressBoard.Row) -> Void)? = nil,
+    workingFailure: WorkingFailure? = nil,
     onSelect: @escaping (ProgressBoard.Row) -> Void
   ) {
     self.board = board
@@ -56,6 +80,8 @@ public struct ProgressBoardView: View {
     self.title = title
     self.subtitle = subtitle
     self.onShowSettings = onShowSettings
+    self.onShowChangeWorking = onShowChangeWorking
+    self.workingFailure = workingFailure
     self.onSelect = onSelect
   }
 
@@ -192,7 +218,7 @@ public struct ProgressBoardView: View {
       .accessibilityElement(children: .ignore)
       .accessibilityLabel(ProgressCopy.spokenRow(row, sourceNote: sourceNotes[row.id]))
       .accessibilityHint("Opens its history")
-      badge(for: row)
+      footer(for: row)
     }
   }
 
@@ -270,9 +296,9 @@ public struct ProgressBoardView: View {
       .frame(maxWidth: .infinity, alignment: .leading)
     }
     .padding(.top, Tokens.Spacing.snug)
-    // A row with a certainty phrase gives its bottom space to the phrase's own 44 pt region, so
-    // the phrase sits under the sentence it qualifies instead of floating a line below it.
-    .padding(.bottom, row.trend.certainty == nil ? Tokens.Spacing.snug : 0)
+    // A row with a certainty phrase or a working control gives its bottom space to that control's own
+    // 44 pt region, so it sits under the sentence it qualifies instead of floating a line below it.
+    .padding(.bottom, row.trend.certainty == nil && !hasWorking(row) ? Tokens.Spacing.snug : 0)
     .frame(maxWidth: .infinity, alignment: .leading)
   }
 
@@ -290,6 +316,50 @@ public struct ProgressBoardView: View {
       attributed[range].foregroundColor = Tokens.Color.chalk
     }
     return attributed
+  }
+
+  /// Whether this row's change can be explained: it has one, and the screen can open its working.
+  private func hasWorking(_ row: ProgressBoard.Row) -> Bool {
+    onShowChangeWorking != nil && row.trend.sixWeekChange != nil
+  }
+
+  /// Under the sentence, its own controls and never inside the row's button: how far to trust the
+  /// estimate, as a phrase, and the control that opens the sets the change was worked from. Side by
+  /// side where they fit and stacked where they do not, so neither is ever cut short.
+  @ViewBuilder private func footer(for row: ProgressBoard.Row) -> some View {
+    if row.trend.certainty != nil, hasWorking(row) {
+      ViewThatFits(in: .horizontal) {
+        HStack(alignment: .center, spacing: Tokens.Spacing.regular) {
+          badge(for: row)
+          Spacer(minLength: Tokens.Spacing.snug)
+          workingControl(for: row)
+        }
+        VStack(alignment: .leading, spacing: 0) {
+          badge(for: row)
+          workingControl(for: row)
+        }
+      }
+    } else {
+      badge(for: row)
+      workingControl(for: row)
+    }
+    if let failure = workingFailure, failure.key == row.id {
+      Text(failure.message)
+        .font(Tokens.Text.provenance)
+        .foregroundStyle(Tokens.Color.chalkDim)
+        .fixedSize(horizontal: false, vertical: true)
+        .padding(.bottom, Tokens.Spacing.snug)
+    }
+  }
+
+  @ViewBuilder private func workingControl(for row: ProgressBoard.Row) -> some View {
+    if hasWorking(row), let onShowChangeWorking {
+      WorkedFromButton("Worked from", style: .compact) { onShowChangeWorking(row) }
+        // Begins with the words the control shows, so a Voice Control user can say what they see.
+        .accessibilityLabel(
+          "Worked from, \(row.exerciseName), \(ProgressCopy.metricName(row.trend.metric).lowercased()) change")
+        .accessibilityHint("Shows the sets this change was worked from")
+    }
   }
 
   /// Beside every estimated-max figure, the certainty of the estimate behind it, as a phrase.

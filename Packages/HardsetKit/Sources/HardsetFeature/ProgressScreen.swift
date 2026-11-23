@@ -17,7 +17,12 @@ import SwiftUI
 @MainActor
 public struct ProgressScreen: View {
   @State private var snapshot = SnapshotLoader<ProgressBoard>()
-  @State private var selectedMovement: ProgressMovement?
+  /// The sheet that is up, or `nil`: a movement's progress, or the working behind a row's change. One
+  /// value, so the screen carries one presentation and two sheets are never asked for at once.
+  @State private var presented: ProgressSheet?
+  /// Why the last request for a row's working failed, drawn under that row's control. A control
+  /// that appeared to do nothing is what this app is not allowed to have.
+  @State private var workingFailure: ProgressBoardView.WorkingFailure?
   /// Bumped to re-read when the app comes back to the foreground.
   @State private var reloadToken = 0
   @Environment(\.scenePhase) private var scenePhase
@@ -70,9 +75,11 @@ public struct ProgressScreen: View {
           title: Self.title,
           subtitle: Self.subtitle(value),
           onShowSettings: onShowSettings,
+          onShowChangeWorking: { showChangeWorking($0) },
+          workingFailure: workingFailure,
           onSelect: { row in
-            selectedMovement = ProgressMovement(
-              exerciseID: row.trend.key.exerciseID, name: row.exerciseName)
+            presented = .movement(
+              ProgressMovement(exerciseID: row.trend.key.exerciseID, name: row.exerciseName))
           }
         )
       } else {
@@ -90,19 +97,26 @@ public struct ProgressScreen: View {
     .onChange(of: scenePhase) { _, phase in
       if phase == .active { reloadToken &+= 1 }
     }
-    .sheet(item: $selectedMovement) { movement in
-      NavigationStack {
-        ExerciseProgressScreen(
-          store: progression, exerciseID: movement.exerciseID, exerciseName: movement.name,
-          unit: unit
-        )
-        .toolbar {
-          ToolbarItem(placement: .confirmationAction) {
-            Button("Done") { selectedMovement = nil }
+    .sheet(item: $presented) { sheet in
+      switch sheet {
+      case .movement(let movement):
+        NavigationStack {
+          ExerciseProgressScreen(
+            store: progression, exerciseID: movement.exerciseID, exerciseName: movement.name,
+            unit: unit
+          )
+          .toolbar {
+            ToolbarItem(placement: .confirmationAction) {
+              Button("Done") { presented = nil }
+            }
           }
         }
+        .hardsetSheet()
+      case .working(let presentation):
+        // The sets behind the six-week change the lifter tapped, read when it was asked for.
+        WorkedFromSheet(account: presentation.account)
+          .hardsetSheet()
       }
-      .hardsetSheet()
     }
   }
 
@@ -126,6 +140,48 @@ public struct ProgressScreen: View {
   private func load() async {
     let board = board
     await snapshot.load { try await board.loadBoard() }
+  }
+
+  /// Opens the working behind a row's six-week change. The sets are read when it is asked for, by the
+  /// board's own grouping and the very comparison the row's figure came from, so what the sheet says
+  /// is what the row did. A failed read, or a change that is no longer there, says so under the row.
+  private func showChangeWorking(_ row: ProgressBoard.Row) {
+    workingFailure = nil
+    let board = board
+    let key = row.id
+    let format = WorkedFromFormat(unit: unit)
+    Task {
+      do {
+        guard let account = try await board.loadChangeWorking(for: key, format: format) else {
+          workingFailure = ProgressBoardView.WorkingFailure(
+            key: key,
+            message: "This change could not be worked out from the sets on record now. Pull down to refresh.")
+          return
+        }
+        presented = .working(WorkedFromPresentation(account))
+      } catch is CancellationError {
+        return
+      } catch {
+        workingFailure = ProgressBoardView.WorkingFailure(
+          key: key, message: "Could not read this movement's sets. Your logged sets are safe.")
+      }
+    }
+  }
+}
+
+/// The sheets this screen opens, one at a time. `nonisolated` so its computed `id` satisfies
+/// `Identifiable` without isolated-conformance inference, as the other screens' sheet enums do.
+private nonisolated enum ProgressSheet: Identifiable {
+  /// A movement's own progress screen.
+  case movement(ProgressMovement)
+  /// The working behind a row's six-week change.
+  case working(WorkedFromPresentation)
+
+  var id: String {
+    switch self {
+    case .movement(let movement): "movement-\(movement.exerciseID.rawValue.uuidString)"
+    case .working(let presentation): "working-\(presentation.id.uuidString)"
+    }
   }
 }
 

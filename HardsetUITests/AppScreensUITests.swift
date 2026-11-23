@@ -799,7 +799,8 @@ final class AppScreensUITests: XCTestCase {
 
   /// The pitch pages' progress row is a gauge: a progress indicator named "Introduction" whose
   /// value is the page. Fails if it goes back to a bare labelled node, which the audit read as a
-  /// 4 pt target (`docs/KNOWN-ISSUES.md`), or if its label or value drifts.
+  /// 4 pt target (the audit's hit-area line on the gauge is a known false positive; see the
+  /// first-launch pager in `DESIGN.md`), or if its label or value drifts.
   @MainActor
   private func assertPitchProgress(
     _ app: XCUIApplication, page: Int, file: StaticString = #filePath, line: UInt = #line

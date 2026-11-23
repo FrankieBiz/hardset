@@ -55,6 +55,17 @@ PRESSED = {
 # Boundaries that identify a control: 3:1 (SC 1.4.11). A pressed face keeps its control edge, so
 # `steelPressed` is a surface it must clear too.
 BOUNDARY_ON = {"controlEdge": SURFACES + ["steelPressed"]}
+# The unfilled part of a gauge is required information, not decoration (ruling D22), so it carries
+# the same 3:1. It is drawn on the canvas only: on dark `steel` it would measure 2.6:1, so `steel`
+# is deliberately not listed.
+BOUNDARY_ON["gaugeTrack"] = ["canvas"]
+# The indicator against the track it sits on. Not a WCAG floor: both are already held to 3:1 on the
+# canvas above, and a mid-grey track cannot also be 3:1 from a deep-blue indicator on the light
+# canvas. This keeps the order. Under Increase Contrast `controlEdge` and `hairline` go loud and
+# `plateBlue` sinks to about 1.7:1 and 1.6:1 against them, so the indicator reads as the quieter of
+# the two; the floor sits just under the weakest value the pair has (2.47, light) and above that.
+# (indicator, track, floor)
+GAUGE = [("plateBlue", "gaugeTrack", 2.4)]
 # Steps between surfaces. These are not WCAG floors. With the stroke gone from cards and labelled
 # controls, the step between two fills is what separates them, so a later colour change must not
 # quietly flatten it. Each floor sits just under the value the design was built around (dark
@@ -110,7 +121,14 @@ def load(path):
 def main():
     path = Path(sys.argv[1]) if len(sys.argv) > 1 else DEFAULT
     palette, series = load(path)
-    required = set(TEXT_ON) | set(BOUNDARY_ON) | set(TINTS) | set(SURFACES) | {"steelPressed"}
+    required = (
+        set(TEXT_ON)
+        | set(BOUNDARY_ON)
+        | set(TINTS)
+        | set(SURFACES)
+        | {"steelPressed"}
+        | {name for pair in GAUGE for name in pair[:2]}
+    )
     missing = sorted(name for name in required if name not in palette)
     if missing:
         print(f"Missing swatches in {path}: {', '.join(missing)}")
@@ -138,6 +156,8 @@ def main():
     for fg, backgrounds in BOUNDARY_ON.items():
         for bg in backgrounds:
             check(fg, bg, 3.0)
+    for indicator, track, floor in GAUGE:
+        check(indicator, track, floor)
     for upper, lower, dark_floor, light_floor in STEPS:
         for appearance, floor in (("dark", dark_floor), ("light", light_floor)):
             value = ratio(palette[upper][appearance], palette[lower][appearance])

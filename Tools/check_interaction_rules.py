@@ -9,7 +9,9 @@ Three of the app's signatures are interactions, and each is easy to undo without
    logger's own keypad. A system text field in that path brings up the system keyboard, which is the
    thing the pad exists to prevent. The pad's quick steps come from the machine's own increment, and
    nothing the logger needs is pinned to the top of the screen.
-3. The figure scale: every figure drawn at a monument size can be opened to the working behind it.
+3. The figure scale: every figure drawn at a monument size can be opened to the working behind it,
+   and so can every capped estimate: a Progress row's six-week change, the scorecard's biggest gain
+   and the live record notice.
 
 The type system cannot say any of this, so this reads the sources the way `check_figure_cap.py`
 does, names the few files each rule is about, and fails with the reason. It is deliberately a text
@@ -229,6 +231,34 @@ def check_monuments_are_inspectable(failures):
             print(f"note: {relative} no longer draws a monument; it can leave MONUMENT_DRAWN_IN.")
 
 
+# The capped estimates: a figure no larger than 28 pt that is inferred, not counted. They are held to
+# the same rule as a monument, that a number the lifter cannot open to the sets behind it is what the
+# product refuses. Each surface draws a control, and the screen that owns it opens the sheet from a
+# derivation in Core (ChangeWorking, RecordWorking.liveAccount).
+CAPPED_ESTIMATE_HOOKUPS = {
+    "HardsetUI/ProgressBoardView.swift": ("onShowChangeWorking", "WorkedFromButton("),
+    "HardsetUI/WorkoutReceiptView.swift": ("onExplainGain", "WorkedFromButton("),
+    "HardsetUI/SessionView.swift": ("onExplainRecords", "WorkedFromButton("),
+    "HardsetFeature/ProgressScreen.swift": ("loadChangeWorking", "WorkedFromSheet("),
+    "HardsetFeature/WorkoutReceiptScreen.swift": ("ChangeWorking.lastTime", "WorkedFromSheet("),
+    "HardsetFeature/LiveSessionScreen.swift": ("RecordWorking.liveAccount", "WorkedFromSheet("),
+}
+
+
+def check_capped_estimates_are_inspectable(failures):
+    """Every capped estimate opens "Worked from": a surface cannot lose its working quietly."""
+    for relative, hookups in CAPPED_ESTIMATE_HOOKUPS.items():
+        code = strip_comments(read(relative))
+        missing = [hook for hook in hookups if hook not in code]
+        if missing:
+            failures.append(
+                f"{relative} no longer has its Worked from hookup ({', '.join(missing)}). It draws a "
+                "capped estimate (a six-week change, the scorecard's biggest gain or the live record "
+                "notice), and an estimate the lifter cannot open to the sets behind it is exactly "
+                "what the product refuses (DESIGN.md, Inspectable figures)."
+            )
+
+
 def check_nothing_pinned_to_the_top(failures):
     """A logger control pinned to the top of the screen is out of reach of one thumb."""
     for relative in LIVE_SCREEN_FILES:
@@ -248,6 +278,7 @@ CHECKS = [
     check_pad_steps,
     check_step_targets,
     check_monuments_are_inspectable,
+    check_capped_estimates_are_inspectable,
     check_nothing_pinned_to_the_top,
 ]
 

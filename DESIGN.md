@@ -25,8 +25,9 @@ the code does yet, so a reader does not look for a screen that has not moved.
   the 64 pt set row, the estimate ceiling and its check. It is scale and hierarchy only: it adds no
   glyph, rule, colour or motion. The onboarding demo and the catalogue's set rows keep the compact
   row, and History's row figures, the keypad display and the welcome bar keep their sizes.
-- The two monuments open "Worked from" (see Inspectable figures). Three capped estimates do not yet,
-  and the audit there says which.
+- Every monument and every capped estimate opens "Worked from" (see Inspectable figures): the two
+  monuments, a Progress row's six-week change, the scorecard's biggest gain and the live record
+  notice. The audit there lists every figure and says which derivation explains it.
 - Not yet in code, so the bullets below that name these describe where they are going: whatever a
   screen draws for itself instead of through the kit. That is the scorecard headline's type role, the
   deep muscle map, and the
@@ -102,6 +103,7 @@ primary appearance; light is derived from the same roles and held to the same fl
 | `steelPressed` | `#111216` | `#E6E6EB` | Momentary pressed fill, darker than `steelRaised` so a press sinks, and distinct from both `steel` and `canvas` so a pressed control with no outline keeps a visible face |
 | `hairline` | `#2E3039` | `#DEDEE4` | Decorative separators inside a card; never a boundary |
 | `controlEdge` | `#7B7E8C` | `#7E8190` | The outline of an input, and of every control under Increase Contrast or Button Shapes |
+| `gaugeTrack` | `#5C5C65` | `#888892` | The unfilled part of a gauge that carries meaning: the first-launch pager's inactive segments. At least 3:1 on `canvas` in every appearance; drawn on `canvas` only |
 | `chalk` | `#F3F3F5` | `#141519` | Chalk / graphite body text and values |
 | `chalkDim` | `#B6B8C3` | `#4B4D58` | Supporting text, units, provenance |
 | `plateBlue` | `#6FB7FF` | `#084A95` | The 20 kg plate: actions, focus, selection, next up |
@@ -144,6 +146,18 @@ green, yellow and red plates, `warning` and their surfaces keep their normal val
 clear the floor. Under Increase Contrast `canvas`, `steel` and `steelRaised` are one colour, so the
 fill step is gone and every control wears its `controlEdge`. Resolution happens live from the trait
 collection, in code, with no asset catalogue.
+
+`gaugeTrack` is the one boundary-grade colour with no Increase Contrast pair, on purpose. A gauge's
+unfilled part is required information, so it is held to 3:1 on `canvas` and cannot be `hairline`, which
+is decoration and was 1.54:1 dark and 1.20:1 light when the pager drew its segments with it (ruling
+D22). It measures 3.06:1 dark, 3.15:1 light, 3.17:1 dark and 3.51:1 light under Increase Contrast.
+`controlEdge` would clear 3:1 as well, but its Increase Contrast pair (`#9B9BA5` / `#595964`) is
+loud against pure black and white and leaves the `plateBlue` indicator, in its own Increase Contrast
+pair, at about 1.7:1 and 1.6:1 against it: the indicator would read as the quieter segment at the
+setting a low-vision lifter turns on. Against `gaugeTrack` the indicator is 3.12:1 dark and 2.47:1
+light, and 4.08:1 and 3.20:1 under Increase Contrast. A deep-blue indicator cannot also be 3:1 from a
+mid-grey track on the light canvas while the track is 3:1 from the canvas, so the pair is held to
+its order and not to 3:1 (`Tools/check_contrast.py`).
 
 Certainty maps high → `plateGreen`, moderate → `plateYellow`, low → `warning`, unevaluated →
 `chalkDim`, always with its word and symbol so colour is never the only carrier. On the live
@@ -227,12 +241,13 @@ comparison of estimates, so none of them leaves the sentence it is in.
 ### Inspectable figures
 
 The scale has a second half: a large number the lifter cannot inspect is exactly what the product
-refuses. So every monument opens "Worked from", and every capped estimate should too, through the same
+refuses. So every monument opens "Worked from", and so does every capped estimate, through the same
 `WorkedFromSheet` and a derivation in Core that runs the same inputs through the same functions the
-figure came from, so the sheet cannot say what the figure did not do.
+figure came from, so the sheet cannot say what the figure did not do. Each names the formula and lists
+every set it left out under "Left out", with the reason.
 `Tools/check_interaction_rules.py` fails the build when a file draws a monument without its hookup,
 and when a new file draws one at all until the file is added to its list with the derivation that
-explains it.
+explains it. It fails the same way when a capped estimate's control or its sheet is removed.
 
 The audit, every figure the app draws above body size or capped as an estimate, as of this pass:
 
@@ -245,16 +260,24 @@ The audit, every figure the app draws above body size or capped as an estimate, 
 | Receipt | A record on a set; the scorecard's record line | Derived | 17 | Yes. `RecordWorking` |
 | Rest bar | The countdown | A deadline the lifter chose | `countdown` 64 | Not applicable: nothing was worked out |
 | Live session, receipt, Train | Weight and reps of a set; the live "This workout" ledger | Typed or counted | `figureXL` 44 | Not applicable for a typed figure; the ledger's sets are the list above it |
-| Progress board | A row's six-week change in estimated max, and the Most improved strip | Estimate | 17 | **Not in place.** The row opens the movement's chart, where the legend's estimate opens its working |
-| Receipt | The scorecard's "Biggest gain … estimated max" | Estimate | 17 | **Not in place.** The scorecard is drawn into the shared image, which holds no controls |
-| Live session | The record notice for an estimated max | Estimate | 17 | **Not in place** |
+| Progress board | A row's six-week change, and the same figure in the Most improved strip | Estimate (a ratio of two estimates) | 17 | Yes. `ChangeWorking.sixWeek`, rebuilt from `ProgressTrendAnalyzer.comparison`, the function the row's figure came from: the latest session and the baseline five to seven weeks before it, each set as weight × (1 + reps ÷ 30), the sessions passed over in the band, and every warm-up, set on other equipment, session outside the band and session with no estimate under Left out. Read on demand from the board's own grouping; a Store test holds its figure equal to the row's |
+| Receipt | The scorecard's "Biggest gain … estimated max" | Estimate (a ratio of two estimates) | 17 | Yes. `ChangeWorking.lastTime`, from the sets the gain was computed from, which travel with it: this workout's sets, last time's on the same machine, the formula, and the warm-ups, sets on other equipment and older sessions counted under Left out. The control is on the screen's receipt and never in the shared image, which holds no controls |
+| Live session | The record notice, for an estimated max or any other record | Estimate (for an estimated max); derived | 17 | Yes. `RecordWorking.liveAccount`: one line per record on the notice, each naming the set it beat and the margin the detector applied; the estimate's formula and this session's sets, with those left out; and under Left out of the comparison a count of the warm-ups, other-equipment sets and imported sets it was never measured against. Built from the saved history when asked for, and a Store test holds the replay's records equal to the logger's own |
 | Onboarding | The pitch's estimate for a fixed 60 kg set | A demonstration | `readout` 28 | Exempt: no history to open; the arithmetic is the lesson |
 
 Nothing above 28 pt is an estimate, which `Role.mayCarryEstimate`, the ledger and `check_figure_cap.py`
-hold. The three rows marked not in place are capped estimates, so the size rule holds for them and
-the inspectability rule does not yet: each needs a derivation of a comparison (two estimates, or an
-estimate and the record it beat) that Core does not have, and a control placed where the surface has
-room for one. They are listed here so they are found.
+hold. Every capped estimate in the table above is also inspectable, so both halves of the rule hold for
+every figure the app draws above body size or as an estimate. The three that were not are each a
+comparison of two estimates, or an estimate and the record it beat, which no derivation in Core covered
+and no surface had a control for; `ChangeWorking` covers the first two and `RecordWorking.liveAccount`
+the third. Where a control sits, it is its own element beside the figure's own, so tapping the row, the
+scorecard or the notice does what it always did.
+
+Two choices are on purpose. The change's account lists a session outside the comparison band as one
+line with its count of sessions and sets, not a line per set: the reason belongs to the whole session,
+and a long history would otherwise be hundreds of lines. And the scorecard's account is built from the
+sets the gain was computed from, carried on the gain itself, so it needs no second read and cannot
+disagree with the scorecard it explains.
 
 One monument per screen and nowhere else: Volume's weekly working-set count at 88 pt, where the
 number is the content, and Train's last workout volume at 72 pt, where the action is. A screen with
@@ -435,10 +458,21 @@ Selection rows, the unit switch and pickers stay silent.
   | Type a weight or reps | The pad, pinned at the bottom; the row's figures open it | Pad top at or below 40% of the screen, every key below that |
   | Weight to reps, Log set, Done | The pad's footer: Next, Log set and Done, 56 pt | Bottom of the pad, the bottom of the screen |
   | Step the load | The pad's quick steps, and −/+ under the next row where the machine's step is recorded | Pad; the next row, wherever the list has put it |
-  | Rest: −15, +15, pause, skip, next rest | The rest bar, pinned at the bottom | At or below 60% of the screen |
+  | Rest: −15, +15, pause, skip, next rest | The rest bar, pinned at the bottom; the next-rest row at ordinary sizes only | At or below 60% of the screen |
   | Machine, movement options, add a set | The card's own header and footer, in the list | Scrolls into reach |
   | Finish the workout | The end of the list, and Workout options in the header | The end of the list is a flick away; the header menu is a convenience, never the only way |
   | Change gym, Settings | The gym line in the list, and the header | Not needed to log a set |
+
+  **The pinned stack is capped at accessibility sizes.** The record notice and the rest bar are pinned
+  over the list, so what they cover is what the list loses. At accessibility3 the full notice, about half
+  the screen on its own, stacked on the rest bar covered about eighty percent of it and left a sliver
+  of the list to log in; that grew worse when the figure scale grew. So at accessibility sizes the
+  notice collapses to one line (a trophy, "2 records" and a close mark, a 56 pt control) that opens
+  its detail, and the rest bar keeps only the countdown and the four controls (see Record notice and
+  Rest bar), and the one-time correction hint waits for the rest to end. The rule is that the two
+  together cover at most half the screen, so the upper half always holds the list and the set being
+  logged can be seen and reached; `SingleThumbReachTests` hosts the session with a notice and a running
+  rest at accessibility3 and accessibility5 and asserts it.
 
   The pinned figures are measured and not assumed: `SingleThumbReachTests` hosts the live session at
   402 by 874 pt, asks where the keypad and the rest bar actually are, and asserts them, writing every
@@ -462,8 +496,20 @@ Selection rows, the unit switch and pickers stay silent.
 - **Panel** (`hardsetPanel`): the one raised tone of the live session: `steelRaised` on the `card`
   radius, no colour and no border, with a `hairline` border under Increase Contrast. The rest bar
   and the record notice are panels, so they stand on the same step off the canvas, and what a panel
-  says is carried by its words and one small mark. The stale-workout notice is a neutral `hardsetCard`
+  says is carried by its words and one small mark. The record notice ends in a compact "Worked from"
+  control, `provenance` words in `chalkDim` and the glyph, that opens what each record beat, the
+  formula behind an estimate and every set left out. The stale-workout notice is a neutral `hardsetCard`
   with a small `warning` glyph, because it holds buttons that need a fill to step off.
+- **Record notice** (`SessionView`): the records of the set just logged, a panel at the foot of the
+  live session: the movement and "New record" with the trophy in `plateYellow`, a line per record that
+  says what it beat ("Best estimated 1RM: About 162 kg, up from about 122 kg") and, under an estimate,
+  its certainty as a phrase, then the compact "Worked from" control. It arrives on the log moment's
+  follow beat and is put away with its close mark. At accessibility sizes, where it has a way to open
+  its detail, it is one line instead: the trophy, "1 record" or "2 records", and the close mark, the
+  whole line a 56 pt control that opens "Worked from", where every record, what it beat, the formula and
+  the sets behind it are written out at the lifter's own pace. Without a way to open that detail the
+  card stays whole, because collapsing would hide the records. Neither form adds a token or a motion
+  beyond the follow beat.
 - **Chips** (`HardsetChip`): capsule, raised fill, no stroke; selected uses `plateBlueFill` with
   `onPlateBlue` text.
 - **Inline control** (`InlineControlStyle`): a control that is only its label, for a screen that has
@@ -668,8 +714,11 @@ Selection rows, the unit switch and pickers stay silent.
   (`ProgressCopy.mostImprovedOrdering`), so a Low-confidence gain that also has no record in 3
   sessions is never on top while a better-supported gain sits
   below it; load and rep percentages stay in their own movement rows. Empty, it says "Log a workout and your progress
-  shows up here"; loading is a quiet line and a failed read says so, never an empty board. It adds no
-  token and no motion.
+  shows up here"; loading is a quiet line and a failed read says so, never an empty board. A row that
+  has a six-week change also draws a quiet "Worked from" control, `provenance` words in `chalkDim` and the
+  glyph, beside its certainty phrase (under it at accessibility sizes), as its own control beneath the
+  row's button. It opens the latest session, the baseline and everything left out (see Inspectable
+  figures), and a failed read says so under that row's control. It adds no token and no motion.
 - **Scorecard** (`WorkoutReceiptView`, `ScorecardCopy`): the block at the top of a finished workout's
   receipt, in `hardsetCard`. The headline, "Beat last time on 5 of 7", is in `readout`; a record line sits
   on `plateYellowSurface` with its trophy; "Biggest gain: Chest press, estimated max +6%" names its
@@ -681,7 +730,9 @@ Selection rows, the unit switch and pickers stay silent.
   movement. A movement with no earlier session on its machine is a first time and is left out of both
   numbers; one that fell short is carried by the count and never drawn as a failure. The same words open
   the share text, and the same view is rendered into the shared image. Finishing a workout opens its
-  receipt here; a discarded workout, and one finished with no sets, have none to open. The receipt's
+  receipt here; a discarded workout, and one finished with no sets, have none to open. On the screen,
+  the biggest gain carries a quiet "Worked from this gain" control beneath its line that opens this
+  workout's sets, last time's and what was left out; the shared image never draws it. The receipt's
   own sets, the load and reps the lifter typed, are `figureXL` with the unit and the multiply sign
   as the quiet words between them, because they are measurements; the scorecard's headline stays
   `readout` and its estimated gain stays a sentence, so on the receipt too the estimates are the
@@ -749,6 +800,11 @@ Selection rows, the unit switch and pickers stay silent.
   inline controls identified by their label or glyph, with no key face; Increase Contrast and
   Button Shapes outline them. "Resting" and "Paused" are `chalkDim`, and the next rest's lengths
   are figures: the chosen one in `chalk` with a 2 pt rule under it, the others `chalkDim`.
+  At accessibility sizes the bar is the countdown and the four controls and nothing else: "Resting",
+  the movement and set it follows and the "Next rest" row (and its drag) are dropped, because pinned over
+  the list they would cover the set being logged. The movement and set are still read aloud, the card's
+  rest control still sets the next rest, and "Paused" is kept, since a frozen number is otherwise
+  indistinguishable from a running one.
 - **Navigation titles** (`hardsetNavigationTitle`): the one title that may shrink, with
   `minimumScaleFactor(0.8)`, so a long exercise name stays on a single line in a bar. It is a
   documented exception to "adaptive layouts in place of shrinking text".
@@ -778,9 +834,12 @@ Selection rows, the unit switch and pickers stay silent.
   the only High), moderate, low and not evaluated because `StrengthMath` says so. "Rest that keeps
   time" is the real rest bar over a `DemoRestTimer`,
   an in-memory timer with no alarm, whose controls give the selection haptic. The first-launch pager
-  shows three short `hairline` segments above the primary button, the active one `plateBlue`,
-  sliding on `Motion.state`; like the segmented control's indicator it is one shape moved between
-  two places inside its row.
+  shows three short segments above the primary button, the active one `plateBlue` and the others
+  `gaugeTrack`, sliding on `Motion.state`; like the segmented control's indicator it is one shape moved
+  between two places inside its row. The segments are information (they say how much of the
+  introduction is left, and "Page N of 3" says the same to VoiceOver), so they clear 3:1 and are
+  never `hairline`. The gauge is not a control, and the accessibility audit's hit-area line on it is a
+  false positive that is not suppressed.
 - **Tour** (`TourStage`, `SpotlightOverlay`, `CalloutCard`, `tourTarget`, `TourStaging`): the real
   root view in the staged phone, asked into each state through the `TourStaging` environment value
   the real screens read, with the controls it points at tagged in place. The spotlight is the

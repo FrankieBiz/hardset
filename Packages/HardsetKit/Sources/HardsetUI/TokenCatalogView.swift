@@ -78,6 +78,7 @@ private enum PaletteCatalog {
     PaletteEntry(name: "steelPressed", color: Tokens.Color.steelPressed, isText: false),
     PaletteEntry(name: "hairline", color: Tokens.Color.hairline, isText: false),
     PaletteEntry(name: "controlEdge", color: Tokens.Color.controlEdge, isText: false),
+    PaletteEntry(name: "gaugeTrack", color: Tokens.Color.gaugeTrack, isText: false),
     PaletteEntry(name: "chalk", color: Tokens.Color.chalk, isText: true),
     PaletteEntry(name: "chalkDim", color: Tokens.Color.chalkDim, isText: true),
     PaletteEntry(name: "plateBlue", color: Tokens.Color.plateBlue, isText: true),

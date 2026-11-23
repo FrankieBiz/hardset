@@ -214,7 +214,8 @@ struct WorkoutReceiptScreen: View {
             onCorrectLine: editing == .correcting && !isDeleting ? { beginCorrecting($0) } : nil,
             // Offered while no correction or removal is under way, so the pencil and minus controls
             // are not crowded; the shared image is rendered without it.
-            onExplainRecords: editing == nil ? { showRecordWorking(line: $0) } : nil
+            onExplainRecords: editing == nil ? { showRecordWorking(line: $0) } : nil,
+            onExplainGain: editing == nil ? { showGainWorking() } : nil
           )
           // On the receipt itself: the stack carries the editor's sheet, the group the naming sheet
           // and the scroll reader the correction sheet, and a second sheet on one anchor never
@@ -374,6 +375,20 @@ struct WorkoutReceiptScreen: View {
         receipt: receipt, line: current, format: WorkedFromFormat(unit: unit))
     else { return }
     working = WorkedFromPresentation(account)
+  }
+
+  /// Opens the working behind the scorecard's biggest gain: this workout's sets, last time's, the
+  /// formula and everything left out.
+  ///
+  /// Derived from the receipt on screen as it is now, never from a copy the control was drawn with. A
+  /// correction rewrites a set in place and the screen re-reads, so the scorecard here is the corrected
+  /// one; a gain that is no longer on it opens nothing. The sets it was computed from travel with the
+  /// gain, so no read is needed and the account is the figure's own.
+  private func showGainWorking() {
+    guard let gain = snapshot.value?.scorecard?.biggestGain,
+      let working = ChangeWorking.lastTime(gain: gain)
+    else { return }
+    self.working = WorkedFromPresentation(working.account(format: WorkedFromFormat(unit: unit)))
   }
 
   // MARK: - Save as workout

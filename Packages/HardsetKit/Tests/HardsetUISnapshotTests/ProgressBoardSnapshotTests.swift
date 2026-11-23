@@ -52,12 +52,15 @@
         mostImproved: [row2, press, pullup])
     }
 
-    private static func screen(_ board: ProgressBoard) -> some View {
+    private static func screen(
+      _ board: ProgressBoard, failure: ProgressBoardView.WorkingFailure? = nil
+    ) -> some View {
       let count = board.sections.reduce(0) { $0 + $1.rows.count }
       let subtitle: String? = count == 0 ? nil : count == 1 ? "1 movement" : "\(count) movements"
       return NavigationStack {
         ProgressBoardView(
           board: board, title: "Progress", subtitle: subtitle, onShowSettings: {},
+          onShowChangeWorking: { _ in }, workingFailure: failure,
           onSelect: { _ in }
         )
         .hardsetTabRoot()
@@ -73,6 +76,18 @@
       }
       try await Snapshot.capture("kit-progressboard-dark-contrast", size: Self.tall, contrast: .high) {
         Self.screen(Self.board)
+      }
+    }
+
+    /// A request for a row's working that failed, said under that row's own control. The Hammer Strength
+    /// chest press is the first row, so the line sits under its certainty phrase and control.
+    @Test func boardWithAFailedWorking() async throws {
+      let board = Self.board
+      let press = try #require(board.sections.first?.rows.first)
+      let failure = ProgressBoardView.WorkingFailure(
+        key: press.id, message: "Could not read this movement's sets. Your logged sets are safe.")
+      try await Snapshot.capture("kit-progressboard-working-failed-dark", size: Self.tall) {
+        Self.screen(board, failure: failure)
       }
     }
 

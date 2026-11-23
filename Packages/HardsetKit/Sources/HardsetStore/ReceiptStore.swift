@@ -35,6 +35,16 @@ public nonisolated struct ReceiptStore: Sendable {
         .where { $0.sessionID.neq(id.rawValue) }
         .where { #sql("NOT EXISTS (SELECT 1 FROM sessions WHERE sessions.id = \($0.sessionID) AND sessions.notes LIKE 'Imported from %')", as: Bool.self) }
         .fetchAll(db)
+      // The earlier warm-ups, which no comparison reads. Held only so the account of a gain can count
+      // them as left out. An imported workout has no scorecard, so it reads none.
+      var priorWarmups: [LoggedSet] = []
+      if !session.notes.hasPrefix("Imported from ") {
+        priorWarmups = try LoggedSet.where { $0.exerciseID.in(exerciseIDs) }
+          .where { $0.isWarmup && $0.completedAt < session.startedAt }
+          .where { $0.sessionID.neq(id.rawValue) }
+          .where { #sql("NOT EXISTS (SELECT 1 FROM sessions WHERE sessions.id = \($0.sessionID) AND sessions.notes LIKE 'Imported from %')", as: Bool.self) }
+          .fetchAll(db)
+      }
       var history = Dictionary(grouping: prior) {
         ProgressionKey(exerciseID: ExerciseID(rawValue: $0.exerciseID), machineID: $0.machineID.map(MachineID.init(rawValue:)))
       }.mapValues { $0.map { PriorSetRecord(weightKg: $0.weightKg, reps: $0.reps, completedAt: $0.completedAt) } }
@@ -72,7 +82,8 @@ public nonisolated struct ReceiptStore: Sendable {
       let scorecard = imported
         ? nil
         : Self.scorecard(
-          sets: sets, lines: lines, prior: prior, plan: plan, names: names, modalities: modalities)
+          sets: sets, lines: lines, prior: prior, priorWarmups: priorWarmups, plan: plan, names: names,
+          modalities: modalities)
       return WorkoutReceipt(id: id, title: session.title, startedAt: session.startedAt,
         finishedAt: end, lines: lines, notes: session.notes, scorecard: scorecard)
     }
@@ -87,8 +98,8 @@ public nonisolated struct ReceiptStore: Sendable {
   /// so a plan changed since makes no difference. A movement set a record when any of its lines
   /// did. Nil when no movement had a working set, rather than a card with nothing on it.
   private static func scorecard(
-    sets: [LoggedSet], lines: [WorkoutReceipt.Line], prior: [LoggedSet], plan: [SessionExercise],
-    names: [UUID: String], modalities: [UUID: ExerciseModality?]
+    sets: [LoggedSet], lines: [WorkoutReceipt.Line], prior: [LoggedSet], priorWarmups: [LoggedSet],
+    plan: [SessionExercise], names: [UUID: String], modalities: [UUID: ExerciseModality?]
   ) -> WorkoutScorecard? {
     func key(_ set: LoggedSet) -> ProgressionKey {
       ProgressionKey(
@@ -120,6 +131,18 @@ public nonisolated struct ReceiptStore: Sendable {
         (SessionID(rawValue: $0.sessionID), $0.completedAt)
       })
       let previous = candidates.filter { $0.sessionID == latest?.rawValue }
+      // What the comparison passed over, counted, so a gain can say what it left out. None of it
+      // changes a figure: the scoring reads `currentSets` and `previousSets` alone.
+      let exercise = movement.exerciseID.rawValue
+      let older = candidates.filter { $0.sessionID != latest?.rawValue }
+      let leftOut = ScorecardInput.LeftOut(
+        currentWarmups: sets.filter { $0.isWarmup && $0.exerciseID == exercise }.count,
+        currentOtherEquipment: sets.filter { !$0.isWarmup && $0.exerciseID == exercise && key($0) != movement }.count,
+        previousWarmups: priorWarmups.filter { $0.sessionID == latest?.rawValue && $0.exerciseID == exercise }.count,
+        previousOtherEquipment: prior.filter {
+          $0.sessionID == latest?.rawValue && $0.exerciseID == exercise && key($0) != movement
+        }.count,
+        olderSessions: Set(older.map(\.sessionID)).count, olderSets: older.count)
       let planRow =
         plan.first { $0.exerciseID == movement.exerciseID.rawValue && $0.machineID == movement.machineID?.rawValue }
         ?? plan.first { $0.exerciseID == movement.exerciseID.rawValue }
@@ -133,7 +156,8 @@ public nonisolated struct ReceiptStore: Sendable {
         },
         estimatesOneRepMax: (modalities[movement.exerciseID.rawValue] ?? nil)?.estimatesOneRepMax ?? false,
         assumesAddedLoad: (modalities[movement.exerciseID.rawValue] ?? nil) == nil,
-        recordKinds: recorded[movement] ?? []
+        recordKinds: recorded[movement] ?? [],
+        leftOut: leftOut
       )
     }
     let card = WorkoutScorecard.make(inputs)
