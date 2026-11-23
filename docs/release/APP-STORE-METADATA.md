@@ -78,7 +78,7 @@ FRACTIONAL VOLUME, WITH THE WORKING SHOWN
 A completed working set credits 1.0 to each direct muscle and 0.5 to each indirect one. Tap a muscle's count to see the sets it was worked from. Hardset cites the research behind the scheme and states plainly that the 0.5 weight is an adopted convention, not a finding estimated from the data. There are no weekly set targets, because no target is established for any muscle; the app shows what you did and what was not trained, without a red bar pretending to know your recovery limit.
 
 150 MOVEMENTS, ATTRIBUTED
-The catalogue ships 150 movements, each with primary and secondary muscle attribution and the anatomy it was inferred from. Add a custom movement when yours is not listed; your attribution is yours. Import past history from an English Strong or Hevy CSV.
+The catalogue ships 150 movements, each with its complete direct, indirect and stabilising attribution and the anatomy it was inferred from. Add a custom movement when yours is not listed; your attribution is yours. Import past history from an English Strong or Hevy CSV.
 
 BUILT FOR THE GYM FLOOR
 - High-contrast monochrome interface for bright gym lighting and chalky fingers.
