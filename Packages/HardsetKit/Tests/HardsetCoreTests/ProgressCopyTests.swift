@@ -94,11 +94,14 @@ struct ProgressCopyTests {
       == "5 sessions. A comparison needs a session 5 to 7 weeks before the latest.")
   }
 
-  @Test("The Most improved order is stated on screen: confidence, then gain, stalled after")
+  @Test("The Most improved order is stated on screen: confidence, then gain, no-record movements after")
   func mostImprovedOrderingIsStated() {
     #expect(ProgressCopy.mostImprovedOrdering.contains("confidence"))
     #expect(ProgressCopy.mostImprovedOrdering.contains("gain"))
-    #expect(ProgressCopy.mostImprovedOrdering.contains("stalled"))
+    #expect(ProgressCopy.mostImprovedOrdering.contains("no record in 3 sessions"))
+    // The sentence uses the rule's own count, and never the word that claims more than the rule.
+    #expect(ProgressTrendAnalyzer.stallRun == 3)
+    #expect(!ProgressCopy.mostImprovedOrdering.lowercased().contains("stall"))
   }
 
   @Test("The short form is what the Most improved strip shows")
@@ -109,14 +112,16 @@ struct ProgressCopyTests {
     #expect(ProgressCopy.shortChangeText(for: trend(.estimatedMax, change: nil)) == nil)
   }
 
-  @Test("Stalled says how many sessions, and states no advice")
+  @Test("The flag says how many sessions had no record, states no advice, and never says stalled")
   func stalledText() {
     #expect(ProgressCopy.stalledText(for: trend(.estimatedMax, change: 0.1, stalled: 3))
-      == "Stalled · 3 sessions")
+      == "No record in 3 sessions")
     #expect(ProgressCopy.stalledText(for: trend(.estimatedMax, change: 0.1, stalled: nil)) == nil)
+    let said = ProgressCopy.stalledText(for: trend(.estimatedMax, change: 0.1, stalled: 3)) ?? ""
+    #expect(!said.lowercased().contains("stall"))
   }
 
-  @Test("A row is spoken as the movement, its machine, the change and any stall")
+  @Test("A row is spoken as the movement, its machine, the change and any run without a record")
   func spokenRow() {
     let key = ProgressionKey(exerciseID: ExerciseID(), machineID: MachineID())
     let stalled = MovementTrend(
@@ -129,10 +134,34 @@ struct ProgressCopyTests {
 
     #expect(ProgressCopy.spokenRow(
       ProgressBoard.Row(trend: stalled, exerciseName: "Chest press", machineName: "Hammer"))
-      == "Chest press, Hammer. Estimated max +8% in 6 weeks. Stalled · 3 sessions.")
+      == "Chest press, Hammer. Estimated max +8% in 6 weeks. No record in 3 sessions.")
     #expect(ProgressCopy.spokenRow(ProgressBoard.Row(trend: plain, exerciseName: "Squat"))
       == "Squat. Heaviest weight · no 6-week comparison. 2 sessions over 3 weeks. "
       + "A comparison needs a session 5 to 7 weeks before the latest.")
+  }
+
+  @Test("A movement with no equipment on record says what is withheld and where it is set")
+  func equipmentNoteFollowsTheLoadAssumption() {
+    let key = ProgressionKey(exerciseID: ExerciseID())
+    let unknown = MovementTrend(
+      key: key, metric: .addedLoad, sparkline: [1], sixWeekChange: 0.13, sessionCount: 4,
+      stalledSessions: nil, latestDate: Date(timeIntervalSince1970: 0), certainty: .low,
+      loadAssumption: ExerciseModality.unknownLoadAssumption)
+    let known = MovementTrend(
+      key: key, metric: .estimatedMax, sparkline: [1], sixWeekChange: 0.13, sessionCount: 4,
+      stalledSessions: nil, latestDate: Date(timeIntervalSince1970: 0), certainty: .high)
+
+    #expect(ProgressCopy.equipmentNote(for: unknown) == ProgressCopy.equipmentNotSet)
+    #expect(ProgressCopy.equipmentNote(for: known) == nil)
+    #expect(ProgressCopy.equipmentNotSet.contains("no max is estimated"))
+    #expect(ProgressCopy.equipmentNotSet.contains("Library"))
+    // It states a fact and a place. It does not promise a max, which bodyweight never gets.
+    #expect(!ProgressCopy.equipmentNotSet.contains("will"))
+    let spoken = ProgressCopy.spokenRow(ProgressBoard.Row(trend: unknown, exerciseName: "Bench Press"))
+    #expect(spoken.contains(ExerciseModality.unknownLoadAssumption))
+    #expect(spoken.contains(ProgressCopy.equipmentNotSet))
+    #expect(!ProgressCopy.spokenRow(ProgressBoard.Row(trend: known, exerciseName: "Squat"))
+      .contains("Equipment not set"))
   }
 
   @Test("Each metric has a name the lifter would use")

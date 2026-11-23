@@ -93,24 +93,40 @@ public struct MovementEditorSheet: View {
   private var nameSection: some View {
     VStack(alignment: .leading, spacing: Tokens.Spacing.snug) {
       SectionLabel("Name")
-      TextField(
-        text: $draft.name,
-        prompt: Text("Movement name").foregroundStyle(Tokens.Color.chalkDim)
-      ) {
-        Text("Movement name")
+      if draft.nameIsFixed {
+        // Plain text, not a field: nothing that looks typeable should refuse typing.
+        Text(draft.name)
+          .font(Tokens.Text.label)
+          .foregroundStyle(Tokens.Color.chalk)
+          .fixedSize(horizontal: false, vertical: true)
+        Text(MovementEditorDraft.fixedNameNote)
+          .hardsetText(.caption)
+          .foregroundStyle(Tokens.Color.chalkDim)
+          .fixedSize(horizontal: false, vertical: true)
+      } else {
+        nameField
       }
-      .font(Tokens.Text.label)
-      .foregroundStyle(Tokens.Color.chalk)
-      .tint(Tokens.Color.plateBlue)
-      .focused($isNameFocused)
-      .hardsetNameInput()
-      .submitLabel(.done)
-      .padding(.horizontal, Tokens.Spacing.regular)
-      .padding(.vertical, Tokens.Spacing.snug)
-      .frame(maxWidth: .infinity, minHeight: Tokens.loggerTapTarget, alignment: .leading)
-      .entryFieldChrome(isFocused: isNameFocused)
-      .onTapGesture { isNameFocused = true }
     }
+  }
+
+  private var nameField: some View {
+    TextField(
+      text: $draft.name,
+      prompt: Text("Movement name").foregroundStyle(Tokens.Color.chalkDim)
+    ) {
+      Text("Movement name")
+    }
+    .font(Tokens.Text.label)
+    .foregroundStyle(Tokens.Color.chalk)
+    .tint(Tokens.Color.plateBlue)
+    .focused($isNameFocused)
+    .hardsetNameInput()
+    .submitLabel(.done)
+    .padding(.horizontal, Tokens.Spacing.regular)
+    .padding(.vertical, Tokens.Spacing.snug)
+    .frame(maxWidth: .infinity, minHeight: Tokens.loggerTapTarget, alignment: .leading)
+    .entryFieldChrome(isFocused: isNameFocused)
+    .onTapGesture { isNameFocused = true }
   }
 
   private var bodyPartSection: some View {
@@ -218,6 +234,12 @@ public struct MovementEditorSheet: View {
   private var equipmentSection: some View {
     VStack(alignment: .leading, spacing: Tokens.Spacing.snug) {
       SectionLabel("Equipment")
+      if draft.equipmentIsUnset {
+        Text(MovementEditorDraft.equipmentUnsetNote)
+          .hardsetText(.caption)
+          .foregroundStyle(Tokens.Color.chalkDim)
+          .fixedSize(horizontal: false, vertical: true)
+      }
       chipGrid {
         ForEach(MovementEditorDraft.equipment, id: \.rawValue) { modality in
           HardsetChip(modality.label, isSelected: draft.modality == modality) {
@@ -245,7 +267,7 @@ public struct MovementEditorSheet: View {
           .foregroundStyle(Tokens.Color.chalkDim)
           .fixedSize(horizontal: false, vertical: true)
       } else {
-        Text("Saved as your own choice, so volume counts these muscles as you say.")
+        Text(draft.savedNote)
           .hardsetText(.caption)
           .foregroundStyle(Tokens.Color.chalkDim)
           .fixedSize(horizontal: false, vertical: true)

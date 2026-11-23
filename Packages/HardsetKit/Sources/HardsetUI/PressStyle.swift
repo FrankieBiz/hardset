@@ -167,14 +167,14 @@ private struct ControlPressBody<S: InsettableShape>: View {
 /// that looks like plain text still looks like a control to anyone who asked it to. A disabled
 /// control is dimmed to 40% only when `dimsWhenDisabled` says so: an inert title keeps its
 /// contrast, an action that cannot be used does not.
-struct InlineControlStyle: ButtonStyle {
+public struct InlineControlStyle: ButtonStyle {
   let minHeight: CGFloat
   let alignment: Alignment
   let fullWidth: Bool
   let dimsWhenDisabled: Bool
   let outlinesRegion: Bool
 
-  init(
+  public init(
     minHeight: CGFloat = Tokens.minimumTapTarget,
     alignment: Alignment = .leading,
     fullWidth: Bool = false,
@@ -188,7 +188,7 @@ struct InlineControlStyle: ButtonStyle {
     self.outlinesRegion = outlinesRegion
   }
 
-  func makeBody(configuration: Configuration) -> some View {
+  public func makeBody(configuration: Configuration) -> some View {
     InlineControlBody(
       configuration: configuration, minHeight: minHeight, alignment: alignment,
       fullWidth: fullWidth, dimsWhenDisabled: dimsWhenDisabled, outlinesRegion: outlinesRegion)

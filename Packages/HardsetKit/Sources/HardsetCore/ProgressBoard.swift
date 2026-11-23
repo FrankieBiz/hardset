@@ -54,6 +54,38 @@ public struct ProgressBoard: Hashable, Sendable {
 
   public static let empty = ProgressBoard(sections: [], mostImproved: [])
 
+  /// Every row on the board, in section order.
+  public var rows: [Row] { sections.flatMap(\.rows) }
+
+  /// Whether any row is imported history, so the board says once that imported rows stand apart.
+  public var hasImportedHistory: Bool { rows.contains { $0.id.isImported } }
+
+  /// How each imported row, and each logged row beside an imported one, relates to the other
+  /// source, for the rows that have something true to say.
+  ///
+  /// An imported series is never merged into a native one: it has its own key, its machine is
+  /// unknown, and a rewrite of history would be worse than a split. What the app can say honestly
+  /// is read from identity alone. A movement with both an imported series and a logged one (an
+  /// import whose name matched the catalogue's) says on both rows that the other is separate. An
+  /// imported movement of its own, whose name the app does not match to any other, says it is not
+  /// combined with what is logged here. A logged row with no imported series says nothing, because
+  /// it has nothing to point at, and two names that look alike are not evidence they are one lift.
+  public var sourceNotes: [ProgressionKey: String] {
+    let rows = self.rows
+    let imported = Set(rows.filter { $0.id.isImported }.map { $0.id.exerciseID })
+    let logged = Set(rows.filter { !$0.id.isImported }.map { $0.id.exerciseID })
+    var notes: [ProgressionKey: String] = [:]
+    for row in rows {
+      let movement = row.id.exerciseID
+      if row.id.isImported {
+        notes[row.id] = logged.contains(movement) ? ProgressCopy.importedBesideLogged : ProgressCopy.importedAlone
+      } else if imported.contains(movement) {
+        notes[row.id] = ProgressCopy.loggedBesideImported
+      }
+    }
+    return notes
+  }
+
   public init(sections: [Section], mostImproved: [Row], mostImprovedAddedLoad: [Row] = []) {
     self.sections = sections
     self.mostImproved = mostImproved.filter { $0.trend.metric == .estimatedMax }

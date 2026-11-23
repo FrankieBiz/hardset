@@ -12,8 +12,16 @@ public enum StrengthMath {
   /// that a set this long does not predict a one-rep max.
   public static let maximumEstimableReps = 12
 
+  /// Highest rep count that still earns Moderate. Past it a formula's estimate is Low, and past
+  /// `maximumEstimableReps` there is none.
+  public static let maximumModerateReps = 10
+
   /// Sanity ceiling. Above this the input is a data-entry error, not a lift.
   public static let implausibleWeightKg: Double = 1_000
+
+  /// The 30 in Epley's weight x (1 + reps / 30). Named so the working shown to a lifter states the
+  /// same constant the arithmetic applies, rather than a second copy of it.
+  public static let epleyRepsDivisor: Double = 30
 
   public static let measuredSource = EvidenceSource(
     id: "one-rep-max.measured",
@@ -28,10 +36,12 @@ public enum StrengthMath {
     id: "one-rep-max.epley",
     title: "Epley one-rep-max estimate",
     methodology:
-      "Estimated from a completed set as weight x (1 + reps / 30). This is a plan-structure "
-      + "heuristic for comparing loads over time, not a measurement of maximal strength. "
-      + "Accuracy falls as repetitions rise, so certainty is reduced above 6 repetitions "
-      + "and no estimate is produced above 12.",
+      "Estimated from a completed set with the Epley formula, weight x (1 + reps / 30). This is "
+      + "a plan-structure heuristic for comparing loads over time, not a measurement of maximal "
+      + "strength. Validation work finds the formula most accurate near a 3-rep max and "
+      + "overestimating from 5 reps, so a formula's figure is never reported with high "
+      + "confidence: it is moderate up to 10 repetitions, low at 11 and 12, and no estimate is "
+      + "produced above 12. Only a measured single is high.",
     citation: "Epley, B. (1985). Poundage Chart. Boyd Epley Workout.",
     validRange: "2-12 repetitions, sub-maximal to maximal effort."
   )
@@ -40,6 +50,13 @@ public enum StrengthMath {
   ///
   /// Returns `.unevaluated` for non-positive input, implausible loads, and any set longer
   /// than `maximumEstimableReps`. There is no neutral fallback value.
+  ///
+  /// Certainty is decided here, beside the figure, and nowhere else: every surface that states how
+  /// sure an estimate is reads `Claim.certainty` from this result. A formula's figure is capped at
+  /// Moderate, because the research this app rests on finds Epley overestimating from a 5-rep max
+  /// and recommends a band over a point; a measured single is the only High. The figure stays a
+  /// point because `Claim<Double>` carries one value and every chart, record and trend reads it as
+  /// one; the cap is what keeps that point from claiming more than it knows.
   public static func estimatedOneRepMax(weightKg: Double, reps: Int) -> Claim<Double> {
     guard weightKg > 0, weightKg <= implausibleWeightKg, reps >= 1 else {
       return .unevaluated(source: epleySource)
@@ -54,15 +71,11 @@ public enum StrengthMath {
       return .unevaluated(source: epleySource)
     }
 
-    let estimate = weightKg * (1.0 + Double(reps) / 30.0)
+    let estimate = weightKg * (1.0 + Double(reps) / epleyRepsDivisor)
 
-    // Certainty tracks distance from the low-rep region the equation was fitted on.
-    let certainty: Certainty =
-      switch reps {
-      case 2...6: .high
-      case 7...10: .moderate
-      default: .low
-      }
+    // A formula is never High. Past the Moderate band, certainty keeps falling with the distance
+    // from the low-rep region the equation was fitted on.
+    let certainty: Certainty = reps <= maximumModerateReps ? .moderate : .low
 
     return Claim(estimate, certainty: certainty, source: epleySource)
   }

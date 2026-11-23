@@ -187,6 +187,13 @@ public nonisolated struct CatalogSeeder: Sendable {
   /// A curated movement is the catalogue's finding and is never retagged. The new name may not be
   /// another live movement's, ignoring case and diacritics, though its own name in another case is
   /// fine. Sets already logged on it are counted from the next read, since volume reads the movement.
+  ///
+  /// A movement a workout import created is retagged the same way, with one difference: it keeps
+  /// the name it was imported under, because the next import of the same app's export finds it by
+  /// that name and would otherwise start a second movement beside it. Naming it anything but what
+  /// it already is throws `importedNotRenamable` and writes nothing. Equipment is saved only when
+  /// `attribution` carries one, so a lifter who names a body part for an imported lift has not
+  /// declared its equipment, and it stays unknown until they do.
   @discardableResult
   public func updateCustomExercise(
     _ id: ExerciseID, name: String, attribution: CustomAttribution
@@ -198,13 +205,19 @@ public nonisolated struct CatalogSeeder: Sendable {
         throw CatalogSeederError.notFound
       }
       guard !row.isCurated else { throw CatalogSeederError.curatedNotEditable }
-      let others = try Exercise.where { !$0.isArchived && $0.id.neq(id.rawValue) }.fetchAll(db)
-      if others.contains(where: { !Self.isImported($0) && Self.isSameName($0.name, cleaned) }) {
-        throw CatalogSeederError.duplicateName
+      let keepsName = Self.isImported(row)
+      if keepsName {
+        guard Self.isSameName(row.name, cleaned) else { throw CatalogSeederError.importedNotRenamable }
+      } else {
+        let others = try Exercise.where { !$0.isArchived && $0.id.neq(id.rawValue) }.fetchAll(db)
+        if others.contains(where: { !Self.isImported($0) && Self.isSameName($0.name, cleaned) }) {
+          throw CatalogSeederError.duplicateName
+        }
       }
+      let storedName = keepsName ? row.name : cleaned
       try Exercise.where { $0.id.eq(id.rawValue) }
         .update {
-          $0.name = #bind(cleaned)
+          $0.name = #bind(storedName)
           $0.modality = #bind(attribution.modality?.rawValue ?? row.modality)
           $0.primaryMuscle = #bind(attribution.primary.rawValue)
           $0.secondaryMusclesJSON = #bind(MuscleColumn.encode(attribution.contributions))
@@ -229,12 +242,31 @@ public nonisolated struct CatalogSeeder: Sendable {
   /// verified equipment, and the import promises they stay separate from machine-level history;
   /// offered beside the catalogue's own entry, a lifter could log today's sets against the copy
   /// and earn no volume for them. Their history stays visible in History and progress screens,
-  /// which read sets directly.
+  /// which read sets directly, and the Library lists them through `libraryExercises` so they can
+  /// be given a body part and equipment.
   public func selectableExercises() throws -> [CatalogEntry] {
     try database.read { db in
       try Exercise
         .where { !$0.isArchived }
         .where { !$0.notes.like(Self.importedNotesPattern) }
+        .order { ($0.isCurated, $0.createdAt.desc(), $0.name) }
+        .fetchAll(db)
+        .map(CatalogEntry.init(row:))
+    }
+  }
+
+  /// Every movement the Library lists: what `selectableExercises` offers, and the movements a
+  /// workout import created, which it does not.
+  ///
+  /// The two lists differ on purpose. A picker is for logging today's sets, and offering an
+  /// imported copy beside the catalogue's own entry would let a lifter log against it and earn no
+  /// volume. The Library is where a movement is described, and an imported one has no body part
+  /// until its owner gives it one, which is nowhere else to be done: Progress and Volume both say
+  /// so. An imported movement stays out of the picker and the recent list however it is tagged.
+  public func libraryExercises() throws -> [CatalogEntry] {
+    try database.read { db in
+      try Exercise
+        .where { !$0.isArchived }
         .order { ($0.isCurated, $0.createdAt.desc(), $0.name) }
         .fetchAll(db)
         .map(CatalogEntry.init(row:))
@@ -292,7 +324,7 @@ public nonisolated struct CatalogSeeder: Sendable {
   /// The same marker as a `LIKE` pattern. The prefix holds no `%` or `_`, so it matches literally.
   private static let importedNotesPattern = importedNotesPrefix + "%"
 
-  private static func isImported(_ row: Exercise) -> Bool {
+  static func isImported(_ row: Exercise) -> Bool {
     row.notes.hasPrefix(importedNotesPrefix)
   }
 
@@ -320,6 +352,9 @@ public nonisolated enum CatalogSeederError: Error, Equatable, Sendable {
   case duplicateName
   /// No movement has this id.
   case notFound
+  /// An imported movement keeps the name it was imported under, because a later import finds it
+  /// by that name. Its muscles and equipment can still be set.
+  case importedNotRenamable
 }
 
 /// Maps a stored row into the shared `CatalogEntry` value.
@@ -338,7 +373,8 @@ extension CatalogEntry {
       primaryMuscle: MuscleColumn.decodePrimary(row.primaryMuscle),
       contributions: decoded.contributions,
       // Carried, not dropped. The decoder is only safe because its failures travel with the value.
-      unreadableEntryCount: decoded.unreadableEntryCount
+      unreadableEntryCount: decoded.unreadableEntryCount,
+      isImported: CatalogSeeder.isImported(row)
     )
   }
 }

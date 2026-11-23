@@ -48,6 +48,10 @@ struct CatalogSearchTests {
       ("tricep pushdown", "Cable Triceps Pushdown"),
       ("lat raise", "Lateral Raise"),
       ("hamstring curl", "Seated Leg Curl"),
+      ("adductor machine", "Hip Adduction Machine"),
+      ("abductor machine", "Hip Abduction Machine"),
+      ("glute drive", "Machine Hip Thrust"),
+      ("plate loaded pulldown", "Pulldown Machine"),
       ("squats", "Barbell Back Squat"),
       ("dips", "Dip"),
       ("shrugs", "Shrug"),
@@ -63,6 +67,14 @@ struct CatalogSearchTests {
     #expect(names(query).first == expected, "\(query) -> \(names(query))")
   }
 
+  @Test("Dumbbell bench shorthand keeps the flat press first in the store's alphabetical order")
+  func flatDumbbellBenchRanksBeforeDecline() {
+    let alphabetical = entries.sorted { $0.name < $1.name }
+    for query in ["db bench", "dumbbell bench"] {
+      #expect(CatalogSearch.rank(alphabetical, query: query).first?.slug == "dumbbell-bench-press")
+    }
+  }
+
   @Test("Every word must begin a word of the name, in any order")
   func everyWordMustMatch() {
     #expect(Set(names("dumbbell press")).isSuperset(of: [
@@ -70,7 +82,9 @@ struct CatalogSearchTests {
     ]))
     #expect(!names("dumbbell press").contains("Barbell Bench Press"))
     #expect(names("press dumbbell incline") == ["Incline Dumbbell Press"])
-    #expect(Set(names("leg curl")) == ["Seated Leg Curl", "Lying Leg Curl"])
+    #expect(Set(names("leg curl")) == [
+      "Seated Leg Curl", "Lying Leg Curl", "Standing Leg Curl", "Single-Leg Seated Leg Curl",
+    ])
     #expect(Set(names("pull up")) == ["Pull-up"])
   }
 

@@ -78,6 +78,42 @@ public nonisolated struct VolumeStore: Sendable {
     return VolumeAnalyzer.report(sets: sets, attribution: AttributionIndex(entries: entries))
   }
 
+  /// The report for `window`, with the sets and attribution it was counted from and the names of the
+  /// movements, all read from one snapshot.
+  ///
+  /// The "Worked from" account for a muscle is derived from these, so it explains the count on
+  /// screen and cannot be built from a window that changed after the count was made.
+  public func loadWindow(in window: VolumeWindowRange) async throws -> VolumeWindowReading {
+    try Task.checkCancellation()
+    let (sets, entries, movements) = try await database.read { db in
+      (
+        try Self.readCountableSets(from: window.start, to: window.end, in: db),
+        try Self.readAttributionEntries(in: db),
+        try Self.readMovements(in: db)
+      )
+    }
+    try Task.checkCancellation()
+    let attribution = AttributionIndex(entries: entries)
+    return VolumeWindowReading(
+      report: VolumeAnalyzer.report(sets: sets, attribution: attribution),
+      sets: sets, attribution: attribution, exerciseNames: movements.names,
+      importedMovements: movements.imported)
+  }
+
+  /// Every movement's name, archived ones included, and which of them a workout import created.
+  private static func readMovements(in db: Database) throws
+    -> (names: [ExerciseID: String], imported: Set<ExerciseID>)
+  {
+    var names: [ExerciseID: String] = [:]
+    var imported = Set<ExerciseID>()
+    for row in try Exercise.fetchAll(db) {
+      let id = ExerciseID(rawValue: row.id)
+      names[id] = row.name
+      if CatalogSeeder.isImported(row) { imported.insert(id) }
+    }
+    return (names, imported)
+  }
+
   private static func readCountableSets(from: Date, to: Date, in db: Database) throws
     -> [CountableSet]
   {
@@ -102,6 +138,33 @@ public nonisolated struct VolumeStore: Sendable {
   public func rollingWeek(endingAt now: Date) throws -> MuscleVolumeReport {
     try report(from: now.addingTimeInterval(-7 * 86_400), to: now)
   }
+}
+
+/// A window's report and everything it was counted from.
+public nonisolated struct VolumeWindowReading: Sendable {
+  public let report: MuscleVolumeReport
+  /// The window's sets, warm-ups included, as the report was given them.
+  public let sets: [CountableSet]
+  public let attribution: AttributionIndex
+  /// Every movement's name, archived ones included: their sets are in the window too.
+  public let exerciseNames: [ExerciseID: String]
+  /// The movements a workout import created. Their sets are counted like any other's, and the
+  /// account says which lines they are.
+  public let importedMovements: Set<ExerciseID>
+
+  public init(
+    report: MuscleVolumeReport, sets: [CountableSet], attribution: AttributionIndex,
+    exerciseNames: [ExerciseID: String], importedMovements: Set<ExerciseID> = []
+  ) {
+    self.report = report
+    self.sets = sets
+    self.attribution = attribution
+    self.exerciseNames = exerciseNames
+    self.importedMovements = importedMovements
+  }
+
+  /// A movement's name, or the same words the history uses for one that no longer exists.
+  public func name(for id: ExerciseID) -> String { exerciseNames[id] ?? "Unknown movement" }
 }
 
 /// Seven local days of volume, rolling rather than a calendar week, aligned to midnight so the
@@ -192,6 +255,9 @@ public nonisolated struct ProgressionStore: Sendable {
 
   private struct HistoryInputs: Sendable {
     let samples: [ProgressionSample]
+    /// The exercise's warm-ups, kept apart from `samples` so no analysis can count one, and read so
+    /// the "Worked from" account can list them as left out rather than leave them missing.
+    let warmups: [ProgressionSample]
     let names: [MachineID: String]
     /// Each machine's real load step, so a record on a 5 kg stack needs a genuine 5 kg.
     let increments: [MachineID: Double]
@@ -204,6 +270,7 @@ public nonisolated struct ProgressionStore: Sendable {
     -> HistoryInputs
   {
     let samples = try readSamples(for: exerciseID, limit: Int.max, in: db)
+    let warmups = try readWarmupSamples(for: exerciseID, in: db)
     let ids = Array(Set(samples.compactMap(\.machineID)))
     // The movement's modality decides whether its load may be estimated at all. An unknown or
     // missing modality cannot establish the whole load moved.
@@ -213,7 +280,7 @@ public nonisolated struct ProgressionStore: Sendable {
     // One read for both, so labelling a history stays a single query however much it carries.
     let machines = try readMachines(ids, in: db)
     return HistoryInputs(
-      samples: samples, names: machines.names, increments: machines.increments,
+      samples: samples, warmups: warmups, names: machines.names, increments: machines.increments,
       estimatesOneRepMax: estimates,
       assumesAddedLoad: knownModality == nil,
       requiresMachineIdentity: knownModality == .machine || knownModality == .cable
@@ -243,7 +310,8 @@ public nonisolated struct ProgressionStore: Sendable {
       estimatesOneRepMax: inputs.estimatesOneRepMax,
       assumesAddedLoad: inputs.assumesAddedLoad,
       requiresMachineIdentity: inputs.requiresMachineIdentity,
-      recordSessionIDs: recordSessions, bestAtWeight: ledgers
+      recordSessionIDs: recordSessions, bestAtWeight: ledgers,
+      samples: inputs.samples, warmupSamples: inputs.warmups, incrementsKg: inputs.increments
     )
   }
 
@@ -256,10 +324,29 @@ public nonisolated struct ProgressionStore: Sendable {
       .order { ($0.completedAt.desc(), $0.setOrdinal.desc(), $0.id.desc()) }
       .limit(limit)
       .fetchAll(db)
+    return try samples(from: rows.reversed(), in: db)
+  }
+
+  /// The exercise's warm-up sets, oldest first. Never fed to the analysers.
+  private static func readWarmupSamples(for exerciseID: ExerciseID, in db: Database) throws
+    -> [ProgressionSample]
+  {
+    let rows = try LoggedSet
+      .where { $0.exerciseID.eq(exerciseID.rawValue) }
+      .where { $0.isWarmup }
+      .order { ($0.completedAt, $0.setOrdinal, $0.id) }
+      .fetchAll(db)
+    return try samples(from: rows, in: db)
+  }
+
+  /// Rows as samples, in the order given, with imported sessions marked.
+  private static func samples(from rows: [LoggedSet], in db: Database) throws
+    -> [ProgressionSample]
+  {
     let sessionIDs = Array(Set(rows.map(\.sessionID)))
     let imported = Set(try Session.where { $0.id.in(sessionIDs) && $0.notes.like("Imported from %") }
       .select(\.id).fetchAll(db))
-    return rows.reversed().map {
+    return rows.map {
         ProgressionSample(
           sessionID: SessionID(rawValue: $0.sessionID),
           machineID: $0.machineID.map(MachineID.init(rawValue:)),
@@ -310,6 +397,15 @@ public nonisolated struct ProgressionHistory: Hashable, Sendable {
   public let recordSessionIDs: [ProgressionKey: Set<SessionID>]
   /// For each series, the most reps ever done at each weight, heaviest first.
   public let bestAtWeight: [ProgressionKey: [BestAtWeight]]
+  /// Every working set the series above were built from, across machines, oldest first. The
+  /// "Worked from" account derives from these, so it explains the sets the chart used and no others.
+  public let samples: [ProgressionSample]
+  /// The exercise's warm-up sets, which the analysers never see. Held so an account can list them
+  /// as left out.
+  public let warmupSamples: [ProgressionSample]
+  /// Each machine's real load step, as the record replay was given it, so the account of a record
+  /// states the margin that was applied.
+  public let incrementsKg: [MachineID: Double]
 
   public init(
     series: [ProgressionSeries],
@@ -319,7 +415,10 @@ public nonisolated struct ProgressionHistory: Hashable, Sendable {
     assumesAddedLoad: Bool = false,
     requiresMachineIdentity: Bool = false,
     recordSessionIDs: [ProgressionKey: Set<SessionID>] = [:],
-    bestAtWeight: [ProgressionKey: [BestAtWeight]] = [:]
+    bestAtWeight: [ProgressionKey: [BestAtWeight]] = [:],
+    samples: [ProgressionSample] = [],
+    warmupSamples: [ProgressionSample] = [],
+    incrementsKg: [MachineID: Double] = [:]
   ) {
     self.series = series
     self.machineChanges = machineChanges
@@ -329,6 +428,15 @@ public nonisolated struct ProgressionHistory: Hashable, Sendable {
     self.requiresMachineIdentity = requiresMachineIdentity
     self.recordSessionIDs = recordSessionIDs
     self.bestAtWeight = bestAtWeight
+    self.samples = samples
+    self.warmupSamples = warmupSamples
+    self.incrementsKg = incrementsKg
+  }
+
+  /// The load step the record replay used for a series: its machine's own, or `nil` when it has
+  /// none saved, where the detector assumes one 5 lb plate.
+  public func incrementKg(for key: ProgressionKey) -> Double? {
+    key.machineID.flatMap { incrementsKg[$0] }
   }
 
   /// Label for a series. Free-weight work and a deleted machine are named rather than blank.
@@ -389,7 +497,8 @@ public nonisolated struct HistoryPage: Hashable, Sendable {
 
 /// Reads finished sessions for the history screen.
 public nonisolated struct HistoryStore: Sendable {
-  private let database: any DatabaseWriter
+  /// Module-internal so `HistoryStore+Search.swift` reads through the same database.
+  let database: any DatabaseWriter
 
   public init(database: any DatabaseWriter) {
     self.database = database
@@ -413,24 +522,42 @@ public nonisolated struct HistoryStore: Sendable {
 
   /// The newest `limit` finished sessions and the count of all of them, from one snapshot, so the
   /// screen can say "latest 50 of 312" and offer the older ones rather than implying fifty is all.
-  public func loadHistory(limit: Int) async throws -> HistoryPage {
+  ///
+  /// With `startedBefore`, the page starts from there instead: only sessions that started before
+  /// that instant, still newest first, and the count is of those. This is how History lands on a
+  /// month with data (`loadMonths` supplies the instant) without reading every workout newer than it.
+  public func loadHistory(limit: Int, startedBefore bound: Date? = nil) async throws -> HistoryPage {
     try Task.checkCancellation()
     let page = try await database.read { db in
       HistoryPage(
-        sessions: try Self.readRecentSessions(limit: limit, in: db),
-        totalCount: try Session.where { $0.finishedAt.isNot(nil) }.fetchCount(db)
+        sessions: try Self.readRecentSessions(limit: limit, startedBefore: bound, in: db),
+        totalCount: try Self.finished(startedBefore: bound).fetchCount(db)
       )
     }
     try Task.checkCancellation()
     return page
   }
 
-  private static func readRecentSessions(limit: Int, in db: Database) throws -> [SessionSummary] {
-    let sessions = try Session
-      .where { $0.finishedAt.isNot(nil) }
+  /// Finished sessions, and when `bound` is given only those that started before it.
+  private static func finished(startedBefore bound: Date?) -> Where<Session> {
+    let finished = Session.where { $0.finishedAt.isNot(nil) }
+    guard let bound else { return finished }
+    return finished.where { $0.startedAt < bound }
+  }
+
+  private static func readRecentSessions(
+    limit: Int, startedBefore bound: Date? = nil, in db: Database
+  ) throws -> [SessionSummary] {
+    let sessions = try finished(startedBefore: bound)
       .order { ($0.startedAt.desc(), $0.id.desc()) }
       .limit(limit)
       .fetchAll(db)
+    return try summaries(of: sessions, in: db)
+  }
+
+  /// Summaries of `sessions`, in the order given. Shared by the newest-first list and by search, so
+  /// a workout reads identically wherever it is found.
+  static func summaries(of sessions: [Session], in db: Database) throws -> [SessionSummary] {
     guard !sessions.isEmpty else { return [] }
 
     let sessionIDs = sessions.map(\.id)

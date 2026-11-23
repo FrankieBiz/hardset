@@ -41,6 +41,19 @@ physical iPhone, in the gym lighting where it matters.
       unless Increase Contrast or Button Shapes is on: confirm each reads as a control in daylight.
 - [ ] **Glare and sweat.** Plate blue, the caption text and the certainty capsules stay legible at
       arm's length in daylight; the log control can be hit one-handed with a chalky thumb.
+- [ ] **Correcting a saved set.** Log a set, then open the movement's "…" menu: it opens with
+      "Correct set" (one entry with one saved set, a list naming each set by its figures with
+      several), and choosing one puts the keypad on that set's weight. In a lifter's first workout,
+      one quiet line at the bottom says a saved weight or reps can be tapped to correct it; it is
+      not a modal, "Got it" puts it away, it does not come back in the next workout or after a
+      relaunch, and it is not drawn over an error, a new record or the keypad. At the largest
+      Dynamic Type it wraps with "Got it" below it, and with Reduce Motion it appears at once.
+- [ ] **Correcting a finished set.** On a receipt, "Correct" in the toolbar and "Correct a set…"
+      at the bottom both show a pencil beside each set. The sheet seeds the saved figures, "Next"
+      moves to the reps, "Save correction" writes, and the receipt then shows the corrected set with
+      a neutral note and no celebration. In pounds, correcting only the reps leaves the weight
+      exactly as saved. After a correction, History's volume, the movement's chart and the Progress
+      tab agree with it. "Remove a set…" still deletes.
 - [ ] **Volume.** Each muscle carries its own certainty; none speaks for the whole report.
 - [ ] **Train.** The last-workout card opens its receipt. With no history the start screen says
       "No sessions yet".

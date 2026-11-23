@@ -109,6 +109,26 @@ public struct MuscleVolumeReport: Hashable, Sendable {
 /// source: deriving an "optional muscle" flag from `mev == 0` made every per-session band look
 /// optional and silently emptied session volume scoring.
 public enum VolumeAnalyzer {
+  /// What one set does to a count. The one place that decides it, so the report and the "Worked
+  /// from" account for a muscle's count cannot disagree about a set.
+  enum SetCredit {
+    /// A warm-up. Counts nowhere.
+    case warmup
+    /// A working set whose movement nobody has attributed. It is a hard set and credits no muscle.
+    case unattributed
+    /// A working set on an attributed movement, with the muscles it credits and the role of each.
+    case attributed([MuscleContribution])
+  }
+
+  static func credit(for set: CountableSet, attribution: AttributionIndex) -> SetCredit {
+    // Warm-ups are real work and are not the prescription. They count nowhere here.
+    guard !set.isWarmup else { return .warmup }
+    guard let contributions = attribution.contributions(for: set.exerciseID) else {
+      return .unattributed
+    }
+    return .attributed(contributions)
+  }
+
   public static func report(
     sets: [CountableSet],
     attribution: AttributionIndex
@@ -119,22 +139,22 @@ public enum VolumeAnalyzer {
     var unattributed = 0
 
     for (index, set) in sets.enumerated() {
-      // Warm-ups are real work and are not the prescription. They count nowhere here.
-      guard !set.isWarmup else { continue }
-      hardSets += 1
-
-      guard let contributions = attribution.contributions(for: set.exerciseID) else {
-        unattributed += 1
+      switch credit(for: set, attribution: attribution) {
+      case .warmup:
         continue
-      }
-
-      for contribution in contributions {
-        let weight = contribution.setWeight
-        guard weight > 0 else { continue }
-        fractional[contribution.key, default: 0] += weight
-        // Counted once per set per group, however many of the group's muscles it credits.
-        if let group = contribution.key.group {
-          touching[group, default: []].insert(index)
+      case .unattributed:
+        hardSets += 1
+        unattributed += 1
+      case .attributed(let contributions):
+        hardSets += 1
+        for contribution in contributions {
+          let weight = contribution.setWeight
+          guard weight > 0 else { continue }
+          fractional[contribution.key, default: 0] += weight
+          // Counted once per set per group, however many of the group's muscles it credits.
+          if let group = contribution.key.group {
+            touching[group, default: []].insert(index)
+          }
         }
       }
     }

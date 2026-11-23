@@ -597,6 +597,47 @@ public nonisolated enum HardsetMigrations {
       ).execute(db)
     }
 
+    // Searching history by machine or gym. Searching by movement needs nothing new: sets are already
+    // indexed by exercise. No index led with the machine, so finding the sessions done on one would
+    // scan every set, and a session's gym was not indexed at all. Both are local and non-unique, so
+    // no synchronized table changes shape. The machine index is partial because most sets, free
+    // weights and imports among them, have no machine, and it carries the session so the lookup is
+    // answered from the index alone.
+    migrator.registerMigration("v14_historySearch") { db in
+      try #sql(
+        """
+        CREATE INDEX "loggedSets_on_machineID_sessionID"
+          ON "loggedSets"("machineID", "sessionID")
+          WHERE "machineID" IS NOT NULL
+        """
+      )
+      .execute(db)
+      try #sql(
+        """
+        CREATE INDEX "sessions_on_gymID" ON "sessions"("gymID")
+        """
+      )
+      .execute(db)
+    }
+
+    // Jumping to a month in History. The list reads finished workouts newest first, and from a month
+    // back, `startedAt < ?`, with the id as the tie-break so a page boundary is stable. No index
+    // matched that order: the existing ones lead with the start time alone, or with the finish
+    // time, so each page sorted every finished workout (and the tie-break always needed a sort).
+    // This holds finished rows only, in exactly that order, so the page, its count and the list of
+    // months with data are each read straight off it. Local and non-unique; no synchronized table
+    // changes shape.
+    migrator.registerMigration("v15_historyOrder") { db in
+      try #sql(
+        """
+        CREATE INDEX "sessions_on_historyOrder"
+          ON "sessions"("startedAt" DESC, "id" DESC)
+          WHERE "finishedAt" IS NOT NULL
+        """
+      )
+      .execute(db)
+    }
+
     return migrator
   }
 }

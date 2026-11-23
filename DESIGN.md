@@ -18,18 +18,19 @@ the code does yet, so a reader does not look for a screen that has not moved.
   kit: the flat control face and its outline rule (`ControlFace.swift`), buttons, chips, the
   segmented control, header buttons, text entry, cards, banners, tags and certainty badges.
 - The live session is in code, rebuilt monochrome and type-led (ruling D12): see Set row, Set log
-  control, Inline control, Panel and the live-session layout below. Its sibling screens have not
-  moved.
+  control, Inline control, Panel and the live-session layout below. Train's start screen is rebuilt
+  the same way (see Train start screen), and so are Progress, the board and the movement chart,
+  Volume and Library.
 - The figure scale is in code (ruling D20): `figureXL`, `countdown` and `monument`, the 28 pt title,
   the 64 pt set row, the estimate ceiling and its check. It is scale and hierarchy only: it adds no
   glyph, rule, colour or motion. The onboarding demo and the catalogue's set rows keep the compact
   row, and History's row figures, the keypad display and the welcome bar keep their sizes.
 - Not yet in code, so the bullets below that name these describe where they are going: whatever a
-  screen draws for itself instead of through the kit. That is the Library's "Curated" tag, the
-  Progress card's layout, the Volume gauge ends, the scorecard headline's type role, and the
-  onboarding and tour surfaces. It also includes four private outlined-card button styles that each draw their own
-  stroke: the History row, the Settings disclosure row, the Train screen's gym row and the
-  receipt's link row, plus the methodology citation card. A screen that uses the kit picks up the new look with no change; one that draws its own
+  screen draws for itself instead of through the kit. That is the scorecard headline's type role, the
+  deep muscle map, and the
+  onboarding and tour surfaces. It also includes three private outlined-card button styles that each draw their own
+  stroke: the History row, the Settings disclosure row and the receipt's link row, plus the
+  methodology citation card. A screen that uses the kit picks up the new look with no change; one that draws its own
   face or stroke keeps the old one until it is migrated.
 - The keypad keys keep their `controlEdge` outline until the keypad has had its device check; see
   Keys. `ScaledPhoneFrame` still reads the retired `edgeLight`; see the palette notes.
@@ -146,8 +147,17 @@ session certainty is language instead: a phrase in `provenance` and `chalkDim`, 
 confidence", with what it is about before it ("From another machine · Low confidence") and a small
 info glyph that says it opens. The words carry the level and no hue does; see `CertaintyBadge`.
 
-Chart series (one line per machine, never merged) use `plateBlue`, chalk `#E7E7EC`/`#3A3A42`,
-lilac `#B9A8FF`/`#5236B8` and rose `#FF9DD6`/`#9A1F66`, each paired with a distinct point symbol.
+An estimate derived from a formula is never High: an estimated one-rep max tops out at Moderate,
+because the research behind it finds the formula overestimating from about five reps, and only a
+measured single, which estimates nothing, is High. `StrengthMath.estimatedOneRepMax` decides this
+beside the figure, and every badge, record line and disclosure beside an estimate reads it from
+there. This matches the Volume ladder, which never exceeds Moderate either.
+
+Chart series (one line per machine, never merged) use chalk `#E7E7EC`/`#3A3A42`, `plateBlue`,
+lilac `#B9A8FF`/`#5236B8` and rose `#FF9DD6`/`#9A1F66`, each paired with a distinct point symbol. Chalk
+comes first, so a movement on one machine, which is most of them, draws a monochrome line on a screen
+that has no primary action to own an accent; `plateBlue` appears only when a second machine needs a
+second hue.
 
 ## Typography
 
@@ -168,7 +178,7 @@ System fonts only, so no resource bundle is needed. Every role is a Dynamic Type
 | `figureXL` | 44 pt, semibold, condensed, tabular | Measured figures in a set row, a `StatLedger` and a receipt's sets |
 | `hero` | Large Title, semibold, condensed, tabular | Keypad display, welcome bar's total |
 | `readout` | Title, semibold, condensed, tabular | Headline figures; the largest an estimate may be |
-| `setEntry` | Title 2, semibold, condensed, tabular | Keypad quick steps, history's day figure |
+| `setEntry` | Title 2, semibold, condensed, tabular | Keypad quick steps, history's day figure, Volume's per-muscle counts |
 | `figure` | Headline, condensed, tabular | Small figures inside rows and compact ledgers |
 
 Condensed is for figures only; a sentence that holds figures is `title` with tabular digits. The
@@ -365,22 +375,35 @@ Selection rows, the unit switch and pickers stay silent.
   of text, not a spinner. An empty slot is drawn with a dashed outline, the app's one mark for
   "nothing here yet": the empty-state socket, the workout editor's "Add movement" slot and the rule
   under "Not evaluated". The live session draws none: its "Add movement" is an inline control, a
-  warm-up's ordinal is a plain "W", and an incomplete set's log control is an empty square.
+  warm-up's ordinal is a plain "W", and an incomplete set's log control is an empty square. A screen
+  that has dropped its containers asks `HardsetEmptyState` for `.quiet`, the same symbol and words
+  with no socket, and Train's "No sessions yet" is plain left-aligned type with no symbol.
 - **Tags versus chips**: a chip can be tapped and is a raised fill with an action label; a tag
   (modality, "Recent", "Custom", an untrained muscle) is flat `steelRaised`, so it never imitates a
   control. At
   accessibility sizes a wrapping tag, assumption chip or certainty capsule takes the control radius
   instead of a capsule, so wrapped text stays inside its outline.
-- **Library** (`LibraryView`, `LibraryScreen`): every selectable movement grouped by body part, with a
-  ledger of the count in each at the bottom. Movements with no body part come first under a `warning`
-  header with its `exclamationmark.triangle` symbol, "Needs a body part", because until one is tagged its
-  sets count toward no muscle. A row is a 56 pt `SelectionCardButtonStyle` button for the lifter's own
-  movement, marked "Custom", and opens the editor; a curated movement is a flat card with no tag, because
-  a tag repeated on every row says nothing, and its spoken label still says "Curated". It does
+- **Library** (`LibraryView`, `LibraryScreen`): every movement grouped by body part, with a
+  ledger of the count in each at the bottom. The list is the picker's movements and the ones a workout
+  import created (`CatalogSeeder.libraryExercises`), because the Library is the only place an imported
+  movement's body part and equipment can be set; the picker, search and recent list still leave imported
+  movements out, however they are tagged, so nobody logs today's sets against an imported copy.
+  Movements with no body part come first under the header "Needs a body part", whose
+  `exclamationmark.triangle` is the one `warning` mark and whose words are `chalk`, because until one is
+  tagged its sets count toward no muscle. Nothing is boxed: a row is type under a hairline, the name in
+  `headline` and what it trains in `provenance`, with its equipment and whose it is as plain `caption`
+  words in `chalkDim` at the trailing edge, or under the name at accessibility sizes. A row for the
+  lifter's own movement is a 56 pt button that ends in a chevron, which is what says it opens the editor,
+  and says "Custom", or "Imported" for one a workout import created; a curated movement is a plain row
+  with no chevron and no "Curated" word on screen, because a word repeated on every row says nothing,
+  and its spoken label still says "Curated". A
+  movement that is not curated and has no equipment on record says "Equipment not set" after its
+  muscles in `provenance`, so the absence of a mark is not the only sign. A curated row does
   not open the editor, so nothing that looks tappable does nothing. The footer lists every body part, zeros
   included, in `figure` against `chalkDim` for a zero, each row under a `hairline`. It reads what is
-  there: loading is a quiet line, a failed read says so in `HardsetEmptyState`, and neither draws an empty
-  library. It adds no token and no motion.
+  there: loading is a quiet line, a failed read says so in `HardsetEmptyState` with the quiet style, and
+  neither draws an empty library. The one accent on the screen is the "New movement" plus in the bar,
+  which is the screen's primary action. It adds no token and no motion.
 - **Movement editor** (`MovementEditorSheet`, `MovementEditorDraft`): a name field in `entryFieldChrome`,
   body-part chips, a `SelectionRow` per muscle where the body part has more than one, up to three optional
   secondary muscles chosen from chips (each counts half a set), and the equipment as chips. Chips wrap
@@ -391,24 +414,50 @@ Selection rows, the unit switch and pickers stay silent.
   top would be out of sight beside the button it answers; the sheet stays up with everything typed.
   Nothing is inferred from the name, and what is saved is the lifter's own attribution at moderate
   certainty. It adds no token and no motion.
-- **Workout cards** (`WorkoutCardsView`, `WorkoutCard`): the Train tab's saved workouts. The workout done
-  longest ago, or never, is the up-next card, in `hardsetCard`, with its name in `title`, "3 movements" in
-  `label` and a context line in `provenance`: "Up next · last done 4 days ago · beat 4 of 6 last time".
-  Its one `primary` 56 pt button reads "Start" and the name; starting is a single tap with no
-  confirmation, because the lifter is standing at a machine. It is the screen's one primary button:
-  while a saved workout is shown, the empty "Start workout" below it steps down to `secondary`. The
-  other workouts are control-radius cards with a `secondary` Start and a `quiet` Edit. The empty "Start
-  workout" follows the cards, and under it are `secondary` "Repeat last workout", only when a finished
-  workout of the lifter's own exists (an imported one does not count), and "New saved workout", which
-  opens the plan editor and starts nothing. They sit below the start and never above it, and the editor's
-  button says it makes a saved workout, so a lifter in a hurry cannot take it for starting one
-  (`WorkoutCardActions`). Nothing is claimed that was not measured:
-  "beat 4 of 6" appears only when something was compared, and only on the workout it belongs to. The
-  order is the rotation, never a schedule or a streak. A workout counts as done, for the rotation, the
-  last-done day, "last time" and "Repeat last workout", and for Apple Health alike, only when it
-  finished with a working set: an accidental Start finished with nothing logged, or with warm-ups only,
-  leaves all of them where they were. At accessibility sizes the buttons stack. It adds no token and no
-  motion.
+  An imported movement opens the same sheet with two differences. Its name is plain text with a
+  `caption` saying why it stays (a later import finds the movement by that name, so renaming it would
+  start a second one), and Save says its imported sets will count toward the muscles in Volume. Any
+  movement with no equipment on record, imported or not, opens with no equipment chip selected and a
+  `caption` under "Equipment" saying that no max is estimated until the lifter says what the load is.
+  Saving without choosing leaves the equipment as it was, so naming a body part never declares
+  equipment; only a chip the lifter taps does.
+- **Train start screen** (`HardsetRootView.startView`, `WorkoutCardsView`): nothing on it is boxed.
+  Top to bottom: the header, with Library and Settings as `.bare` header glyphs and the gym as the
+  header's own line; the saved workouts; the empty "Start workout", its sentence, and the two
+  controls that follow it; then, under a hairline, the last workout. The gym line is the live
+  session's gym chip: a pin, "Training at" and the name in `chalkDim`, and a chevron that says it
+  opens the list, wrapping rather than truncating a long name; with no gym it is "Add a gym to track machines" in full `chalk` with a plus and its
+  reason in `caption` under it, an invitation and not a warning. Its accessible name is unchanged,
+  and Voice Control also answers to "Change gym". The last workout is a section label and one
+  button: the workout's title (or its date) in `headline`, its length in `figure` with a clock, a
+  chevron, the volume as the screen's one monument (`monument`, 88 pt, with its unit and label)
+  over a `StatLedger` of working sets and reps at `figureXL`, and the movements in `label` and
+  `chalkDim`. With no volume, as in a bodyweight session, there is no monument and the ledger is
+  the counts. It is a 56 pt `InlineControlStyle` region that opens the receipt. With no finished
+  workout, "No sessions yet" is left-aligned type under the same hairline and no symbol. The one
+  accent is the primary Start: the up-next workout's when one is saved, the empty "Start workout"
+  otherwise. It adds no token and no motion.
+- **Workout cards** (`WorkoutCardsView`, `WorkoutCard`): the Train tab's saved workouts, drawn without
+  cards. The workout done longest ago, or never, is the up-next workout, type on the canvas, with its
+  name in `title`, "3 movements" in `label` and a context line in `provenance`: "Up next · last done 4
+  days ago · beat 4 of 6 last time". Its one `primary` 56 pt button reads "Start" and the name;
+  starting is a single tap with no confirmation, because the lifter is standing at a machine. Under it
+  is "Edit", an inline control in `chalkDim`. It is the screen's one primary button: while a saved
+  workout is shown, the empty "Start workout" below it steps down to `secondary`. The other workouts
+  are rows under a "Your workouts" label, each under a hairline: the name in `headline` and its line
+  in `provenance`, with "Start" in `chalk` and "Edit" in `chalkDim` as inline controls at the
+  trailing edge. The empty "Start workout" follows the workouts, and under it are the inline controls
+  "Repeat last workout", only when a finished workout of the lifter's own exists (an imported one does
+  not count), and "New saved workout", which opens the plan editor and starts nothing. "Repeat" keeps
+  the logger's 56 pt region, because it starts a workout; "New saved workout" is 44 pt. They sit
+  below the start and never above it, and the editor's control says it makes a saved workout, so a
+  lifter in a hurry cannot take it for starting one (`WorkoutCardActions`). Nothing is claimed that
+  was not measured: "beat 4 of 6" appears only when something was compared, and only on the workout
+  it belongs to. The order is the rotation, never a schedule or a streak. A workout counts as done,
+  for the rotation, the last-done day, "last time" and "Repeat last workout", and for Apple Health
+  alike, only when it finished with a working set: an accidental Start finished with nothing logged,
+  or with warm-ups only, leaves all of them where they were. At accessibility sizes a row's controls
+  stack under its text. It adds no token and no motion.
 - **Workout editor** (`WorkoutEditorView`, `WorkoutEditorScreen`, `WorkoutDraft`): a name field in
   `entryFieldChrome` and a card per movement. Each card has Sets and, once added, a rep range as large
   44 pt minus and plus controls around a `figure` value, so a plan made sitting down cannot hold a number
@@ -427,23 +476,50 @@ Selection rows, the unit switch and pickers stay silent.
   group. It adds no token and no motion.
 - **Progress board** (`ProgressBoardView`, `ProgressScreen`, the Progress tab): every trained movement,
   one row per movement and machine, grouped by body part under `SectionLabel` headers, with the movements
-  that have no body part last under the `warning` header. A row is a `SelectionCardButtonStyle` card: the
-  movement in `headline`, its machine in `provenance`, a small `plateBlue` sparkline of the last dozen
-  sessions (hidden from VoiceOver and dropped at accessibility sizes), and one sentence that names its
-  metric: "Estimated max +8% in 6 weeks", or, in `chalkDim`, "Estimated max · no 6-week comparison" with
+  that have no body part last under a header whose `warning` glyph is its only colour. Nothing is boxed:
+  a row is type on the canvas under a hairline, a button of 56 pt or more. It reads the
+  movement in `headline`, its machine in `provenance`, a small `chalkDim` sparkline of the last dozen
+  sessions with its newest session a `chalk` point (hidden from VoiceOver and dropped at accessibility
+  sizes), and one sentence that names its
+  metric: "Estimated max +8% in 6 weeks", in `provenance` and `chalkDim` with the signed percent alone
+  in `figure` and `chalk`, so the number is what the eye reads first and the sentence stays whole
+  (`ProgressBoardView.sentence` finds the figure inside `ProgressCopy`'s own words; it never composes
+  them), or, in `chalkDim`, "Estimated max · no 6-week comparison" with
   the history the movement does have ("4 sessions over 3 weeks. A comparison needs a session 5 to 7
   weeks before the latest.") when no session sits in that band. It never says "Not enough history":
   a movement trained every four weeks has plenty and only misses the band. The band is
-  `ProgressTrendAnalyzer.comparisonBandDays`, and the words are written from it. Beside every estimated-max figure sits its `CertaintyBadge`, drawn over the card's corner
-  as its own control so it never nests inside the card's button. A six-week change uses the weaker
+  `ProgressTrendAnalyzer.comparisonBandDays`, and the words are written from it. Beside every estimated-max figure sits its `CertaintyBadge` in the `.language`
+  style, a phrase ("Moderate confidence" and an info glyph) under the sentence, as its own control beneath
+  the row's button so it never nests inside it. A six-week change uses the weaker
   certainty of its two estimates. Imported history has its own series and says "Imported · machine
-  not recorded" in the same `provenance` role. Machine and cable movements whose sets have no
+  not recorded" in the same `provenance` role. A movement with no equipment on record, which is every
+  imported one until the lifter sets it in Library, shows its added-load reading with the sentence that
+  its body's own load is unknown and, under it, "Equipment not set, so no max is estimated. Set it in
+  Library, on the Train tab." (`ProgressCopy.equipmentNotSet`, also in the chart and spoken by VoiceOver).
+  The estimated max appears once the lifter has declared equipment that has one, never before, and
+  naming a body part declares nothing; a bodyweight movement gets none however it is declared.
+  Imported history is never merged into what the lifter logged, so a lift can have two rows, and the
+  split is stated rather than hidden (`ProgressBoard.sourceNotes`, in `provenance` and `chalkDim` as the
+  last line of a row): an imported row says "Not combined with sets you log in Hardset, even for the same
+  lift"; a movement with both an imported series and a logged one, which is what an import under the
+  catalogue's own name makes, says on each row that the other is on its own row; and a logged row with no
+  imported series of its own movement says nothing, because two names that look alike are not evidence
+  of one lift and the app does not guess. Above the rows, in `caption`, the board says once why a lift
+  can appear twice, whenever any row is imported. Under a movement's chart, one `caption` says an
+  imported line is kept as its own series because an imported set records no machine. No merge action is
+  offered: the two series would stay two rows either way, since an imported series has its own key, and
+  moving sets between movements would rewrite history to draw the same chart. Machine and cable
+  movements whose sets have no
   machine say "No machine recorded" there and in the chart legend. A movement with no record in its last
-  three sessions is flagged "Stalled · 3 sessions" in `warning` with `pause.circle`, and no advice. "Most
+  three sessions says "No record in 3 sessions" in `chalk` beside a `warning` `pause.circle`, the glyph being
+  the caveat's one mark, and no advice: the rule
+  is only that none of those sessions set a record, and "stalled" would claim more about the lifter's
+  body than the data knows. "Most
   improved · estimated max" at the top repeats three estimated-max gains, ordered by the confidence of
-  the estimate first, then the size of the gain, with a stalled movement after one of the same
-  confidence that is not, and a `caption` under its label says so (`ProgressCopy.mostImprovedOrdering`),
-  so a Low-confidence gain that is also Stalled is never on top while a better-supported gain sits
+  the estimate first, then the size of the gain, with a movement that has no record in 3 sessions after
+  one of the same confidence that has, and a `caption` under its label says so
+  (`ProgressCopy.mostImprovedOrdering`), so a Low-confidence gain that also has no record in 3
+  sessions is never on top while a better-supported gain sits
   below it; load and rep percentages stay in their own movement rows. Empty, it says "Log a workout and your progress
   shows up here"; loading is a quiet line and a failed read says so, never an empty board. It adds no
   token and no motion.
@@ -476,6 +552,40 @@ Selection rows, the unit switch and pickers stay silent.
   syncs, and for a screen that does not know), it is drawn outside the receipt view so the shared image
   never carries it, and Settings still holds the whole warning. The launch view hands the sync status
   down through the environment. It adds no token and no motion.
+- **Worked from** (`WorkedFromSheet`, `WorkedFromButton`, `WorkedFromAccount`): the one presentation behind
+  every number that can say how it was made. An estimated max (the figure in a chart legend row), a muscle's
+  count (the figure on a Volume row and on a map tile) and a record (the chart's star key, a receipt set's
+  record and the scorecard's record line) each open the same sheet, in the `MethodologySheet` family: the
+  figure in `readout` with how far to trust it and where it is from, the rule in `label`, then the sets that
+  fed it and what was left out, each a line of `figure` over `provenance`. A line's standing is carried by a
+  word and a symbol, a tick, a ring or a minus, and never by colour. Every set that did not count is a line
+  under "Left out" with its reason, so nothing is silently missing. The account is derived in Core from the
+  same inputs and through the same functions as the figure (`EstimateWorking`, `MuscleCountWorking`,
+  `RecordWorking`), so the sheet does no arithmetic and cannot say what the figure did not do. The control is
+  visible without a gesture: a glyph beside the figure, or a quiet "Worked from" button. It is never drawn on
+  the shared receipt image. VoiceOver hears the account as one sentence on the header and each line as one
+  sentence. Imported history keeps its split here as everywhere: an imported set is left out of a machine's
+  line as imported history, an imported series has a working of its own and says what its records were
+  compared with, and a movement a workout import created is marked as one on the lines that count it. Its
+  confidence is whatever the estimator gives, and the account states the ladder from the estimator itself,
+  so a formula's figure never reads higher than Moderate. A correction to a finished set shows in the
+  working as it shows in the figure: a receipt's records are derived from the receipt as it is read now,
+  found again by the set's id, and a chart's from the history as it is read now, so neither explains a
+  record or an estimate from the figures before the correction. It adds no token and no motion.
+- **History search and month jump** (`HistorySearch`, `HistorySearchBar`, `HistoryMonthJumpSheet`): under the
+  History header, the app's own search field and, beside it, a round calendar header button. The field finds
+  workouts by movement, machine or gym and says so in its prompt; typing waits for a pause before anything is
+  read, and the results are the same month-grouped cards, opening the same receipt, with a subtitle that names
+  the words ("7 workouts match “bench”, newest first"). A search that finds nothing is a `HardsetEmptyState`
+  that names the words, "No workouts match “deadlift”", never a blank screen; one still being read says so in
+  a quiet line, and one that failed says history is safe. VoiceOver is told what a search found, once per
+  query, because the matches appear away from where focus is. The field sits in the one scrolling column every
+  state shares, so a no-match never rebuilds it and the keyboard stays up; dragging the list puts it away. The
+  calendar button opens a sheet of the months that hold workouts, under pinned year headings, each a
+  `SelectionRow` with its workout count and the current month marked by the ring and check. Choosing one starts
+  the list at that month's last workout and pages older; the subtitle says "from March 2023 and earlier", and a
+  quiet "Back to latest workouts" button returns. A search spans all of history, so the calendar button is
+  hidden while one is showing. It adds no token and no motion.
 - **Selection** (`SelectionRow`, `SelectionCardButtonStyle`, `SelectionIndicator`): selected choices
   take the plate blue ring and `plateBlueSurface`, and the trailing indicator swaps an empty ring
   for a filled check, so the choice is carried by shape as well as colour. A pressed selection
@@ -517,8 +627,9 @@ Selection rows, the unit switch and pickers stay silent.
   pages with one anatomy, a `title` headline, two lines in `label` and one live element that is the
   real component, never a picture. "One tap per set" is a real set row prefilled from last time; its
   tap plays `clank` then the row's own `success`. "Honest numbers" is the engine's estimate for the
-  same 60 kg set at 3, 8, 12 and 15 reps, so the badge walks high, moderate, low and not evaluated
-  because `StrengthMath` says so. "Rest that keeps time" is the real rest bar over a `DemoRestTimer`,
+  same 60 kg set at 1, 3, 12 and 15 reps, so the badge walks high (the single, which is measured and
+  the only High), moderate, low and not evaluated because `StrengthMath` says so. "Rest that keeps
+  time" is the real rest bar over a `DemoRestTimer`,
   an in-memory timer with no alarm, whose controls give the selection haptic. The first-launch pager
   shows three short `hairline` segments above the primary button, the active one `plateBlue`,
   sliding on `Motion.state`; like the segmented control's indicator it is one shape moved between
@@ -578,9 +689,22 @@ Selection rows, the unit switch and pickers stay silent.
   through the coordinator, which persists first and changes the row only after the write succeeds;
   a failed write leaves the saved figures and shows the failure. A field left empty, or typed back to
   what it held, writes nothing. A correction keeps the set's machine, its place and its save time,
-  starts no rest and claims no record. A finished workout's sets are never edited; its corrections
-  are removals, in the receipt. "Edit set" in the long-press menu and for VoiceOver does the same
-  thing as tapping the weight, and "Undo log" still takes a set back.
+  starts no rest and claims no record. A finished workout's set is corrected through the receipt,
+  by the same operation and with downstream recomputed (see History). "Edit set" in the long-press
+  menu and for VoiceOver does the same thing as tapping the weight, and "Undo log" still takes a
+  set back.
+  Nothing on a saved figure says it can be tapped, so two things say it in words. The movement's
+  options menu, the visible "…" in the card's corner, opens with "Correct set": one entry when a
+  single set is saved, a list naming each set by its figures ("Set 2 · 100 kg × 10") when several
+  are, and each puts the keypad on that set's weight exactly as a tap does. It is another way to
+  the same correction, not a second mechanism. And once, in a lifter's first workout, one quiet
+  line at the bottom edge says "Tap a saved weight or reps to correct it." in `provenance` and
+  `chalkDim` with an inline "Got it": not a modal, not a banner, no colour, the insertion-only
+  reveal on `Motion.reveal` (instant under Reduce Motion), wrapped and with the dismissal below it
+  at accessibility sizes. It is drawn only once a set is saved, only where a correction can be
+  written, never over the keypad, an error or a new record, and never in the tour's staged phone.
+  It is spent when it is drawn, not when it is dismissed (`HintPreferences`, a device preference),
+  and opening a saved figure to correct it dismisses it too.
 - **Set log control**: four states, never confused, each one SF Symbol of one weight and one size,
   about 30 pt inside the logger's whole 56 pt region: incomplete is an empty square in `controlEdge`
   (faint, and above the 3:1 floor for a graphic), ready is a checked square in `chalkDim`, next up is
@@ -634,31 +758,52 @@ Selection rows, the unit switch and pickers stay silent.
 - **Button Shapes**: with the system setting on, every stroke-free control, `quiet` buttons
   included, wears the `controlEdge` outline, and the exercise name (the load-history link) is
   underlined.
-- **Volume bars**: round-ended gauges, 4 pt continuous, scaled to the week's own maximum, never to a target. Modelled
-  muscles are solid plate blue; muscles that are counted but not modelled are hollow (plate blue
-  outline on `plateBlueSurface`) and say so in words beside the bar.
+- **Volume bars**: round-ended gauges, 4 pt tall and continuous, on a `hairline` ground, scaled to the
+  week's own maximum, never to a target. Modelled muscles are solid `chalk`; muscles that are counted
+  but not modelled are hollow (a `chalkDim` outline, no fill) and say so in words beside the name. The
+  screen has no primary action, so the bars carry no accent. A row is the muscle's name in `label` and
+  its count in `setEntry`, the certainty phrase tucked under the name as its subtitle and the bar closing
+  it, with space between rows and no card, so the count is the biggest thing in the row. At accessibility
+  sizes the name, the count and the phrase each take a line. The week's total is the screen's
+  `monument`, 88 pt and stacked above its sentence at accessibility sizes, because it is the one
+  figure here that is a count of what was logged; the per-muscle counts are fractional credits, an
+  adopted convention, so they stay in `setEntry`. The window
+  controls "Earlier" and "Later" and "How sets are counted" are inline controls in `chalk`, with "Later"
+  dimmed to 40% on the newest window; the two window controls stack one above the other when they
+  cannot sit side by side, because a word that says what the control does is never truncated; "Deep muscle map" is a pinned row under a hairline, words and a
+  chevron, a 56 pt control. It adds no token and no motion.
 - **Certainty on a muscle's count**: the badge beside a weekly count is about the research, not the
   count: whether published studies of weekly sets reach that muscle at that many sets. It is moderate
   for the six modelled muscles up to about 25 fractional sets, low above that, and not evaluated for
   every other muscle, whose count is still shown. The rule is `VolumeAnalyzer.doseResponse` and
   nothing else: the volume rows and the deep muscle map draw the same `MuscleCertaintyBadge` from it,
-  so one count never carries two answers, and the map carries no badge of its own for the week.
+  so one count never carries two answers, and the map carries no badge of its own for the week. The
+  Volume rows draw it as the `.language` phrase under the muscle's name; the map keeps the capsule
+  until it is rebuilt.
   `VolumeAnalyzer.certaintyMeaning` says what the badge is about, once, in words on the Volume screen,
   on the map and at the top of the "How sets are counted" disclosure; the disclosure's capsule is the
   best level a count can reach, `VolumeAnalyzer.bestCertainty`, and `certaintyScale` names where each
   level applies. Settings opens the same disclosure. No new token, no motion.
-- **Lower bounds and muscles the catalogue cannot train yet**: the `caveat` banner "Counts below are
-  lower bounds" says the cause and the way out, and is shared by the Volume screen and the map: sets
-  on a movement with no muscles recorded count toward no muscle, a movement the lifter made gets its
-  muscles from a body part set in Library on the Train tab, and an imported movement cannot be given
-  one. The muscles no built-in movement trains directly (`ExerciseCatalog.unauthoredDirectTokens`) are
+- **Lower bounds and muscles the catalogue cannot train yet**: the caveat "Counts below are
+  lower bounds" says the cause and the way out. The Volume screen draws it as a neutral note, a card
+  with a small `warning` glyph and `chalk` words, as the stale-workout notice is drawn, and the map
+  keeps the `caveat` banner until it is rebuilt; both say the same words: sets
+  on a movement with no muscles recorded count toward no muscle, and a movement the lifter made, or one
+  a workout import created, gets its muscles from a body part set in Library on the Train tab. The
+  muscles no built-in movement trains directly (`ExerciseCatalog.unauthoredDirectTokens`) are
   not listed under "Nothing logged for", where a zero would blame the lifter; the Volume screen names
   the ones with nothing credited in their own section, "Not counted directly yet", with the reason
   ("This is a gap in the catalogue, not in your training"), and a tile on the map with nothing
-  credited says the same. Tags, `caption` and the `caveat` banner; no new token, no motion.
-- **Charts**: one series per machine with its own colour and point symbol, a custom legend in app
+  credited says the same. On Volume the muscles in both sections are plain `label` type in `chalkDim`
+  joined by " · ", not tags, because nothing there can be tapped; the map keeps its tags. No new
+  token, no motion.
+- **Charts**: nothing around the chart: the metric control, then the metric's name, what is plotted and
+  its certainty as a `.language` phrase, the plot, a hairline and the legend sit straight on the canvas.
+  One series per machine with its own colour and point symbol (the first is chalk, see the palette notes),
+  a custom legend in app
   type, with equipment provenance allowed to wrap fully at accessibility sizes, and machine changes
-  as 2 pt dashed `warning` rules. The chart opens on the estimated max,
+  as 2 pt dashed `warning` rules. "Worked from these records" and "How this is measured" are inline
+  controls in `chalk`. The chart opens on the estimated max,
   which rises when the lifter does more weight or more reps, with the heaviest load as the other
   segment; it opens on the heaviest load when no estimate can be made. A session that set a record is
   marked on its line with a `star.fill` in `plateYellow`, drawn over the machine's own point, and the
@@ -725,10 +870,31 @@ components rather than native spinners.
 - History opens a static receipt of committed sets. It states equipment provenance,
   caveats and same-machine record definitions. Native share sheets handle text and a
   deliberately dark image; long sessions retain text sharing rather than render an
-  unbounded image. It adds no animation and responds to Dynamic Type. Where it offers "Correct this
-  workout" it says in one sentence that corrections are removals only and why: a finished workout
-  feeds History, volume and record baselines, so its sets are never edited or added, and the
-  removal banner adds that a removed set cannot be added back.
+  unbounded image. It adds no animation and responds to Dynamic Type. A finished set can be
+  corrected as well as removed (ruling D13). "Correct a set" is in the receipt's toolbar menu, at the
+  top where the receipt opens, and under "Correct this workout" at the bottom beside "Remove a
+  set"; either turns on a mode in which each set shows a plate-blue pencil, and one mode is on at a
+  time. The pencil opens `SetCorrectionSheet`: the movement and where it was done, one line saying
+  that only the weight and reps change and that History, volume, records and progress, including how
+  later workouts compare with this one, are recalculated from the corrected figures, both figures as
+  56 pt controls, the logger's own `NumericPad`, and "Next" then "Save correction" as the only
+  write. A figure the lifter did not touch is written back exactly as saved, so a lifter reading
+  pounds who corrects only the reps does not rewrite the weight through a rounded conversion.
+  The write keeps the set's id, machine, plan row, ordinal, warm-up flag, RPE and save time, and the
+  workout's own start and finish, and is one transaction that persists before the receipt claims it:
+  the receipt is re-read from storage, so what it shows is what is stored. Volume, records, load
+  history and the Progress stall flag are derived from the stored sets on every read and nothing is
+  cached beside them, so one write is the whole recomputation; the screens under the receipt
+  re-read on `dataRevision`. A correction that makes a record is recorded as one, on the receipt
+  and on the movement's chart, and one that takes a record away takes it off. Nothing celebrates: a
+  neutral `info` banner says what the set now is and, when it changed, that it is now recorded as a
+  best or no longer counts as a record, with no trophy, no tint and no haptic. A failed save keeps
+  the sheet up with the figures typed, and Cancel and a swipe-down are blocked while figures are
+  unsaved. Removing a set is unchanged, and its banner now says a removed set cannot be added back
+  and points to correcting when the figures were the problem. Because records are replayed, a
+  correction to an earlier workout can change a later workout's records when it changes the
+  baseline they were judged against; that is the ledger being true and not a bug. It adds no token
+  and no motion.
 - The optional deep muscle map uses the existing palette and fractional-set method,
   with labelled values and comparative tracks, never target bands. It uses two
   columns at ordinary sizes and one at accessibility sizes. Unknown attribution

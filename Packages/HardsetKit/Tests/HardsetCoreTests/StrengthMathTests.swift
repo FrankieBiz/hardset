@@ -30,9 +30,9 @@ struct StrengthMathTests {
   }
 
   @Test(
-    "Certainty degrades as reps rise, then stops entirely",
+    "A formula is moderate at best, then degrades as reps rise, then stops entirely",
     arguments: [
-      (2, Certainty.high), (6, .high),
+      (2, Certainty.moderate), (3, .moderate), (6, .moderate),
       (7, .moderate), (10, .moderate),
       (11, .low), (12, .low),
       (13, .unevaluated), (20, .unevaluated), (30, .unevaluated),
@@ -42,6 +42,48 @@ struct StrengthMathTests {
     let claim = StrengthMath.estimatedOneRepMax(weightKg: 100, reps: reps)
     #expect(claim.certainty == expected)
     #expect(claim.isEvaluated == (expected != .unevaluated))
+  }
+
+  /// The research in `docs/research/prior-research.md` finds Epley most accurate near a 3-rep max
+  /// and overestimating from 5, so the app may not be more sure of a formula's figure than it is
+  /// of a measured weekly set count, which never exceeds Moderate either.
+  @Test("No formula-derived estimate is ever High, at any rep count or load")
+  func aFormulaIsNeverHigh() {
+    for kg in [2.5, 20, 60, 100, 250, 600] {
+      for reps in 2...StrengthMath.maximumEstimableReps {
+        let claim = StrengthMath.estimatedOneRepMax(weightKg: kg, reps: reps)
+        #expect(claim.certainty != .high, "\(kg) kg for \(reps) reps")
+        #expect(claim.source.id == StrengthMath.epleySource.id, "\(kg) kg for \(reps) reps")
+      }
+    }
+  }
+
+  @Test("A 3-rep estimate, where Epley is most accurate, is Moderate and names its formula")
+  func threeRepsIsModerateAndNamesTheFormula() throws {
+    let claim = StrengthMath.estimatedOneRepMax(weightKg: 100, reps: 3)
+    #expect(claim.certainty == .moderate)
+    #expect(claim.certainty != .high)
+    let value = try #require(claim.value)
+    #expect(abs(value - 110) < 0.001)
+    #expect(claim.source.title.contains("Epley"))
+    #expect(claim.source.methodology.contains("Epley formula"))
+    #expect(claim.source.methodology.contains("(1 + reps / 30)"))
+  }
+
+  @Test("The derivation says a formula is never high and only a measured single is")
+  func derivationStatesTheCap() {
+    let methodology = StrengthMath.epleySource.methodology
+    #expect(methodology.contains("never reported with high confidence"))
+    #expect(methodology.contains("Only a measured single is high"))
+    #expect(StrengthMath.measuredSource.methodology.contains("No estimation is involved"))
+  }
+
+  @Test("Moderate holds exactly up to the stated ceiling and Low starts the rep after")
+  func moderateCeiling() {
+    let ceiling = StrengthMath.maximumModerateReps
+    #expect(StrengthMath.estimatedOneRepMax(weightKg: 100, reps: ceiling).certainty == .moderate)
+    #expect(StrengthMath.estimatedOneRepMax(weightKg: 100, reps: ceiling + 1).certainty == .low)
+    #expect(ceiling < StrengthMath.maximumEstimableReps)
   }
 
   @Test("Nonsense input is unevaluated rather than defaulted")

@@ -3,6 +3,22 @@ import HardsetStore
 import HardsetUI
 import SwiftUI
 
+/// The sheets this screen opens, one at a time. `nonisolated` so its computed `id` satisfies
+/// `Identifiable` without isolated-conformance inference, as `VolumeSheet` does.
+private nonisolated enum ProgressSheet: Identifiable {
+  /// How the load history is measured.
+  case methodology
+  /// The working behind a figure.
+  case working(WorkedFromPresentation)
+
+  var id: String {
+    switch self {
+    case .methodology: "methodology"
+    case .working(let presentation): "working-\(presentation.id.uuidString)"
+    }
+  }
+}
+
 /// One movement's load history, wired.
 ///
 /// This is where the app's per-machine tracking pays off, and it is the reason the chart refuses
@@ -15,7 +31,8 @@ import SwiftUI
 @MainActor
 public struct ExerciseProgressScreen: View {
   @State private var snapshot = SnapshotLoader<ProgressionHistory>()
-  @State private var isShowingMethodology = false
+  /// The sheet that is up, or `nil`. One value for both, so the screen holds one presentation.
+  @State private var presented: ProgressSheet?
 
   private let store: ProgressionStore
   private let exerciseID: ExerciseID
@@ -41,17 +58,30 @@ public struct ExerciseProgressScreen: View {
           HardsetEmptyState(
             title: "Could not read this history",
             detail: "Your logged sets are safe. Pull down to try again.",
-            systemImage: "exclamationmark.triangle"
+            systemImage: "exclamationmark.triangle",
+            style: .quiet
           )
         } else if let history = snapshot.value {
-          ProgressionChartView(
-            series: seriesInputs,
-            machineChanges: history.machineChanges,
-            unit: unit,
-            estimatesOneRepMax: history.estimatesOneRepMax,
-            assumesAddedLoad: history.assumesAddedLoad,
-            onExplain: { isShowingMethodology = true }
-          )
+          VStack(alignment: .leading, spacing: Tokens.Spacing.loose) {
+            ProgressionChartView(
+              series: seriesInputs,
+              machineChanges: history.machineChanges,
+              unit: unit,
+              estimatesOneRepMax: history.estimatesOneRepMax,
+              assumesAddedLoad: history.assumesAddedLoad,
+              onExplain: { presented = .methodology },
+              onShowEstimateWorking: { showEstimateWorking($0) },
+              onShowRecordWorking: { showRecordWorking() }
+            )
+            // Imported history is a line of its own, never joined to a machine's. Said under the
+            // chart whenever one of its lines is imported, so the legend's label is not the only hint.
+            if history.series.contains(where: { $0.key.isImported }) {
+              Text(ProgressCopy.importedSeriesNote)
+                .font(Tokens.Text.caption)
+                .foregroundStyle(Tokens.Color.chalkDim)
+                .fixedSize(horizontal: false, vertical: true)
+            }
+          }
         } else {
           // Until the first read lands, say so. The chart's "No history yet" would be a claim
           // about the lifter's training made before the history was even read.
@@ -67,11 +97,18 @@ public struct ExerciseProgressScreen: View {
     // Keyed on the movement, so a different exercise reloads and a stale read is cancelled.
     .task(id: exerciseID) { await load() }
     .refreshable { await load() }
-    .sheet(isPresented: $isShowingMethodology) {
-      // The estimate is a formula applied to the user's own sets, not a study finding, and the
-      // sheet says which formula and where it stops being meaningful.
-      MethodologySheet(source: ProgressionAnalyzer.source)
-        .hardsetSheet()
+    .sheet(item: $presented) { sheet in
+      switch sheet {
+      case .methodology:
+        // The estimate is a formula applied to the user's own sets, not a study finding, and the
+        // sheet says which formula and where it stops being meaningful.
+        MethodologySheet(source: ProgressionAnalyzer.source)
+          .hardsetSheet()
+      case .working(let presentation):
+        // The sets behind the figure the lifter tapped, from the history on screen.
+        WorkedFromSheet(account: presentation.account)
+          .hardsetSheet()
+      }
     }
   }
 
@@ -88,8 +125,34 @@ public struct ExerciseProgressScreen: View {
         ProgressionChartView.SeriesInput(
           label: history.label(for: $0.key), points: $0.points,
           recordSessionIDs: history.recordSessionIDs[$0.key] ?? [],
-          bestAtWeight: history.bestAtWeight[$0.key] ?? [])
+          bestAtWeight: history.bestAtWeight[$0.key] ?? [], key: $0.key)
       }
+  }
+
+  /// Opens the working behind a machine's latest estimated max. Derived from the sets the history on
+  /// screen was built from, by the functions the chart's own points come from, when it is asked for.
+  private func showEstimateWorking(_ key: ProgressionKey) {
+    guard let history = snapshot.value,
+      let working = EstimateWorking.deriveLatest(
+        key: key, samples: history.samples, warmups: history.warmupSamples,
+        estimatesOneRepMax: history.estimatesOneRepMax,
+        assumesAddedLoad: history.assumesAddedLoad, label: history.label(for:))
+    else { return }
+    presented = .working(WorkedFromPresentation(working.account(format: WorkedFromFormat(unit: unit))))
+  }
+
+  /// Opens the working behind the record stars: the set that set each, what it beat, by how much
+  /// and the rule. Derived from the replay the stars themselves come from, with each machine's own
+  /// load step, when it is asked for.
+  private func showRecordWorking() {
+    guard let history = snapshot.value,
+      let account = RecordWorking.chartAccount(
+        keys: history.series.map(\.key), samples: history.samples,
+        estimatesOneRepMax: history.estimatesOneRepMax,
+        incrementKg: history.incrementKg(for:), label: history.label(for:),
+        format: WorkedFromFormat(unit: unit))
+    else { return }
+    presented = .working(WorkedFromPresentation(account))
   }
 
   private func load() async {

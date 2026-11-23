@@ -95,6 +95,27 @@ struct ProgressionTests {
     #expect(ProgressionAnalyzer.estimateCertainty(latestOf: [series.points]) == .unevaluated)
   }
 
+  /// D9 holds under the cap: a heavy low-rep set on bodyweight work would be 3 reps of Moderate if
+  /// it were estimated, so the series must carry neither the figure nor the certainty.
+  @Test("A 3-rep bodyweight set still carries no estimate and no certainty")
+  func bodyweightLowRepsStaysUnestimated() throws {
+    let all = samples([(1, nil, 30, 3, 0), (2, nil, 40, 3, 7)])
+    let series = try #require(
+      ProgressionAnalyzer.series(from: all, exerciseID: exercise, estimatesOneRepMax: false).first
+    )
+    #expect(series.hasNoEstimates)
+    #expect(series.points.allSatisfy { $0.bestEstimatedOneRepMaxKg == nil })
+    #expect(series.points.allSatisfy { $0.bestEstimateCertainty == nil })
+    #expect(ProgressionAnalyzer.estimateCertainty(latestOf: [series.points]) == .unevaluated)
+  }
+
+  @Test("The disclosure agrees with the engine: a formula is never high")
+  func disclosureMatchesTheCap() {
+    let range = ProgressionAnalyzer.source.validRange ?? ""
+    #expect(range.contains("at most moderate"))
+    #expect(!range.contains("two to six reps"))
+  }
+
   @Test("Points are oldest first, and the most-trained machine leads")
   func orderingIsStable() throws {
     let all = samples([
@@ -251,7 +272,7 @@ struct ProgressionTests {
   }
 
   @Test("The winning estimate's certainty is the one recorded", arguments: [
-    (5, Certainty.high), (8, Certainty.moderate), (1, Certainty.high),
+    (5, Certainty.moderate), (8, Certainty.moderate), (1, Certainty.high),
   ])
   func winningCertainty(reps: Int, expected: Certainty) throws {
     let series = ProgressionAnalyzer.series(
@@ -312,6 +333,7 @@ struct ProgressionTests {
     #expect(range.contains("twelve reps or fewer"))
     #expect(range.contains("not a change in strength"))
     #expect(ProgressionAnalyzer.source.methodology.contains("never merged"))
+    #expect(ProgressionAnalyzer.source.methodology.contains("Epley"))
   }
 
   /// Sessions can share a timestamp, and the input comes from a dictionary. Equal dates must

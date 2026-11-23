@@ -85,6 +85,12 @@ public struct LiveSessionScreen: View {
   /// The set whose records the lifter dismissed, so the card stays gone for those records and comes
   /// back for the next set that earns one.
   @State private var dismissedRecordsSetID: SetID?
+  /// Whether the one-time line saying a saved weight can be tapped to correct it is still owed to
+  /// this lifter. Read once when the screen is made and held for its life, so the line that was
+  /// just noted as seen stays up for the rest of this workout instead of vanishing the moment it
+  /// appears; only dismissing it, or opening a correction, takes it away.
+  @State private var correctionHintOwed: Bool
+  private let hints: HintPreferences
   private let unit: WeightUnit
   private let hooks: RestTimerHooks
   private let catalog: CatalogSeeder?
@@ -103,6 +109,8 @@ public struct LiveSessionScreen: View {
   ///   both; a session with no gym hides the machine chips until one is set.
   /// - Parameter gymName: Shown in the screen's header, so the lifter can see which gym's
   ///   machines the chips are offering. `nil` reads "No gym recorded".
+  /// - Parameter hints: Remembers which one-time lines the lifter has already been shown, so the
+  ///   hint that a saved weight can be corrected appears in their first workout and not again.
   /// - Parameter onShowSettings: Puts the settings button in the header, so the unit can be
   ///   changed mid-workout as it could be from the start screen.
   /// - Parameter onFinished: Called once the workout is finished or discarded, and no longer open.
@@ -113,11 +121,14 @@ public struct LiveSessionScreen: View {
     catalog: CatalogSeeder? = nil,
     gyms: GymStore? = nil,
     progression: ProgressionStore? = nil,
+    hints: HintPreferences = HintPreferences(),
     gymName: String? = nil,
     onShowSettings: (() -> Void)? = nil,
     onFinished: @escaping () -> Void = {}
   ) {
     self._coordinator = State(initialValue: coordinator)
+    self.hints = hints
+    self._correctionHintOwed = State(initialValue: !hints.hasSeen(.correctSavedSet))
     self.unit = unit
     self.hooks = hooks
     self.catalog = catalog
@@ -193,6 +204,14 @@ public struct LiveSessionScreen: View {
       },
       onDismissError: dismissError,
       onDismissRecords: { dismissedRecordsSetID = coordinator.lastRecordsSetID },
+      showsCorrectionHint: correctionHintOwed,
+      // Spent when it is drawn, not when it is dismissed, so a lifter who never taps "Got it" is
+      // still told once and no more.
+      onCorrectionHintShown: { hints.markSeen(.correctSavedSet) },
+      onDismissCorrectionHint: {
+        hints.markSeen(.correctSavedSet)
+        correctionHintOwed = false
+      },
       onFinish: { finish() },
       onFinishAt: coordinator.lastLoggedAt == nil ? nil : { finish(at: $0) },
       onDiscard: discard
@@ -598,7 +617,7 @@ public struct LiveSessionScreen: View {
       try gyms.archiveMachine(id)
       refreshMachines(forExercise: target)
     } catch {
-      machineError = "That machine could not be archived. Try again."
+      machineError = "That machine could not be removed. Try again."
     }
   }
 

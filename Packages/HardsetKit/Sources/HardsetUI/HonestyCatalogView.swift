@@ -49,8 +49,8 @@ public struct HonestyCatalogView: View {
 // MARK: - Samples
 
 /// What a badge says for one rep count, taken from the engine so the catalogue cannot show a level
-/// the engine would not produce. The reps walk 3, 8, 12 and 15 because the engine gives high,
-/// moderate, low and unevaluated there.
+/// the engine would not produce. The reps walk 1, 3, 12 and 15 because the engine gives high (a
+/// measured single, the only High), moderate, low and unevaluated there.
 private struct HonestySample {
   let reps: Int
   let level: CertaintyLevel
@@ -65,7 +65,7 @@ private struct HonestySample {
     self.citation = claim.source.citation
   }
 
-  static let walk: [HonestySample] = [3, 8, 12, 15].map { HonestySample(reps: $0) }
+  static let walk: [HonestySample] = [1, 3, 12, 15].map { HonestySample(reps: $0) }
 }
 
 private func honestyNote(_ text: String) -> some View {

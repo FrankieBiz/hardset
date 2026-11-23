@@ -15,27 +15,34 @@ public struct MovementEditorDraft: Hashable, Sendable {
   ]
 
   public var name: String
-  /// Always one of `equipment`. A new movement opens on machine, which the lifter can change, and
-  /// is not read off the name.
-  public var modality: ExerciseModality
+  /// One of `equipment`, or nil when the movement has no equipment on record. A new movement opens
+  /// on machine, which the lifter can see and change, and is not read off the name. A movement that
+  /// already exists opens on what it says, and on nothing when it says nothing: saving it with no
+  /// equipment chosen leaves it unrecorded, so the app never declares equipment for the lifter. An
+  /// estimated max follows from equipment the lifter named, never from one the editor filled in.
+  public var modality: ExerciseModality?
+  /// An imported movement keeps the name it was imported under. A later import looks it up by that
+  /// name, so renaming it would start a second movement beside it with the same history.
+  public let nameIsFixed: Bool
   public private(set) var bodyPart: MuscleFilterCategory?
   public private(set) var primary: Muscle?
   /// In the order chosen, at most `CustomAttribution.maximumSecondaries`.
   public private(set) var secondary: [Muscle]
 
-  public init(name: String = "", modality: ExerciseModality = .machine) {
+  public init(name: String = "", modality: ExerciseModality? = .machine, nameIsFixed: Bool = false) {
     self.name = name
     self.modality = modality
+    self.nameIsFixed = nameIsFixed
     self.bodyPart = nil
     self.primary = nil
     self.secondary = []
   }
 
   /// Starts from what a movement already says, for retagging it. An untagged movement has no body
-  /// part, and an equipment type this build does not know opens on machine. Stabilisers and tokens
-  /// this build does not know are not carried over as secondaries.
+  /// part, and one with no equipment on record, or equipment this build does not know, has none
+  /// selected. Stabilisers and tokens this build does not know are not carried over as secondaries.
   public init(entry: CatalogEntry) {
-    self.init(name: entry.name, modality: entry.modality ?? .machine)
+    self.init(name: entry.name, modality: entry.modality, nameIsFixed: entry.isImported)
     guard let muscle = entry.primaryMuscle.muscle else { return }
     bodyPart = muscle.filterCategory
     primary = muscle
@@ -49,6 +56,26 @@ public struct MovementEditorDraft: Hashable, Sendable {
   }
 
   public var trimmedName: String { name.trimmingCharacters(in: .whitespacesAndNewlines) }
+
+  /// Said under a name that cannot be edited, so a field that will not take typing is not a mystery.
+  public static let fixedNameNote =
+    "Named by the app it came from. A later import finds it by this name, so it stays."
+
+  /// Whether the equipment is still unrecorded, so the editor says what that holds back.
+  public var equipmentIsUnset: Bool { modality == nil }
+
+  /// Said under the equipment chips while none is chosen. It is the one place the app says why a
+  /// movement has no estimated max, and what makes one possible, without offering a guess.
+  public static let equipmentUnsetNote =
+    "Not set. Hardset does not estimate a max for a movement until you say what the load is."
+
+  /// Said under Save once it can be pressed. An imported movement's sets already exist, so the
+  /// lifter is told what saving it changes: volume counts them from the next read.
+  public var savedNote: String {
+    nameIsFixed
+      ? "Saved as your own choice. Its imported sets count toward these muscles in Volume."
+      : "Saved as your own choice, so volume counts these muscles as you say."
+  }
 
   /// What every surface that saves a movement says when its name belongs to another movement, so
   /// the Library, the live workout's picker and the workout editor refuse in the same words. The
@@ -68,7 +95,8 @@ public struct MovementEditorDraft: Hashable, Sendable {
     secondary.count >= CustomAttribution.maximumSecondaries
   }
 
-  /// A name and a primary muscle. The secondaries and the equipment always have an answer.
+  /// A name and a primary muscle. The secondaries may be none, and the equipment may stay as it is:
+  /// naming a body part for an imported movement must not oblige the lifter to declare equipment.
   public var canSave: Bool { !trimmedName.isEmpty && primary != nil }
 
   /// What still stops the movement from being saved, in the lifter's words, or nil when nothing
@@ -80,7 +108,8 @@ public struct MovementEditorDraft: Hashable, Sendable {
     return nil
   }
 
-  /// What the store saves, or nil until there is a primary muscle.
+  /// What the store saves, or nil until there is a primary muscle. Equipment left unset is saved as
+  /// "leave it as it is", never as a choice.
   public var attribution: CustomAttribution? {
     primary.flatMap { CustomAttribution(primary: $0, secondary: secondary, modality: modality) }
   }

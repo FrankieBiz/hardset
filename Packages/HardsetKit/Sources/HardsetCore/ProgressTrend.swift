@@ -21,9 +21,10 @@ public struct MovementTrend: Hashable, Sendable, Identifiable {
   /// A fraction, so 0.08 means +8%. Nil when the six-week window has no session.
   public let sixWeekChange: Double?
   public let sessionCount: Int
-  /// Non-nil means the movement is stalled: none of its last `ProgressTrendAnalyzer.stallRun`
-  /// sessions set a record, and the number is that count. It is never a longer run, because only
-  /// those sessions are checked.
+  /// Non-nil means none of the movement's last `ProgressTrendAnalyzer.stallRun` sessions set a
+  /// record, and the number is that count. It is never a longer run, because only those sessions
+  /// are checked. The screen says exactly that, "No record in 3 sessions", and not that the lifter
+  /// has stalled.
   public let stalledSessions: Int?
   public let latestDate: Date
   /// The date of the movement's first session, so a row with no six-week change can say how much
@@ -63,7 +64,7 @@ public struct MovementTrend: Hashable, Sendable, Identifiable {
   }
 }
 
-/// Builds movement trends, the sessions that set records, and the stalled flag.
+/// Builds movement trends, the sessions that set records, and the no-record-in-recent-sessions flag.
 public enum ProgressTrendAnalyzer {
   public static let stallRun = 3
   public static let minimumSessionsForStall = 4
@@ -157,6 +158,17 @@ public enum ProgressTrendAnalyzer {
     )
   }
 
+  /// One record the detector found while replaying a series, with the set that set it.
+  public struct RecordFinding: Hashable, Sendable {
+    public let sessionID: SessionID
+    /// The set that set the record.
+    public let sample: ProgressionSample
+    public let record: PersonalRecord
+    /// The earlier set the record beat, when the history names exactly one. `nil` when two different
+    /// earlier sets match the record's own figures, rather than a guess between them.
+    public let beaten: PriorSetRecord?
+  }
+
   /// The sessions that set at least one record, with history always including every earlier set.
   ///
   /// The first session only builds history: with nothing before it, an ordinary ramp would look
@@ -172,28 +184,75 @@ public enum ProgressTrendAnalyzer {
     estimatesOneRepMax: Bool,
     lastSessions: Int? = nil
   ) -> Set<SessionID> {
+    Set(
+      recordFindings(
+        samples: samples, incrementKg: incrementKg, estimatesOneRepMax: estimatesOneRepMax,
+        lastSessions: lastSessions
+      ).map(\.sessionID))
+  }
+
+  /// Every record the replay finds, with the set that set it, oldest first. This is the replay the
+  /// record stars come from: `recordSessionIDs` is the sessions of these findings, so the "Worked
+  /// from" account for a star is the detector's own answer and not a second reading of the history.
+  public static func recordFindings(
+    samples: [ProgressionSample],
+    incrementKg: Double?,
+    estimatesOneRepMax: Bool,
+    lastSessions: Int? = nil
+  ) -> [RecordFinding] {
     let sessions = sessions(from: samples)
     guard sessions.count > 1 else { return [] }
 
-    var records = Set<SessionID>()
+    var findings: [RecordFinding] = []
     var history = RecordReplayIndex(samples: samples)
     let firstTested = max(1, sessions.count - (lastSessions ?? sessions.count))
 
     for (index, session) in sessions.enumerated() {
       for sample in session.samples.sorted(by: { $0.completedAt < $1.completedAt }) {
         if index >= firstTested {
+          let comparisons = history.comparisons(for: sample)
           let found = PersonalRecordDetector.records(
             for: .init(weightKg: sample.weightKg, reps: sample.reps),
-            history: history.comparisons(for: sample),
+            history: comparisons,
             increment: incrementKg,
             estimatesOneRepMax: estimatesOneRepMax
           )
-          if !found.isEmpty { records.insert(session.id) }
+          for record in found {
+            findings.append(
+              RecordFinding(
+                sessionID: session.id, sample: sample, record: record,
+                beaten: beatenSet(by: record, among: comparisons)))
+          }
         }
         history.append(sample)
       }
     }
-    return records
+    return findings
+  }
+
+  /// The one earlier set a record's own figures point to, among the comparisons it was decided
+  /// against, or `nil` when none or more than one different set fits.
+  static func beatenSet(by record: PersonalRecord, among comparisons: [PriorSetRecord]) -> PriorSetRecord? {
+    let tolerance = PersonalRecordDetector.loadMatchingTolerance
+    let matches: [PriorSetRecord]
+    switch record.kind {
+    case .heaviestLoad:
+      guard let previous = record.previousWeightKg else { return nil }
+      matches = comparisons.filter { $0.weightKg == previous }
+    case .repsAtLoad:
+      guard let reps = record.previousReps else { return nil }
+      matches = comparisons.filter { abs($0.weightKg - record.weightKg) < tolerance && $0.reps == reps }
+    case .loadAtReps:
+      guard let previous = record.previousWeightKg, let reps = record.previousReps else { return nil }
+      matches = comparisons.filter { $0.weightKg == previous && $0.reps == reps }
+    case .estimatedOneRepMax:
+      guard let previous = record.previousWeightKg else { return nil }
+      matches = comparisons.filter {
+        StrengthMath.estimatedOneRepMax(weightKg: $0.weightKg, reps: $0.reps).value == previous
+      }
+    }
+    let distinct = Set(matches)
+    return distinct.count == 1 ? distinct.first : nil
   }
 
   /// The ranking is deliberately one metric: percentages of load and reps cannot be ordered
@@ -202,11 +261,12 @@ public enum ProgressTrendAnalyzer {
 
   /// The positive six-week gains within one metric, best-supported first.
   ///
-  /// Ordered by how sure the estimate is, then by whether the movement has stalled, then by the size
-  /// of the gain. A bigger percentage from a weaker estimate does not outrank a smaller one from a
-  /// better one, and a movement that has stalled ranks after one of the same confidence that has not,
-  /// so the strip never leads with a Low-confidence movement that is also flagged Stalled while a
-  /// better-supported gain sits below it. `ProgressCopy.mostImprovedOrdering` says so on screen.
+  /// Ordered by how sure the estimate is, then by whether the movement has gone without a record,
+  /// then by the size of the gain. A bigger percentage from a weaker estimate does not outrank a
+  /// smaller one from a better one, and a movement with no record in its last sessions ranks after
+  /// one of the same confidence that has one, so the strip never leads with a Low-confidence
+  /// movement that is also flagged "No record in 3 sessions" while a better-supported gain sits
+  /// below it. `ProgressCopy.mostImprovedOrdering` says so on screen.
   public static func mostImproved(
     _ trends: [MovementTrend], metric: TrendMetric = mostImprovedMetric, limit: Int = 3
   ) -> [MovementTrend] {

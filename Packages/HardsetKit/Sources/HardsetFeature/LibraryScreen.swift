@@ -5,8 +5,9 @@ import SwiftUI
 
 /// The movement library, wired.
 ///
-/// Reads every selectable movement, groups it by body part through `LibraryIndex`, and opens the
-/// movement editor to tag the lifter's own movements or add a new one. Until the first read lands
+/// Reads every movement the Library lists, groups it by body part through `LibraryIndex`, and opens
+/// the movement editor to tag the lifter's own movements, including the ones a workout import
+/// created, or add a new one. Until the first read lands
 /// it says it is reading rather than claiming the library is empty, and a failed read says so
 /// instead of drawing an empty library: neither is a statement about the lifter's movements the app
 /// could check. A failed save keeps the editor up with everything typed and says why in an alert.
@@ -19,9 +20,13 @@ public struct LibraryScreen: View {
   @State private var reloadToken = 0
 
   private let catalog: CatalogSeeder
+  private let onChanged: () -> Void
 
-  public init(catalog: CatalogSeeder) {
+  /// - Parameter onChanged: Called after a movement is saved. A body part or equipment given here
+  ///   changes what Progress and Volume read, which neither can see from this screen.
+  public init(catalog: CatalogSeeder, onChanged: @escaping () -> Void = {}) {
     self.catalog = catalog
+    self.onChanged = onChanged
   }
 
   public var body: some View {
@@ -32,7 +37,8 @@ public struct LibraryScreen: View {
           HardsetEmptyState(
             title: "Could not read your movements",
             detail: "Your logged sets are safe. Pull down to try again.",
-            systemImage: "exclamationmark.triangle"
+            systemImage: "exclamationmark.triangle",
+            style: .quiet
           )
           .padding(.top, Tokens.Spacing.section)
         }
@@ -75,7 +81,7 @@ public struct LibraryScreen: View {
 
   private func load() async {
     let catalog = catalog
-    await snapshot.load { try catalog.selectableExercises() }
+    await snapshot.load { try catalog.libraryExercises() }
   }
 
   private func save(_ target: LibraryEditorTarget, name: String, attribution: CustomAttribution) {
@@ -91,10 +97,13 @@ public struct LibraryScreen: View {
       saveError = nil
       editor = nil
       reloadToken &+= 1
+      onChanged()
     } catch CatalogSeederError.duplicateName {
       saveError = MovementEditorDraft.nameTakenMessage(name)
     } catch CatalogSeederError.curatedNotEditable {
       saveError = "This movement comes with the app, so its muscles cannot be changed."
+    } catch CatalogSeederError.importedNotRenamable {
+      saveError = "An imported movement keeps the name it was imported under. Its body part and equipment can still be set."
     } catch CatalogSeederError.blankName {
       saveError = "Type the movement's name first."
     } catch {
@@ -121,7 +130,7 @@ private nonisolated enum LibraryEditorTarget: Identifiable {
   var title: String {
     switch self {
     case .creating: "New movement"
-    case .editing: "Movement"
+    case .editing(let entry): entry.isImported ? "Imported movement" : "Movement"
     }
   }
 

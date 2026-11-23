@@ -99,4 +99,97 @@ struct ProgressBoardTests {
     #expect(ProgressCopy.mostImprovedTitle == "Most improved · estimated max")
   }
 
+
+  // MARK: - Imported history beside what was logged here
+
+  private func series(
+    _ name: String, exercise: ExerciseID, imported: Bool, machine: MachineID? = nil,
+    bodyPart: MuscleFilterCategory? = .chest
+  ) -> ProgressBoard.Entry {
+    ProgressBoard.Entry(
+      row: ProgressBoard.Row(
+        trend: MovementTrend(
+          key: ProgressionKey(exerciseID: exercise, machineID: machine, isImported: imported),
+          metric: .heaviestLoad, sparkline: [1], sixWeekChange: nil, sessionCount: 1,
+          stalledSessions: nil, latestDate: epoch),
+        exerciseName: name, machineName: imported ? ProgressCopy.importedHistory : nil),
+      bodyPart: bodyPart)
+  }
+
+  @Test("One movement with an imported series and a logged one says on both rows that the other is separate")
+  func bothHalvesOfOneMovementPointAtEachOther() {
+    let bench = ExerciseID()
+    let imported = series("Barbell Bench Press", exercise: bench, imported: true)
+    let logged = series("Barbell Bench Press", exercise: bench, imported: false)
+
+    let board = ProgressBoard.make([imported, logged])
+
+    // Two rows, never one: the series are kept apart, not merged.
+    #expect(board.rows.count == 2)
+    #expect(board.sourceNotes[imported.row.id] == ProgressCopy.importedBesideLogged)
+    #expect(board.sourceNotes[logged.row.id] == ProgressCopy.loggedBesideImported)
+    #expect(ProgressCopy.importedBesideLogged != ProgressCopy.loggedBesideImported)
+  }
+
+  @Test("Logged history on two machines each points at the imported series of the same movement")
+  func everyLoggedRowOfTheMovementPoints() {
+    let press = ExerciseID()
+    let hammer = series("Chest press", exercise: press, imported: false, machine: MachineID())
+    let lifeFitness = series("Chest press", exercise: press, imported: false, machine: MachineID())
+    let imported = series("Chest press", exercise: press, imported: true)
+
+    let notes = ProgressBoard.make([hammer, lifeFitness, imported]).sourceNotes
+
+    #expect(notes[hammer.row.id] == ProgressCopy.loggedBesideImported)
+    #expect(notes[lifeFitness.row.id] == ProgressCopy.loggedBesideImported)
+    #expect(notes[imported.row.id] == ProgressCopy.importedBesideLogged)
+  }
+
+  @Test("An imported movement under its own name says it is not combined, and names no other row")
+  func importedAloneIsNotMatchedByName() {
+    // Same words, different movements: the app has no evidence they are one lift, so neither row
+    // points at the other and the imported one says only what is true of every imported row.
+    let imported = series("Bench Press (Imported • Strong)", exercise: ExerciseID(), imported: true)
+    let logged = series("Bench Press", exercise: ExerciseID(), imported: false)
+
+    let notes = ProgressBoard.make([imported, logged]).sourceNotes
+
+    #expect(notes[imported.row.id] == ProgressCopy.importedAlone)
+    #expect(notes[logged.row.id] == nil)
+    #expect(!ProgressCopy.importedAlone.contains("Bench"))
+  }
+
+  @Test("A board with no imported row has no notes and no board-level sentence")
+  func noImportedHistoryNoNotes() {
+    let board = ProgressBoard.make([
+      series("Squat", exercise: ExerciseID(), imported: false, bodyPart: .quads),
+      series("Press", exercise: ExerciseID(), imported: false),
+    ])
+
+    #expect(board.sourceNotes.isEmpty)
+    #expect(!board.hasImportedHistory)
+    #expect(ProgressBoard.empty.sourceNotes.isEmpty)
+    #expect(!ProgressBoard.empty.hasImportedHistory)
+  }
+
+  @Test("Any imported row makes the board say once why a lift can appear twice")
+  func boardNoteAppearsWithImportedHistory() {
+    let board = ProgressBoard.make([series("Row (Imported • Hevy)", exercise: ExerciseID(), imported: true)])
+
+    #expect(board.hasImportedHistory)
+    #expect(ProgressCopy.importedBoardNote.contains("appear twice"))
+    #expect(ProgressCopy.importedBoardNote.contains("does not guess"))
+    #expect(ProgressCopy.importedBoardNote.contains("never joins"))
+  }
+
+  @Test("The relationship is spoken with the row, after everything else it says")
+  func sourceNoteIsSpoken() {
+    let entry = series("Barbell Bench Press", exercise: ExerciseID(), imported: true)
+
+    let spoken = ProgressCopy.spokenRow(entry.row, sourceNote: ProgressCopy.importedBesideLogged)
+
+    #expect(spoken.hasSuffix(ProgressCopy.importedBesideLogged))
+    #expect(ProgressCopy.spokenRow(entry.row) == ProgressCopy.spokenRow(entry.row, sourceNote: nil))
+    #expect(!ProgressCopy.spokenRow(entry.row).contains("Not combined"))
+  }
 }

@@ -97,7 +97,16 @@ QUERIES = {
 
 # Queries that return a whole table's worth by design, so they cannot be a keyed lookup: the work
 # is the size of the answer. They may scan, but they may not sort or build a temporary tree.
-WHOLE_HISTORY = {"progress board sets", "import movement candidates", "recent native movements"}
+WHOLE_HISTORY = {
+    "progress board sets", "import movement candidates", "recent native movements",
+    # History search reads the names of movements, machines and gyms whole and matches them in
+    # Swift, by the movement picker's rules; these are catalogues of hundreds of rows, not history.
+    "history search movement names", "history search machine names", "history search gym names",
+    # The month picker lists the months that hold workouts: one start time per finished workout, read
+    # in index order and grouped in Swift, because a month is cut by the lifter's calendar and not
+    # by UTC. It runs when the picker opens, not on a keystroke.
+    "history months",
+}
 
 
 def is_unbounded(name, plan):
@@ -124,6 +133,43 @@ UPGRADED_QUERIES = {
         'SELECT * FROM templateExercises WHERE templateID IN (?, ?)',
         ("template-1", "template-2"),
     ),
+    # History search (HistoryStore.searchHistory): names are read whole and matched in Swift, then
+    # each match leads to workouts by key, never by scanning the sets or sessions. The order is
+    # applied to the matched workouts in Swift, so none of these sorts.
+    "history search movement names": ('SELECT * FROM exercises', ()),
+    "history search machine names": ('SELECT * FROM machines', ()),
+    "history search gym names": ('SELECT * FROM gyms', ()),
+    "history search by movement": (
+        'SELECT sessionID FROM loggedSets WHERE exerciseID IN (?, ?)',
+        ("exercise-3", "exercise-4"),
+    ),
+    "history search by machine": (
+        'SELECT sessionID FROM loggedSets WHERE machineID IN (?, ?)',
+        ("machine-0", "machine-1"),
+    ),
+    "history search by gym": (
+        'SELECT id FROM sessions WHERE gymID IN (?, ?)',
+        ("gym-1", "gym-2"),
+    ),
+    "history search resolve sessions": (
+        'SELECT id, startedAt FROM sessions WHERE id IN (?, ?, ?) AND finishedAt IS NOT NULL',
+        ("session-100", "session-101", "session-102"),
+    ),
+    # Jumping to a month (HistoryStore.loadHistory(limit:startedBefore:) and loadMonths): the page
+    # starts at the month's end and walks the history index, in its own order, so none of these
+    # sorts. Counting reads the same index.
+    "history page from a month": (
+        'SELECT * FROM sessions WHERE finishedAt IS NOT NULL AND startedAt < ? ORDER BY startedAt DESC, id DESC LIMIT 50',
+        ("2020-01-01",),
+    ),
+    "history count from a month": (
+        'SELECT count(*) FROM sessions WHERE finishedAt IS NOT NULL AND startedAt < ?',
+        ("2020-01-01",),
+    ),
+    "history months": (
+        'SELECT startedAt FROM sessions WHERE finishedAt IS NOT NULL ORDER BY startedAt DESC',
+        (),
+    ),
 }
 
 
@@ -140,6 +186,22 @@ def seed_saved_workouts(db):
     db.execute(
         "UPDATE sessions SET templateID = 'template-' || (CAST(substr(id, 9) AS INTEGER) % 3) "
         "WHERE CAST(substr(id, 9) AS INTEGER) % 10 = 0"
+    )
+
+
+def seed_history_search(db):
+    """Three gyms, six machines, and sessions and sets attached to them, as a lifter who trains in
+    more than one place has. Seeded after the upgrade, so the new indexes are the ones that follow
+    the writes."""
+    db.executemany('INSERT INTO gyms (id, name) VALUES (?, ?)', [(f"gym-{i}", f"Gym {i}") for i in range(3)])
+    db.executemany(
+        'INSERT INTO machines (id, gymID, name) VALUES (?, ?, ?)',
+        [(f"machine-{i}", f"gym-{i % 3}", f"Machine {i}") for i in range(6)],
+    )
+    db.execute("UPDATE sessions SET gymID = 'gym-' || (CAST(substr(id, 9) AS INTEGER) % 3)")
+    db.execute(
+        "UPDATE loggedSets SET machineID = 'machine-' || (CAST(substr(id, 5) AS INTEGER) % 6) "
+        "WHERE CAST(substr(id, 5) AS INTEGER) % 10 = 0"
     )
 
 
@@ -224,6 +286,7 @@ def main():
             failures.append(name)
     if upgrade:
         seed_saved_workouts(db)
+        seed_history_search(db)
         for name, (query, arguments) in UPGRADED_QUERIES.items():
             rows, elapsed, plan = measure(db, query, arguments)
             assert rows, f"{name}: empty fixture cannot verify a loading query"

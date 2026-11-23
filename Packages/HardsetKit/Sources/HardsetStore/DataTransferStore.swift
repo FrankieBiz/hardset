@@ -55,7 +55,8 @@ public nonisolated struct WorkoutImportUndo: Sendable, Equatable, Identifiable {
   public var confirmationMessage: String {
     "Delete \(sessionCount) \(sessionCount == 1 ? "session" : "sessions") and "
       + "\(setCount) \(setCount == 1 ? "set" : "sets") from the last import? "
-      + "Imported movements stay in Library. This cannot be undone."
+      + "The movements it created stay in Library, with any body part or equipment you gave them. "
+      + "This cannot be undone."
   }
 }
 
