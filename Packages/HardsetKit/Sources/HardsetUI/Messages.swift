@@ -65,9 +65,11 @@ public struct StatLedger: View {
   /// audit flagged "800" as clipping.
   ///
   /// At 44 pt the columns are the width of their figures and no wider, so a five-digit volume gets
-  /// the room it needs and a short count does not hold space it does not use. When the figures and
-  /// their dividers would be wider than the line, as a four-figure ledger with a large volume can
-  /// be, the figures wrap onto a second line with the dividers dropped, and none is clipped.
+  /// the room it needs and a short count does not hold space it does not use. Three figures take one
+  /// line if they fit. Four, which is the ledger once warm-ups are logged, do not fit beside a
+  /// four-digit volume on any phone, so they are always two to a line in columns that line up, and
+  /// the layout does not change when the volume crosses 1,000. Three too wide for the line, as at a
+  /// six-digit volume on a narrow phone, fall to the same two columns, and none is clipped.
   @ViewBuilder private var columns: some View {
     if dynamicTypeSize.isAccessibilitySize {
       VStack(alignment: .leading, spacing: Tokens.Spacing.regular) {
@@ -76,16 +78,33 @@ public struct StatLedger: View {
             .frame(maxWidth: .infinity, alignment: .leading)
         }
       }
+    } else if items.count > 3 {
+      pairedColumns
     } else {
       ViewThatFits(in: .horizontal) {
         ruledRow
-        FlowLayout(spacing: Tokens.Spacing.loose) {
-          ForEach(items) { item in
-            figure(item, isMonument: false)
+        pairedColumns
+      }
+    }
+  }
+
+  /// Two figures to a line, each column as wide as its widest figure so the lines under one another
+  /// align. No dividers: the alignment is what groups them.
+  private var pairedColumns: some View {
+    Grid(
+      alignment: .topLeading, horizontalSpacing: Tokens.Spacing.section,
+      verticalSpacing: Tokens.Spacing.loose
+    ) {
+      ForEach(Array(stride(from: 0, to: items.count, by: 2)), id: \.self) { start in
+        GridRow {
+          figure(items[start], isMonument: false)
+          if start + 1 < items.count {
+            figure(items[start + 1], isMonument: false)
           }
         }
       }
     }
+    .frame(maxWidth: .infinity, alignment: .leading)
   }
 
   private var ruledRow: some View {
@@ -94,8 +113,8 @@ public struct StatLedger: View {
         let isFirst = item.id == items.first?.id
         let isLast = item.id == items.last?.id
         figure(item, isMonument: false)
-          .padding(.leading, isFirst ? 0 : Tokens.Spacing.loose)
-          .padding(.trailing, isLast ? 0 : Tokens.Spacing.loose)
+          .padding(.leading, isFirst ? 0 : Tokens.Spacing.regular)
+          .padding(.trailing, isLast ? 0 : Tokens.Spacing.regular)
           .overlay(alignment: .leading) {
             if !isFirst {
               Rectangle()

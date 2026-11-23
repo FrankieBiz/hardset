@@ -353,10 +353,11 @@ Selection rows, the unit switch and pickers stay silent.
   the name entry sheet and the session use it; the root screens adopt it when they are rebuilt.
 - **Ledger** (`StatLedger`): a row of labelled figures separated by hairlines, used for session
   totals. Its values are `figureXL`, 44 pt, because each is a count or a sum of what was logged. The
-  columns are the width of their figures, so a five-digit volume has room; when the figures and
-  their dividers would be wider than the line, as a four-figure ledger with a large volume can be,
-  they wrap onto a second line with the dividers dropped, and at accessibility sizes each takes a
-  line. An item marked `isEstimate` is drawn at `readout`. A ledger may lead with one `monument`,
+  columns are the width of their figures, so a five-digit volume has room. Three figures take one
+  line, with dividers, if they fit. Four, the ledger once warm-ups are logged, do not fit beside a
+  four-digit volume on any phone, so they are always two to a line in aligned columns with no
+  dividers, and the layout does not change as the volume crosses 1,000; three too wide for the line
+  fall to the same two columns. At accessibility sizes each takes a line. An item marked `isEstimate` is drawn at `readout`. A ledger may lead with one `monument`,
   above the columns, when its screen has one: Train's last-workout card leads with its volume and
   leaves sets and reps in the columns, and with no volume, as in a bodyweight session, it has no
   monument.

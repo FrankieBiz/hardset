@@ -10,10 +10,10 @@
   /// the tab bar's glass and veils the whole screen, so the card's ledger is drawn through the same
   /// `StatLedger`, inside the same card, instead.
   ///
-  /// It exists to look at the three layouts a ledger can take that the screens' own captures do not
+  /// It exists to look at the layouts a ledger can take that the screens' own captures do not
   /// reach: a measured monument over its columns at five-digit volume, an estimate offered as a
-  /// monument and drawn at the readout size instead, and a four-figure ledger too wide for one line
-  /// wrapping rather than clipping. Like the other render suites it is inert unless
+  /// monument and drawn at the readout size instead, and the four-figure ledger a session shows
+  /// once warm-ups are logged, in aligned columns, at a typical and at a five-digit volume. Like the other render suites it is inert unless
   /// `HARDSET_SNAPSHOT_DIR` is set and it asserts nothing about pixels.
   @MainActor
   @Suite("Ledger renders for review", .serialized)
@@ -39,14 +39,22 @@
           label: "Estimated max", value: "112", unit: "kg", isEstimate: true))
     }
 
-    /// The live session's totals late in a long workout: four figures and a five-digit volume,
-    /// which are wider than a 375 pt line at 44 pt and have to wrap.
-    private static var sessionTotals: StatLedger {
+    /// The live session's totals with warm-ups logged: four figures, which are two to a line.
+    private static func sessionTotals(volume: String, sets: String, reps: String) -> StatLedger {
       StatLedger([
-        StatLedger.Item(label: "Working sets", value: "18"),
-        StatLedger.Item(label: "Reps", value: "144"),
-        StatLedger.Item(label: "Volume", value: "25,600", unit: "lb"),
+        StatLedger.Item(label: "Working sets", value: sets),
+        StatLedger.Item(label: "Reps", value: reps),
+        StatLedger.Item(label: "Volume", value: volume, unit: "lb"),
         StatLedger.Item(label: "Warm-ups", value: "4"),
+      ])
+    }
+
+    /// Three figures with no warm-ups, one line with dividers.
+    private static var plainTotals: StatLedger {
+      StatLedger([
+        StatLedger.Item(label: "Working sets", value: "9"),
+        StatLedger.Item(label: "Reps", value: "72"),
+        StatLedger.Item(label: "Volume", value: "2,400", unit: "lb"),
       ])
     }
 
@@ -61,7 +69,9 @@
       VStack(alignment: .leading, spacing: Tokens.Spacing.section) {
         card { trainCard }
         card { estimateAsMonument }
-        sessionTotals
+        plainTotals
+        Self.sessionTotals(volume: "2,400", sets: "9", reps: "72")
+        Self.sessionTotals(volume: "25,600", sets: "18", reps: "144")
       }
       .padding(Tokens.Spacing.loose)
       .frame(maxHeight: .infinity, alignment: .top)
