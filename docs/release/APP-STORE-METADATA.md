@@ -404,24 +404,10 @@ Connect confirm on upload. If it warns about the profile, re-export with an expl
 profile rather than changing the artwork.
 
 **Decision for 1.0: ship the interim asset.** This is deliberate, not a gap. The asset is
-legible at small sizes and is not misleading, and it is what 1.0 ships. The owner is
-commissioning a proper mark separately, built from D21's Scale and tested at 29 and 60 px.
-This kit does not design, generate, or replace it; nothing here should be read as a
-pending icon task.
-
-The separate commission should be a deliberate mark built from the app's own visual
-signature and palette, not another gradient object:
-
-- One idea, readable at 29 px and 60 px: a stamped measurement numeral, a single
-  calibrated plate, or the selector pin on a stack, not all three at once.
-- Use the app's plate colours rather than the current teal: action blue `#6FB7FF`, chalk
-  `#F3F3F5`, graphite `#050608`. The teal pin is not a token in `DesignTokens.swift`.
-- Strong silhouette against both a black and a white Home Screen; no text, no thin
-  hairlines, no transparency, no pre-rounded corners (iOS masks the icon).
-- Test the 1024 px master, the 60 px Home Screen size, and the 29 px Settings size before
-  replacing the asset. Keep the master as a source file outside the asset catalogue.
-- Replace it in a dedicated icon change with a new build; do not swap the PNG inside a
-  release that is already in review.
+legible at small sizes, is not misleading, and is what 1.0 ships. A proper mark is being
+commissioned separately (D21's Scale, tested at 29 and 60 px); that work is outside this
+kit. This document does not design it, and the interim asset is not a placeholder waiting
+on this PR.
 
 The icon is the only store asset not produced by `Tools/render_store_screenshots.sh`; that
 is expected, because it is a brand asset rather than a screen.
