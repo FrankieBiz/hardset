@@ -681,6 +681,11 @@ public struct SessionView: View {
   ///
   /// While the keypad is up it covers this area, so the inset becomes room to scroll the edited row
   /// clear of the keypad instead; the keypad repeats any error and the rest countdown itself.
+  ///
+  /// The stack is capped at accessibility sizes, where the type that is meant to be readable would
+  /// otherwise cover most of the screen and leave no window to log in: the record notice collapses to
+  /// one line that opens its detail, the rest bar keeps its countdown and controls, and the one-time
+  /// correction hint waits for the rest to end. `SingleThumbReachTests` measures what is left.
   @ViewBuilder private var bottomInset: some View {
     if keypad != nil {
       Color.clear
@@ -696,7 +701,8 @@ public struct SessionView: View {
             .hardsetArrival()
         }
         if !records.isEmpty {
-          recordsCard
+          recordsNotice
+            .tourTarget(.recordNotice)
             .padding(.horizontal, Tokens.Spacing.regular)
             .hardsetArrival(beat: .follow)
         }
@@ -780,10 +786,13 @@ public struct SessionView: View {
   /// The correction hint is owed, and this is a moment to draw it: something is saved to correct,
   /// the screen can write a correction, and nothing more urgent is on the bottom edge. A failure or
   /// a new record has the line to itself, so the hint waits and is drawn, and counted as seen, only
-  /// when it is actually in front of the lifter. The tour's staged phone never draws it, because the
-  /// lifter has not started training there.
+  /// when it is actually in front of the lifter. At accessibility sizes it also waits while a rest
+  /// runs, because it would stack on the rest bar and cover the set being logged; it is spent when it
+  /// is drawn, so it is still owed when the rest ends. The tour's staged phone never draws it, because
+  /// the lifter has not started training there.
   private var isShowingCorrectionHint: Bool {
     showsCorrectionHint && onCorrectSet != nil && !staging.presentsSheetsInline && !hasFeedback
+      && !(dynamicTypeSize.isAccessibilitySize && !isRestIdle)
       && exercises.contains { $0.loggedCount > 0 }
   }
 
@@ -823,6 +832,67 @@ public struct SessionView: View {
   private var runningRestEnd: Date? {
     if case .running(let endsAt) = restState { return endsAt }
     return nil
+  }
+
+  /// Whether the notice is one line. At accessibility sizes the full card, a title and a sentence per
+  /// record with the certainty phrase under the estimate, was about half the screen on its own and
+  /// stacked on the rest bar covered about eighty percent of it. So the notice collapses to a count
+  /// that opens its detail, "Worked from", where every record, what it beat and the sets behind it
+  /// are written out and can be read at the lifter's own pace. Only where there is a way to open that
+  /// detail: without one, collapsing would hide the records, so the card stays whole.
+  private var collapsesRecords: Bool {
+    dynamicTypeSize.isAccessibilitySize && onExplainRecords != nil
+  }
+
+  @ViewBuilder private var recordsNotice: some View {
+    if collapsesRecords {
+      recordsLine
+    } else {
+      recordsCard
+    }
+  }
+
+  /// A count with no sentence: the figures and what each beat are in the detail the line opens. The
+  /// whole line is a 56 pt control, the logger's own floor, so a missed tap costs nothing; the trophy
+  /// is the record's one mark, and a close mark puts the notice away.
+  private var recordsLine: some View {
+    HStack(alignment: .center, spacing: Tokens.Spacing.regular) {
+      Button {
+        onExplainRecords?()
+      } label: {
+        HStack(alignment: .center, spacing: Tokens.Spacing.regular) {
+          Image(systemName: "trophy.fill")
+            .font(Tokens.Text.headline)
+            .foregroundStyle(Tokens.Color.plateYellow)
+            .accessibilityHidden(true)
+          Text(recordsCountTitle)
+            .font(Tokens.Text.headline)
+            .foregroundStyle(Tokens.Color.chalk)
+            .fixedSize(horizontal: false, vertical: true)
+          Spacer(minLength: 0)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+      }
+      .buttonStyle(
+        InlineControlStyle(minHeight: Tokens.loggerTapTarget, alignment: .leading, fullWidth: true)
+      )
+      // Begins with the words the line shows, so a Voice Control user can say what they see; the
+      // record is new, and says which movement earned it, which the line itself does not.
+      .accessibilityLabel(
+        [recordsCountTitle, "new", recordsExerciseName].compactMap { $0 }.joined(separator: ", "))
+      .accessibilityHint("Shows what each record beat and the sets behind it")
+      if let onDismissRecords {
+        DismissGlyphButton(action: onDismissRecords)
+      }
+    }
+    .padding(Tokens.Spacing.regular)
+    .hardsetPanel()
+  }
+
+  /// "1 record" or "2 records": short enough to stay on one line beside the trophy and the close mark
+  /// at the largest size, which a sentence, or even "2 new records", is not.
+  private var recordsCountTitle: String {
+    records.count == 1 ? "1 record" : "\(records.count) records"
   }
 
   /// Records from the set just logged, under the movement's name. Each one names what it beat, so

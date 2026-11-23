@@ -458,10 +458,21 @@ Selection rows, the unit switch and pickers stay silent.
   | Type a weight or reps | The pad, pinned at the bottom; the row's figures open it | Pad top at or below 40% of the screen, every key below that |
   | Weight to reps, Log set, Done | The pad's footer: Next, Log set and Done, 56 pt | Bottom of the pad, the bottom of the screen |
   | Step the load | The pad's quick steps, and −/+ under the next row where the machine's step is recorded | Pad; the next row, wherever the list has put it |
-  | Rest: −15, +15, pause, skip, next rest | The rest bar, pinned at the bottom | At or below 60% of the screen |
+  | Rest: −15, +15, pause, skip, next rest | The rest bar, pinned at the bottom; the next-rest row at ordinary sizes only | At or below 60% of the screen |
   | Machine, movement options, add a set | The card's own header and footer, in the list | Scrolls into reach |
   | Finish the workout | The end of the list, and Workout options in the header | The end of the list is a flick away; the header menu is a convenience, never the only way |
   | Change gym, Settings | The gym line in the list, and the header | Not needed to log a set |
+
+  **The pinned stack is capped at accessibility sizes.** The record notice and the rest bar are pinned
+  over the list, so what they cover is what the list loses. At accessibility3 the full notice, about half
+  the screen on its own, stacked on the rest bar covered about eighty percent of it and left a sliver
+  of the list to log in; that grew worse when the figure scale grew. So at accessibility sizes the
+  notice collapses to one line (a trophy, "2 records" and a close mark, a 56 pt control) that opens
+  its detail, and the rest bar keeps only the countdown and the four controls (see Record notice and
+  Rest bar), and the one-time correction hint waits for the rest to end. The rule is that the two
+  together cover at most half the screen, so the upper half always holds the list and the set being
+  logged can be seen and reached; `SingleThumbReachTests` hosts the session with a notice and a running
+  rest at accessibility3 and accessibility5 and asserts it.
 
   The pinned figures are measured and not assumed: `SingleThumbReachTests` hosts the live session at
   402 by 874 pt, asks where the keypad and the rest bar actually are, and asserts them, writing every
@@ -489,6 +500,16 @@ Selection rows, the unit switch and pickers stay silent.
   control, `provenance` words in `chalkDim` and the glyph, that opens what each record beat, the
   formula behind an estimate and every set left out. The stale-workout notice is a neutral `hardsetCard`
   with a small `warning` glyph, because it holds buttons that need a fill to step off.
+- **Record notice** (`SessionView`): the records of the set just logged, a panel at the foot of the
+  live session: the movement and "New record" with the trophy in `plateYellow`, a line per record that
+  says what it beat ("Best estimated 1RM: About 162 kg, up from about 122 kg") and, under an estimate,
+  its certainty as a phrase, then the compact "Worked from" control. It arrives on the log moment's
+  follow beat and is put away with its close mark. At accessibility sizes, where it has a way to open
+  its detail, it is one line instead: the trophy, "1 record" or "2 records", and the close mark, the
+  whole line a 56 pt control that opens "Worked from", where every record, what it beat, the formula and
+  the sets behind it are written out at the lifter's own pace. Without a way to open that detail the
+  card stays whole, because collapsing would hide the records. Neither form adds a token or a motion
+  beyond the follow beat.
 - **Chips** (`HardsetChip`): capsule, raised fill, no stroke; selected uses `plateBlueFill` with
   `onPlateBlue` text.
 - **Inline control** (`InlineControlStyle`): a control that is only its label, for a screen that has
@@ -779,6 +800,11 @@ Selection rows, the unit switch and pickers stay silent.
   inline controls identified by their label or glyph, with no key face; Increase Contrast and
   Button Shapes outline them. "Resting" and "Paused" are `chalkDim`, and the next rest's lengths
   are figures: the chosen one in `chalk` with a 2 pt rule under it, the others `chalkDim`.
+  At accessibility sizes the bar is the countdown and the four controls and nothing else: "Resting",
+  the movement and set it follows and the "Next rest" row (and its drag) are dropped, because pinned over
+  the list they would cover the set being logged. The movement and set are still read aloud, the card's
+  rest control still sets the next rest, and "Paused" is kept, since a frozen number is otherwise
+  indistinguishable from a running one.
 - **Navigation titles** (`hardsetNavigationTitle`): the one title that may shrink, with
   `minimumScaleFactor(0.8)`, so a long exercise name stays on a single line in a bar. It is a
   documented exception to "adaptive layouts in place of shrinking text".

@@ -14,6 +14,9 @@ public enum TourTarget: Hashable, Sendable {
   case keypad
   /// The rest bar.
   case restBar
+  /// The record notice above the rest bar, whichever form it is in. Tagged so the pinned stack's
+  /// height can be measured and not assumed (`SingleThumbReachTests`); the tour points at nothing here.
+  case recordNotice
   /// The machine picker's list.
   case machineList
   /// The Volume tab's figures.

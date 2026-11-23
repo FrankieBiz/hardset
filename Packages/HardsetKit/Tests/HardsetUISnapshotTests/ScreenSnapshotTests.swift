@@ -628,7 +628,10 @@
         onAddExercise: {},
         onSelectMachine: { _ in },
         onShowHistory: { _ in },
-        onShowSettings: {}
+        onShowSettings: {},
+        // As in the app, where a record notice can open the working behind its records. It is also
+        // what lets the notice collapse to one line at accessibility sizes.
+        onExplainRecords: pinned ? {} : nil
       )
     }
 

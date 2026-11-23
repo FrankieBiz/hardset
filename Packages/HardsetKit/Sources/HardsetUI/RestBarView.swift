@@ -23,6 +23,12 @@ import SwiftUI
 /// set: a quiet "Next rest" row under the controls opens a row of choices, and a drag up on the bar
 /// opens it as well and a drag down closes it, so the length can be changed without reaching for a
 /// menu on the card. Choosing changes the next set's rest, not the one running.
+///
+/// The bar is pinned over the list, so at accessibility sizes it keeps only what a lifter needs
+/// mid-set: the countdown and the four controls. "Resting", the movement and set it follows and the
+/// next-rest row are dropped, because at those sizes they would cover the set being logged; the
+/// movement and the set are still read aloud, and the card's own rest control still sets the next
+/// rest. "Paused" is kept, because a frozen number is otherwise indistinguishable from a running one.
 public struct RestBarView: View {
   private let state: RestTimerState
   private let metadata: RestMetadata?
@@ -71,6 +77,12 @@ public struct RestBarView: View {
 
   private var hasChooser: Bool { onChooseNextRest != nil && !restChoices.isEmpty }
 
+  /// Whether the bar is the countdown and the controls and nothing else. See the type's note.
+  private var isCompact: Bool { dynamicTypeSize.isAccessibilitySize }
+
+  /// The next-rest row and its drag are offered where there is room for them.
+  private var offersChooser: Bool { hasChooser && !isCompact }
+
   public var body: some View {
     if case .idle = state {
       EmptyView()
@@ -88,7 +100,7 @@ public struct RestBarView: View {
             controls
           }
         }
-        if hasChooser {
+        if offersChooser {
           chooser
         }
       }
@@ -200,7 +212,7 @@ public struct RestBarView: View {
   /// control for anyone who does not drag.
   private var chooserDrag: some Gesture {
     DragGesture(minimumDistance: 16).onEnded { value in
-      guard hasChooser else { return }
+      guard offersChooser else { return }
       if value.translation.height < -24 {
         isChoosing = true
       } else if value.translation.height > 24 {
@@ -211,23 +223,26 @@ public struct RestBarView: View {
 
   /// The countdown and what it is resting after. Side by side at ordinary sizes; at accessibility
   /// sizes the words drop under the figure, because the 64 pt countdown grows with Dynamic Type up
-  /// to its cap and would leave "Chest press, set 2" a sliver of the bar to wrap in.
+  /// to its cap and would leave "Chest press, set 2" a sliver of the bar to wrap in. There the words
+  /// go altogether while the rest runs, and only "Paused" stays (see the type's note).
   private var status: some View {
     let layout =
-      dynamicTypeSize.isAccessibilitySize
+      isCompact
       ? AnyLayout(VStackLayout(alignment: .leading, spacing: Tokens.Spacing.snug))
       : AnyLayout(HStackLayout(alignment: .firstTextBaseline, spacing: Tokens.Spacing.regular))
     return layout {
       countdown
-      VStack(alignment: .leading, spacing: Tokens.Spacing.hairline) {
-        Text(state.isRunning ? "Resting" : "Paused")
-          .font(Tokens.Text.sectionHeader)
-          .foregroundStyle(Tokens.Color.chalkDim)
-        if let metadata {
-          Text("\(metadata.exerciseName), \(metadata.setLabel.lowercased())")
-            .hardsetText(.caption)
+      if !isCompact || !state.isRunning {
+        VStack(alignment: .leading, spacing: Tokens.Spacing.hairline) {
+          Text(state.isRunning ? "Resting" : "Paused")
+            .font(Tokens.Text.sectionHeader)
             .foregroundStyle(Tokens.Color.chalkDim)
-            .lineLimit(2)
+          if let metadata, !isCompact {
+            Text("\(metadata.exerciseName), \(metadata.setLabel.lowercased())")
+              .hardsetText(.caption)
+              .foregroundStyle(Tokens.Color.chalkDim)
+              .lineLimit(2)
+          }
         }
       }
     }
