@@ -76,6 +76,49 @@
       ).account(muscleName: "Chest", windowLabel: "Last 7 days, 14 Nov to now", format: format)
     }
 
+    /// The Volume screen's monument: a week of working sets across movements, one with no muscles
+    /// recorded, and warm-ups under Left out.
+    static func workingSetCountAccount() -> WorkedFromAccount {
+      let bench = ExerciseID()
+      let squat = ExerciseID()
+      let mystery = ExerciseID()
+      func contribution(_ muscle: Muscle, _ role: MuscleRole) -> MuscleContribution {
+        MuscleContribution(muscle, role: role, certainty: .moderate, source: .anatomy)
+      }
+      let attribution = AttributionIndex([
+        bench: [contribution(.chest, .direct), contribution(.triceps, .indirect)],
+        squat: [contribution(.quadriceps, .direct), contribution(.glutes, .indirect)],
+      ])
+      func sets(_ id: ExerciseID, _ count: Int, warmup: Bool = false) -> [CountableSet] {
+        (0..<count).map { _ in CountableSet(exerciseID: id, isWarmup: warmup) }
+      }
+      let names = [bench: "Barbell bench press", squat: "Back squat", mystery: "Cable crossover"]
+      return WorkingSetCountWorking.derive(
+        sets: sets(bench, 12) + sets(bench, 3, warmup: true) + sets(squat, 14) + sets(squat, 2, warmup: true)
+          + sets(mystery, 3),
+        attribution: attribution, name: { names[$0] ?? "Unknown movement" }
+      ).account(windowLabel: "Last 7 days, 14 Nov to now", format: format)
+    }
+
+    /// The Train screen's monument: a workout's sets as weight x reps, a warm-up under Left out and
+    /// a set with no load.
+    static func sessionVolumeAccount() -> WorkedFromAccount {
+      func line(
+        _ name: String, _ kg: Double, _ reps: Int, warmup: Bool = false, machine: String? = "Hammer Strength"
+      ) -> WorkoutReceipt.Line {
+        WorkoutReceipt.Line(
+          id: SetID(), exerciseName: name, machineName: machine, weightKg: kg, reps: reps,
+          isWarmup: warmup)
+      }
+      return SessionVolumeWorking.derive(lines: [
+        line("Chest press", 60, 12, warmup: true),
+        line("Chest press", 100, 10),
+        line("Chest press", 100, 8),
+        line("Chest press", 102.5, 6),
+        line("Pull-up", 0, 10, machine: nil),
+      ]).account(title: "Push day", format: format)
+    }
+
     /// Two sessions that each set records on one machine, with the machine's own 5 kg step.
     static func chartRecordAccount() -> WorkedFromAccount {
       let exercise = ExerciseID()
@@ -149,6 +192,26 @@
       }
       try await Snapshot.capture("kit-worked-from-muscle-light", size: Self.tall, style: .light) {
         Self.sheet(Self.muscleAccount())
+      }
+    }
+
+    @Test func monuments() async throws {
+      try await Snapshot.capture("kit-worked-from-working-sets-dark", size: Self.tall) {
+        Self.sheet(Self.workingSetCountAccount())
+      }
+      try await Snapshot.capture("kit-worked-from-working-sets-light", size: Self.tall, style: .light) {
+        Self.sheet(Self.workingSetCountAccount())
+      }
+      try await Snapshot.capture("kit-worked-from-volume-dark", size: Self.tall) {
+        Self.sheet(Self.sessionVolumeAccount())
+      }
+      try await Snapshot.capture("kit-worked-from-volume-light", size: Self.tall, style: .light) {
+        Self.sheet(Self.sessionVolumeAccount())
+      }
+      try await Snapshot.capture(
+        "kit-worked-from-volume-dark-ax3", size: Self.accessibility, typeSize: .accessibility3
+      ) {
+        Self.sheet(Self.sessionVolumeAccount())
       }
     }
 

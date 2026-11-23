@@ -26,6 +26,7 @@ public struct NumericPad: View {
   private let onNext: (() -> Void)?
   private let onLog: (() -> Void)?
   private let canLog: Bool
+  private let weightSteps: [Double]
 
   @Environment(\.accessibilityVoiceOverEnabled) private var voiceOverEnabled
   @Environment(\.dynamicTypeSize) private var dynamicTypeSize
@@ -48,6 +49,9 @@ public struct NumericPad: View {
   ///   is entered and logged without a separate trip back to the row's check.
   /// - Parameter canLog: Whether the set is complete. The same `SetEntryDraft.isLoggable` the
   ///   row's check uses; the pad never decides that on its own.
+  /// - Parameter weightSteps: The four quick steps a decimal field offers, in the pad's unit: the
+  ///   machine's real increment where one is recorded (`QuickSteps.weight`), so a step never lands
+  ///   on a load the equipment cannot hold. Integer fields offer reps' own steps whatever is passed.
   public init(
     buffer: Binding<NumericEntryBuffer>,
     title: String? = nil,
@@ -59,7 +63,8 @@ public struct NumericPad: View {
     onDone: (() -> Void)? = nil,
     onNext: (() -> Void)? = nil,
     onLog: (() -> Void)? = nil,
-    canLog: Bool = false
+    canLog: Bool = false,
+    weightSteps: [Double] = QuickSteps.weight(machineIncrementKg: nil, unit: .kilograms)
   ) {
     self._buffer = buffer
     self.title = title
@@ -72,10 +77,11 @@ public struct NumericPad: View {
     self.onNext = onNext
     self.onLog = onLog
     self.canLog = canLog
+    self.weightSteps = weightSteps
   }
 
   private var quickAdjusters: [Double] {
-    buffer.allowsDecimal ? [-5.0, -2.5, 2.5, 5.0] : [-1.0, 1.0, 2.0]
+    buffer.allowsDecimal ? weightSteps : QuickSteps.reps
   }
 
   /// A step that would invent a value or overflow the field is disabled rather than applied.
@@ -287,6 +293,10 @@ public struct NumericPad: View {
         .font(Tokens.Text.setEntry)
         .foregroundStyle(Tokens.Color.chalk)
         .lineLimit(1)
+        // A machine's own step can be four or five characters, "−19.84" in pounds. A number cut to
+        // "−19…" is worse than one drawn a little smaller, the same exception the set row's figures
+        // make; accessibility sizes already take a two-by-two grid.
+        .minimumScaleFactor(0.7)
     }
     .buttonStyle(HardsetKeyStyle())
     .disabled(!isAdjusterEnabled(delta))

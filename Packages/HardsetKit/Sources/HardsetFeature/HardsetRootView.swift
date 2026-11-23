@@ -89,6 +89,10 @@ public struct HardsetRootView: View {
   @State private var receiptSelection: LastWorkoutReceipt?
   /// Set when the open receipt changed saved data, so the start screen re-reads once it closes.
   @State private var receiptChanged = false
+  /// The working behind the last workout's volume, the start screen's monument, while its sheet is
+  /// up, and why it could not be read when it could not.
+  @State private var volumeWorking: WorkedFromPresentation?
+  @State private var volumeWorkingError: String?
   /// Set when Settings asked for the tour, so it opens once the sheet has finished closing: a
   /// presentation started while another is still leaving is dropped.
   @State private var wantsTour = false
@@ -704,6 +708,24 @@ public struct HardsetRootView: View {
             minHeight: Tokens.loggerTapTarget, alignment: .leading, fullWidth: true)
         )
         .accessibilityHint("Opens the receipt")
+        // The monument is a number the lifter cannot be asked to take on trust, so it opens the sets
+        // it was summed from. Its own control beneath the block's button, never inside it, so a tap
+        // here explains the figure and a tap anywhere above opens the receipt.
+        if ledgerItems(lastWorkout.volume).volume != nil {
+          WorkedFromButton("Worked from", style: .inline) { showVolumeWorking(for: lastWorkout) }
+            .accessibilityLabel("Worked from, volume")
+            .accessibilityHint("Shows the sets this volume was summed from")
+          if let volumeWorkingError {
+            Text(volumeWorkingError)
+              .font(Tokens.Text.provenance)
+              .foregroundStyle(Tokens.Color.chalkDim)
+              .fixedSize(horizontal: false, vertical: true)
+          }
+        }
+      }
+      .sheet(item: $volumeWorking) { presentation in
+        WorkedFromSheet(account: presentation.account)
+          .hardsetSheet()
       }
     } else if lastWorkoutSnapshot.value != nil {
       VStack(alignment: .leading, spacing: Tokens.Spacing.regular) {
@@ -718,6 +740,28 @@ public struct HardsetRootView: View {
             .fixedSize(horizontal: false, vertical: true)
         }
         .accessibilityElement(children: .combine)
+      }
+    }
+  }
+
+  /// Opens the working behind the last workout's volume. The sets are read when it is asked for, from
+  /// the receipt, and the volume is summed from them by `SessionVolume`'s rules, so what the sheet
+  /// says is what the figure did. A failed read says so on the screen, because a control that
+  /// appeared to do nothing is what this app is not allowed to have.
+  private func showVolumeWorking(for summary: SessionSummary) {
+    volumeWorkingError = nil
+    let receipts = environment.receipts
+    let id = summary.id
+    let format = WorkedFromFormat(unit: unit)
+    let named = summary.title.trimmingCharacters(in: .whitespacesAndNewlines)
+    let heading = named.isEmpty ? Self.sessionDate(summary.timeline.startedAt) : named
+    Task {
+      do {
+        let receipt = try await receipts.load(id)
+        let working = SessionVolumeWorking.derive(lines: receipt.lines)
+        volumeWorking = WorkedFromPresentation(working.account(title: heading, format: format))
+      } catch {
+        volumeWorkingError = "Could not read this workout's sets. Your logged sets are safe."
       }
     }
   }

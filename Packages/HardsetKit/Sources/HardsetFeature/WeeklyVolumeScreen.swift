@@ -86,7 +86,8 @@ public struct WeeklyVolumeScreen: View {
           onShowSettings: onShowSettings,
           onEarlier: weeksBack < Self.maximumWeeksBack ? { weeksBack += 1 } : nil,
           onLater: weeksBack > 0 ? { weeksBack -= 1 } : nil,
-          onShowWorking: { presented = .working(workingPresentation(for: $0, in: window)) }
+          onShowWorking: { presented = .working(workingPresentation(for: $0, in: window)) },
+          onShowTotalWorking: { presented = .working(totalWorkingPresentation(in: window)) }
         )
       } else if snapshot.loadFailed {
         // Says what is wrong and what is not. Logged sets are safe either way, and saying so is
@@ -219,6 +220,16 @@ public struct WeeklyVolumeScreen: View {
         muscleName: ExercisePickerView.displayName(MuscleKey(muscle)),
         // A count holds no load, so the unit is never read; only the locale is.
         windowLabel: window.description, format: WorkedFromFormat(unit: .kilograms)))
+  }
+
+  /// The working behind the screen's monument, the week's count of working sets, derived from the
+  /// sets that window's report was counted from, by the classification the report counts with.
+  private func totalWorkingPresentation(in window: VolumeWindow) -> WorkedFromPresentation {
+    let working = WorkingSetCountWorking.derive(
+      sets: window.reading.sets, attribution: window.reading.attribution,
+      imported: window.reading.importedMovements, name: window.reading.name(for:))
+    return WorkedFromPresentation(
+      working.account(windowLabel: window.description, format: WorkedFromFormat(unit: .kilograms)))
   }
 
   private func header(subtitle: String) -> some View {

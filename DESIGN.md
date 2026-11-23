@@ -25,6 +25,8 @@ the code does yet, so a reader does not look for a screen that has not moved.
   the 64 pt set row, the estimate ceiling and its check. It is scale and hierarchy only: it adds no
   glyph, rule, colour or motion. The onboarding demo and the catalogue's set rows keep the compact
   row, and History's row figures, the keypad display and the welcome bar keep their sizes.
+- The two monuments open "Worked from" (see Inspectable figures). Three capped estimates do not yet,
+  and the audit there says which.
 - Not yet in code, so the bullets below that name these describe where they are going: whatever a
   screen draws for itself instead of through the kit. That is the scorecard headline's type role, the
   deep muscle map, and the
@@ -80,8 +82,9 @@ glass; the content beneath it is never glass.
   a saved value never imitate a button. The live session goes further: no input is boxed, a control
   may be only its label, and the outline returns under Increase Contrast and Button Shapes.
 - **Restraint everywhere except the log tap.** The one memorable moment is logging a set: the
-  check stamps in with a short spring and a success haptic, and the row settles into its logged
-  state. Nothing else moves without being asked.
+  check stamps in with a short spring and the clank, the row settles into its logged state, and the
+  rest bar and marks arrive just after, as one event (see The log moment). Nothing else moves
+  without being asked.
 
 ## Palette
 
@@ -221,6 +224,38 @@ with the reason its numbers are measurements, so that adding a use anywhere else
 edit to that list and not a drive-by. Progress is the proof: every figure on it is an estimate or a
 comparison of estimates, so none of them leaves the sentence it is in.
 
+### Inspectable figures
+
+The scale has a second half: a large number the lifter cannot inspect is exactly what the product
+refuses. So every monument opens "Worked from", and every capped estimate should too, through the same
+`WorkedFromSheet` and a derivation in Core that runs the same inputs through the same functions the
+figure came from, so the sheet cannot say what the figure did not do.
+`Tools/check_interaction_rules.py` fails the build when a file draws a monument without its hookup,
+and when a new file draws one at all until the file is added to its list with the derivation that
+explains it.
+
+The audit, every figure the app draws above body size or capped as an estimate, as of this pass:
+
+| Surface | Figure | Kind | Size | Opens Worked from |
+| --- | --- | --- | --- | --- |
+| Volume | Weekly count of working sets | Counted | `monument` 88 | Yes. `WorkingSetCountWorking`: a line per movement, warm-ups under Left out, equal to the report's own count |
+| Train | Last workout's volume | Summed | `monumentAside` 72 | Yes. `SessionVolumeWorking`: a line per set as weight × reps, warm-ups under Left out, equal to the history summary's volume (a Store test holds them equal) |
+| Volume | A muscle's weekly count; a map tile | Estimate (fractional credit) | `setEntry` 22 | Yes. `MuscleCountWorking` |
+| Progress chart | A machine's latest estimated max; a record star | Estimate; derived | legend figure | Yes. `EstimateWorking`, `RecordWorking` |
+| Receipt | A record on a set; the scorecard's record line | Derived | 17 | Yes. `RecordWorking` |
+| Rest bar | The countdown | A deadline the lifter chose | `countdown` 64 | Not applicable: nothing was worked out |
+| Live session, receipt, Train | Weight and reps of a set; the live "This workout" ledger | Typed or counted | `figureXL` 44 | Not applicable for a typed figure; the ledger's sets are the list above it |
+| Progress board | A row's six-week change in estimated max, and the Most improved strip | Estimate | 17 | **Not in place.** The row opens the movement's chart, where the legend's estimate opens its working |
+| Receipt | The scorecard's "Biggest gain … estimated max" | Estimate | 17 | **Not in place.** The scorecard is drawn into the shared image, which holds no controls |
+| Live session | The record notice for an estimated max | Estimate | 17 | **Not in place** |
+| Onboarding | The pitch's estimate for a fixed 60 kg set | A demonstration | `readout` 28 | Exempt: no history to open; the arithmetic is the lesson |
+
+Nothing above 28 pt is an estimate, which `Role.mayCarryEstimate`, the ledger and `check_figure_cap.py`
+hold. The three rows marked not in place are capped estimates, so the size rule holds for them and
+the inspectability rule does not yet: each needs a derivation of a comparison (two estimates, or an
+estimate and the record it beat) that Core does not have, and a control placed where the surface has
+room for one. They are listed here so they are found.
+
 One monument per screen and nowhere else: Volume's weekly working-set count at 88 pt, where the
 number is the content, and Train's last workout volume at 72 pt, where the action is. A screen with
 no measured figure to lead with has none; Progress, Library, History and the live session have none,
@@ -262,6 +297,7 @@ working, not a gap in it: every figure there is an estimate, and an estimate is 
 | `Motion.state` | spring, response 0.30, damping 1.0 | Selection, segment indicator, row state |
 | `Motion.reveal` | 280 ms ease-out | Banners and inline confirmations appearing |
 | `Motion.stamp` | 300 ms spring, bounce 0.3 | The log check, and nothing else |
+| `Motion.follow(reduceMotion:)` | `Motion.reveal` started 120 ms after the stamp; none under Reduce Motion | The second beat of the log moment: the "+1 rep" mark, the rest bar and the record notice |
 | `Motion.fling(initialVelocity:)` | spring, response 0.35, damping 0.80 | Gesture release only, carrying the gesture's velocity |
 | `zoom` (no Swift symbol; `navigationTransition(.zoom)` at the call site) | system zoom transition | A card growing into its screen and back |
 
@@ -275,16 +311,60 @@ spring are dropped and only the fill or opacity changes, instantly or with `Moti
 
 In practice: a message or inline confirmation arrives with an insertion-only opacity transition
 carrying `Motion.reveal`, and no animated transaction, so what it displaces moves at once and it
-leaves at once. A logged row's field faces are layers whose opacity fades on `Motion.state`; the
-row's height is never animated.
+leaves at once. A logged row's figures go from `chalkDim` to `chalk` in the frame the set is saved,
+with no fade, and the row's height is never animated.
 
-Haptics follow the same restraint, and each has a name in `Tokens.Haptic`: `clank`, `success`,
-`error`, `selection` and `warning`. `clank` is the weighty tap of a plate meeting a bar: a CoreHaptics
+### The log moment
+
+The one signature of the app is not a spring and not a haptic; it is one event that a lifter at a
+machine perceives as a single thing, the plate meeting the bar. `LogMoment`
+(`Packages/HardsetKit/Sources/HardsetCore/LogMoment.swift`) writes it down as data, the interface
+reads its numbers from there, and `LogMomentTests` pins them. It has two beats.
+
+| Beat | When | What |
+| --- | --- | --- |
+| Contact | The frame the row is marked logged, which is after the write succeeded | The clank (the one haptic), the seal's stamp on `Motion.stamp`, the figures to full `chalk`, the screen's one accent moving to the next set that can be logged. Cuts and the one spring; nothing fades |
+| Follow | 120 ms later, one delay for all of it | The "+1 rep" mark, the rest bar, the record notice and the one-time correction hint fade in on `Motion.reveal`. Layout is already final and nothing slides |
+
+The follow beat waits because those things are information about the set and not the set being
+stamped: arriving with it, they competed with it on three clocks (a spring, a fade and a hard cut).
+120 ms is inside the stamp's own 300 ms, so the two overlap, and the whole moment is over inside
+0.45 s (`LogMoment.settleCeiling`). The seal reaches its full size a little after the follow beat
+begins, so the eye lands on the stamp first.
+
+Rules, each of which a future change has to break on purpose:
+
+- **One haptic, and it is the clank.** There is no `success` haptic under it: two patterns on one
+  instant felt like one doubled tap and are not what is wanted. `Tokens.Haptic` has no `success`.
+  `ClankPlayer.play()` is called from the row's `isLogged` false to true change, once, and from
+  nowhere else in the logging path; the Welcome bar's plate landing is its only other use. The
+  session prepares the engine when it appears, so the first set's clank is not late.
+- **Never before the save.** The row is marked logged only by `SessionCoordinator.logSet`, after
+  the store has written the set; a refused write leaves the row unlogged and starts no rest, so it
+  has no contact. An undo, and a row that appears already logged after a recovery, change nothing
+  and play nothing.
+- **Reduce Motion keeps the meaning.** One beat, no spring, no fade, no delay: the seal, the mark,
+  the rest bar and the notice appear together in the frame the set is saved, and the clank is
+  unchanged, because it now carries what the motion no longer does.
+- **Nothing else is this theatrical.** No other control stamps, springs with bounce, or sequences a
+  second beat. A new use of `Motion.stamp` or of `hardsetArrival(beat: .follow)` outside the set a
+  lifter just logged is a change to this section first. A failure, a stale-workout notice and every
+  other message stay on the plain reveal.
+
+What this does not claim: that it feels right. The sequence and the Reduce Motion variant are
+checked as data and in the code; the felt alignment of the clank with the stamp is a device check
+(`docs/OWNER-DEVICE-CHECKLIST.md`), and the seal's first full size lands about 150 ms after the
+haptic, which is the number to tune against `LogMoment.followDelay` if the device says the two feel
+apart.
+
+Haptics follow the same restraint, and each has a name in `Tokens.Haptic`: `clank`, `error`,
+`selection` and `warning`. `clank` is the weighty tap of a plate meeting a bar: a CoreHaptics
 pattern (a transient at intensity 1.0 and sharpness 0.6, then a 40 ms low rumble) played by
 `ClankPlayer`, which falls back to the heavy system impact where CoreHaptics is unavailable, and
 which `Tokens.Haptic.clank` names for a view that plays it through `.sensoryFeedback`. Saving a set
-plays `clank` under `success` (the row plays both when it is marked logged, so a failed write plays
-neither), and the Welcome bar's plate landing is the only other place `clank` is used. `error`
+plays `clank` and nothing with it (the row plays it when it is marked logged, so a failed write
+plays nothing; see the log moment above), and the Welcome bar's plate landing is the only other
+place `clank` is used. `error`
 follows every failed command, a repeated failure included. `selection` answers the row's machine
 step and the rest bar's −15, +15, pause, skip and next-rest choices. `warning`
 marks a rest that ran out on its own when no alarm can mark it (alarms denied or unavailable).
@@ -307,12 +387,66 @@ Selection rows, the unit switch and pickers stay silent.
   the pad's width: no face, no fill and no outline. Pressed, it sinks to 0.96 and dims to 80% on
   `Motion.press` (Reduce Motion drops the scale), as every control with no face of its own does;
   disabled, it dims to 40%. Under Increase Contrast or Button Shapes each key wears the 3:1
-  `controlEdge` outline around its whole cell. The quick steps (−5, −2.5, +2.5, +5) are keys in
-  `chalk`, and Done is an inline control; the one filled control on the pad is its primary action,
-  Next or Log set, which owns the screen's accent while the pad is up (the rows give theirs up, see
-  the set log control). The keypad drops its keys' faces because the screen behind it has none; gym
-  glare and sweaty hands on a face-less key are a device check, and it reverts in one place,
-  `HardsetKeyFace`. The same pad serves the load-step editor.
+  `controlEdge` outline around its whole cell. The quick steps are keys in `chalk`: the machine's own
+  increment as minus two, minus one, plus one and plus two of it, or −5, −2.5, +2.5 and +5 when none is
+  recorded (see The single-thumb pad traversal), and Done is an inline control; the one filled
+  control on the pad is its primary action, Next or Log set, which owns the screen's accent while
+  the pad is up (the rows give theirs up, see the set log control). The keypad drops its keys' faces
+  because the screen behind it has none; gym glare and sweaty hands on a face-less key are a device
+  check, and it reverts in one place, `HardsetKeyFace`. The same pad serves the load-step editor
+  and the receipt's correction sheet, which have no live machine increment in hand and so offer the
+  fallback steps.
+- **The single-thumb pad traversal** (`NumericPad`, the session's keypad sheet, `QuickSteps`): the
+  logger is operated with the thumb of the hand holding the phone, the other hand on the bar. That
+  is a rule with three clauses, each held by a check, so a future change cannot reintroduce what the
+  pad exists to remove.
+  - **No system keyboard, no cursor, ever, on the logging path.** Weight, reps, a load step, a rest
+    and a correction are typed on `NumericPad`, which edits a `NumericEntryBuffer`. No file on that
+    path (`Tools/check_interaction_rules.py` lists them) may declare a text input: `TextField`,
+    `TextEditor`, `SecureField`, `.keyboardType`, `@FocusState`, `.focused`, `.searchable` or a UIKit
+    text view. A keyboard covers half a small screen, puts the digits where the hardware says, and
+    needs a dismiss gesture the free hand is not free to make; a field needs a cursor placed. A
+    search field in a picker, a name or the Health body mass is text and is not on the path. The real
+    app is driven through a workout in CI and asserts that no system keyboard appears with the weight
+    open, after Next, or on the reps (`AppScreensUITests`).
+  - **Weight to reps is one press.** `Next` retargets the same pad in place: the display names the
+    new field, the prefill is selected so the first digit replaces it, and nothing is dismissed and
+    presented again. The last field offers `Log set`, so a changed set is entered and logged without
+    a trip back to the row's check. Type a weight, Next, type the reps, Log set: no cursor and no
+    second tap on the reps field. A set that is already right is one tap on its check.
+  - **The steps are the machine's.** The pad's quick steps are the machine's recorded increment as
+    minus two, minus one, plus one and plus two of it, in the unit the pad shows (`QuickSteps`), and
+    the row's −/+ use the same number, so the pad never steps to a load the equipment cannot hold. A
+    pin stack of 4.5 kg offers −9, −4.5, +4.5 and +9 and, read in pounds, 9.92 and 19.84. With no
+    increment recorded the pad falls back to 2.5 and 5, which claims nothing about the machine, and
+    the row's −/+ stay absent, as they always have, because a stepper on the row would assert a step.
+    Reps move by −1, +1 and +2. A step is a key like the others, a cell the width of its column and
+    56 pt tall, four across at ordinary sizes (about 88 by 56 pt on a 402 pt phone) and two by two at
+    accessibility sizes; the row's steps are 56 pt tall and half the row wide.
+
+  Where everything the logger needs between sets lives, so reach is a property of the layout and not
+  of luck. The header scrolls away with the list, and nothing is pinned to the top: the live screen's
+  pinned things are the rest bar and the keypad, both at the bottom, and the check forbids anything
+  else being pinned to the top.
+
+  | The lifter needs | It lives | Reach |
+  | --- | --- | --- |
+  | Log a set that is right | The check at the trailing edge of its row, 64 pt, in the list | Scrolls into the lower part of the screen; the list is flicked with the same thumb |
+  | Type a weight or reps | The pad, pinned at the bottom; the row's figures open it | Pad top at or below 40% of the screen, every key below that |
+  | Weight to reps, Log set, Done | The pad's footer: Next, Log set and Done, 56 pt | Bottom of the pad, the bottom of the screen |
+  | Step the load | The pad's quick steps, and −/+ under the next row where the machine's step is recorded | Pad; the next row, wherever the list has put it |
+  | Rest: −15, +15, pause, skip, next rest | The rest bar, pinned at the bottom | At or below 60% of the screen |
+  | Machine, movement options, add a set | The card's own header and footer, in the list | Scrolls into reach |
+  | Finish the workout | The end of the list, and Workout options in the header | The end of the list is a flick away; the header menu is a convenience, never the only way |
+  | Change gym, Settings | The gym line in the list, and the header | Not needed to log a set |
+
+  The pinned figures are measured and not assumed: `SingleThumbReachTests` hosts the live session at
+  402 by 874 pt, asks where the keypad and the rest bar actually are, and asserts them, writing every
+  number it measured to `thumb-reach.txt` beside the renders. It does not say where a row is in the
+  list, which is wherever the lifter scrolled it, nor that a given hand reaches a given point: the
+  next-up check at the trailing edge is the right thumb's, and a left-handed lifter crosses the
+  screen to it. Both are device checks (`docs/OWNER-DEVICE-CHECKLIST.md`). It adds no token and no
+  motion.
 - **Knurl** (`KnurlPattern`, `.knurl(opacity:)`): a `Canvas` crosshatch at 8% opacity, the
   `KnurlPattern` default. It fills rectangular bounds, so callers with rounded shapes clip it
   themselves. It is retired from the live session: the rest bar's countdown is drawn directly on
@@ -445,8 +579,9 @@ Selection rows, the unit switch and pickers stay silent.
   the subject of this screen is starting a workout, so the number sits beside the action and does not outrank it)
   over a `StatLedger` of working sets and reps at `figureXL`, and the movements in `label` and
   `chalkDim`. With no volume, as in a bodyweight session, there is no monument and the ledger is
-  the counts. It is a 56 pt `InlineControlStyle` region that opens the receipt. With no finished
-  workout, "No sessions yet" is left-aligned type under the same hairline and no symbol. The one
+  the counts. It is a 56 pt `InlineControlStyle` region that opens the receipt, and beneath it, as
+  its own control and never inside it, an inline "Worked from" opens the sets the volume was summed
+  from. With no finished workout, "No sessions yet" is left-aligned type under the same hairline and no symbol. The one
   accent is the primary Start: the up-next workout's when one is saved, the empty "Start workout"
   otherwise. It adds no token and no motion.
 - **Workout cards** (`WorkoutCardsView`, `WorkoutCard`): the Train tab's saved workouts, drawn without
@@ -638,7 +773,7 @@ Selection rows, the unit switch and pickers stay silent.
 - **Pitch pages** (`PitchPage`, `PitchSetRowPage`, `PitchEstimatePage`, `PitchRestPage`): three
   pages with one anatomy, a `title` headline, two lines in `label` and one live element that is the
   real component, never a picture. "One tap per set" is a real set row prefilled from last time; its
-  tap plays `clank` then the row's own `success`. "Honest numbers" is the engine's estimate for the
+  tap plays the log moment, the stamp and the one `clank`. "Honest numbers" is the engine's estimate for the
   same 60 kg set at 1, 3, 12 and 15 reps, so the badge walks high (the single, which is measured and
   the only High), moderate, low and not evaluated because `StrengthMath` says so. "Rest that keeps
   time" is the real rest bar over a `DemoRestTimer`,
@@ -725,8 +860,8 @@ Selection rows, the unit switch and pickers stay silent.
   round `plateGreen` `checkmark.circle.fill`. A square logs a set and a circle is a set that is
   logged, so logged and next up differ by shape, not only by hue. Nothing is dashed, knurled or
   boxed, and a logged row has no tint. The stamp is the seal scaling in from 0.6 on `Motion.stamp`
-  as the unlogged glyph fades out, and the one flourish on the screen; with Reduce Motion it simply
-  appears. At accessibility sizes the control also reads "Log set" or "Logged" in `chalk`, and
+  as the unlogged glyph fades out, and the one flourish on the screen, the contact of the log moment
+  (see The log moment); with Reduce Motion it simply appears. At accessibility sizes the control also reads "Log set" or "Logged" in `chalk`, and
   VoiceOver hears "next to log" on the next-up row. Voice Control answers to "Set 2", "Log set 2",
   and, on the next-up row, "Log set".
 - **Press feedback on self-drawn controls** (`HardsetPressStyle` and the set row's own styles): flat
@@ -778,7 +913,8 @@ Selection rows, the unit switch and pickers stay silent.
   it, with space between rows and no card, so the count is the biggest thing in the row. At accessibility
   sizes the name, the count and the phrase each take a line. The week's total is the screen's
   `monument`, 88 pt and stacked above its sentence at accessibility sizes, because it is the one
-  figure here that is a count of what was logged; the per-muscle counts are fractional credits, an
+  figure here that is a count of what was logged, and an inline "Worked from" under it opens the sets it
+  was counted from (`WorkingSetCountWorking`); the per-muscle counts are fractional credits, an
   adopted convention, so they stay in `setEntry`. The window
   controls "Earlier" and "Later" and "How sets are counted" are inline controls in `chalk`, with "Later"
   dimmed to 40% on the newest window; the two window controls stack one above the other when they

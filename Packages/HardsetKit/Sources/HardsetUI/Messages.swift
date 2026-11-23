@@ -1,3 +1,4 @@
+import HardsetCore
 import SwiftUI
 
 // MARK: - Ledger
@@ -325,22 +326,33 @@ extension View {
   ///
   /// Apply it to the message view where a conditional inserts it. The pickers, the name entry
   /// sheet and the session use it; the root screens adopt it as they are rebuilt.
-  public func hardsetArrival() -> some View {
-    modifier(HardsetArrivalModifier())
+  ///
+  /// - Parameter beat: `.contact`, the default, fades in at once. `.follow` is the log moment's
+  ///   second beat: the same reveal, started `LogMoment.followDelay` after the stamp, for the things
+  ///   a logged set explains (the "+1 rep" mark, the rest bar, the record notice). A failure, a
+  ///   stale-workout notice or any message that is not about a set just logged stays on `.contact`.
+  public func hardsetArrival(beat: LogMoment.Beat = .contact) -> some View {
+    modifier(HardsetArrivalModifier(beat: beat))
   }
 }
 
 /// The insertion-only reveal behind `hardsetArrival()`. A `View` extension cannot read the
 /// environment, so the modifier reads Reduce Motion and builds the transition from it.
 struct HardsetArrivalModifier: ViewModifier {
+  let beat: LogMoment.Beat
   @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+  private var animation: Animation? {
+    switch beat {
+    case .contact: Tokens.Motion.adaptive(Tokens.Motion.reveal, reduceMotion: reduceMotion)
+    case .follow: Tokens.Motion.follow(reduceMotion: reduceMotion)
+    }
+  }
 
   func body(content: Content) -> some View {
     content.transition(
       .asymmetric(
-        insertion: .opacity.animation(
-          Tokens.Motion.adaptive(Tokens.Motion.reveal, reduceMotion: reduceMotion)
-        ),
+        insertion: .opacity.animation(animation),
         removal: .identity
       )
     )

@@ -14,7 +14,7 @@ physical iPhone, in the gym lighting where it matters.
       four seconds: it loads one 20 kg plate a side by itself, and a touch takes over at once.
 - [ ] A horizontal swipe on the bar loads or unloads and never turns the page; a swipe anywhere
       else turns it.
-- [ ] **Pitch pages.** The set row logs with a stamp, `clank` under `success`. The estimate's four
+- [ ] **Pitch pages.** The set row logs with a stamp and one `clank`. The estimate's four
       segments read high, moderate, low, not evaluated. The rest bar counts down and −15, +15, pause
       and skip each answer with a selection tick.
 - [ ] **Tour.** The staged phone is legible at its size and nothing is cropped. The callout card on
@@ -29,13 +29,34 @@ physical iPhone, in the gym lighting where it matters.
 
 ## The daily app
 
-- [ ] **Log tap.** `clank` under `success` is heavy once, not twice: if it reads as a double buzz,
-      lower the clank's intensity in `ClankPlayer` before anything else.
+- [ ] **Log tap, the log moment.** One tap on the check is one event: the clank and the stamp begin
+      together, and about a tenth of a second later the rest bar, the "+1 rep" mark and any record
+      notice fade in as one. Check that: (1) the clank is one tap, not two, and nothing buzzes under
+      it (there is no success haptic any more); (2) the *first* set of a fresh launch clanks as
+      crisply as the tenth, because the session starts the haptic engine ahead of it; (3) the clank
+      and the seal feel like the same instant. The seal first reaches its full size about 150 ms
+      after the haptic, so if the two feel apart, tune `LogMoment.followDelay` and the seal's
+      spring together, not the haptic alone; (4) a log from the keypad's "Log set" reads the same
+      as one from the row's check, with the sheet leaving as the bar arrives; (5) with Reduce Motion
+      on, the seal, the mark and the rest bar appear at once with the clank and nothing travels;
+      (6) a write that fails plays nothing and stamps nothing. If the clank reads as too heavy,
+      lower its intensity in `ClankPlayer` before anything else.
 - [ ] **Auto rest.** A movement you have chosen a rest for starts that rest when a working set is
       saved; a warm-up starts none; a movement with no remembered rest starts none and asks once.
 - [ ] **Next rest.** The row under the rest bar and a drag up on the bar open the lengths, a drag
       down closes them, choosing one changes the next rest and not the running one.
 - [ ] **Keypad** retargets in place between weight and reps, and its keys sink on touch-down.
+- [ ] **Single-thumb traversal.** With the phone in one hand and the other on the bar: tap a weight,
+      type it, press Next, type the reps, press Log set, and never move the thumb to the top half of
+      the screen, never see the system keyboard, never place a cursor. The pad's top edge is at or
+      below 40% of the screen and the rest bar's at or below 60% (CI measures both and writes
+      `thumb-reach.txt`; this is whether it *feels* in reach). The log check sits at the trailing
+      edge, the right thumb's side: say whether a left-handed lifter should be offered the mirror.
+- [ ] **Machine steps.** On a machine with a recorded increment, the pad's quick steps are that step
+      and twice it, the row's −/+ show the same number, and stepping from a typed load lands on a
+      load the stack can hold. In pounds a 4.5 kg stack shows 9.92 and 19.84. On a machine with no
+      increment recorded the pad offers 2.5 and 5 and the row shows no −/+. Every step is hit first
+      time with a chalky thumb.
 - [ ] **Press feel** on the header icon menu (a `Menu` never reports a press, so it is device-only)
       and on the flat control faces, which now step off their surface by fill and carry no outline
       unless Increase Contrast or Button Shapes is on: confirm each reads as a control in daylight.
@@ -54,9 +75,12 @@ physical iPhone, in the gym lighting where it matters.
       a neutral note and no celebration. In pounds, correcting only the reps leaves the weight
       exactly as saved. After a correction, History's volume, the movement's chart and the Progress
       tab agree with it. "Remove a set…" still deletes.
-- [ ] **Volume.** Each muscle carries its own certainty; none speaks for the whole report.
-- [ ] **Train.** The last-workout card opens its receipt. With no history the start screen says
-      "No sessions yet".
+- [ ] **Volume.** Each muscle carries its own certainty; none speaks for the whole report. The
+      88 pt weekly count has "Worked from" under it: it opens a line per movement that adds up to the
+      figure, with warm-ups under "Left out", and says it is counted and not estimated.
+- [ ] **Train.** The last-workout card opens its receipt, and the "Worked from" beneath it opens a
+      line per set (weight × reps = its volume) whose sum is the 72 pt figure, with warm-ups under
+      "Left out". With no history the start screen says "No sessions yet".
 
 ## Decisions that are the owner's
 

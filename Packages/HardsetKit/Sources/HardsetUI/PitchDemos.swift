@@ -41,8 +41,9 @@ public struct PitchPage<Element: View>: View {
 // MARK: - Pitch 1: one tap per set
 
 /// "One tap per set." A real set row for "Chest press", filled in from last time's 60 kg for 10.
-/// Tapping its check logs the set: the stamp, the `clank` and success haptics the row plays when a set
-/// is saved, the row settling onto the logged tint, and the next row appearing with its own prefill.
+/// Tapping its check logs the set: the stamp and the one `clank` haptic the row plays when a set is
+/// saved (the log moment, `LogMoment`), the figures going to full chalk, and the next row appearing
+/// with its own prefill.
 public struct PitchSetRowPage: View {
   private let unit: WeightUnit
   private let isFirstLogged: Bool

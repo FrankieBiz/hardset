@@ -378,7 +378,8 @@ public struct SetRowView: View {
   /// nothing. It names what grew, "+1 rep", "+2.5 kg · +1 rep", or says "Matched". A win is `chalk`
   /// with an up arrow and a match is `chalkDim` with an equals sign: the arrow and the words carry
   /// the difference, and no hue does, because green on the screen means a set is saved. It arrives
-  /// with the standard reveal, so the row's height changes at once and nothing animates layout.
+  /// on the follow beat of the log moment, the standard reveal started just after the stamp, so the
+  /// row's height changes at once and nothing animates layout.
   private func beatMark(_ comparison: SetComparison) -> some View {
     let isMatch = comparison == .matched
     return HStack(spacing: Tokens.Spacing.tight) {
@@ -389,7 +390,7 @@ public struct SetRowView: View {
     .hardsetText(.caption, weight: .semibold)
     .monospacedDigit()
     .foregroundStyle(isMatch ? Tokens.Color.chalkDim : Tokens.Color.chalk)
-    .hardsetArrival()
+    .hardsetArrival(beat: .follow)
   }
 
   /// The −/+ machine-step pair, on the next set up and on a row being edited only.
@@ -557,12 +558,15 @@ public struct SetRowView: View {
     // The same predicate the store enforces. There is no second definition of "complete".
     .disabled(!draft.isLoggable || isLogged)
     .accessibilityLabel(isLogged ? "Logged" : "Log set")
-    // Haptics confirm the tap landed without the user looking at the phone.
-    .sensoryFeedback(Tokens.Haptic.success, trigger: isLogged) { !$0 && $1 }
-    // The weight of the plate going down, as the set is saved: the clank under the success. Only on
-    // the saved transition, so a failed write, which never marks the row logged, stays silent.
+    // The anchor of the log moment (`LogMoment`): the weight of a plate going down, once, as the
+    // set is saved. The haptic is the clank and only the clank: a second system haptic under it
+    // played two patterns on the same instant and made a doubled tap of what is one event. It is
+    // keyed on the row turning logged, which `SessionCoordinator.logSet` does only after the write
+    // succeeded, so a failed write, which never marks the row logged, stays silent; an undo, and a
+    // row that appears already logged after a recovery, change nothing and play nothing. Reduce
+    // Motion leaves it as it is: the haptic carries the meaning the motion no longer does.
     .onChange(of: isLogged) { old, new in
-      if !old && new { ClankPlayer.shared.play() }
+      if LogMoment.isContact(from: old, to: new) { ClankPlayer.shared.play() }
     }
     // The tour points at the check of the first set still to log.
     .tourTarget(.logCheck, isActive: isNext && !isLogged)
@@ -867,8 +871,10 @@ enum SetLogState: Sendable {
 /// Ready and next up take the opacity press through `HardsetPressFace`; incomplete and logged are
 /// disabled, so they ignore `isPressed` and show no press. The stamp is the app's one spring, on
 /// the seal and nothing else: it scales in from 0.6 as the unlogged glyph fades out, and with
-/// Reduce Motion it simply appears. The glyph's text size stops growing at xxxLarge so it stays
-/// inside the region; past that the words beside it carry the state.
+/// Reduce Motion it simply appears. It is the contact of the log moment (`LogMoment`), begun in the
+/// same frame as the clank, with the figures going to full chalk and the accent moving on; what the
+/// log means, the rest bar and the marks, follows it. The glyph's text size stops growing at
+/// xxxLarge so it stays inside the region; past that the words beside it carry the state.
 struct SetLogControlFace: View {
   private let state: SetLogState
   private let isPressed: Bool

@@ -1,3 +1,4 @@
+import HardsetCore
 import SwiftUI
 
 #if canImport(UIKit)
@@ -400,10 +401,20 @@ public enum Tokens {
     /// settles without overshoot, and when a change is reversed mid-flight it carries the
     /// current velocity into the new target instead of restarting a curve from rest.
     public static let state = Animation.spring(response: 0.30, dampingFraction: 1.0)
-    /// Banners and inline confirmations arriving.
-    public static let reveal = Animation.easeOut(duration: 0.28)
-    /// The log check stamping in. The only spring with bounce outside a gesture release.
-    public static let stamp = Animation.spring(duration: 0.3, bounce: 0.3)
+    /// Banners and inline confirmations arriving. Its length is `LogMoment.revealDuration`, so the
+    /// log moment's plan and the reveal it draws cannot disagree.
+    public static let reveal = Animation.easeOut(duration: LogMoment.revealDuration)
+    /// The log check stamping in. The only spring with bounce outside a gesture release. Its length
+    /// is `LogMoment.sealDuration`.
+    public static let stamp = Animation.spring(duration: LogMoment.sealDuration, bounce: 0.3)
+
+    /// The second beat of the log moment: the reveal, started `LogMoment.followDelay` after the
+    /// stamp. The "+1 rep" mark, the rest bar and the record notice use it, so they arrive together
+    /// and just after the seal lands instead of on three clocks of their own. `nil` under Reduce
+    /// Motion, where they appear with the seal in the same frame and nothing is delayed.
+    public static func follow(reduceMotion: Bool) -> Animation? {
+      reduceMotion ? nil : reveal.delay(LogMoment.followDelay)
+    }
 
     /// A release that hands the gesture's own velocity to the settle, such as a sheet or a card
     /// let go mid-drag.

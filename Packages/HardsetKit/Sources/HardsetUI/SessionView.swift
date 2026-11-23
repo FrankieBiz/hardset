@@ -352,6 +352,9 @@ public struct SessionView: View {
     }
     // The buffer is in the display unit; a unit change mid-entry would write pounds as kilograms.
     .onChange(of: unit) { keypad = nil }
+    // The clank is the anchor of the log moment, so its engine is running before the first set is
+    // logged and the first one is not the one that pays for starting it.
+    .onAppear { ClankPlayer.shared.prepare() }
     // A failed save is felt as well as read: the check simply not stamping was easy to miss.
     // Keyed on the failure as an event, so a retry that fails the same way is felt again.
     .sensoryFeedback(Tokens.Haptic.error, trigger: errorSignal) { _, new in new.message != nil }
@@ -685,33 +688,40 @@ public struct SessionView: View {
         if !records.isEmpty {
           recordsCard
             .padding(.horizontal, Tokens.Spacing.regular)
-            .hardsetArrival()
+            .hardsetArrival(beat: .follow)
         }
         if isShowingCorrectionHint {
           correctionHint
             .padding(.horizontal, Tokens.Spacing.regular)
-            .hardsetArrival()
+            .hardsetArrival(beat: .follow)
         }
-        RestBarView(
-          state: restState,
-          metadata: restMetadata,
-          nextRest: restExerciseID.flatMap { lastRest[$0] },
-          restChoices: ExerciseSectionView.restChoices,
-          onChooseNextRest: restChooser,
-          onAdjust: { delta in
-            restControlTaps += 1
-            onAdjustRest(delta)
-          },
-          onPauseResume: {
-            restControlTaps += 1
-            onPauseResumeRest()
-          },
-          onSkip: {
-            restControlTaps += 1
-            onSkipRest()
-          }
-        )
-        .tourTarget(.restBar)
+        // The log moment's follow beat: the bar is inserted when a rest begins, and fades in just
+        // after the stamp lands instead of cutting in at full strength on a clock of its own.
+        // Idle draws nothing, so it is not in the hierarchy then, which is also what lets its
+        // arrival be an insertion. It leaves at once, as every message does.
+        if !isRestIdle {
+          RestBarView(
+            state: restState,
+            metadata: restMetadata,
+            nextRest: restExerciseID.flatMap { lastRest[$0] },
+            restChoices: ExerciseSectionView.restChoices,
+            onChooseNextRest: restChooser,
+            onAdjust: { delta in
+              restControlTaps += 1
+              onAdjustRest(delta)
+            },
+            onPauseResume: {
+              restControlTaps += 1
+              onPauseResumeRest()
+            },
+            onSkip: {
+              restControlTaps += 1
+              onSkipRest()
+            }
+          )
+          .tourTarget(.restBar)
+          .hardsetArrival(beat: .follow)
+        }
       }
       .padding(.bottom, isRestIdle && (hasFeedback || isShowingCorrectionHint) ? Tokens.Spacing.snug : 0)
     }
@@ -1261,6 +1271,11 @@ public struct SessionView: View {
   private var keypadSheet: some View {
     let target = keypad ?? shownKeypad
     let field = target?.field ?? .weight
+    // The weight steps are the machine's real increment where one is recorded, the same number the
+    // row's −/+ use, so the pad never steps to a load the equipment cannot hold.
+    let machineIncrementKg = target.flatMap { target in
+      exercises.first(where: { $0.id == target.exerciseID })?.machineIncrementKg
+    }
     return ScrollView {
       VStack(spacing: 0) {
         // The keypad covers the bottom of the screen where errors are shown, so a set that fails
@@ -1280,7 +1295,8 @@ public struct SessionView: View {
           onNext: field == .weight ? { advanceToReps() } : nil,
           // A correction has no "Log set": the set is already logged, and Done writes the change.
           onLog: field == .reps && target?.isCorrection != true ? { logFromKeypad() } : nil,
-          canLog: targetedSlot?.draft.isLoggable ?? false
+          canLog: targetedSlot?.draft.isLoggable ?? false,
+          weightSteps: QuickSteps.weight(machineIncrementKg: machineIncrementKg, unit: unit)
         )
         .tourTarget(.keypad)
       }
