@@ -19,6 +19,9 @@ private nonisolated enum SessionSheet: Identifiable, Hashable {
   case history(UUID)
   /// The workout's gym picker.
   case gym
+  /// The working behind the records on the notice, whose presentation is `workingPresentation`. The
+  /// payload is that presentation's id, so the enum stays a plain value.
+  case working(UUID)
 
   var id: SessionSheet { self }
 }
@@ -85,6 +88,11 @@ public struct LiveSessionScreen: View {
   /// The set whose records the lifter dismissed, so the card stays gone for those records and comes
   /// back for the next set that earns one.
   @State private var dismissedRecordsSetID: SetID?
+  /// The working behind the records on the notice while its sheet is up, and why it could not be
+  /// opened when it could not. A control that appeared to do nothing is what this app is not allowed
+  /// to have, so a failed read says so under the control.
+  @State private var workingPresentation: WorkedFromPresentation?
+  @State private var recordsWorkingError: String?
   /// Whether the one-time line saying a saved weight can be tapped to correct it is still owed to
   /// this lifter. Read once when the screen is made and held for its life, so the line that was
   /// just noted as seen stays up for the rest of this workout instead of vanishing the moment it
@@ -204,6 +212,10 @@ public struct LiveSessionScreen: View {
       },
       onDismissError: dismissError,
       onDismissRecords: { dismissedRecordsSetID = coordinator.lastRecordsSetID },
+      // The records are a formula's figure when one is an estimated max, so the notice opens the sets
+      // it was worked from. Offered only where the history can be read.
+      onExplainRecords: progression == nil ? nil : { showRecordWorking() },
+      recordsWorkingError: recordsWorkingError,
       showsCorrectionHint: correctionHintOwed,
       // Spent when it is drawn, not when it is dismissed, so a lifter who never taps "Got it" is
       // still told once and no more.
@@ -225,6 +237,8 @@ public struct LiveSessionScreen: View {
         presented = nil
       }
     }
+    // An old failure belongs to the notice it was shown under, not to the next set's.
+    .onChange(of: coordinator.lastRecordsSetID) { _, _ in recordsWorkingError = nil }
     // One presentation for every sheet this screen opens. The four of them sat side by side on this
     // view, each driven by its own flag; now which one is up is `presented`, so two can never be
     // requested at once and SwiftUI is never asked to choose between sibling modifiers.
@@ -234,6 +248,7 @@ public struct LiveSessionScreen: View {
       case .machine(let target): machineSheet(forExercise: target)
       case .history(let target): historySheet(forExercise: target)
       case .gym: gymSheet
+      case .working(let id): workingSheet(id)
       }
     }
   }
@@ -252,6 +267,7 @@ public struct LiveSessionScreen: View {
     clearError(from: .changeMachine)
     gymError = nil
     clearError(from: .setGym)
+    workingPresentation = nil
   }
 
   // MARK: - Sheets
@@ -372,6 +388,52 @@ public struct LiveSessionScreen: View {
         }
       }
       .hardsetSheet()
+    }
+  }
+
+  /// The working behind the records on the notice, as the one presentation `presented` asked for.
+  @ViewBuilder private func workingSheet(_ id: UUID) -> some View {
+    if let presentation = workingPresentation, presentation.id == id {
+      WorkedFromSheet(account: presentation.account)
+        .hardsetSheet()
+    }
+  }
+
+  /// Opens the working behind the records on the notice. The movement's history is read when it is
+  /// asked for, from the saved sets, and the account is built from the very records the notice
+  /// draws: what each beat, the formula behind an estimate, and every set left out. A failed read
+  /// says so under the control instead of opening nothing.
+  private func showRecordWorking() {
+    guard let progression, let key = coordinator.lastRecordsKey,
+      let name = coordinator.lastRecordsExerciseName
+    else { return }
+    recordsWorkingError = nil
+    let records = coordinator.lastRecords
+    let sessionID = coordinator.sessionID
+    let increment = coordinator.lastRecordsIncrementKg
+    let format = WorkedFromFormat(unit: unit)
+    Task {
+      do {
+        let history = try await progression.loadHistory(for: key.exerciseID)
+        guard
+          let account = RecordWorking.liveAccount(
+            records: records, exerciseName: name, sessionID: sessionID, key: key,
+            samples: history.samples, warmups: history.warmupSamples,
+            estimatesOneRepMax: history.estimatesOneRepMax,
+            assumesAddedLoad: history.assumesAddedLoad, incrementKg: increment,
+            label: history.label(for:), format: format)
+        else {
+          recordsWorkingError = "These records could not be worked out from the saved sets."
+          return
+        }
+        let presentation = WorkedFromPresentation(account)
+        workingPresentation = presentation
+        presented = .working(presentation.id)
+      } catch is CancellationError {
+        return
+      } catch {
+        recordsWorkingError = "Could not read this movement's history. Your logged sets are safe."
+      }
     }
   }
 

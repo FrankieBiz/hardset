@@ -51,6 +51,8 @@ public struct SessionView: View {
   private let onMoveExercise: ((UUID, Int) -> Void)?
   private let onDismissError: (() -> Void)?
   private let onDismissRecords: (() -> Void)?
+  private let onExplainRecords: (() -> Void)?
+  private let recordsWorkingError: String?
   private let showsCorrectionHint: Bool
   private let onCorrectionHintShown: (() -> Void)?
   private let onDismissCorrectionHint: (() -> Void)?
@@ -113,6 +115,10 @@ public struct SessionView: View {
   /// - Parameter restEndsSilently: No system alarm will mark the end of a rest, so the screen
   ///   does: a haptic and an announcement when the deadline, not the lifter, ends it.
   /// - Parameter records: Records from the set just logged, named after `recordsExerciseName`.
+  /// - Parameter onExplainRecords: Opens the working behind the records on the notice: what each beat,
+  ///   by how much, the formula behind an estimate and every set left out. With it the notice draws
+  ///   a "Worked from" control; without it, as in the tour's staged phone, it draws none.
+  /// - Parameter recordsWorkingError: Says why the working could not be opened, under that control.
   /// - Parameter lastRest: The rest the lifter last chose per movement, keyed by exercise-state id.
   /// - Parameter restExerciseID: The exercise-state id the running rest follows, so the rest bar can
   ///   offer the length of that movement's next rest.
@@ -171,6 +177,8 @@ public struct SessionView: View {
     onMoveExercise: ((UUID, Int) -> Void)? = nil,
     onDismissError: (() -> Void)? = nil,
     onDismissRecords: (() -> Void)? = nil,
+    onExplainRecords: (() -> Void)? = nil,
+    recordsWorkingError: String? = nil,
     showsCorrectionHint: Bool = false,
     onCorrectionHintShown: (() -> Void)? = nil,
     onDismissCorrectionHint: (() -> Void)? = nil,
@@ -212,6 +220,8 @@ public struct SessionView: View {
     self.onMoveExercise = onMoveExercise
     self.onDismissError = onDismissError
     self.onDismissRecords = onDismissRecords
+    self.onExplainRecords = onExplainRecords
+    self.recordsWorkingError = recordsWorkingError
     self.showsCorrectionHint = showsCorrectionHint
     self.onCorrectionHintShown = onCorrectionHintShown
     self.onDismissCorrectionHint = onDismissCorrectionHint
@@ -863,6 +873,21 @@ public struct SessionView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         // Deliberately not combined: the certainty badge inside is a button that opens the
         // methodology disclosure, and combining the row would make it unreachable by VoiceOver.
+      }
+      // An estimated max is a formula's figure, so the notice can say how it was made: the set, what
+      // it beat, the formula, and every set left out. A compact control, so it never outweighs the
+      // record it explains.
+      if let onExplainRecords {
+        WorkedFromButton("Worked from", style: .compact, action: onExplainRecords)
+          // Begins with the words the control shows, so a Voice Control user can say what they see.
+          .accessibilityLabel("Worked from, \(recordsTitle)")
+          .accessibilityHint("Shows the sets this record was worked from")
+        if let recordsWorkingError {
+          Text(recordsWorkingError)
+            .font(Tokens.Text.provenance)
+            .foregroundStyle(Tokens.Color.chalkDim)
+            .fixedSize(horizontal: false, vertical: true)
+        }
       }
     }
     .padding(Tokens.Spacing.regular)

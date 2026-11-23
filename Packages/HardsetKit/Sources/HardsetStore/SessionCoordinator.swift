@@ -51,6 +51,11 @@ public final class SessionCoordinator {
   /// them. Kept here, beside the records, because the screen cannot tell from a successful log
   /// whether a set was written or the row was already saved.
   public private(set) var lastRecordsExerciseName: String?
+  /// The series, a movement on a machine, the set that produced `lastRecords` was logged on, and the
+  /// load step the record detector was given for it. They let the notice open the working behind its
+  /// records from the saved history. Cleared with the records.
+  public private(set) var lastRecordsKey: ProgressionKey?
+  public private(set) var lastRecordsIncrementKg: Double?
   /// The saved sets across the workout.
   ///
   /// Stored, and updated only by the commands that save or delete sets, rather than derived from
@@ -487,6 +492,9 @@ public final class SessionCoordinator {
       lastRecords = saved.records
       lastRecordsSetID = saved.records.isEmpty ? nil : saved.setID
       lastRecordsExerciseName = saved.records.isEmpty ? nil : exercise.exerciseName
+      lastRecordsKey = saved.records.isEmpty
+        ? nil : ProgressionKey(exerciseID: exercise.exerciseID, machineID: exercise.machineID)
+      lastRecordsIncrementKg = saved.records.isEmpty ? nil : exercise.machineIncrementKg
 
       // Warm-ups do not start a rest timer: the user is still warming up. A working set starts the
       // rest the lifter last chose for this movement and, failing that, a fixed one when the caller
@@ -936,6 +944,8 @@ public final class SessionCoordinator {
     lastRecords = []
     lastRecordsSetID = nil
     lastRecordsExerciseName = nil
+    lastRecordsKey = nil
+    lastRecordsIncrementKg = nil
   }
 }
 

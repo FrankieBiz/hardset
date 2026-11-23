@@ -13,6 +13,37 @@ public struct ScorecardInput: Hashable, Sendable {
   public let recordKinds: Set<PersonalRecordKind>
   public let estimatesOneRepMax: Bool
   public let assumesAddedLoad: Bool
+  /// The sets of this movement that took no part in the comparison, counted so the account of a
+  /// gain can say what was left out. Not read by the scoring itself.
+  public let leftOut: LeftOut
+
+  /// What the comparison passed over for this movement. Each is a count of sets, or of sessions
+  /// where a whole session was passed over; none changes a figure.
+  public struct LeftOut: Hashable, Sendable {
+    /// This workout's warm-ups on the movement.
+    public let currentWarmups: Int
+    /// This workout's working sets on the movement on other equipment.
+    public let currentOtherEquipment: Int
+    /// The previous session's warm-ups on the movement.
+    public let previousWarmups: Int
+    /// The previous session's working sets on the movement on other equipment.
+    public let previousOtherEquipment: Int
+    /// Earlier sessions on this machine older than the previous one, and their working sets.
+    public let olderSessions: Int
+    public let olderSets: Int
+
+    public init(
+      currentWarmups: Int = 0, currentOtherEquipment: Int = 0, previousWarmups: Int = 0,
+      previousOtherEquipment: Int = 0, olderSessions: Int = 0, olderSets: Int = 0
+    ) {
+      self.currentWarmups = currentWarmups
+      self.currentOtherEquipment = currentOtherEquipment
+      self.previousWarmups = previousWarmups
+      self.previousOtherEquipment = previousOtherEquipment
+      self.olderSessions = olderSessions
+      self.olderSets = olderSets
+    }
+  }
 
   public init(
     key: ProgressionKey,
@@ -23,7 +54,8 @@ public struct ScorecardInput: Hashable, Sendable {
     setRecord: Bool = false,
     estimatesOneRepMax: Bool = true,
     assumesAddedLoad: Bool = false,
-    recordKinds: Set<PersonalRecordKind> = []
+    recordKinds: Set<PersonalRecordKind> = [],
+    leftOut: LeftOut = LeftOut()
   ) {
     self.key = key
     self.exerciseName = exerciseName
@@ -34,6 +66,7 @@ public struct ScorecardInput: Hashable, Sendable {
     self.recordKinds = recordKinds
     self.estimatesOneRepMax = estimatesOneRepMax
     self.assumesAddedLoad = assumesAddedLoad
+    self.leftOut = leftOut
   }
 }
 
@@ -93,10 +126,14 @@ public struct WorkoutScorecard: Hashable, Sendable {
     /// weaker of their certainties; a gain in the heaviest load is measured, and has none.
     public let certainty: Certainty?
     public let loadAssumption: String?
+    /// What the gain was computed from, so the account of it ("Worked from") runs the same sets
+    /// through the same functions. Nil for a gain built without one, such as a preview's, which
+    /// then has nothing to open.
+    public let basis: ScorecardInput?
 
     public init(
       key: ProgressionKey, exerciseName: String, fraction: Double, metric: TrendMetric,
-      certainty: Certainty? = nil, loadAssumption: String? = nil
+      certainty: Certainty? = nil, loadAssumption: String? = nil, basis: ScorecardInput? = nil
     ) {
       self.key = key
       self.exerciseName = exerciseName
@@ -104,6 +141,7 @@ public struct WorkoutScorecard: Hashable, Sendable {
       self.metric = metric
       self.certainty = certainty
       self.loadAssumption = loadAssumption
+      self.basis = basis
     }
   }
 
@@ -229,15 +267,14 @@ public struct WorkoutScorecard: Hashable, Sendable {
     return Gain(
       key: input.key, exerciseName: input.exerciseName, fraction: fraction, metric: metric,
       certainty: certainty,
-      loadAssumption: input.assumesAddedLoad ? ExerciseModality.unknownLoadAssumption : nil
+      loadAssumption: input.assumesAddedLoad ? ExerciseModality.unknownLoadAssumption : nil,
+      basis: input
     )
   }
 
   /// The best estimate among the sets, with its certainty: the figure and the trust in it come from
-  /// the same set.
-  private static func bestEstimate(_ sets: [PriorSetRecord]) -> Claim<Double>? {
-    StrengthMath.bestSupportedEstimate(sets.map {
-      StrengthMath.estimatedOneRepMax(weightKg: $0.weightKg, reps: $0.reps)
-    })
+  /// the same set. One definition, shared with the Progress trend.
+  static func bestEstimate(_ sets: [PriorSetRecord]) -> Claim<Double>? {
+    ProgressTrendAnalyzer.bestEstimateClaim(in: sets.map { (weightKg: $0.weightKg, reps: $0.reps) })
   }
 }

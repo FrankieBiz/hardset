@@ -85,47 +85,11 @@ public enum ProgressTrendAnalyzer {
     assumesAddedLoad: Bool = false
   ) -> MovementTrend? {
     let sessions = sessions(from: samples)
-    guard let latestSession = sessions.last else { return nil }
-
-    let metric: TrendMetric
-    if assumesAddedLoad {
-      metric = latestSession.samples.contains { $0.weightKg > 0 } ? .addedLoad : .repsAtTopLoad
-    } else if !estimatesOneRepMax {
-      metric = .repsAtTopLoad
-    } else if bestEstimate(in: latestSession.samples) != nil {
-      metric = .estimatedMax
-    } else {
-      metric = .heaviestLoad
-    }
-
-    let points: [(date: Date, value: Double, topLoad: Double, certainty: Certainty?)] = sessions.compactMap { session in
-      guard let value = value(of: metric, in: session.samples) else { return nil }
-      return (session.date, value, session.samples.map(\.weightKg).max() ?? 0,
-        metric == .estimatedMax ? bestEstimateClaim(in: session.samples)?.certainty : nil)
-    }
-    guard let latest = points.last else { return nil }
-
-    let change: Double?
-    let windowStart = latestSession.date.addingTimeInterval(-Double(comparisonBandDays.upperBound) * day)
-    let windowEnd = latestSession.date.addingTimeInterval(-Double(comparisonBandDays.lowerBound) * day)
-    let base = points
-      .filter { $0.date >= windowStart && $0.date <= windowEnd }
-      // Reps at the top load are only a fair comparison at the same top load: ten bodyweight
-      // pull-ups against five with 20 kg added is not an improvement of 100%, it is a different
-      // exercise's number. Other metrics are loads or estimates, which compare across sessions.
-      .filter {
-        metric != .repsAtTopLoad
-          || abs($0.topLoad - latest.topLoad) < PersonalRecordDetector.loadMatchingTolerance
-      }
-      .max {
-        if $0.value != $1.value { return $0.value < $1.value }
-        return ($0.certainty ?? .unevaluated) < ($1.certainty ?? .unevaluated)
-      }
-    if let base, base.value > 0 {
-      change = latest.value / base.value - 1
-    } else {
-      change = nil
-    }
+    guard let latestSession = sessions.last,
+      let comparison = comparison(
+        sessions: sessions, estimatesOneRepMax: estimatesOneRepMax, assumesAddedLoad: assumesAddedLoad)
+    else { return nil }
+    let metric = comparison.metric
 
     // Only the last `stallRun` sessions decide a stall, so only they are replayed through the
     // detector, each set against everything before it. Replaying the whole history made opening
@@ -145,15 +109,13 @@ public enum ProgressTrendAnalyzer {
     return MovementTrend(
       key: key,
       metric: metric,
-      sparkline: Array(points.suffix(12)).map(\.value),
-      sixWeekChange: change,
+      sparkline: Array(comparison.points.suffix(12)).map(\.value),
+      sixWeekChange: comparison.change,
       sessionCount: sessions.count,
       stalledSessions: stalled,
       latestDate: latestSession.date,
       firstDate: sessions.first?.date,
-      certainty: assumesAddedLoad ? .low : metric == .estimatedMax
-        ? Certainty.combine([latest.certainty, change == nil ? nil : base?.certainty].compactMap { $0 })
-        : nil,
+      certainty: comparison.certainty,
       loadAssumption: assumesAddedLoad ? ExerciseModality.unknownLoadAssumption : nil
     )
   }
@@ -296,15 +258,108 @@ public enum ProgressTrendAnalyzer {
       .map { $0 }
   }
 
+  // MARK: - The comparison a six-week change is read from
+
+  /// One session's value on a metric, a point on the line a change is read from.
+  struct ComparisonPoint: Hashable, Sendable {
+    let sessionID: SessionID
+    let date: Date
+    let value: Double
+    /// The session's heaviest load, which `repsAtTopLoad` is only comparable at.
+    let topLoad: Double
+    /// The estimate's own certainty, for the estimated-max metric only.
+    let certainty: Certainty?
+  }
+
+  /// What a six-week change is built from: the metric, each session's value on it, the latest session,
+  /// the sessions five to seven weeks before it, and the baseline chosen among them.
+  ///
+  /// `trend` and `ChangeWorking` both take it from here, so the figure on a Progress row and the
+  /// account that explains it are one calculation and cannot drift apart.
+  struct Comparison {
+    let metric: TrendMetric
+    /// Every session that has a value on `metric`, oldest first.
+    let points: [ComparisonPoint]
+    let latest: ComparisonPoint
+    /// The sessions inside the comparison band, before any same-load filter.
+    let inBand: [ComparisonPoint]
+    /// The sessions the baseline was chosen from.
+    let candidates: [ComparisonPoint]
+    let base: ComparisonPoint?
+    /// A fraction, so 0.08 means +8%. Nil when there is no baseline, or its value is not positive.
+    let change: Double?
+    /// How far to trust the change: the weaker of its two estimates, `.low` for an added load whose
+    /// body mass is unknown, and none for a measured metric.
+    let certainty: Certainty?
+  }
+
+  static func comparison(
+    sessions: [Session], estimatesOneRepMax: Bool, assumesAddedLoad: Bool
+  ) -> Comparison? {
+    guard let latestSession = sessions.last else { return nil }
+
+    let metric: TrendMetric
+    if assumesAddedLoad {
+      metric = latestSession.samples.contains { $0.weightKg > 0 } ? .addedLoad : .repsAtTopLoad
+    } else if !estimatesOneRepMax {
+      metric = .repsAtTopLoad
+    } else if bestEstimate(in: latestSession.samples) != nil {
+      metric = .estimatedMax
+    } else {
+      metric = .heaviestLoad
+    }
+
+    let points: [ComparisonPoint] = sessions.compactMap { session in
+      guard let value = value(of: metric, in: session.samples) else { return nil }
+      return ComparisonPoint(
+        sessionID: session.id, date: session.date, value: value,
+        topLoad: session.samples.map(\.weightKg).max() ?? 0,
+        certainty: metric == .estimatedMax ? bestEstimateClaim(in: session.samples)?.certainty : nil)
+    }
+    guard let latest = points.last else { return nil }
+
+    let windowStart = latestSession.date.addingTimeInterval(-Double(comparisonBandDays.upperBound) * day)
+    let windowEnd = latestSession.date.addingTimeInterval(-Double(comparisonBandDays.lowerBound) * day)
+    let inBand = points.filter { $0.date >= windowStart && $0.date <= windowEnd }
+    let candidates =
+      inBand
+      // Reps at the top load are only a fair comparison at the same top load: ten bodyweight
+      // pull-ups against five with 20 kg added is not an improvement of 100%, it is a different
+      // exercise's number. Other metrics are loads or estimates, which compare across sessions.
+      .filter {
+        metric != .repsAtTopLoad
+          || abs($0.topLoad - latest.topLoad) < PersonalRecordDetector.loadMatchingTolerance
+      }
+    let base = candidates.max {
+      if $0.value != $1.value { return $0.value < $1.value }
+      return ($0.certainty ?? .unevaluated) < ($1.certainty ?? .unevaluated)
+    }
+    let change: Double?
+    if let base, base.value > 0 {
+      change = latest.value / base.value - 1
+    } else {
+      change = nil
+    }
+
+    return Comparison(
+      metric: metric, points: points, latest: latest, inBand: inBand, candidates: candidates,
+      base: base, change: change,
+      certainty: assumesAddedLoad
+        ? .low
+        : metric == .estimatedMax
+          ? Certainty.combine([latest.certainty, change == nil ? nil : base?.certainty].compactMap { $0 })
+          : nil)
+  }
+
   // MARK: - Session reduction
 
-  private struct Session {
+  struct Session {
     let id: SessionID
     let date: Date
     let samples: [ProgressionSample]
   }
 
-  private static func sessions(from samples: [ProgressionSample]) -> [Session] {
+  static func sessions(from samples: [ProgressionSample]) -> [Session] {
     var grouped: [SessionID: [ProgressionSample]] = [:]
     for sample in samples {
       grouped[sample.sessionID, default: []].append(sample)
@@ -322,27 +377,45 @@ public enum ProgressTrendAnalyzer {
     }
   }
 
+  /// A set reduced to the two figures every metric reads, so the trend, which has samples, and the
+  /// scorecard, which has prior-set records, take one value through one function.
+  typealias SetFigures = (weightKg: Double, reps: Int)
+
+  private static func figures(_ samples: [ProgressionSample]) -> [SetFigures] {
+    samples.map { (weightKg: $0.weightKg, reps: $0.reps) }
+  }
+
   private static func bestEstimate(in samples: [ProgressionSample]) -> Double? {
     bestEstimateClaim(in: samples)?.value
   }
 
+  private static func bestEstimateClaim(in samples: [ProgressionSample]) -> Claim<Double>? {
+    bestEstimateClaim(in: figures(samples))
+  }
+
   /// The session's best estimate with its certainty, so the figure and the trust in it come from
   /// the same set.
-  private static func bestEstimateClaim(in samples: [ProgressionSample]) -> Claim<Double>? {
-    StrengthMath.bestSupportedEstimate(samples.map {
+  static func bestEstimateClaim(in sets: [SetFigures]) -> Claim<Double>? {
+    StrengthMath.bestSupportedEstimate(sets.map {
       StrengthMath.estimatedOneRepMax(weightKg: $0.weightKg, reps: $0.reps)
     })
   }
 
   private static func value(of metric: TrendMetric, in samples: [ProgressionSample]) -> Double? {
+    value(of: metric, in: figures(samples))
+  }
+
+  /// A session's value on a metric. The one definition: a Progress row, a scorecard's gain and the
+  /// accounts that explain them all read it here.
+  static func value(of metric: TrendMetric, in sets: [SetFigures]) -> Double? {
     switch metric {
     case .estimatedMax:
-      return bestEstimate(in: samples)
+      return bestEstimateClaim(in: sets)?.value
     case .heaviestLoad, .addedLoad:
-      return samples.map(\.weightKg).max()
+      return sets.map(\.weightKg).max()
     case .repsAtTopLoad:
-      guard let heaviest = samples.map(\.weightKg).max() else { return nil }
-      return samples
+      guard let heaviest = sets.map(\.weightKg).max() else { return nil }
+      return sets
         .filter { abs($0.weightKg - heaviest) < PersonalRecordDetector.loadMatchingTolerance }
         .map { Double($0.reps) }
         .max()

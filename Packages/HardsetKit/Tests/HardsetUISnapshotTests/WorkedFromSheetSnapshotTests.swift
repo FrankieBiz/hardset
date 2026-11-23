@@ -167,6 +167,96 @@
       return RecordWorking.receiptAccount(receipt: receipt, format: format)!
     }
 
+    /// A Progress row's six-week change: the latest session, the baseline five to seven weeks before
+    /// it, another session in the band that lost, a set too long to estimate, a warm-up, a set on other
+    /// equipment and sessions outside the band.
+    static func sixWeekAccount() -> WorkedFromAccount {
+      let exercise = ExerciseID()
+      let hammer = MachineID()
+      let cybex = MachineID()
+      let key = ProgressionKey(exerciseID: exercise, machineID: hammer)
+      let start = Date(timeIntervalSince1970: 1_700_000_000)
+      func set(
+        _ session: SessionID, _ kg: Double, _ reps: Int, day: Int, minute: Int = 0,
+        machine: MachineID? = nil
+      ) -> ProgressionSample {
+        // Unless it says otherwise, a set is on the machine the row is for.
+        ProgressionSample(
+          sessionID: session, machineID: machine ?? hammer, weightKg: kg, reps: reps,
+          completedAt: start.addingTimeInterval(Double(day) * 86_400 + Double(minute) * 60))
+      }
+      let baseline = SessionID()
+      let below = SessionID()
+      let recent = SessionID()
+      let latest = SessionID()
+      let working = ChangeWorking.sixWeek(
+        key: key,
+        samples: [
+          set(baseline, 100, 5, day: 0), set(baseline, 100, 8, day: 0, minute: 5),
+          set(baseline, 60, 15, day: 0, minute: 10), set(baseline, 90, 8, day: 0, minute: 15, machine: cybex),
+          set(below, 90, 8, day: 3), set(recent, 95, 8, day: 14), set(latest, 120, 5, day: 42),
+          set(latest, 120, 4, day: 42, minute: 5),
+        ],
+        warmups: [set(baseline, 40, 10, day: 0, minute: -5), set(latest, 60, 5, day: 42, minute: -5)],
+        estimatesOneRepMax: true, label: { $0.machineID == hammer ? "Hammer Strength" : "Cybex" })
+      return working!.account(format: format)
+    }
+
+    /// The scorecard's biggest gain: this workout against last time on the same machine, with
+    /// warm-ups, a set on other equipment and an older session left out.
+    static func gainAccount() -> WorkedFromAccount {
+      let start = Date(timeIntervalSince1970: 1_700_000_000)
+      func set(_ kg: Double, _ reps: Int, day: Int, minute: Int = 0) -> PriorSetRecord {
+        PriorSetRecord(
+          weightKg: kg, reps: reps,
+          completedAt: start.addingTimeInterval(Double(day) * 86_400 + Double(minute) * 60))
+      }
+      let input = ScorecardInput(
+        key: ProgressionKey(exerciseID: ExerciseID(), machineID: MachineID()), exerciseName: "Incline press",
+        currentSets: [set(80, 9, day: 7), set(80, 8, day: 7, minute: 5), set(60, 15, day: 7, minute: 10)],
+        previousSets: [set(80, 7, day: 0), set(80, 6, day: 0, minute: 5)],
+        leftOut: ScorecardInput.LeftOut(
+          currentWarmups: 2, currentOtherEquipment: 1, previousWarmups: 1, olderSessions: 4, olderSets: 14))
+      let gain = WorkoutScorecard.make([input]).biggestGain!
+      return ChangeWorking.lastTime(gain: gain)!.account(format: format)
+    }
+
+    /// The live record notice: two records on a set just logged, one an estimate, with the
+    /// estimate's formula and what the comparison was never made against.
+    static func liveRecordAccount() -> WorkedFromAccount {
+      let exercise = ExerciseID()
+      let hammer = MachineID()
+      let cybex = MachineID()
+      let key = ProgressionKey(exerciseID: exercise, machineID: hammer)
+      let start = Date(timeIntervalSince1970: 1_700_000_000)
+      func set(
+        _ session: SessionID, _ kg: Double, _ reps: Int, day: Int, minute: Int = 0,
+        machine: MachineID? = nil, imported: Bool = false
+      ) -> ProgressionSample {
+        // Unless it says otherwise, a set is on the machine the record was set on; an imported set
+        // records no machine.
+        ProgressionSample(
+          sessionID: session, machineID: imported ? nil : (machine ?? hammer), weightKg: kg, reps: reps,
+          completedAt: start.addingTimeInterval(Double(day) * 86_400 + Double(minute) * 60),
+          isImported: imported)
+      }
+      let earlier = SessionID()
+      let today = SessionID()
+      let records = PersonalRecordDetector.records(
+        for: .init(weightKg: 100, reps: 8),
+        history: [PriorSetRecord(weightKg: 100, reps: 5, completedAt: start)], increment: nil,
+        estimatesOneRepMax: true)
+      return RecordWorking.liveAccount(
+        records: records, exerciseName: "Chest press", sessionID: today, key: key,
+        samples: [
+          set(earlier, 100, 5, day: 0), set(earlier, 90, 8, day: 0, minute: 5, machine: cybex),
+          set(SessionID(), 80, 10, day: -30, imported: true), set(today, 100, 8, day: 14),
+        ],
+        warmups: [set(earlier, 40, 10, day: 0, minute: -5), set(today, 50, 5, day: 14, minute: -5)],
+        estimatesOneRepMax: true, incrementKg: nil,
+        label: { $0.machineID == hammer ? "Hammer Strength" : "Cybex" }, format: format)!
+    }
+
     private static func sheet(_ account: WorkedFromAccount) -> some View {
       WorkedFromSheet(account: account)
         .tint(Tokens.Color.plateBlue)
@@ -212,6 +302,27 @@
         "kit-worked-from-volume-dark-ax3", size: Self.accessibility, typeSize: .accessibility3
       ) {
         Self.sheet(Self.sessionVolumeAccount())
+      }
+    }
+
+    @Test func cappedEstimates() async throws {
+      try await Snapshot.capture("kit-worked-from-six-week-dark", size: Self.accessibility) {
+        Self.sheet(Self.sixWeekAccount())
+      }
+      try await Snapshot.capture("kit-worked-from-six-week-light", size: Self.accessibility, style: .light) {
+        Self.sheet(Self.sixWeekAccount())
+      }
+      try await Snapshot.capture("kit-worked-from-gain-dark", size: Self.accessibility) {
+        Self.sheet(Self.gainAccount())
+      }
+      try await Snapshot.capture("kit-worked-from-record-notice-dark", size: Self.accessibility) {
+        Self.sheet(Self.liveRecordAccount())
+      }
+      try await Snapshot.capture(
+        "kit-worked-from-record-notice-dark-ax3", size: CGSize(width: 402, height: 9000),
+        typeSize: .accessibility3
+      ) {
+        Self.sheet(Self.liveRecordAccount())
       }
     }
 
