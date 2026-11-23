@@ -82,12 +82,12 @@ on main in run 45075709250, `accessibility-audit-onboarding.txt` and
 `accessibility-audit-onboarding-ax.txt`).
 
 **What it is.** A gauge, not a control: nothing happens when a segment is touched, and the page turns
-only through Next and Skip, so there is no target to enlarge. On main it was exposed as a bare labelled
+through Next, Skip or a swipe of the pager, so there is no target to enlarge. On main it was exposed as a bare labelled
 node, element type `other` (type 1 in the report) with no trait. It is now a progress indicator through
 `accessibilityRepresentation`: label "Introduction", value "Page N of 3", no action and no adjustable
 trait, with the drawing unchanged. `PitchProgressAccessibilityTests` pins the label and the value, and
 `testOnboardingJourneyDark` (`assertPitchProgress`) asserts on each pitch page that the element is a
-progress indicator carrying them; that journey passed in CI run 45098584272.
+progress indicator carrying them; that journey passed in CI runs 45098584272 and 45107677213.
 
 **What the audit did with the gauge.** It still reports the hit area, now on the progress indicator
 (type 35, id `pitch-progress`, label "Introduction", the same frames), on all three pitch pages at
@@ -97,13 +97,25 @@ could classify as non-interactive was wrong. For a gauge the reading is a false 
 nothing to hit. The audit is not told to ignore it, so the report keeps showing it.
 
 **New in the same run: "Contrast failed" on the same node.** As an `other` node the row was never
-contrast-checked; as a progress indicator it is. The active segment is `plateBlue` on `canvas` (9.55:1
-dark, 7.76:1 light), but the two inactive segments are `hairline` on `canvas`, 1.54:1 dark and 1.20:1
-light, under the 3:1 that WCAG 1.4.11 asks of a graphic needed to read the content. Whether "of 3" is
-needed to read the gauge, when VoiceOver gets it as the value and the active segment carries the
-position, is a design question. Raising the inactive segments to a 3:1 colour would change the
-drawing that `DESIGN.md` specifies ("three short `hairline` segments"), so it was not done here. This is
-recorded as a probable real finding, not dismissed.
+contrast-checked; as a progress indicator it is. The audit names the node but reports no ratio. The
+ratios below are calculated from the tokens in `DesignTokens.swift` (`canvas`, `hairline`, `plateBlue`),
+not taken from the audit:
+
+- Position, the active segment: `plateBlue` on `canvas` is 9.55:1 dark and 7.76:1 light. Against an
+  inactive segment it is 6.19:1 dark and 6.47:1 light.
+- Total page count, the inactive segments: `hairline` on `canvas` is 1.54:1 dark and 1.20:1 light.
+  WCAG 1.4.11 asks 3:1 of a graphic needed to identify the state.
+- Increase Contrast already lifts the hairline to 7.63:1 dark (`#9B9BA5` on black) and 6.91:1 light
+  (`#595964` on white). WCAG does not credit a setting, so this is context and not a defence. It does
+  decide the shape of any fix: if the default is judged too low, the remedy is to raise the inactive
+  segments' colour, not to redesign the gauge.
+
+**The 1.4.11 question, in one sentence, for the owner.** Is the total page count visual information
+required to identify the gauge's state, or is the position the state and the count decorative, since
+"Page N of 3" carries it for VoiceOver? If the count is required, the default appearance fails 1.4.11.
+If it is decorative, the gauge passes, and this entry should say so with that reason. Raising the
+inactive segments would change the drawing that `DESIGN.md` specifies ("three short `hairline`
+segments"), so nothing was changed here.
 
 **Tried, and why each failed.**
 
@@ -113,8 +125,8 @@ recorded as a probable real finding, not dismissed.
 2. Gauge semantics (this entry's "What it is"). Right for assistive technology, and held by tests, but
    the audit's report did not change.
 
-**Open question.** Keep the gauge and accept the hit-area line as a documented false positive, or take
-the row out of the accessibility tree (decorative) and carry "Page N of 3" on an element that is already
-a reasonable size, such as the page's heading. The second route would also end the audit's contrast
-line, because a hidden decoration is not checked, but not the question of whether sighted lifters can
-see the inactive segments. That is a design decision either way.
+**Open question.** Keep the gauge and accept the hit-area line as a documented false positive: the row is
+not interactive, so a target size does not apply. The alternative is to make the row decorative, hidden
+from the accessibility tree, and carry "Page N of 3" on an element that is already a reasonable size, such
+as the page's heading. That would also end the audit's contrast line, because the audit does not check a
+hidden decoration. It would not answer the 1.4.11 question above, which is about what sighted lifters see.

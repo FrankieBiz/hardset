@@ -182,8 +182,8 @@ private struct WelcomePage: View {
 /// the next on `Motion.state`; a `matchedGeometryEffect` moves one shape between segments inside
 /// this row and never changes its layout.
 ///
-/// It is a gauge, not a control: nothing happens when a segment is touched, and the page turns only
-/// through Next and Skip. So assistive technology is offered a progress indicator with a label and
+/// It is a gauge, not a control: nothing happens when a segment is touched, and the page turns
+/// through Next, Skip or a swipe of the pager. So assistive technology is offered a progress indicator with a label and
 /// a value, "Introduction", "Page 1 of 3", and no action and no adjustable trait. Exposed as a bare
 /// labelled node it had no role at all, and the accessibility audit read that 4 pt node as a target
 /// too small to hit (`docs/KNOWN-ISSUES.md` #3).
