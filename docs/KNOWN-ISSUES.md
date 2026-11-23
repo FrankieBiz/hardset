@@ -75,13 +75,27 @@ change was made to the screen or to the palette, because nothing was found to fi
 
 **Where.** The three-segment progress above the Next button on the pitch pages (`PitchProgress`).
 
-**What is open.** The audit reports "Page N of 3" at `(151, 744, 100, 4)`, at an ordinary text size
-and at accessibility size XL (`(151, 736, 100, 4)`), as a hit area that is too small. The element is a
-non-interactive node of type "other", so the report may be a false positive for a gauge; that has
-not been shown.
+**What was reported.** The audit reports "Page N of 3" at `(151, 744, 100, 4)`, at an ordinary text size
+and at accessibility size XL (`(151, 736, 100, 4)`), as a hit area that is too small, with the detail
+"The size of this SwiftUI.AccessibilityNode is too small for user to interact" (CI run 45075709250 on
+main, `accessibility-audit-onboarding.txt` and `accessibility-audit-onboarding-ax.txt`; first seen in
+run 44755327282).
 
-**Tried.** Raising the row's frame to 44 pt above the segments and taking the height back from the
-layout (`45afb77`). The audit's frame did not change, and the change was reverted in `fb3caf7`.
+**Why it was a false positive, and what was wrong instead.** The row is not a control: nothing happens
+when a segment is touched, and the page turns only through Next and Skip, so there is no target to
+enlarge. What was wrong was its role. It was exposed as a bare labelled node, element type `other`
+(type 1 in the report) with no trait, and the audit treats an `other` node it cannot classify as
+something a user might interact with and measures its frame. A gauge should say it is one.
+`PitchProgress` now offers a progress indicator through `accessibilityRepresentation`: label
+"Introduction", value "Page N of 3", no action and no adjustable trait. The drawing is unchanged.
 
-**Evidence.** CI run 44755327282, `accessibility-audit-onboarding.txt` and
-`accessibility-audit-onboarding-ax.txt`.
+**Tried before.** Raising the row's frame to 44 pt above the segments and taking the height back from the
+layout (`45afb77`). The audit's frame did not change, and the change was reverted in `fb3caf7`. That was
+the wrong fix in any case: it would have made a gauge look like a target.
+
+**How it is held.** `PitchProgressAccessibilityTests` pins the label and the value, and
+`testOnboardingJourneyDark` (`assertPitchProgress`) asserts on each pitch page that the element is a
+progress indicator carrying them.
+
+**Still open.** Whether the audit stops reporting the row is shown only by the next CI audit of the
+onboarding journey. This entry is removed when that audit has no "Page N of 3" line.

@@ -439,6 +439,7 @@ final class AppScreensUITests: XCTestCase {
     XCTAssertTrue(app.staticTexts["One tap per set."].waitForExistence(timeout: 5))
     XCTAssertTrue(app.buttons["Skip"].exists, "skip is offered from the second page on")
     capture(app, "42-onboarding-pitch-1")
+    assertPitchProgress(app, page: 1)
     audit(app, screen: "onboarding pitch 1")
     app.buttons["Log set"].firstMatch.tap()
     XCTAssertTrue(app.buttons["Logged"].waitForExistence(timeout: 5), "the pitch row logs")
@@ -448,6 +449,7 @@ final class AppScreensUITests: XCTestCase {
     // Pitch 2: honest numbers.
     XCTAssertTrue(app.staticTexts["Honest numbers."].waitForExistence(timeout: 5))
     capture(app, "44-onboarding-pitch-2")
+    assertPitchProgress(app, page: 2)
     let fifteen = app.buttons["15 reps"].firstMatch
     XCTAssertTrue(fifteen.waitForExistence(timeout: 5))
     fifteen.tap()
@@ -457,6 +459,7 @@ final class AppScreensUITests: XCTestCase {
     // Pitch 3: rest that keeps time.
     XCTAssertTrue(app.staticTexts["Rest that keeps time."].waitForExistence(timeout: 5))
     capture(app, "46-onboarding-pitch-3")
+    assertPitchProgress(app, page: 3)
     app.buttons["Next"].tap()
     // What is on screen two seconds after the tap, kept in the log so a page that lands somewhere
     // else is visible in the run rather than inferred.
@@ -783,6 +786,20 @@ final class AppScreensUITests: XCTestCase {
     } catch {
       auditReport.append("[\(screen)] audit could not run: \(error)")
     }
+  }
+
+  /// The pitch pages' progress row is a gauge: a progress indicator named "Introduction" whose
+  /// value is the page. Fails if it goes back to a bare labelled node, which the audit read as a
+  /// 4 pt target (`docs/KNOWN-ISSUES.md`), or if its label or value drifts.
+  @MainActor
+  private func assertPitchProgress(
+    _ app: XCUIApplication, page: Int, file: StaticString = #filePath, line: UInt = #line
+  ) {
+    let gauge = app.descendants(matching: .any)["pitch-progress"]
+    XCTAssertTrue(gauge.waitForExistence(timeout: 5), "the pitch progress is offered", file: file, line: line)
+    XCTAssertEqual(gauge.elementType, .progressIndicator, "the pitch progress is a gauge", file: file, line: line)
+    XCTAssertEqual(gauge.label, "Introduction", file: file, line: line)
+    XCTAssertEqual(gauge.value as? String, "Page \(page) of 3", file: file, line: line)
   }
 
   @MainActor
