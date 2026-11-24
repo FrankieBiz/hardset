@@ -31,11 +31,15 @@ documentation PR.
 | In-App Purchase product ID | `LifetimeAccess.productID` | `com.hardset.app.lifetime` |
 | Launch price | decision D17 | **$19.99** |
 | Standing price after launch | decision D17 | **$29.99** |
-| Marketing URL | published site root | **PLACEHOLDER** |
-| Support URL | published `support.html` | **PLACEHOLDER** |
-| Privacy Policy URL | published `privacy.html` | **PLACEHOLDER** |
+| Marketing URL | GitHub Pages workflow | `https://frankiebiz.github.io/hardset/` |
+| Support URL | GitHub Pages workflow | `https://frankiebiz.github.io/hardset/support.html` |
+| Privacy Policy URL | GitHub Pages workflow | `https://frankiebiz.github.io/hardset/privacy.html` |
 | Review contact phone | owner | **PLACEHOLDER** |
 | EU trader status | owner/legal decision | **PLACEHOLDER** |
+
+The site is published by `.github/workflows/pages.yml`: set the Pages source to **GitHub
+Actions** once, then every push to `main` deploys the `site/` folder. Pages does not accept
+`/site` as a branch/folder source; do not configure one.
 
 Exact code locations, so nobody greps twice:
 

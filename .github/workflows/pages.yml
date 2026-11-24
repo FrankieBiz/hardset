@@ -1,0 +1,55 @@
+# Publishes the static site in `site/` to GitHub Pages.
+#
+# Pages' branch source only accepts `/` or `/docs`, so the site cannot be selected as a
+# branch folder while it stays in `site/`. This workflow is the supported way to publish a
+# subdirectory: it uploads `site/` as the Pages artifact and deploys it. Set the Pages
+# source to **GitHub Actions** once; after that every push to `main` deploys.
+#
+# The site is plain HTML/CSS with no build step, so the build job only checks out the
+# repository, configures Pages, and uploads the folder.
+
+name: Deploy site to GitHub Pages
+
+on:
+  push:
+    branches: ["main"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# One deployment at a time. Do not cancel a deployment that is already publishing; the
+# next push waits and then deploys the newer commit.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Build Pages artifact
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Configure Pages
+        uses: actions/configure-pages@983d7736d9b0ae728b81ab479565c72886d7745b # v5
+
+      - name: Upload the site
+        uses: actions/upload-pages-artifact@56afc609e74202658d3ffba0e8f6dda462b719fa # v3
+        with:
+          path: site
+
+  deploy:
+    name: Deploy Pages artifact
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@d6db90164ac5ed86f2b6aed7e0febac5b3c0c03e # v4

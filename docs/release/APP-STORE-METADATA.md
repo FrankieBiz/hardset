@@ -1,9 +1,9 @@
 # Hardset — App Store Connect metadata
 
-Everything App Store Connect asks for, written as text the owner can paste. Values that
-depend on the developer account are marked **PLACEHOLDER** in a way that cannot be
-mistaken for final. Character limits were counted with `python3 len()` on the exact
-strings below.
+Everything App Store Connect asks for, written as text the owner can paste. The values
+below are final for this kit; owner-only values that cannot be known from the repository
+live in `RELEASE-RUNBOOK.md`. Character limits were counted with `python3 len()` on the
+exact strings below.
 
 Verified against `origin/main` at `31f7c45` unless a line says otherwise. The code
 verification notes in §9 are part of this document: the privacy answer that Apple reads
@@ -225,10 +225,9 @@ comments in this kit; correct them when the Health decision in §9.1 is executed
 
 ## 7. App Review information
 
-**Contact:** Frankie Bisignano · `frankabisignano@gmail.com` · **PLACEHOLDER — phone
-number** (App Store Connect requires one; use a number the owner will answer). **Demo
-account: not required; there is no account or login.** **Privacy Choices URL: not
-applicable** (no tracking, no data sale, no account).
+**Contact:** Frankie Bisignano · `frankabisignano@gmail.com`. **Demo account: not
+required; there is no account or login.** **Privacy Choices URL: not applicable** (no
+tracking, no data sale, no account).
 
 **Review notes (paste):**
 
@@ -281,8 +280,9 @@ research citations are bibliographic facts, not reproduced text.
 
 ## 8. URLs and hosting
 
-Hosting is decided: **GitHub Pages**, free, serving the `/site` folder from `main` in
-`FrankieBiz/hardset`. These are the final URLs; no further hosting decision is open.
+Hosting is **GitHub Pages**, free, published by `.github/workflows/pages.yml` from the
+`site/` folder in `FrankieBiz/hardset`. These are the final URLs; no further hosting
+decision is open.
 
 | App Store Connect field | Value |
 | --- | --- |
@@ -290,11 +290,11 @@ Hosting is decided: **GitHub Pages**, free, serving the `/site` folder from `mai
 | Support URL | `https://frankiebiz.github.io/hardset/support.html` |
 | Privacy Policy URL | `https://frankiebiz.github.io/hardset/privacy.html` |
 
-The only remaining hosting action is the owner pressing Publish: enable Pages for this
-repository with **Settings → Pages → Deploy from a branch → `main` → `/site`**. The exact
-steps are in `site/README.md`. Until that is done the URLs return 404; the files and links
-need no change. A custom domain can be added later without changing any page, and would
-only require updating the three values above and in App Store Connect.
+The workflow is the only publisher. Set the Pages source to **GitHub Actions** once (not a
+branch/folder source; Pages accepts only `/` or `/docs` for a branch source and rejects
+`/site`), then every push to `main` deploys the current `site/` folder. The exact steps are
+in `site/README.md`. A custom domain can be added later without changing any page, and
+would only require updating the three values above and in App Store Connect.
 
 The site's copy is final for the 1.0 decision, subject to the Apple Health verification
 in §9.1: local-only, no account, no server, CSV/JSON/SQLite exports with JSON/CSV restore,
@@ -422,8 +422,8 @@ is expected, because it is a brand asset rather than a screen.
 - [ ] Primary and secondary category set.
 - [ ] Age rating questionnaire answered; 4+ expected.
 - [ ] App Privacy "Data Not Collected" selected; §9.3 is ruled (Purchases: Not collected).
-- [ ] GitHub Pages published; the three URL fields are already set to the live GitHub Pages URLs.
-- [ ] Review notes pasted; contact phone filled.
+- [ ] Pages source set to GitHub Actions; the workflow has deployed and the three URLs resolve.
+- [ ] Review notes pasted; review contact email confirmed.
 - [ ] Export compliance answered.
 - [ ] Content rights answered.
 - [ ] Icon: the interim asset is the deliberate 1.0 choice; no replacement in this kit.
