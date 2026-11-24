@@ -818,6 +818,19 @@ public struct SessionView: View {
       // No extra room under the last control at accessibility sizes: the reach check caps what
       // this stack covers, and the button already sits above the tab bar.
       .padding(.bottom, dynamicTypeSize.isAccessibilitySize ? 0 : Tokens.Spacing.snug)
+      // Opaque, with the same hairline the other pinned bar draws, so nothing behind it can show
+      // through. The inset is inserted when a hint, a record or a finish question arrives, and
+      // inserting a safe-area inset does not move the scroll's offset: without a fill the new line
+      // was drawn over the ledger figures behind it, and at accessibility sizes a bare "Finish"
+      // sat on the row text. The inset still reserves exactly its own height for the scroll, so
+      // the last row can be scrolled clear of the surface rather than under it.
+      .background(Tokens.Color.canvas)
+      .overlay(alignment: .top) {
+        Rectangle()
+          .fill(Tokens.Color.hairline)
+          .frame(height: Tokens.Stroke.hairline)
+          .accessibilityHidden(true)
+      }
     }
   }
 
