@@ -45,9 +45,13 @@ struct ScorecardCopyTests {
   func entryMarks() {
     let beat = WorkoutScorecard.Outcome.beat(.beat(addedKg: 0, addedReps: 1))
     let load = WorkoutScorecard.Outcome.beat(.beat(addedKg: 2.5, addedReps: 1))
-    func mark(_ outcome: WorkoutScorecard.Outcome) -> String? {
+    func mark(
+      _ outcome: WorkoutScorecard.Outcome, equipment: WorkoutReceipt.Equipment? = nil
+    ) -> String? {
       ScorecardCopy.markText(
-        WorkoutScorecard.Entry(key: ProgressionKey(exerciseID: ExerciseID()), exerciseName: "Lift", outcome: outcome),
+        WorkoutScorecard.Entry(
+          key: ProgressionKey(exerciseID: ExerciseID()), exerciseName: "Lift", outcome: outcome,
+          equipment: equipment),
         unit: .kilograms)
     }
 
@@ -55,7 +59,14 @@ struct ScorecardCopyTests {
     #expect(mark(load) == "+2.5 kg · +1 rep")
     #expect(mark(.beat(nil)) == "Record")
     #expect(mark(.matched) == "Matched")
-    #expect(mark(.firstTime) == "First time on this machine")
+    // A first time names what it is a first time on. Only a recorded machine earns "on this
+    // machine"; a barbell has none, so claiming one was the bug.
+    #expect(mark(.firstTime, equipment: .machine("Hammer Strength Chest Press"))
+      == "First time on this machine")
+    #expect(mark(.firstTime, equipment: .freeWeight) == "First time")
+    #expect(mark(.firstTime, equipment: .bodyweight) == "First time")
+    #expect(mark(.firstTime, equipment: .unrecorded) == "First time")
+    #expect(mark(.firstTime) == "First time")
     // Falling short is carried by the headline's count, not drawn as a mark on the movement.
     #expect(mark(.notBeaten) == nil)
   }

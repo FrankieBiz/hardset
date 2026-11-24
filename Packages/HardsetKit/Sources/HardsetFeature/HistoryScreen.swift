@@ -340,7 +340,8 @@ public struct HistoryScreen: View {
         duration: summary.timeline.duration,
         exerciseNames: summary.exerciseNames,
         volume: summary.volume,
-        hasImplausibleDuration: summary.hasImplausibleDuration
+        hasImplausibleDuration: summary.hasImplausibleDuration,
+        isImported: summary.isImported
       )
     }
   }

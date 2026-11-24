@@ -54,6 +54,8 @@ public struct WeeklyVolumeScreen: View {
   /// on screen is read again while its current figures stay visible.
   private let dataRevision: Int
   private let onShowSettings: (() -> Void)?
+  /// Opens the Library, where a movement with no body part gets one.
+  private let onShowLibrary: (() -> Void)?
 
   /// One entitlement app-wide, shared with Settings.
   private let lifetime = LifetimeAccess.shared
@@ -64,12 +66,13 @@ public struct WeeklyVolumeScreen: View {
 
   public init(
     store: VolumeStore, now: @escaping () -> Date = { Date() }, dataRevision: Int = 0,
-    onShowSettings: (() -> Void)? = nil
+    onShowSettings: (() -> Void)? = nil, onShowLibrary: (() -> Void)? = nil
   ) {
     self.store = store
     self.now = now
     self.dataRevision = dataRevision
     self.onShowSettings = onShowSettings
+    self.onShowLibrary = onShowLibrary
   }
 
   public var body: some View {
@@ -86,6 +89,8 @@ public struct WeeklyVolumeScreen: View {
           onShowSettings: onShowSettings,
           onEarlier: weeksBack < Self.maximumWeeksBack ? { weeksBack += 1 } : nil,
           onLater: weeksBack > 0 ? { weeksBack -= 1 } : nil,
+          onShowLibrary: onShowLibrary,
+          earlierLimitNote: "Volume keeps the last \(Self.maximumWeeksBack) weeks. Earlier weeks are not shown.",
           onShowWorking: { presented = .working(workingPresentation(for: $0, in: window)) },
           onShowTotalWorking: { presented = .working(totalWorkingPresentation(in: window)) }
         )

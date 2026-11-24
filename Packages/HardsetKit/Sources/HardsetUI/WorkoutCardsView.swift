@@ -20,17 +20,27 @@ public struct WorkoutCardsView: View {
   private let cards: [WorkoutCard]
   private let onStart: (TemplateID) -> Void
   private let onEdit: (TemplateID) -> Void
+  /// A start that failed, and the card whose Start it was, so the failure is drawn under that
+  /// card's own button rather than somewhere off screen.
+  private let failedStartTemplate: TemplateID?
+  private let failedStartMessage: String?
 
   @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
   /// - Parameters:
   ///   - cards: `WorkoutCard.cards`, up next first.
+  ///   - failedStartTemplate: The card whose Start failed, if any.
+  ///   - failedStartMessage: Why it failed, in the lifter's words, naming the workout.
   public init(
     cards: [WorkoutCard],
+    failedStartTemplate: TemplateID? = nil,
+    failedStartMessage: String? = nil,
     onStart: @escaping (TemplateID) -> Void,
     onEdit: @escaping (TemplateID) -> Void
   ) {
     self.cards = cards
+    self.failedStartTemplate = failedStartTemplate
+    self.failedStartMessage = failedStartMessage
     self.onStart = onStart
     self.onEdit = onEdit
   }
@@ -79,6 +89,10 @@ public struct WorkoutCardsView: View {
       }
       .buttonStyle(HardsetButtonStyle(.primary, size: .logger))
 
+      if let failedStartMessage, failedStartTemplate == card.id {
+        HardsetBanner(.error, message: failedStartMessage)
+      }
+
       editButton(card)
     }
     .frame(maxWidth: .infinity, alignment: .leading)
@@ -124,6 +138,11 @@ public struct WorkoutCardsView: View {
         }
       }
       .padding(.vertical, Tokens.Spacing.snug)
+
+      if let failedStartMessage, failedStartTemplate == card.id {
+        HardsetBanner(.error, message: failedStartMessage)
+          .padding(.bottom, Tokens.Spacing.snug)
+      }
     }
   }
 
@@ -161,18 +180,22 @@ public struct WorkoutCardsView: View {
 /// are.
 public struct WorkoutCardActions: View {
   private let canRepeatLast: Bool
+  private let repeatFailure: String?
   private let onRepeatLast: () -> Void
   private let onNew: () -> Void
 
   /// - Parameters:
   ///   - canRepeatLast: Whether a finished workout exists to repeat. "Repeat last workout" is only
   ///     offered when it does, so it is never a control that has nothing to do.
+  ///   - repeatFailure: Why the last "Repeat last workout" failed, drawn under that control.
   public init(
     canRepeatLast: Bool,
+    repeatFailure: String? = nil,
     onRepeatLast: @escaping () -> Void,
     onNew: @escaping () -> Void
   ) {
     self.canRepeatLast = canRepeatLast
+    self.repeatFailure = repeatFailure
     self.onRepeatLast = onRepeatLast
     self.onNew = onNew
   }
@@ -192,6 +215,10 @@ public struct WorkoutCardActions: View {
         .buttonStyle(
           InlineControlStyle(minHeight: Tokens.loggerTapTarget, alignment: .leading, fullWidth: true)
         )
+        if let repeatFailure {
+          HardsetBanner(.error, message: repeatFailure)
+            .padding(.top, Tokens.Spacing.snug)
+        }
       }
 
       Button(action: onNew) {

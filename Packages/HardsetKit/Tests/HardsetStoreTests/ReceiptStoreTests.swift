@@ -494,6 +494,24 @@ struct ReceiptStoreTests {
     #expect(scorecard.headline == "First time on every movement")
   }
 
+  /// A8: a barbell movement has no machine, so its first time must not claim one. The receipt's
+  /// entry carries the equipment its lines recorded, and the mark reads "First time".
+  @Test("A barbell first time reads 'First time', not 'First time on this machine'")
+  func receiptScorecardFirstTimeOnAFreeWeight() async throws {
+    let (db, exercise, _) = try await scorecardFixture(modality: "barbell")
+    let current = try await seedFinished(
+      db, exercise: exercise, machine: nil, sets: [(60, 8)],
+      at: Date(timeIntervalSince1970: 1_000_000))
+
+    let receipt = try await ReceiptStore(database: db).load(current)
+    let scorecard = try #require(receipt.scorecard)
+    let entry = try #require(scorecard.entries.first)
+
+    #expect(entry.outcome == .firstTime)
+    #expect(entry.equipment == .freeWeight)
+    #expect(ScorecardCopy.markText(entry, unit: .kilograms) == "First time")
+  }
+
   @Test("A record counts as a win for the movement even when no set beat its partner")
   func scorecardCountsARecordAsBeating() async throws {
     let (db, exercise, machine) = try await scorecardFixture()

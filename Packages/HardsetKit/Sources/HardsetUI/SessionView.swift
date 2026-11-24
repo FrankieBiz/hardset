@@ -63,9 +63,6 @@ public struct SessionView: View {
   /// Finishing closes the session for good, so it takes a second, deliberate tap. The first tap
   /// only asks; a lifter brushing the button with a chalky thumb loses nothing.
   @State private var isConfirmingFinish = false
-  /// Set by a request to finish, and consumed once the expanded confirmation has been laid out,
-  /// so it is scrolled into view with its real height rather than the collapsed one.
-  @State private var revealsFinish = false
   @State private var isConfirmingDiscard = false
   @State private var removal: RemovalRequest?
   /// "Continue workout" on the stale notice: the lifter has read it and kept the workout open.
@@ -305,7 +302,6 @@ public struct SessionView: View {
       summary
         .padding(.horizontal, Tokens.Spacing.loose)
         .padding(.top, Tokens.Spacing.block)
-        .id(Self.finishAnchor)
     }
   }
 
@@ -331,9 +327,8 @@ public struct SessionView: View {
       .onChange(of: scrollRequest) { _, request in
         guard let request else { return }
         withAnimation(Tokens.Motion.adaptive(Tokens.Motion.state, reduceMotion: reduceMotion)) {
-          switch request.target {
-          case .view(let id): proxy.scrollTo(id, anchor: request.anchor)
-          case .finish: proxy.scrollTo(Self.finishAnchor, anchor: .bottom)
+          if case .view(let id) = request.target {
+            proxy.scrollTo(id, anchor: request.anchor)
           }
         }
       }
@@ -506,10 +501,13 @@ public struct SessionView: View {
           Label(gymName == nil ? "Set gym" : "Change gym", systemImage: "mappin.and.ellipse")
         }
       }
-      Button {
-        requestFinish()
-      } label: {
-        Label("Finish workout", systemImage: "flag.checkered")
+      // With no sets there is nothing to finish, and the empty workout's way out is Discard.
+      if loggedSetCount > 0 {
+        Button {
+          requestFinish()
+        } label: {
+          Label("Finish workout", systemImage: "flag.checkered")
+        }
       }
       if onDiscard != nil {
         Divider()
@@ -629,9 +627,14 @@ public struct SessionView: View {
 
   /// What a card's machine chip does: open the machine picker, or with no gym, the choice of one.
   /// `nil` when neither is possible, which hides the chip.
-  private func machineChipAction(for id: UUID) -> (() -> Void)? {
+  ///
+  /// A barbell, dumbbell or bodyweight movement has no machine to choose, so its card offers no
+  /// chip at all. Offering "Choose machine" on a barbell said the app did not know what the
+  /// movement was, and a machine recorded against a barbell would split its history on nothing.
+  private func machineChipAction(for exercise: ExerciseLogState) -> (() -> Void)? {
+    guard exercise.canChooseMachine else { return nil }
     if let select = onSelectMachine {
-      return { closeKeypad { select(id) } }
+      return { closeKeypad { select(exercise.id) } }
     }
     if machineChipNeedsGym, let changeGym = onChangeGym {
       return { closeKeypad(then: changeGym) }
@@ -650,8 +653,8 @@ public struct SessionView: View {
       unit: unit,
       onLogSet: { slot in onLogSet(id, slot) },
       onStartRest: onStartRest.map { start in { duration in start(id, duration) } },
-      onSelectMachine: machineChipAction(for: id),
-      machineNeedsGym: machineChipNeedsGym,
+      onSelectMachine: machineChipAction(for: exercise.wrappedValue),
+      machineNeedsGym: machineChipNeedsGym && exercise.wrappedValue.canChooseMachine,
       onShowHistory: onShowHistory.map { show in
         { closeKeypad { show(id) } }
       },
@@ -734,12 +737,17 @@ public struct SessionView: View {
 
   // MARK: - Feedback beside the thumb
 
-  /// What sits at the bottom of the screen: a failed save, the records just set, and the rest bar.
+  /// What sits at the bottom of the screen: a failed save, the records just set, the rest bar, and
+  /// the way out of the workout.
   ///
   /// Here rather than at the top of the list. Inserted above the cards, a record or an error was
   /// off screen whenever the lifter was logging a lower movement, and its arrival pushed every row
   /// down by its height, under the thumb that was about to log the next set. A growing inset moves
   /// nothing already on screen.
+  ///
+  /// Finish is here for a second reason: as the last item in the scroll it was drawn under the
+  /// floating tab bar, and the one-time correction hint, inserted into this same inset, covered its
+  /// other edge. The inset is placed above the tab bar, so anything in it is always visible.
   ///
   /// While the keypad is up it covers this area, so the inset becomes room to scroll the edited row
   /// clear of the keypad instead; the keypad repeats any error and the rest countdown itself.
@@ -755,53 +763,59 @@ public struct SessionView: View {
         .accessibilityHidden(true)
     } else {
       VStack(spacing: Tokens.Spacing.snug) {
-        if let errorMessage {
-          // A failed write is stated, not swallowed. The row it belongs to is still unlogged,
-          // so the user can retry rather than discovering the gap days later.
-          HardsetBanner(.error, message: errorMessage, onDismiss: onDismissError)
-            .padding(.horizontal, Tokens.Spacing.regular)
-            .hardsetArrival()
-        }
-        if !records.isEmpty {
-          recordsNotice
-            .reachTarget(.recordNotice)
-            .padding(.horizontal, Tokens.Spacing.regular)
+        // The finish question replaces every transient: it is the one thing that must be read
+        // and answered now, and the rest bar returns when the lifter keeps training.
+        if !isConfirmingFinish {
+          if let errorMessage {
+            // A failed write is stated, not swallowed. The row it belongs to is still unlogged,
+            // so the user can retry rather than discovering the gap days later.
+            HardsetBanner(.error, message: errorMessage, onDismiss: onDismissError)
+              .padding(.horizontal, Tokens.Spacing.regular)
+              .hardsetArrival()
+          }
+          if !records.isEmpty {
+            recordsNotice
+              .reachTarget(.recordNotice)
+              .padding(.horizontal, Tokens.Spacing.regular)
+              .hardsetArrival(beat: .follow)
+          }
+          if isShowingCorrectionHint {
+            correctionHint
+              .padding(.horizontal, Tokens.Spacing.regular)
+              .hardsetArrival(beat: .follow)
+          }
+          // The log moment's follow beat: the bar is inserted when a rest begins, and fades in just
+          // after the stamp lands instead of cutting in at full strength on a clock of its own.
+          // Idle draws nothing, so it is not in the hierarchy then, which is also what lets its
+          // arrival be an insertion. It leaves at once, as every message does.
+          if !isRestIdle {
+            RestBarView(
+              state: restState,
+              metadata: restMetadata,
+              nextRest: restExerciseID.flatMap { lastRest[$0] },
+              restChoices: ExerciseSectionView.restChoices,
+              onChooseNextRest: restChooser,
+              onAdjust: { delta in
+                restControlTaps += 1
+                onAdjustRest(delta)
+              },
+              onPauseResume: {
+                restControlTaps += 1
+                onPauseResumeRest()
+              },
+              onSkip: {
+                restControlTaps += 1
+                onSkipRest()
+              }
+            )
+            .reachTarget(.restBar)
             .hardsetArrival(beat: .follow)
+          }
         }
-        if isShowingCorrectionHint {
-          correctionHint
-            .padding(.horizontal, Tokens.Spacing.regular)
-            .hardsetArrival(beat: .follow)
-        }
-        // The log moment's follow beat: the bar is inserted when a rest begins, and fades in just
-        // after the stamp lands instead of cutting in at full strength on a clock of its own.
-        // Idle draws nothing, so it is not in the hierarchy then, which is also what lets its
-        // arrival be an insertion. It leaves at once, as every message does.
-        if !isRestIdle {
-          RestBarView(
-            state: restState,
-            metadata: restMetadata,
-            nextRest: restExerciseID.flatMap { lastRest[$0] },
-            restChoices: ExerciseSectionView.restChoices,
-            onChooseNextRest: restChooser,
-            onAdjust: { delta in
-              restControlTaps += 1
-              onAdjustRest(delta)
-            },
-            onPauseResume: {
-              restControlTaps += 1
-              onPauseResumeRest()
-            },
-            onSkip: {
-              restControlTaps += 1
-              onSkipRest()
-            }
-          )
-          .reachTarget(.restBar)
-          .hardsetArrival(beat: .follow)
-        }
+        finishControls
+          .padding(.horizontal, Tokens.Spacing.regular)
       }
-      .padding(.bottom, isRestIdle && (hasFeedback || isShowingCorrectionHint) ? Tokens.Spacing.snug : 0)
+      .padding(.bottom, Tokens.Spacing.snug)
     }
   }
 
@@ -1090,7 +1104,12 @@ public struct SessionView: View {
 
   // MARK: - Finishing
 
-  /// The session's totals, then the way out of it.
+  /// The workout's totals.
+  ///
+  /// The way out of the workout is not here. It is drawn in the screen's bottom inset, which the
+  /// system places above the tab bar and above any hint or rest bar: as the last item in this
+  /// scroll it was clipped by the floating tab bar, and the one-time correction hint, which is
+  /// inserted into the inset, could put it under two pieces of chrome at once.
   private var summary: some View {
     let volume = SessionVolume(exercises: exercises)
     return VStack(alignment: .leading, spacing: Tokens.Spacing.loose) {
@@ -1113,23 +1132,16 @@ public struct SessionView: View {
       .frame(maxWidth: .infinity, alignment: .leading)
       .accessibilityElement(children: .combine)
       .accessibilityLabel(volumeDescription)
-
-      finishControls
-    }
-    // Scrolls the confirmation into view once it has its expanded height. Scrolling in the same
-    // update as the expansion used the collapsed layout, and the answer buttons stayed under the
-    // tab bar, below the fold.
-    .onGeometryChange(for: CGFloat.self) { geometry in
-      geometry.size.height
-    } action: { _ in
-      guard revealsFinish, isConfirmingFinish else { return }
-      revealsFinish = false
-      scrollRequest = ScrollRequest(target: .finish, anchor: .bottom)
     }
   }
 
+  /// The way out of the workout, drawn in the bottom inset above every piece of chrome.
+  ///
+  /// An empty workout offers Discard instead of Finish. Finishing it would save a session with no
+  /// count in it, which History would then list and a receipt would open with nothing on it; the
+  /// confirmation already says a discard loses nothing and does not appear in History.
   @ViewBuilder private var finishControls: some View {
-    if isConfirmingFinish {
+    if isConfirmingFinish, loggedSetCount > 0 {
       VStack(alignment: .leading, spacing: Tokens.Spacing.regular) {
         Text("Finish this workout? Sets you have not logged are not saved.")
           .font(Tokens.Text.provenance)
@@ -1171,7 +1183,17 @@ public struct SessionView: View {
         }
       }
       .hardsetArrival()
-    } else {
+    } else if loggedSetCount == 0, onDiscard != nil {
+      // Nothing has been logged, so there is nothing to finish. Discard is the only honest way
+      // out, and its confirmation says nothing is lost and it will not appear in History.
+      Button {
+        requestDiscard()
+      } label: {
+        Label("Discard workout", systemImage: "trash")
+      }
+      .buttonStyle(HardsetButtonStyle(.secondary, size: .logger))
+      .hardsetArrival()
+    } else if loggedSetCount > 0 {
       Button {
         requestFinish()
       } label: {
@@ -1181,6 +1203,10 @@ public struct SessionView: View {
       .hardsetArrival()
     }
   }
+
+  /// Every saved set, warm-ups included: an empty workout is one with no sets at all, not one with
+  /// only warm-ups.
+  private var loggedSetCount: Int { exercises.reduce(0) { $0 + $1.loggedCount } }
 
   /// How long after the last logged set "now" stops being an honest end for the workout.
   ///
@@ -1195,12 +1221,11 @@ public struct SessionView: View {
     isStale || Date().timeIntervalSince(lastLoggedAt) >= Self.lastSetFinishOffer
   }
 
-  /// Opens the finish confirmation and brings it on screen, wherever it was asked from.
+  /// Opens the finish confirmation, wherever it was asked from. It is drawn in the bottom inset,
+  /// so it needs no scroll of its own to be visible above the tab bar.
   private func requestFinish() {
     closeKeypad {
       setConfirming(true)
-      revealsFinish = true
-      scrollRequest = ScrollRequest(target: .finish, anchor: .bottom)
       // The menu or button that asked has gone; VoiceOver lands on the question it opened.
       isFinishQuestionFocused = true
     }
@@ -1226,9 +1251,12 @@ public struct SessionView: View {
   }
 
   private func ledgerItems(_ volume: SessionVolume) -> [StatLedger.Item] {
+    // The figure and its label read as one phrase: "1 / Working sets" is not one.
     var items = [
-      StatLedger.Item(label: "Working sets", value: String(volume.workingSets)),
-      StatLedger.Item(label: "Reps", value: String(volume.reps)),
+      StatLedger.Item(
+        label: volume.workingSets == 1 ? "Working set" : "Working sets",
+        value: String(volume.workingSets)),
+      StatLedger.Item(label: volume.reps == 1 ? "Rep" : "Reps", value: String(volume.reps)),
     ]
     if volume.volumeKg > 0 {
       let displayed = Int(unit.fromKilograms(volume.volumeKg).rounded())
@@ -1239,7 +1267,10 @@ public struct SessionView: View {
       )
     }
     if volume.warmupSets > 0 {
-      items.append(StatLedger.Item(label: "Warm-ups", value: String(volume.warmupSets)))
+      items.append(
+        StatLedger.Item(
+          label: volume.warmupSets == 1 ? "Warm-up" : "Warm-ups",
+          value: String(volume.warmupSets)))
     }
     return items
   }
@@ -1528,8 +1559,6 @@ public struct SessionView: View {
 
   // MARK: - Shared
 
-  static let finishAnchor = "session.finish"
-
   /// The home indicator's height on current iPhones. The keypad sheet sits above it, and the
   /// measured inset already contains it, so it is added back when reserving the keypad's room.
   /// On a phone without one this reserves a little more than needed, which only scrolls a row
@@ -1655,7 +1684,6 @@ private struct RemovalRequest {
 private struct ScrollRequest: Equatable {
   enum Target: Equatable {
     case view(UUID)
-    case finish
   }
 
   let target: Target

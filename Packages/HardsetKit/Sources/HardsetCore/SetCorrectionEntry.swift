@@ -74,6 +74,15 @@ public struct SetCorrectionEntry: Hashable, Sendable {
 /// retroactive correction updates the ledger and does not celebrate, so there is no trophy and no
 /// tint, only a plain sentence.
 public enum SetCorrectionCopy {
+  /// Why a finished workout cannot gain a set, said in the receipt's correcting mode.
+  ///
+  /// A forgotten set has no time it was performed. A finished workout's length, records and
+  /// comparisons are all read from the times it was ended with, so inserting one after the fact
+  /// would rewrite work that already happened. The receipt corrects what is there and removes what
+  /// is not; it does not invent a set.
+  public static let cannotAddSet =
+    "A set that was never logged cannot be added here: a finished workout keeps the times it ended with, and a set with no real time would rewrite its length, records and comparisons. Log it next time; here you can correct or remove the sets already recorded."
+
   /// - Parameters:
   ///   - figures: The corrected set as the receipt writes it, such as "Bench, 110 kg × 5".
   ///   - before: The set's records before the correction.

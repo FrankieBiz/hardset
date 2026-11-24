@@ -600,6 +600,8 @@ struct SessionCoordinatorTests {
       now: { self.start.addingTimeInterval(0) }
     )
 
+    // A7: an empty workout reports no saved sets, which is what makes the screen offer Discard.
+    #expect(!coordinator.hasLoggedSets)
     try coordinator.finish()
     #expect(coordinator.isFinished)
     #expect(try store.openSession() == nil)

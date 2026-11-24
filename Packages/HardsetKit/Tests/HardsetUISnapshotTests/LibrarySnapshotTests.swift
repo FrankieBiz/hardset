@@ -66,7 +66,7 @@
 
     /// The movement the editor was opened to retag: back, lats, biceps as a secondary.
     private static var tagged: MovementEditorDraft {
-      var draft = MovementEditorDraft(name: "Nautilus lever row")
+      var draft = MovementEditorDraft(name: "Nautilus lever row", modality: .machine)
       draft.choose(bodyPart: .back)
       draft.choose(primary: .lats)
       draft.toggleSecondary(.biceps)

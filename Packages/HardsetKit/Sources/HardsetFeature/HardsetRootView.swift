@@ -64,6 +64,26 @@ private nonisolated struct WorkoutEditorTarget: Identifiable {
   var id: String { template?.id.rawValue.uuidString ?? "new" }
 }
 
+/// A start that failed, named by the control that asked for it.
+private nonisolated enum StartFailure: Equatable {
+  /// A saved workout's card, by its id and the name on the card.
+  case savedWorkout(TemplateID, String)
+  case repeatLast
+  case empty
+
+  /// Names the action, so a lifter who tapped one of several cards knows which one did not open.
+  var message: String {
+    switch self {
+    case .savedWorkout(_, let name):
+      return "Could not start “\(name)”. Nothing has been lost — try its Start again."
+    case .repeatLast:
+      return "Could not start your last workout again. Nothing has been lost — try again."
+    case .empty:
+      return "Could not start an empty workout. Nothing has been lost — try again."
+    }
+  }
+}
+
 /// The app's three tabs, plus the workout-in-progress bar.
 ///
 /// A live session is deliberately NOT a full-screen modal. It lives in the tab bar's bottom
@@ -79,7 +99,9 @@ public struct HardsetRootView: View {
   /// Held here rather than left to the tab view, so the workout accessory can bring the lifter
   /// back to Train from whichever tab they are reading.
   @State private var selectedTab: RootTab = .train
-  @State private var startFailed = false
+  /// What failed to start, and which control asked. The banner names it at the top of the screen,
+  /// where a tap on a card further down cannot put the failure below the fold.
+  @State private var startFailure: StartFailure?
   @State private var isChoosingGym = false
   @State private var isAddingGym = false
   @State private var isShowingSettings = false
@@ -250,7 +272,9 @@ public struct HardsetRootView: View {
           // finished workout, a deletion or an import changes it, so it re-reads on `dataRevision`.
           ProgressScreen(
             board: environment.progressBoard, progression: environment.progression, unit: unit,
-            onShowSettings: { isShowingSettings = true }, dataRevision: dataRevision
+            onShowSettings: { isShowingSettings = true },
+            onShowLibrary: { showLibraryFromAnotherTab() },
+            dataRevision: dataRevision
           )
           .navigationTitle("Progress")
           .hardsetTabRoot()
@@ -263,7 +287,8 @@ public struct HardsetRootView: View {
           // and the window the lifter stepped to while the read runs.
           WeeklyVolumeScreen(
             store: environment.volume, dataRevision: dataRevision,
-            onShowSettings: { isShowingSettings = true }
+            onShowSettings: { isShowingSettings = true },
+            onShowLibrary: { showLibraryFromAnotherTab() }
           )
           // Matches the screen's own header: the window is the last 7 days and can step back.
           .navigationTitle("Volume")
@@ -339,7 +364,7 @@ public struct HardsetRootView: View {
           // A finished workout opens its receipt, with the scorecard at the top: how it went against
           // last time is the thing the lifter came to see. Not for a discarded one, which has no
           // receipt, nor for one finished with no sets logged.
-          let finished = coordinator.isFinished && coordinator.loggedSetCount > 0
+          let finished = coordinator.isFinished && coordinator.hasLoggedSets
             ? coordinator.sessionID : nil
           model.clearFinishedWorkout()
           if let finished { receiptSelection = LastWorkoutReceipt(id: finished) }
@@ -380,12 +405,20 @@ public struct HardsetRootView: View {
   /// The start screen's header: the settings action, and the movement library beside it.
   private var startHeader: some View {
     ScreenHeader("Train", subtitle: Self.dayLabel(today)) {
-      HStack(spacing: Tokens.Spacing.snug) {
-        HeaderIconButton(
-          systemImage: "books.vertical", accessibilityLabel: "Library", style: .bare
-        ) {
+      HStack(spacing: Tokens.Spacing.regular) {
+        // The word, not only the glyph. Volume, Progress and the body-part notes all send a lifter
+        // to "Library", and an unlabelled icon is not something they can find by that name.
+        Button {
           isShowingLibrary = true
+        } label: {
+          Label("Library", systemImage: "books.vertical")
+            .labelStyle(.titleAndIcon)
+            .font(Tokens.Text.provenance.weight(.medium))
+            .foregroundStyle(Tokens.Color.chalk)
         }
+        .buttonStyle(InlineControlStyle(minHeight: Tokens.minimumTapTarget, alignment: .center))
+        .accessibilityHint("Opens every movement, with the body part and equipment each has")
+
         HeaderIconButton(systemImage: "gearshape", accessibilityLabel: "Settings", style: .bare) {
           isShowingSettings = true
         }
@@ -463,10 +496,10 @@ public struct HardsetRootView: View {
             }
             .buttonStyle(HardsetButtonStyle(startRole, size: .logger))
 
-            if startFailed {
+            if case .empty? = startFailure {
               HardsetBanner(
                 .error,
-                message: "Could not start a workout. Nothing has been lost — try again."
+                message: StartFailure.empty.message
               )
               .transition(.opacity)
             }
@@ -485,15 +518,15 @@ public struct HardsetRootView: View {
           }
         }
         .padding(.horizontal, Tokens.Spacing.loose)
-        .animation(
-          Tokens.Motion.adaptive(Tokens.Motion.reveal, reduceMotion: reduceMotion),
-          value: startFailed
-        )
 
         lastWorkoutSection
           .padding(.horizontal, Tokens.Spacing.loose)
       }
       .padding(.bottom, Tokens.Spacing.block)
+      .animation(
+        Tokens.Motion.adaptive(Tokens.Motion.reveal, reduceMotion: reduceMotion),
+        value: startFailure
+      )
     }
     .scrollBounceBehavior(.basedOnSize)
     .background(Tokens.Color.canvas)
@@ -525,6 +558,8 @@ public struct HardsetRootView: View {
       WorkoutCardsView(
         cards: WorkoutCard.cards(
           templates: saved.templates, now: today, lastResult: saved.lastResult),
+        failedStartTemplate: failedSavedWorkout?.id,
+        failedStartMessage: failedSavedWorkout?.message,
         onStart: { startSavedWorkout($0) },
         onEdit: { id in
           guard let template = saved.templates.first(where: { $0.id == id }) else { return }
@@ -546,6 +581,7 @@ public struct HardsetRootView: View {
     if let saved = savedWorkouts.value {
       WorkoutCardActions(
         canRepeatLast: saved.canRepeatLast,
+        repeatFailure: repeatFailureMessage,
         onRepeatLast: { repeatLastWorkout() },
         onNew: { workoutEditor = WorkoutEditorTarget(template: nil, others: saved.templates) }
       )
@@ -562,6 +598,26 @@ public struct HardsetRootView: View {
         .hardsetSheet()
       }
     }
+  }
+
+  /// Why "Repeat last workout" failed, when that is what failed.
+  private var repeatFailureMessage: String? {
+    guard case .repeatLast? = startFailure else { return nil }
+    return StartFailure.repeatLast.message
+  }
+
+  /// The saved workout whose Start failed, if that is what failed, with its message. The card it
+  /// belongs to draws the failure under its own Start button.
+  private var failedSavedWorkout: (id: TemplateID, message: String)? {
+    guard case .savedWorkout(let id, let name)? = startFailure else { return nil }
+    return (id, StartFailure.savedWorkout(id, name).message)
+  }
+
+  /// Opens the Library from a tab that does not host it. The Library is a destination on the Train
+  /// stack, so the tab changes first and the destination is asked for as that screen appears.
+  private func showLibraryFromAnotherTab() {
+    selectedTab = .train
+    isShowingLibrary = true
   }
 
   /// A day, as the start screen's context line: "Saturday 7 November", in the device's format.
@@ -816,8 +872,11 @@ public struct HardsetRootView: View {
     _ volume: SessionVolume
   ) -> (counts: [StatLedger.Item], volume: StatLedger.Item?) {
     let counts: [StatLedger.Item] = [
-      StatLedger.Item(label: "Working sets", value: volume.workingSets.formatted()),
-      StatLedger.Item(label: "Reps", value: volume.reps.formatted()),
+      StatLedger.Item(
+        label: volume.workingSets == 1 ? "Working set" : "Working sets",
+        value: volume.workingSets.formatted()),
+      StatLedger.Item(
+        label: volume.reps == 1 ? "Rep" : "Reps", value: volume.reps.formatted()),
     ]
     let displayed = unit.fromKilograms(volume.volumeKg).rounded()
     guard displayed > 0 else { return (counts, nil) }
@@ -952,20 +1011,20 @@ public struct HardsetRootView: View {
     guard let template = savedWorkouts.value?.templates.first(where: { $0.id == id }) else { return }
     do {
       try model.startWorkout(from: template, unit: unit, rest: RestPreferences())
-      startFailed = false
+      startFailure = nil
       pendingGymPick = ""
     } catch {
-      startFailed = true
+      startFailure = .savedWorkout(id, template.name)
     }
   }
 
   private func repeatLastWorkout() {
     do {
       try model.repeatLastWorkout(unit: unit)
-      startFailed = false
+      startFailure = nil
       pendingGymPick = ""
     } catch {
-      startFailed = true
+      startFailure = .repeatLast
     }
   }
 
@@ -996,11 +1055,11 @@ public struct HardsetRootView: View {
   private func startEmptyWorkout() {
     do {
       try model.startWorkout()
-      startFailed = false
+      startFailure = nil
       // The pick is spent: the session recorded it, and the learned default takes over again.
       pendingGymPick = ""
     } catch {
-      startFailed = true
+      startFailure = .empty
     }
   }
 

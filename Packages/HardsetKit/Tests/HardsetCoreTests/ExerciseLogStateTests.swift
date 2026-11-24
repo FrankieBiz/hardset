@@ -662,4 +662,26 @@ struct ExerciseLogStateTests {
 
     #expect(state.priorNote == "From another machine")
   }
+
+  /// A9: "Choose machine" was offered on a barbell, dumbbell and bodyweight movement alike. A
+  /// machine is only a meaningful thing to record where there is one; an unknown modality keeps
+  /// the chip, and a movement that already records a machine keeps it so the record can be fixed.
+  @Test("A machine is a choice only for a movement that has one")
+  func machineIsOfferedOnlyWhereThereIsOne() {
+    func state(
+      _ modality: ExerciseModality?, machineID: MachineID? = nil
+    ) -> ExerciseLogState {
+      ExerciseLogState.build(
+        exerciseID: exercise, machineID: machineID, exerciseName: "Lift", modality: modality,
+        snapshot: .empty(capturedAt: now))
+    }
+
+    #expect(state(.machine).canChooseMachine)
+    #expect(state(.cable).canChooseMachine)
+    #expect(!state(.barbell).canChooseMachine)
+    #expect(!state(.dumbbell).canChooseMachine)
+    #expect(!state(.bodyweight).canChooseMachine)
+    #expect(state(nil).canChooseMachine)
+    #expect(state(.barbell, machineID: machine).canChooseMachine)
+  }
 }

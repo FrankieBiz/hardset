@@ -116,12 +116,16 @@ public nonisolated struct ReceiptStore: Sendable {
     var order: [ProgressionKey] = []
     var current: [ProgressionKey: [PriorSetRecord]] = [:]
     var recorded: [ProgressionKey: Set<PersonalRecordKind>] = [:]
+    // What each movement was performed on, from its own lines, so a first time can say "First time"
+    // for a barbell instead of claiming a machine that was never recorded.
+    var equipment: [ProgressionKey: WorkoutReceipt.Equipment] = [:]
     // `lines` were built one per set, in the same order.
     for (set, line) in zip(sets, lines) {
       let setKey = key(set)
       if !order.contains(setKey) { order.append(setKey) }
       if !set.isWarmup { current[setKey, default: []].append(record(set)) }
       recorded[setKey, default: []].formUnion(line.records.map(\.kind))
+      if equipment[setKey] == nil { equipment[setKey] = line.equipment }
     }
 
     let earlier = Dictionary(grouping: prior, by: key)
@@ -157,6 +161,7 @@ public nonisolated struct ReceiptStore: Sendable {
         estimatesOneRepMax: (modalities[movement.exerciseID.rawValue] ?? nil)?.estimatesOneRepMax ?? false,
         assumesAddedLoad: (modalities[movement.exerciseID.rawValue] ?? nil) == nil,
         recordKinds: recorded[movement] ?? [],
+        equipment: equipment[movement],
         leftOut: leftOut
       )
     }
@@ -165,6 +170,12 @@ public nonisolated struct ReceiptStore: Sendable {
   }
 
   // MARK: - Corrections
+  //
+  // There is deliberately no `addSet` beside these. A finished workout's length, records and
+  // comparisons are read from the sets it ended with, and a set added afterwards has no real
+  // completion time: inserting one would rewrite work that already happened. The receipt's
+  // correcting mode says this in the lifter's words, `SetCorrectionCopy.cannotAddSet`, and offers
+  // correction and removal of what is recorded instead.
 
   /// Deletes a finished workout with all of its sets and its plan, in one transaction.
   ///

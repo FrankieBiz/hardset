@@ -43,16 +43,23 @@
     /// appearances, at the narrowest width and at an accessibility size.
     @Test func workoutReceiptScorecard() async throws {
       func key() -> ProgressionKey { ProgressionKey(exerciseID: ExerciseID()) }
-      func entry(_ name: String, _ outcome: WorkoutScorecard.Outcome) -> WorkoutScorecard.Entry {
-        WorkoutScorecard.Entry(key: key(), exerciseName: name, outcome: outcome)
+      func entry(
+        _ name: String, _ outcome: WorkoutScorecard.Outcome,
+        equipment: WorkoutReceipt.Equipment? = nil
+      ) -> WorkoutScorecard.Entry {
+        WorkoutScorecard.Entry(
+          key: key(), exerciseName: name, outcome: outcome, equipment: equipment)
       }
       let scorecard = WorkoutScorecard(
         entries: [
-          entry("Incline Press", .beat(.beat(addedKg: 0, addedReps: 1))),
+          entry("Incline Press", .beat(.beat(addedKg: 0, addedReps: 1)),
+            equipment: .machine("Cybex · Station 2")),
           entry("Cable Row", .beat(.beat(addedKg: 2.5, addedReps: 1))),
           entry("Pec Deck", .beat(nil)),
           entry("Lateral Raise", .matched),
-          entry("Hack Squat", .firstTime),
+          // A machine first time says so; a barbell one has no machine to name.
+          entry("Hack Squat", .firstTime, equipment: .machine("Hack Squat Sled")),
+          entry("Barbell Row", .firstTime, equipment: .freeWeight),
           entry("Curl", .notBeaten),
         ],
         beatenCount: 3, comparedCount: 5, recordMovementCount: 2,
@@ -316,14 +323,28 @@
     /// from this package directly.
     @Test func startupStates() async throws {
       try await Snapshot.capture("startup-failed-dark") {
-        HardsetEmptyState(
-          title: "Could not open Hardset",
-          detail: "Try again to open your workouts.",
-          systemImage: "exclamationmark.triangle",
-          actionTitle: "Try again",
-          actionSystemImage: "arrow.clockwise",
-          action: {}
-        )
+        VStack(spacing: Tokens.Spacing.regular) {
+          HardsetEmptyState(
+            title: "Could not open Hardset",
+            detail: "Your workouts are still saved on this phone, and nothing has been erased. "
+              + "Do not delete the app: deleting it is what deletes them. Try again; if it keeps "
+              + "happening, share the error below so it can be looked at.",
+            systemImage: "exclamationmark.triangle",
+            actionTitle: "Try again",
+            actionSystemImage: "arrow.clockwise",
+            action: {}
+          )
+          Button(action: {}) {
+            Label("Share error details", systemImage: "square.and.arrow.up")
+          }
+          .buttonStyle(HardsetButtonStyle(.secondary))
+          Text(verbatim: "SQLite error 11: database disk image is malformed")
+            .font(Tokens.Text.provenance)
+            .foregroundStyle(Tokens.Color.chalkDim)
+            .multilineTextAlignment(.center)
+            .lineLimit(6)
+            .padding(.horizontal, Tokens.Spacing.section)
+        }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Tokens.Color.canvas)
       }
@@ -664,6 +685,7 @@
         title: "This week",
         subtitle: "Last 7 days",
         onExplainCounting: {},
+        onShowLibrary: {},
         onShowTotalWorking: {}
       )
     }
@@ -700,7 +722,9 @@
             duration: .seconds(4_320),
             exerciseNames: ["Bench Press", "Overhead Press", "Cable Triceps Pushdown"],
             volume: SessionVolume(workingSets: 12, warmupSets: 2, volumeKg: 9_400, reps: 96),
-            hasImplausibleDuration: false
+            hasImplausibleDuration: false,
+            // C10 residual: a workout brought in from another app says so on its row.
+            isImported: true
           ),
           HistoryRow(
             id: SessionID(), title: "Legs", date: day.addingTimeInterval(-172_800),

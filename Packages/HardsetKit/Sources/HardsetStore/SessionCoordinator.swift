@@ -62,6 +62,10 @@ public final class SessionCoordinator {
   /// `exercises`. Every keypad digit writes into `exercises`, so a derived count made any view
   /// that showed it re-render on each keystroke.
   public private(set) var loggedSetCount = 0
+  /// Whether the workout holds at least one saved set, warm-ups included. An empty workout is one
+  /// with none: the screen offers Discard for it, because finishing it would save a session with
+  /// no count and no receipt, which History would list as a workout that did nothing.
+  public var hasLoggedSets: Bool { loggedSetCount > 0 }
   /// When the newest saved set was written, or `nil` when nothing is saved. Stored for the same
   /// reason as `loggedSetCount`. Useful as an honest finish time for a workout left open.
   public private(set) var lastLoggedAt: Date?
@@ -184,6 +188,7 @@ public final class SessionCoordinator {
         machineName: planned.machineName,
         machineIncrementKg: planned.machineID.flatMap { increments[$0] }
           ?? planned.machineIncrementKg,
+        modality: modalities[planned.exerciseID],
         snapshot: snapshot,
         plannedSets: planned.plannedSets,
         repRange: planned.repRange,
@@ -313,6 +318,8 @@ public final class SessionCoordinator {
         // Restored, not defaulted. Dropping it makes record detection fall back to a step size the
         // equipment may be unable to hit.
         machineIncrementKg: entry.machineIncrementKg,
+        // Also restored: a reopened barbell movement must not grow a machine chip it never had.
+        modality: entry.modality,
         loggedSets: logged,
         snapshot: snapshot,
         plannedSets: entry.plannedSets,
@@ -387,12 +394,17 @@ public final class SessionCoordinator {
       let resolvedIncrement =
         machineIncrementKg
         ?? (machineID.flatMap { try? store.machineIncrements(for: [$0])[$0] })
+      // The movement's own equipment, so a barbell added mid-workout is offered no machine chip. A
+      // failed lookup adds the movement with no modality rather than not at all, as the machine
+      // lookup above does.
+      let modality = (try? store.modalities(for: [exerciseID]))?[exerciseID]
       let state = ExerciseLogState.build(
         exerciseID: exerciseID,
         machineID: machineID,
         exerciseName: exerciseName,
         machineName: machineName,
         machineIncrementKg: resolvedIncrement,
+        modality: modality,
         snapshot: snapshot,
         plannedSets: plannedSets
       )

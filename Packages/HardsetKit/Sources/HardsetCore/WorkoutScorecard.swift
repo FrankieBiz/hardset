@@ -13,6 +13,9 @@ public struct ScorecardInput: Hashable, Sendable {
   public let recordKinds: Set<PersonalRecordKind>
   public let estimatesOneRepMax: Bool
   public let assumesAddedLoad: Bool
+  /// What the movement was performed on, when the receipt knows. It is what a first time is a
+  /// first time *on*: a barbell has no machine, so its mark says only "First time".
+  public let equipment: WorkoutReceipt.Equipment?
   /// The sets of this movement that took no part in the comparison, counted so the account of a
   /// gain can say what was left out. Not read by the scoring itself.
   public let leftOut: LeftOut
@@ -55,6 +58,7 @@ public struct ScorecardInput: Hashable, Sendable {
     estimatesOneRepMax: Bool = true,
     assumesAddedLoad: Bool = false,
     recordKinds: Set<PersonalRecordKind> = [],
+    equipment: WorkoutReceipt.Equipment? = nil,
     leftOut: LeftOut = LeftOut()
   ) {
     self.key = key
@@ -66,6 +70,7 @@ public struct ScorecardInput: Hashable, Sendable {
     self.recordKinds = recordKinds
     self.estimatesOneRepMax = estimatesOneRepMax
     self.assumesAddedLoad = assumesAddedLoad
+    self.equipment = equipment
     self.leftOut = leftOut
   }
 }
@@ -98,13 +103,20 @@ public struct WorkoutScorecard: Hashable, Sendable {
     public let exerciseName: String
     public let outcome: Outcome
     public let estimateOnlyRecord: Bool
+    /// What the movement was performed on, when the receipt knows. Nil only for an entry built
+    /// without one, such as a preview's.
+    public let equipment: WorkoutReceipt.Equipment?
     public var id: ProgressionKey { key }
 
-    public init(key: ProgressionKey, exerciseName: String, outcome: Outcome, estimateOnlyRecord: Bool = false) {
+    public init(
+      key: ProgressionKey, exerciseName: String, outcome: Outcome, estimateOnlyRecord: Bool = false,
+      equipment: WorkoutReceipt.Equipment? = nil
+    ) {
       self.key = key
       self.exerciseName = exerciseName
       self.outcome = outcome
       self.estimateOnlyRecord = estimateOnlyRecord
+      self.equipment = equipment
     }
   }
 
@@ -171,7 +183,9 @@ public struct WorkoutScorecard: Hashable, Sendable {
       if input.setRecord { recordMovements += 1 }
 
       guard !input.previousSets.isEmpty else {
-        entries.append(Entry(key: input.key, exerciseName: input.exerciseName, outcome: .firstTime))
+        entries.append(Entry(
+          key: input.key, exerciseName: input.exerciseName, outcome: .firstTime,
+          equipment: input.equipment))
         continue
       }
       compared += 1
@@ -209,7 +223,7 @@ public struct WorkoutScorecard: Hashable, Sendable {
         outcome = .notBeaten
       }
       entries.append(Entry(key: input.key, exerciseName: input.exerciseName, outcome: outcome,
-        estimateOnlyRecord: input.recordKinds == [.estimatedOneRepMax]))
+        estimateOnlyRecord: input.recordKinds == [.estimatedOneRepMax], equipment: input.equipment))
 
       if let gain = gain(for: input) { gains.append(gain) }
     }

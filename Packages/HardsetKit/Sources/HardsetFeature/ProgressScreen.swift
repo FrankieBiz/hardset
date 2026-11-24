@@ -31,6 +31,9 @@ public struct ProgressScreen: View {
   private let progression: ProgressionStore
   private let unit: WeightUnit
   private let onShowSettings: (() -> Void)?
+  /// Opens the Library, where a movement with no body part is given one. Nil on a host that has no
+  /// Library to open.
+  private let onShowLibrary: (() -> Void)?
   /// Changes when saved history changed somewhere this screen cannot see. Each change re-reads,
   /// keeping the board on screen while it does.
   private let dataRevision: Int
@@ -42,12 +45,14 @@ public struct ProgressScreen: View {
     progression: ProgressionStore,
     unit: WeightUnit,
     onShowSettings: (() -> Void)? = nil,
+    onShowLibrary: (() -> Void)? = nil,
     dataRevision: Int = 0
   ) {
     self.board = board
     self.progression = progression
     self.unit = unit
     self.onShowSettings = onShowSettings
+    self.onShowLibrary = onShowLibrary
     self.dataRevision = dataRevision
   }
 
@@ -75,6 +80,7 @@ public struct ProgressScreen: View {
           title: Self.title,
           subtitle: Self.subtitle(value),
           onShowSettings: onShowSettings,
+          onShowLibrary: onShowLibrary,
           onShowChangeWorking: { showChangeWorking($0) },
           workingFailure: workingFailure,
           onSelect: { row in

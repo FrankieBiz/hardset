@@ -16,10 +16,10 @@ public struct MovementEditorDraft: Hashable, Sendable {
 
   public var name: String
   /// One of `equipment`, or nil when the movement has no equipment on record. A new movement opens
-  /// on machine, which the lifter can see and change, and is not read off the name. A movement that
-  /// already exists opens on what it says, and on nothing when it says nothing: saving it with no
-  /// equipment chosen leaves it unrecorded, so the app never declares equipment for the lifter. An
-  /// estimated max follows from equipment the lifter named, never from one the editor filled in.
+  /// with nothing chosen, and is not read off the name: a lifter who names a barbell lift and saves
+  /// it as shown gets no declared equipment, rather than a machine nobody recorded. A movement that
+  /// already exists opens on what it says, and on nothing when it says nothing. An estimated max
+  /// follows from equipment the lifter named, never from one the editor filled in.
   public var modality: ExerciseModality?
   /// An imported movement keeps the name it was imported under. A later import looks it up by that
   /// name, so renaming it would start a second movement beside it with the same history.
@@ -29,7 +29,7 @@ public struct MovementEditorDraft: Hashable, Sendable {
   /// In the order chosen, at most `CustomAttribution.maximumSecondaries`.
   public private(set) var secondary: [Muscle]
 
-  public init(name: String = "", modality: ExerciseModality? = .machine, nameIsFixed: Bool = false) {
+  public init(name: String = "", modality: ExerciseModality? = nil, nameIsFixed: Bool = false) {
     self.name = name
     self.modality = modality
     self.nameIsFixed = nameIsFixed
@@ -70,11 +70,15 @@ public struct MovementEditorDraft: Hashable, Sendable {
     "Not set. Hardset does not estimate a max for a movement until you say what the load is."
 
   /// Said under Save once it can be pressed. An imported movement's sets already exist, so the
-  /// lifter is told what saving it changes: volume counts them from the next read.
+  /// lifter is told what saving it changes: volume counts them from the next read. With no
+  /// equipment chosen, it also says what that withholds, because Save can be pressed without one.
   public var savedNote: String {
-    nameIsFixed
+    let base =
+      nameIsFixed
       ? "Saved as your own choice. Its imported sets count toward these muscles in Volume."
       : "Saved as your own choice, so volume counts these muscles as you say."
+    guard equipmentIsUnset else { return base }
+    return base + " No equipment is set, so no max will be estimated for it."
   }
 
   /// What every surface that saves a movement says when its name belongs to another movement, so

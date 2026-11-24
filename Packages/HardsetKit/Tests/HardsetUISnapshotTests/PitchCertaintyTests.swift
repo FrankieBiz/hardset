@@ -45,4 +45,12 @@ struct PitchCertaintyTests {
       #expect(claim.value != nil, "\(reps) reps")
     }
   }
+
+  /// The page opens with the set it estimates. On a pounds phone that was a converted 60 kg,
+  /// "132.28 lb", on a page whose point is that the numbers are honest. The fixture is chosen
+  /// round in the unit it is read in.
+  @Test func theSetReadsRoundInTheUnitItIsShownIn() {
+    #expect(LoadText.entered(PitchEstimateDemo.weightKg(in: .kilograms), in: .kilograms) == "60")
+    #expect(LoadText.entered(PitchEstimateDemo.weightKg(in: .pounds), in: .pounds) == "135")
+  }
 }

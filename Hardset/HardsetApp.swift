@@ -99,12 +99,21 @@ private struct StartupView: View {
         VStack(spacing: Tokens.Spacing.regular) {
           HardsetEmptyState(
             title: "Could not open Hardset",
-            detail: "Try again to open your workouts.",
+            detail: "Your workouts are still saved on this phone, and nothing has been erased. "
+              + "Do not delete the app: deleting it is what deletes them. Try again; if it keeps "
+              + "happening, share the error below so it can be looked at.",
             systemImage: "exclamationmark.triangle",
             actionTitle: "Try again",
             actionSystemImage: "arrow.clockwise",
             action: { Task { await startup.retry() } }
           )
+          // The way out of a repeated failure. Without it, a lifter who cannot open the database
+          // cannot export or reach Settings, and the only words are a retry that keeps failing.
+          ShareLink(item: Self.errorReport(error)) {
+            Label("Share error details", systemImage: "square.and.arrow.up")
+          }
+          .buttonStyle(HardsetButtonStyle(.secondary))
+          .accessibilityHint("Shares the error text so it can be sent for help")
           // The error itself, small and selectable. On a phone with no debugger attached this
           // screen is the only place the cause can be read, and "try again" alone gave nothing
           // to report when retrying failed the same way.
@@ -140,6 +149,15 @@ private struct StartupView: View {
     .onChange(of: scenePhase) { _, phase in
       if phase == .active { restTimer.refresh() }
     }
+  }
+
+  /// The text a lifter can send for help: what failed, and the error itself. A version and build
+  /// are included because the same error on a different build may have a different cause.
+  static func errorReport(_ error: any Error) -> String {
+    let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String
+    let build = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String
+    return "Hardset could not open its database on version \(version ?? "unknown") "
+      + "(\(build ?? "unknown")).\n\n\(String(describing: error))"
   }
 }
 

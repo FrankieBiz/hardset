@@ -70,6 +70,13 @@ public enum ProgressCopy {
     return "\(band.lowerBound / 7) to \(band.upperBound / 7) weeks"
   }
 
+  /// Both marks a board row can carry, defined together where a change is shown: the six-week
+  /// comparison window and the record star. The band comes from the analyser that applies it.
+  public static var comparisonAndRecordKey: String {
+    "A six-week change compares the latest session with one \(comparisonBandText) before it, on the "
+      + "same machine. The star marks a session that set a record."
+  }
+
   /// How long a run of sessions is, in the largest unit that reads plainly: "on one day", "over 6
   /// days", "over 3 weeks", "over 5 months", "over 2 years".
   static func span(from first: Date, to latest: Date) -> String {
