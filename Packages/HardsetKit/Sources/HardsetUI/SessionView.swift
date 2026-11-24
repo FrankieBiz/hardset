@@ -1189,7 +1189,9 @@ public struct SessionView: View {
       Button {
         requestDiscard()
       } label: {
-        Label("Discard workout", systemImage: "trash")
+        // "This workout", not the menu's "Discard workout": the two are on screen together in an
+        // empty workout, and one name for two controls is a name that cannot be tapped by voice.
+        Label("Discard this workout", systemImage: "trash")
       }
       .buttonStyle(HardsetButtonStyle(.secondary, size: .logger))
       .hardsetArrival()
