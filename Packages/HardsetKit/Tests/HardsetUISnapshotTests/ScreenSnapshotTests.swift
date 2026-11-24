@@ -337,7 +337,7 @@
           Button(action: {}) {
             Label("Share error details", systemImage: "square.and.arrow.up")
           }
-          .buttonStyle(HardsetButtonStyle(.secondary))
+          .buttonStyle(HardsetButtonStyle(.secondary, fullWidth: false))
           Text(verbatim: "SQLite error 11: database disk image is malformed")
             .font(Tokens.Text.provenance)
             .foregroundStyle(Tokens.Color.chalkDim)
