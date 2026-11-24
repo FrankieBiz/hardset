@@ -319,12 +319,13 @@ final class AppScreensUITests: XCTestCase {
     XCTAssertTrue(gymChip.waitForExistence(timeout: 10), "The new gym is set and both sheets close")
     XCTAssertTrue(waitUntilGone(addGym), "The gym picker closed with the name sheet")
 
-    // The movement picker, then a movement with a gym set, so its card offers a machine.
+    // The movement picker, then a *machine* movement with a gym set, so its card offers a
+    // machine. A barbell movement has no machine, and since A9 its card offers no chip at all.
     addMovement.tap()
-    let bench = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Barbell Bench Press'"))
+    let press = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Chest Press'"))
       .firstMatch
-    XCTAssertTrue(bench.waitForExistence(timeout: 5))
-    bench.tap()
+    XCTAssertTrue(press.waitForExistence(timeout: 5))
+    press.tap()
 
     // The machine picker, with a machine named from inside it and chosen at once.
     let chooseMachine = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Choose machine'"))
@@ -366,7 +367,7 @@ final class AppScreensUITests: XCTestCase {
 
     // The movement's load history, from its name.
     let history = app.buttons.matching(
-      NSPredicate(format: "label BEGINSWITH 'Barbell Bench Press. Show load history'")
+      NSPredicate(format: "label BEGINSWITH 'Chest Press. Show load history'")
     ).firstMatch
     XCTAssertTrue(history.waitForExistence(timeout: 5))
     history.tap()

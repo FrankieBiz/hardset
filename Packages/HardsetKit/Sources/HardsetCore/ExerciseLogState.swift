@@ -54,6 +54,10 @@ public struct ExerciseLogState: Hashable, Sendable, Identifiable {
   /// Changing it re-prefills the open rows the lifter has not typed into — see `changeMachine`.
   public private(set) var machineID: MachineID?
   public let exerciseName: String
+  /// How the load is applied, when the movement's row names a known modality. The live screen
+  /// reads it to decide whether a machine is a meaningful thing to record: a barbell, dumbbell or
+  /// bodyweight movement has none, so it is offered no machine chip.
+  public let modality: ExerciseModality?
   /// Shown on the Lock Screen while resting, so the user knows which station they left.
   public private(set) var machineName: String?
   /// Set to the machine's real load step when known, so a suggested load is achievable.
@@ -96,6 +100,7 @@ public struct ExerciseLogState: Hashable, Sendable, Identifiable {
     exerciseName: String,
     machineName: String? = nil,
     machineIncrementKg: Double? = nil,
+    modality: ExerciseModality? = nil,
     prior: PriorPerformance?,
     priorNote: String? = nil,
     repRange: RepRange? = nil,
@@ -107,6 +112,7 @@ public struct ExerciseLogState: Hashable, Sendable, Identifiable {
     self.exerciseID = exerciseID
     self.machineID = machineID
     self.exerciseName = exerciseName
+    self.modality = modality
     self.machineName = machineName
     self.machineIncrementKg = machineIncrementKg
     self.prior = prior
@@ -135,6 +141,7 @@ public struct ExerciseLogState: Hashable, Sendable, Identifiable {
     exerciseName: String,
     machineName: String? = nil,
     machineIncrementKg: Double? = nil,
+    modality: ExerciseModality? = nil,
     snapshot: PriorPerformanceSnapshot,
     plannedSets: Int? = nil,
     allowingOtherMachines: Bool = true,
@@ -170,6 +177,7 @@ public struct ExerciseLogState: Hashable, Sendable, Identifiable {
       exerciseName: exerciseName,
       machineName: machineName,
       machineIncrementKg: machineIncrementKg,
+      modality: modality,
       prior: prior,
       priorNote: note,
       repRange: repRange,
@@ -221,6 +229,7 @@ public struct ExerciseLogState: Hashable, Sendable, Identifiable {
     exerciseName: String,
     machineName: String? = nil,
     machineIncrementKg: Double? = nil,
+    modality: ExerciseModality? = nil,
     loggedSets: [LoggedSetSummary],
     snapshot: PriorPerformanceSnapshot,
     plannedSets: Int? = nil,
@@ -235,6 +244,7 @@ public struct ExerciseLogState: Hashable, Sendable, Identifiable {
       exerciseName: exerciseName,
       machineName: machineName,
       machineIncrementKg: machineIncrementKg,
+      modality: modality,
       snapshot: snapshot,
       plannedSets: plannedSets,
       allowingOtherMachines: allowingOtherMachines,
@@ -284,6 +294,20 @@ public struct ExerciseLogState: Hashable, Sendable, Identifiable {
 
   public var progressionKey: ProgressionKey {
     ProgressionKey(exerciseID: exerciseID, machineID: machineID)
+  }
+
+  /// Whether recording a machine is a meaningful choice for this movement.
+  ///
+  /// A barbell, dumbbell or bodyweight movement has no machine: the bar, the dumbbells or the body
+  /// is the equipment, so the live screen offers no machine chip for it. A movement whose modality
+  /// is unknown keeps the chip, because a machine may still be what it was done on, and one that
+  /// already records a machine keeps it so the record can be corrected.
+  public var canChooseMachine: Bool {
+    if machineID != nil { return true }
+    switch modality {
+    case .barbell, .dumbbell, .bodyweight: return false
+    case .machine, .cable, nil: return true
+    }
   }
 
   /// What the row at `index` should be prefilled with. Past last session's count it repeats the

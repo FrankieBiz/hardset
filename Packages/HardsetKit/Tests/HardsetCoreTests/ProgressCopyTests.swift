@@ -55,6 +55,10 @@ struct ProgressCopyTests {
   func bandIsFromTheAnalyser() {
     #expect(ProgressTrendAnalyzer.comparisonBandDays == 35...49)
     #expect(ProgressCopy.comparisonBandText == "5 to 7 weeks")
+    // C9: the window and the record star are defined together where a change is shown.
+    #expect(ProgressCopy.comparisonAndRecordKey.contains("5 to 7 weeks"))
+    #expect(ProgressCopy.comparisonAndRecordKey.contains("star"))
+    #expect(ProgressCopy.comparisonAndRecordKey.contains("record"))
   }
 
   private func history(sessions: Int, firstDay: Int, latestDay: Int) -> MovementTrend {

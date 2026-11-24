@@ -197,7 +197,8 @@ struct WorkoutReceiptScreen: View {
           if editing == .correcting {
             HardsetBanner(
               .info, title: "Correcting sets",
-              message: "Tap the pencil beside a set to change its weight or reps. Nothing else about the set changes."
+              message: "Tap the pencil beside a set to change its weight or reps. Nothing else about the set changes.\n\n"
+                + SetCorrectionCopy.cannotAddSet
             )
             .padding([.horizontal, .top], Tokens.Spacing.loose)
           }
@@ -237,15 +238,26 @@ struct WorkoutReceiptScreen: View {
           }
 
           VStack(alignment: .leading, spacing: Tokens.Spacing.regular) {
+            // The level is about the equipment on these sets, and the badge says so before it says
+            // the level: a bare "High confidence" under the receipt gave no subject.
             CertaintyBadge(
               level: CertaintyLevel(rawValue: receipt.certainty.rawValue) ?? .unevaluated,
-              methodology: "A receipt of saved user-entered sets. Recorded machines, free weight and bodyweight are evaluated; imported sets and machine movements with no machine recorded are unevaluated. No independent load measurement or technique verification is claimed.")
+              methodology: "A receipt of saved user-entered sets. Recorded machines, free weight and bodyweight are evaluated; imported sets and machine movements with no machine recorded are unevaluated. No independent load measurement or technique verification is claimed.",
+              context: "Equipment on these sets",
+              style: .language)
             ShareLink(item: receipt.text(unit: unit)) { Label("Share text receipt", systemImage: "square.and.arrow.up") }
               .buttonStyle(HardsetButtonStyle(.secondary))
             if let image {
               ShareLink(item: image, preview: SharePreview("Hardset workout receipt", image: image)) {
                 Label("Share receipt image", systemImage: "photo")
               }.buttonStyle(HardsetButtonStyle())
+            } else if receipt.lines.count > Self.maximumImageSets {
+              // A control that is absent must say why, or a lifter with a long workout sees only
+              // that the image they shared last time is gone.
+              Text(Self.imageWithheldNote(sets: receipt.lines.count))
+                .font(Tokens.Text.caption)
+                .foregroundStyle(Tokens.Color.chalkDim)
+                .fixedSize(horizontal: false, vertical: true)
             }
             if saveAsWorkout != nil, canSaveAsWorkout(receipt) {
               Button {
@@ -259,6 +271,11 @@ struct WorkoutReceiptScreen: View {
                 HardsetBanner(
                   .info, message: "Saved as a workout. It is on the Train tab, ready to start in one tap.")
               }
+            } else if saveAsWorkout != nil, let reason = saveAsWorkoutWithheldNote(receipt) {
+              Text(reason)
+                .font(Tokens.Text.caption)
+                .foregroundStyle(Tokens.Color.chalkDim)
+                .fixedSize(horizontal: false, vertical: true)
             }
           }
           .padding(Tokens.Spacing.loose)
@@ -398,6 +415,26 @@ struct WorkoutReceiptScreen: View {
   /// against that copy.
   private func canSaveAsWorkout(_ receipt: WorkoutReceipt) -> Bool {
     !receipt.movements.isEmpty && !receipt.lines.contains { $0.isImported }
+  }
+
+  /// Why "Save as workout" is not drawn when the caller offers it. Nil when it is drawn, so the
+  /// note never contradicts a control that is on screen.
+  private func saveAsWorkoutWithheldNote(_ receipt: WorkoutReceipt) -> String? {
+    guard !canSaveAsWorkout(receipt) else { return nil }
+    if receipt.lines.contains(where: \.isImported) {
+      return "Save as workout is not offered for an imported workout: an imported movement stays apart from your own, so a saved workout from it would log against that copy."
+    }
+    return "This workout has no sets, so there is nothing to save as a workout."
+  }
+
+  /// The set count above which the receipt is shared as text rather than an image. Its renderer
+  /// would otherwise allocate a bitmap taller than the phone can sensibly draw.
+  static let maximumImageSets = 30
+
+  /// Said where the image control would be. The same number the renderer uses, so the sentence
+  /// cannot promise a limit the code does not keep.
+  static func imageWithheldNote(sets: Int) -> String {
+    "A receipt image is offered for \(maximumImageSets) sets or fewer; this workout has \(sets), so share the text receipt instead."
   }
 
   /// Makes the plan from this workout and hands it to the editor. A failure stays in the naming
@@ -580,8 +617,9 @@ struct WorkoutReceiptScreen: View {
     await snapshot.load { try await store.load(sessionID) }
     #if canImport(UIKit)
       guard let receipt = snapshot.value else { return }
-      // Keep very long sessions as text rather than allocate an unbounded bitmap.
-      guard receipt.lines.count <= 30 else { image = nil; return }
+      // Keep very long sessions as text rather than allocate an unbounded bitmap, and say so where
+      // the image control would have been.
+      guard receipt.lines.count <= Self.maximumImageSets else { image = nil; return }
       let renderer = ImageRenderer(content: WorkoutReceiptView(receipt: receipt, unit: unit)
         .frame(width: 540).environment(\.colorScheme, .dark).environment(\.dynamicTypeSize, .large))
       renderer.scale = min(displayScale, 2)

@@ -459,19 +459,24 @@ public nonisolated struct SessionSummary: Hashable, Sendable, Identifiable {
   /// Distinct movements performed, in the order they were first logged.
   public let exerciseNames: [String]
   public let volume: SessionVolume
+  /// Written by a workout import, so History can tag it. The receipt already reads the same marker
+  /// from the session's notes; this puts the word where the workout is listed.
+  public let isImported: Bool
 
   public init(
     id: SessionID,
     title: String,
     timeline: SessionTimeline,
     exerciseNames: [String],
-    volume: SessionVolume
+    volume: SessionVolume,
+    isImported: Bool = false
   ) {
     self.id = id
     self.title = title
     self.timeline = timeline
     self.exerciseNames = exerciseNames
     self.volume = volume
+    self.isImported = isImported
   }
 
   /// A session recorded as implausibly long is quarantined rather than displayed as an
@@ -591,7 +596,9 @@ public nonisolated struct HistoryStore: Sendable {
         title: session.title,
         timeline: SessionTimeline(startedAt: session.startedAt, finishedAt: session.finishedAt),
         exerciseNames: ordered,
-        volume: Self.volume(of: own)
+        volume: Self.volume(of: own),
+        // The same marker the receipt withholds its scorecard and records on.
+        isImported: session.notes.hasPrefix("Imported from ")
       )
     }
   }

@@ -74,14 +74,23 @@ public struct PitchSetRowDemo: View {
   @State private var secondLogged = false
   @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
-  private static let lastTime = PriorSetRecord(
-    weightKg: 60, reps: 10, completedAt: Date().addingTimeInterval(-7 * 86_400))
+  /// The set the demo says was done last time. Round in the unit it is read in: 60 kg, or 135 lb
+  /// on a pounds phone, rather than a converted 132.28 lb.
+  private static func lastTime(in unit: WeightUnit) -> PriorSetRecord {
+    PriorSetRecord(
+      weightKg: unit == .pounds ? WeightUnit.pounds.toKilograms(135) : 60,
+      reps: 10, completedAt: Date().addingTimeInterval(-7 * 86_400))
+  }
+
+  private let lastTime: PriorSetRecord
 
   /// - Parameter isFirstLogged: Starts with the first set already logged, for a capture.
   public init(unit: WeightUnit, isFirstLogged: Bool = false) {
     self.unit = unit
-    _first = State(initialValue: SetEntryDraft(suggestion: Self.lastTime))
-    _second = State(initialValue: SetEntryDraft(suggestion: Self.lastTime))
+    let last = Self.lastTime(in: unit)
+    self.lastTime = last
+    _first = State(initialValue: SetEntryDraft(suggestion: last))
+    _second = State(initialValue: SetEntryDraft(suggestion: last))
     _firstLogged = State(initialValue: isFirstLogged)
   }
 
@@ -92,7 +101,7 @@ public struct PitchSetRowDemo: View {
         .foregroundStyle(Tokens.Color.chalk)
       SetRowView(
         draft: $first, ordinal: 0, isLogged: firstLogged, isNext: !firstLogged, unit: unit,
-        previous: Self.lastTime,
+        previous: lastTime,
         onLog: {
           withAnimation(Tokens.Motion.adaptive(Tokens.Motion.reveal, reduceMotion: reduceMotion)) {
             firstLogged = true
@@ -101,7 +110,7 @@ public struct PitchSetRowDemo: View {
       if firstLogged {
         SetRowView(
           draft: $second, ordinal: 1, isLogged: secondLogged, isNext: !secondLogged, unit: unit,
-          previous: Self.lastTime,
+          previous: lastTime,
           onLog: { secondLogged = true }
         )
         .transition(.opacity)
@@ -142,8 +151,16 @@ public struct PitchEstimateDemo: View {
   /// single, the only High), moderate at three, low at twelve (low is only eleven and twelve), and
   /// not evaluated at fifteen.
   public static let repOptions = [1, 3, 12, 15]
-  /// The weight of the set every segment shows.
+  /// The weight of the set every segment shows, in kilograms.
   public static let weightKg = 60.0
+  /// The load a pounds phone is shown. Chosen round in pounds (135 lb) rather than converted from
+  /// 60 kg, which read "132.28 lb" on a page whose point is that the numbers are honest.
+  public static let poundsWeightKg = WeightUnit.pounds.toKilograms(135)
+
+  /// The set's load in `unit`: 60 kg, or the round 135 lb on a pounds phone.
+  public static func weightKg(in unit: WeightUnit) -> Double {
+    unit == .pounds ? poundsWeightKg : weightKg
+  }
 
   private let unit: WeightUnit
   @State private var reps: Int
@@ -154,7 +171,7 @@ public struct PitchEstimateDemo: View {
   }
 
   private var claim: Claim<Double> {
-    StrengthMath.estimatedOneRepMax(weightKg: Self.weightKg, reps: reps)
+    StrengthMath.estimatedOneRepMax(weightKg: Self.weightKg(in: unit), reps: reps)
   }
 
   /// "1 rep", "3 reps".
@@ -164,12 +181,13 @@ public struct PitchEstimateDemo: View {
 
   public var body: some View {
     let claim = claim
+    let loadKg = Self.weightKg(in: unit)
     // A single is the observation itself, so it says "measured"; every other rep count is the
     // formula's estimate.
     let kind = claim.source.id == StrengthMath.measuredSource.id ? "measured" : "estimated"
     let setReps = Self.repsLabel(reps)
     VStack(alignment: .leading, spacing: Tokens.Spacing.loose) {
-      Text("\(LoadText.entered(Self.weightKg, in: unit)) \(unit.abbreviation) for \(setReps)")
+      Text("\(LoadText.entered(loadKg, in: unit)) \(unit.abbreviation) for \(setReps)")
         .hardsetText(.provenance)
         .foregroundStyle(Tokens.Color.chalkDim)
       if let value = claim.value {

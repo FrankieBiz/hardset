@@ -41,6 +41,9 @@ public struct ProgressBoardView: View {
   private let subtitle: String?
   private let onSelect: (ProgressBoard.Row) -> Void
   private let onShowSettings: (() -> Void)?
+  /// Opens the Library, where a movement with no body part is given one. Nil on a host without it,
+  /// and then the "Needs a body part" section says the remedy without a link.
+  private let onShowLibrary: (() -> Void)?
   private let onShowChangeWorking: ((ProgressBoard.Row) -> Void)?
   private let workingFailure: WorkingFailure?
   /// Read once from the board, not per row: how an imported row and the logged row beside it relate.
@@ -71,6 +74,7 @@ public struct ProgressBoardView: View {
     title: String? = nil,
     subtitle: String? = nil,
     onShowSettings: (() -> Void)? = nil,
+    onShowLibrary: (() -> Void)? = nil,
     onShowChangeWorking: ((ProgressBoard.Row) -> Void)? = nil,
     workingFailure: WorkingFailure? = nil,
     onSelect: @escaping (ProgressBoard.Row) -> Void
@@ -80,6 +84,7 @@ public struct ProgressBoardView: View {
     self.title = title
     self.subtitle = subtitle
     self.onShowSettings = onShowSettings
+    self.onShowLibrary = onShowLibrary
     self.onShowChangeWorking = onShowChangeWorking
     self.workingFailure = workingFailure
     self.onSelect = onSelect
@@ -100,6 +105,14 @@ public struct ProgressBoardView: View {
           )
           .padding(.top, Tokens.Spacing.section)
         } else {
+          // The two marks a row can carry, defined once above the rows, so a change is never shown
+          // with its window or its star left to be guessed.
+          Text(ProgressCopy.comparisonAndRecordKey)
+            .font(Tokens.Text.caption)
+            .foregroundStyle(Tokens.Color.chalkDim)
+            .fixedSize(horizontal: false, vertical: true)
+            .padding(.horizontal, Tokens.Spacing.loose)
+            .padding(.top, Tokens.Spacing.regular)
           if board.hasImportedHistory {
             Text(ProgressCopy.importedBoardNote)
               .font(Tokens.Text.caption)
@@ -177,20 +190,35 @@ public struct ProgressBoardView: View {
     } else {
       // Movements with no body part: said as a gap to close, in the library's own words. The
       // warning glyph is the mark; the words are `chalk`, as the stale-workout notice's are.
-      HStack(alignment: .firstTextBaseline, spacing: Tokens.Spacing.snug) {
-        Image(systemName: "exclamationmark.triangle")
-          .foregroundStyle(Tokens.Color.warning)
-          .accessibilityHidden(true)
-        Text("Needs a body part")
-          .foregroundStyle(Tokens.Color.chalk)
-        Text(section.rows.count, format: .number)
-          .monospacedDigit()
-          .foregroundStyle(Tokens.Color.chalkDim)
-        Spacer(minLength: 0)
+      VStack(alignment: .leading, spacing: Tokens.Spacing.tight) {
+        HStack(alignment: .firstTextBaseline, spacing: Tokens.Spacing.snug) {
+          Image(systemName: "exclamationmark.triangle")
+            .foregroundStyle(Tokens.Color.warning)
+            .accessibilityHidden(true)
+          Text("Needs a body part")
+            .foregroundStyle(Tokens.Color.chalk)
+          Text(section.rows.count, format: .number)
+            .monospacedDigit()
+            .foregroundStyle(Tokens.Color.chalkDim)
+          Spacer(minLength: 0)
+        }
+        .font(Tokens.Text.sectionHeader)
+        .accessibilityElement(children: .combine)
+        .accessibilityAddTraits(.isHeader)
+
+        if let onShowLibrary {
+          // The sentence above the rows tells a lifter where the gap is fixed; this is the link to
+          // it. The Library was an unlabelled icon on another tab, which is not a place a note can
+          // send someone to.
+          Button(action: onShowLibrary) {
+            Label("Set it in Library", systemImage: "books.vertical")
+              .font(Tokens.Text.provenance)
+              .foregroundStyle(Tokens.Color.chalkDim)
+          }
+          .buttonStyle(InlineControlStyle(alignment: .leading))
+          .accessibilityHint("Opens every movement, where a body part can be chosen")
+        }
       }
-      .font(Tokens.Text.sectionHeader)
-      .accessibilityElement(children: .combine)
-      .accessibilityAddTraits(.isHeader)
     }
   }
 

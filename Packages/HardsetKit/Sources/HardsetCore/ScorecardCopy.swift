@@ -48,8 +48,13 @@ public enum ScorecardCopy {
   }
 
   /// What a movement earned, in the figures of its sets: "+1 rep", "+2.5 kg · +1 rep", "Record" when
-  /// only a record applies, "Matched", or "First time on this machine". Nil for a movement that
-  /// fell short, which the headline already counts.
+  /// only a record applies, "Matched", or "First time". Nil for a movement that fell short, which
+  /// the headline already counts.
+  ///
+  /// A first time names what it is a first time on: "First time on this machine" only when a
+  /// machine was recorded, and "First time" for free weight or bodyweight work, which has no
+  /// machine, or when no equipment is known. A barbell movement was never "first time on this
+  /// machine" — there is no machine.
   public static func markText(_ entry: WorkoutScorecard.Entry, unit: WeightUnit) -> String? {
     switch entry.outcome {
     case .beat(let comparison):
@@ -57,8 +62,15 @@ public enum ScorecardCopy {
       let label = comparison.label(in: unit)
       return label.isEmpty ? "Ahead of last time" : label
     case .matched: return "Matched"
-    case .firstTime: return "First time on this machine"
+    case .firstTime: return firstTimeText(entry.equipment)
     case .notBeaten: return nil
     }
+  }
+
+  /// "First time on this machine" only for a recorded machine; "First time" for free weight,
+  /// bodyweight, an unrecorded machine, or equipment the entry does not know.
+  public static func firstTimeText(_ equipment: WorkoutReceipt.Equipment?) -> String {
+    guard case .machine = equipment else { return "First time" }
+    return "First time on this machine"
   }
 }

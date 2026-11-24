@@ -251,6 +251,15 @@ public struct SettingsSheet: View {
         disclosureRow(.setCounting)
         disclosureRow(.progression)
       }
+
+      // The Progress board's two marks, stated here as well as above its rows, because Settings is
+      // where a lifter looks for how a figure is worked out.
+      Text(ProgressCopy.comparisonAndRecordKey)
+        .font(Tokens.Text.caption)
+        .foregroundStyle(Tokens.Color.chalkDim)
+        .fixedSize(horizontal: false, vertical: true)
+        .padding(.horizontal, Tokens.Spacing.tight)
+        .padding(.top, Tokens.Spacing.tight)
     }
   }
 

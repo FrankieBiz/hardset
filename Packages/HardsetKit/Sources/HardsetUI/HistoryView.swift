@@ -11,6 +11,9 @@ public struct HistoryRow: Hashable, Sendable, Identifiable {
   public let volume: SessionVolume
   /// A recorded span longer than any real workout. Rendered as a caveat rather than a boast.
   public let hasImplausibleDuration: Bool
+  /// Written by a workout import. The row says so, because imported sets are not compared with the
+  /// lifter's own and a reader should not wonder why this workout has no records.
+  public let isImported: Bool
 
   public init(
     id: SessionID,
@@ -19,7 +22,8 @@ public struct HistoryRow: Hashable, Sendable, Identifiable {
     duration: Duration?,
     exerciseNames: [String],
     volume: SessionVolume,
-    hasImplausibleDuration: Bool
+    hasImplausibleDuration: Bool,
+    isImported: Bool = false
   ) {
     self.id = id
     self.title = title
@@ -28,6 +32,7 @@ public struct HistoryRow: Hashable, Sendable, Identifiable {
     self.exerciseNames = exerciseNames
     self.volume = volume
     self.hasImplausibleDuration = hasImplausibleDuration
+    self.isImported = isImported
   }
 }
 
@@ -285,6 +290,7 @@ public struct HistoryView: View {
 
   static func spokenLabel(_ row: HistoryRow, unit: WeightUnit) -> String {
     var parts = [row.title.isEmpty ? dateText(row.date) : "\(row.title), \(dateText(row.date))"]
+    if row.isImported { parts.append("Imported") }
     parts.append(volumeText(row.volume, unit: unit))
     if row.hasImplausibleDuration {
       parts.append("length unknown, this session was left open")
@@ -374,6 +380,14 @@ private struct HistoryRowContent: View {
           Spacer(minLength: Tokens.Spacing.snug)
           durationLabel
         }
+      }
+
+      if row.isImported {
+        // One word, because the fact matters and the reason is on the receipt. Imported sets are
+        // kept apart from the lifter's own, so this workout's records are not theirs.
+        Text("Imported")
+          .font(Tokens.Text.caption.weight(.semibold))
+          .foregroundStyle(Tokens.Color.chalkDim)
       }
 
       figures

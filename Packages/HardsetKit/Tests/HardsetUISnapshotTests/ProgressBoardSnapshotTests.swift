@@ -42,14 +42,17 @@
       let pullup = row("Pull-up", machine: nil, metric: .repsAtTopLoad, change: 0.2,
         sparkline: [6, 7, 8, 8, 9, 10])
       let mystery = row("Pendulum squat", machine: nil, metric: .heaviestLoad, change: -0.03)
-      return ProgressBoard(
-        sections: [
-          ProgressBoard.Section(category: .chest, rows: [press, fly]),
-          ProgressBoard.Section(category: .back, rows: [row2, pullup]),
-          ProgressBoard.Section(category: .quads, rows: [squat]),
-          ProgressBoard.Section(category: nil, rows: [mystery]),
-        ],
-        mostImproved: [row2, press, pullup])
+      // Through `make`, so the fixture's Most improved order is the analyser's order. Hand-ordering
+      // it once put the Low-confidence stalled row above a Moderate one and made the render
+      // contradict the rule C6 fixed.
+      return ProgressBoard.make([
+        .init(row: press, bodyPart: .chest),
+        .init(row: fly, bodyPart: .chest),
+        .init(row: row2, bodyPart: .back),
+        .init(row: pullup, bodyPart: .back),
+        .init(row: squat, bodyPart: .quads),
+        .init(row: mystery, bodyPart: nil),
+      ])
     }
 
     private static func screen(
@@ -60,6 +63,7 @@
       return NavigationStack {
         ProgressBoardView(
           board: board, title: "Progress", subtitle: subtitle, onShowSettings: {},
+          onShowLibrary: {},
           onShowChangeWorking: { _ in }, workingFailure: failure,
           onSelect: { _ in }
         )
@@ -79,8 +83,9 @@
       }
     }
 
-    /// A request for a row's working that failed, said under that row's own control. The Hammer Strength
-    /// chest press is the first row, so the line sits under its certainty phrase and control.
+    /// A request for a row's working that failed, said under that row's own control. The first row
+    /// of the first section is the one asked about, so the line sits under its certainty phrase
+    /// and control.
     @Test func boardWithAFailedWorking() async throws {
       let board = Self.board
       let press = try #require(board.sections.first?.rows.first)

@@ -36,11 +36,18 @@
     /// controls that follow it. The start is drawn here as the screen draws it, primary with nothing
     /// saved and secondary under the workouts, so the render shows the order a lifter meets the
     /// controls in, with the screen's own spacing between the groups.
-    private static func cards(_ cards: [WorkoutCard], canRepeatLast: Bool = true) -> some View {
+    private static func cards(
+      _ cards: [WorkoutCard], canRepeatLast: Bool = true,
+      failedStartTemplate: TemplateID? = nil, failedStartMessage: String? = nil,
+      repeatFailure: String? = nil
+    ) -> some View {
       ScrollView {
         VStack(alignment: .leading, spacing: Tokens.Spacing.block) {
           if !cards.isEmpty {
-            WorkoutCardsView(cards: cards, onStart: { _ in }, onEdit: { _ in })
+            WorkoutCardsView(
+              cards: cards, failedStartTemplate: failedStartTemplate,
+              failedStartMessage: failedStartMessage,
+              onStart: { _ in }, onEdit: { _ in })
           }
           VStack(alignment: .leading, spacing: Tokens.Spacing.regular) {
             Button {
@@ -49,7 +56,9 @@
                 .labelStyle(.titleAndIcon)
             }
             .buttonStyle(HardsetButtonStyle(cards.isEmpty ? .primary : .secondary, size: .logger))
-            WorkoutCardActions(canRepeatLast: canRepeatLast, onRepeatLast: {}, onNew: {})
+            WorkoutCardActions(
+              canRepeatLast: canRepeatLast, repeatFailure: repeatFailure,
+              onRepeatLast: {}, onNew: {})
           }
         }
         .padding(Tokens.Spacing.loose)
@@ -83,6 +92,21 @@
       try await Snapshot.capture(
         "kit-workoutcards-rotation-dark-ax3", size: Self.tall, typeSize: .accessibility3
       ) { Self.cards(Self.rotation) }
+    }
+
+    /// B1: a start that failed is said under the control that asked for it, and names the workout.
+    /// The old single banner sat below every card and both Start controls, so a tap on a card with
+    /// several above it looked like nothing had happened.
+    @Test func aFailedStartIsSaidUnderItsControl() async throws {
+      let rotation = Self.rotation
+      let failing = rotation[1]
+      try await Snapshot.capture("kit-workoutcards-start-failed-dark", size: Self.tall) {
+        Self.cards(
+          rotation,
+          failedStartTemplate: failing.id,
+          failedStartMessage: "Could not start “\(failing.name)”. Nothing has been lost — try its Start again.",
+          repeatFailure: "Could not start your last workout again. Nothing has been lost — try again.")
+      }
     }
 
     // MARK: - Editor

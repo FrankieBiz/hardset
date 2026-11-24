@@ -39,6 +39,10 @@ public struct VolumeReportView: View {
   private let onShowSettings: (() -> Void)?
   private let onEarlier: (() -> Void)?
   private let onLater: (() -> Void)?
+  /// Opens the Library, where a movement with no body part gets one.
+  private let onShowLibrary: (() -> Void)?
+  /// Said when the window cannot step back any further, so a disabled "Earlier" is not a mystery.
+  private let earlierLimitNote: String?
   /// Opens the working behind a muscle's count, from the figure on its row. `nil` where the screen
   /// has no working to show, and the figure is then plain text.
   private let onShowWorking: ((Muscle) -> Void)?
@@ -56,6 +60,8 @@ public struct VolumeReportView: View {
     onShowSettings: (() -> Void)? = nil,
     onEarlier: (() -> Void)? = nil,
     onLater: (() -> Void)? = nil,
+    onShowLibrary: (() -> Void)? = nil,
+    earlierLimitNote: String? = nil,
     onShowWorking: ((Muscle) -> Void)? = nil,
     onShowTotalWorking: (() -> Void)? = nil
   ) {
@@ -68,6 +74,8 @@ public struct VolumeReportView: View {
     self.onShowSettings = onShowSettings
     self.onEarlier = onEarlier
     self.onLater = onLater
+    self.onShowLibrary = onShowLibrary
+    self.earlierLimitNote = earlierLimitNote
     self.onShowWorking = onShowWorking
     self.onShowTotalWorking = onShowTotalWorking
   }
@@ -87,6 +95,14 @@ public struct VolumeReportView: View {
         VStack(alignment: .leading, spacing: Tokens.Spacing.section) {
           if onEarlier != nil || onLater != nil {
             windowControls
+          }
+          // A disabled "Earlier" with no word beside it reads as a broken control. At the cap it
+          // says what the cap is.
+          if let earlierLimitNote, onEarlier == nil {
+            Text(earlierLimitNote)
+              .font(Tokens.Text.caption)
+              .foregroundStyle(Tokens.Color.chalkDim)
+              .fixedSize(horizontal: false, vertical: true)
           }
           if report.hardSets == 0 {
             HardsetEmptyState(
@@ -205,6 +221,17 @@ public struct VolumeReportView: View {
           title: "Counts below are lower bounds",
           message: Self.lowerBoundMessage(unattributed: report.unattributedHardSets)
         )
+        if let onShowLibrary {
+          // The note says where the gap is fixed. This is the link to that place, so "Library, on
+          // the Train tab" is one tap rather than a name to go looking for.
+          Button(action: onShowLibrary) {
+            Label("Set it in Library", systemImage: "books.vertical")
+              .font(Tokens.Text.provenance)
+              .foregroundStyle(Tokens.Color.chalkDim)
+          }
+          .buttonStyle(InlineControlStyle(alignment: .leading))
+          .accessibilityHint("Opens every movement, where a body part can be chosen")
+        }
       }
 
       if let onExplainCounting {

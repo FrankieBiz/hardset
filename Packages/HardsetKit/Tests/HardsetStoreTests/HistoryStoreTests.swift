@@ -255,6 +255,28 @@ struct HistoryStoreTests {
     #expect(!row.hasImplausibleDuration)
   }
 
+  /// C10 residual: the history list had no way to say a workout came from another app, although
+  /// the receipt reads the same marker. The word is carried from the session's notes.
+  @Test("An imported workout is tagged in the history list, and a logged one is not")
+  func importedSessionIsTagged() throws {
+    let (database, logger, history, press, _) = try fixture()
+    let start = now.addingTimeInterval(-86_400)
+    let session = try logger.startSession(title: "Push", at: start)
+    _ = try logger.logSet(
+      sessionID: session, exerciseID: press,
+      draft: SetEntryDraft(weightKg: 100, reps: 8), setOrdinal: 0, at: start)
+    try logger.finishSession(session, at: start.addingTimeInterval(3600))
+
+    #expect(try history.recentSessions().map(\.isImported) == [false])
+
+    try database.write { db in
+      try #sql(
+        "UPDATE sessions SET notes = 'Imported from Strong' WHERE id = \(bind: session.rawValue)"
+      ).execute(db)
+    }
+    #expect(try history.recentSessions().map(\.isImported) == [true])
+  }
+
   /// An unfinished workout belongs in the recovery path. Listing it with no duration invites the
   /// reader to think it lasted no time at all.
   @Test("An open session is not in history")

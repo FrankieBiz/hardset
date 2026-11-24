@@ -133,7 +133,25 @@ struct MovementEditorDraftTests {
   @Test("Equipment offers the five ways a load is applied, machine first")
   func equipmentOptions() {
     #expect(MovementEditorDraft.equipment == [.machine, .cable, .barbell, .dumbbell, .bodyweight])
-    #expect(MovementEditorDraft(name: "x").modality == .machine)
+  }
+
+  /// A new movement used to open pre-selected to Machine, so a lifter who named a barbell lift and
+  /// saved it as shown later found it was "machine, no machine recorded". Nothing is chosen now,
+  /// and the editor says what that withholds.
+  @Test("A new movement opens with no equipment chosen and says what that withholds")
+  func aNewMovementDeclaresNoEquipment() throws {
+    var draft = MovementEditorDraft(name: "Zercher squat")
+    #expect(draft.modality == nil)
+    #expect(draft.equipmentIsUnset)
+    #expect(draft.savedNote.contains("no max will be estimated"))
+
+    draft.choose(bodyPart: .quads)
+    #expect(draft.canSave)
+    #expect(try #require(draft.attribution).modality == nil)
+
+    draft.modality = .barbell
+    #expect(!draft.equipmentIsUnset)
+    #expect(!draft.savedNote.contains("no max will be estimated"))
   }
 
   @Test("Editing starts from what the movement already says")
@@ -185,11 +203,11 @@ struct MovementEditorDraftTests {
     #expect(try #require(draft.attribution).modality == .barbell)
   }
 
-  @Test("A movement with equipment on record keeps it, and a new one still opens on machine")
+  @Test("A movement with equipment on record keeps it, and a new one opens with none")
   func recordedEquipmentIsKept() {
     #expect(MovementEditorDraft(entry: entry(primary: .lats, modality: .dumbbell)).modality == .dumbbell)
     #expect(!MovementEditorDraft(entry: entry(primary: .lats, modality: .dumbbell)).equipmentIsUnset)
-    #expect(MovementEditorDraft().modality == .machine)
+    #expect(MovementEditorDraft().modality == nil)
   }
 
   @Test("An imported movement's name is fixed, and a lifter's own is not")
