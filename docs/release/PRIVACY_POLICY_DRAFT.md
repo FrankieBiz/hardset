@@ -43,8 +43,9 @@ CSV contains logged training data and machine identifiers. JSON and SQLite
 exports also include the device-local tables Hardset holds; in 1.0 that does not
 include Apple Health data, because 1.0 does not connect to Apple Health.
 The recipient or app you select controls the copies you share. Deleting data in
-Hardset does not delete those copies. Hardset's own exports are readable copies;
-the current app cannot restore its database from them.
+Hardset does not delete those copies. JSON is the complete restorable copy; CSV
+restores workouts; SQLite is for keeping and inspecting and cannot be read back
+into Hardset.
 
 ## Tracking and third parties
 
