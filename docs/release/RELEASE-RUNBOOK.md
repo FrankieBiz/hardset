@@ -31,15 +31,12 @@ documentation PR.
 | In-App Purchase product ID | `LifetimeAccess.productID` | `com.hardset.app.lifetime` |
 | Launch price | decision D17 | **$19.99** |
 | Standing price after launch | decision D17 | **$29.99** |
-| Marketing URL | GitHub Pages workflow | `https://frankiebiz.github.io/hardset/` |
-| Support URL | GitHub Pages workflow | `https://frankiebiz.github.io/hardset/support.html` |
-| Privacy Policy URL | GitHub Pages workflow | `https://frankiebiz.github.io/hardset/privacy.html` |
+| Marketing, Support and Privacy URLs | `docs/release/APP-STORE-METADATA.md` §8 | The three URLs are in §8; that table is the only place they are written down. |
 | Review contact phone | owner | **PLACEHOLDER** |
 | EU trader status | owner/legal decision | **PLACEHOLDER** |
 
-The site is published by `.github/workflows/pages.yml`: set the Pages source to **GitHub
-Actions** once, then every push to `main` deploys the `site/` folder. Pages does not accept
-`/site` as a branch/folder source; do not configure one.
+The site is published by `.github/workflows/pages.yml`; the owner-facing publish procedure
+is in `site/README.md`. That file is the only place the procedure is written down.
 
 Exact code locations, so nobody greps twice:
 
