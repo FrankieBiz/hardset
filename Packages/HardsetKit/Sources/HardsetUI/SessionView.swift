@@ -815,7 +815,9 @@ public struct SessionView: View {
         finishControls
           .padding(.horizontal, Tokens.Spacing.regular)
       }
-      .padding(.bottom, Tokens.Spacing.snug)
+      // No extra room under the last control at accessibility sizes: the reach check caps what
+      // this stack covers, and the button already sits above the tab bar.
+      .padding(.bottom, dynamicTypeSize.isAccessibilitySize ? 0 : Tokens.Spacing.snug)
     }
   }
 
@@ -1196,13 +1198,33 @@ public struct SessionView: View {
       .buttonStyle(HardsetButtonStyle(.secondary, size: .logger))
       .hardsetArrival()
     } else if loggedSetCount > 0 {
-      Button {
-        requestFinish()
-      } label: {
-        Label("Finish workout", systemImage: "flag.checkered")
-      }
-      .buttonStyle(HardsetButtonStyle(.secondary, size: .logger))
-      .hardsetArrival()
+      finishButton
+    }
+  }
+
+  /// "Finish workout", or "Finish" and an inline control at accessibility sizes.
+  ///
+  /// The pinned stack at accessibility sizes already holds the record notice and the rest bar, and
+  /// the reach check caps it at half the screen. A logger-size, wrapping "Finish workout" under
+  /// them would cross that cap; a one-line "Finish" keeps the way out inside it, and the spoken
+  /// name stays "Finish workout".
+  @ViewBuilder private var finishButton: some View {
+    let isLarge = dynamicTypeSize.isAccessibilitySize
+    let button = Button {
+      requestFinish()
+    } label: {
+      Label(isLarge ? "Finish" : "Finish workout", systemImage: "flag.checkered")
+        .font(Tokens.Text.headline)
+    }
+    .accessibilityLabel("Finish workout")
+    if isLarge {
+      button
+        .buttonStyle(InlineControlStyle(alignment: .leading))
+        .hardsetArrival()
+    } else {
+      button
+        .buttonStyle(HardsetButtonStyle(.secondary, size: .logger))
+        .hardsetArrival()
     }
   }
 
