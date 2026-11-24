@@ -61,12 +61,12 @@ no Health permission to revoke for this version.
 
 ## Lifetime purchase
 
-The optional one-time purchase unlocks the deep muscle map. Use Restore purchases
+The optional one-time purchase unlocks muscle history. Use Restore purchases
 with the Apple Account that bought it. A temporary product-loading failure does
 not mean a previous purchase has been lost. Core logging, history, importing and
 exporting do not require Lifetime access.
 
-Development builds include the map and say that nothing was purchased. This
+Development builds include muscle history and say that nothing was purchased. This
 does not verify the App Store purchase flow; the release must be tested with
 Apple's sandbox before publication.
 

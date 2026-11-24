@@ -27,8 +27,8 @@ build the current branch (`BRANCH ?=`), not main. CI compiles Release too.
 
 ## User decisions (2026-11-09)
 
-- Deep muscle map: unlocked in development builds (simulator or embedded.mobileprovision) with a visible
-  note; App Store builds keep the paid gate.
+- The paid surface (now called Muscle history): unlocked in development builds (simulator or
+  embedded.mobileprovision) with a visible note; App Store builds keep the paid gate.
 - Rest: remember the lifter's last chosen duration per movement, one-tap reuse; never invent a default.
 - Delivery: PR from this branch, merge to main once CI is green.
 

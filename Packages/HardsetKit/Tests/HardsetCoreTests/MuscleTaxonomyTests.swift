@@ -284,7 +284,7 @@ struct SetCountingTests {
   }
 
   /// A counted muscle reads "not evaluated", not "low": the relationship was never fitted for it, so
-  /// there is no weak estimate to be unsure of. The deep muscle map once graded it low while the
+  /// there is no weak estimate to be unsure of. The paid surface once graded it low while the
   /// volume row beside the same count read not evaluated; both now read the one rule.
   @Test("Modelled muscles are moderate, counted muscles are not evaluated")
   func tierCeilings() {

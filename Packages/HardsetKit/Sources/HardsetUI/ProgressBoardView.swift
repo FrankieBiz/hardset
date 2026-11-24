@@ -403,11 +403,17 @@ public struct ProgressBoardView: View {
   }
 }
 
-/// A trend line with no axes: the shape of the last dozen sessions, nothing more, in `chalkDim`.
-/// The newest session is marked with a `chalk` point so its end is visible. Hidden from VoiceOver, which reads the
-/// row's sentence.
-private struct Sparkline: View {
+/// A trend line with no axes: the shape of the last dozen sessions or weeks, nothing more, in
+/// `chalkDim`. The newest point is marked with a `chalk` point so its end is visible. Hidden from
+/// VoiceOver, which reads the row's sentence.
+///
+/// - Parameter includesZero: `false` for a load series, where a zero is an impassable lift and
+///   including it would flatten the shape. `true` for muscle history, where a week with no sets must
+///   sit visibly on the floor: with zero excluded, an untrained week would sit on the same line as
+///   a week with one set (D24 §3.5).
+struct Sparkline: View {
   let values: [Double]
+  var includesZero = false
 
   var body: some View {
     Chart {
@@ -428,7 +434,7 @@ private struct Sparkline: View {
     .chartXAxis(.hidden)
     .chartYAxis(.hidden)
     .chartLegend(.hidden)
-    .chartYScale(domain: .automatic(includesZero: false))
+    .chartYScale(domain: .automatic(includesZero: includesZero))
     .accessibilityHidden(true)
   }
 }

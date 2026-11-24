@@ -6,8 +6,8 @@ import SwiftUI
 /// The sheets the Volume screen opens, one at a time. `nonisolated` so its computed `id` satisfies
 /// `Identifiable` without isolated-conformance inference, as `ReceiptSelection` does.
 private nonisolated enum VolumeSheet: Identifiable {
-  /// The deep muscle map.
-  case map
+  /// Muscle history, the paid unlock built around time.
+  case muscleHistory
   /// How sets are counted.
   case methodology
   /// The working behind one muscle's count.
@@ -15,7 +15,7 @@ private nonisolated enum VolumeSheet: Identifiable {
 
   var id: String {
     switch self {
-    case .map: "map"
+    case .muscleHistory: "muscle-history"
     case .methodology: "methodology"
     case .working(let presentation): "working-\(presentation.id.uuidString)"
     }
@@ -37,11 +37,14 @@ private nonisolated enum VolumeSheet: Identifiable {
 @MainActor
 public struct WeeklyVolumeScreen: View {
   @State private var snapshot = SnapshotLoader<VolumeWindow>()
+  /// Muscle history's own read, loaded when the sheet opens and kept for that opening. It is a
+  /// different snapshot because it covers all history, not the week the free screen is showing.
+  @State private var historySnapshot = SnapshotLoader<MuscleHistoryReading>()
   /// The sheet that is up, or `nil`. One value for both, so the screen holds one presentation.
   @State private var presented: VolumeSheet?
-  /// The working a lifter opened from inside the deep muscle map. The map is itself a sheet, so
-  /// this is presented over it, from its own stack, and closing it returns to the map.
-  @State private var mapWorking: WorkedFromPresentation?
+  /// The working a lifter opened from inside muscle history. That sheet is itself a sheet, so this
+  /// is presented over it, from its own stack, and closing it returns to muscle history.
+  @State private var historyWorking: WorkedFromPresentation?
   /// How many whole weeks before now the window ends. Zero is the last seven days.
   @State private var weeksBack = 0
   /// Bumped when the app returns to the foreground, so the rolling window is recomputed from now.
@@ -49,6 +52,9 @@ public struct WeeklyVolumeScreen: View {
   @Environment(\.scenePhase) private var scenePhase
 
   private let store: VolumeStore
+  /// Reads all-history muscle figures for the paid sheet. Separate from `store` because it is a
+  /// different window of time, not a different rule.
+  private let historyStore: MuscleHistoryStore
   private let now: () -> Date
   /// Changes whenever data was written elsewhere, such as an import from Settings, so the window
   /// on screen is read again while its current figures stay visible.
@@ -65,10 +71,12 @@ public struct WeeklyVolumeScreen: View {
   private static let maximumWeeksBack = 52
 
   public init(
-    store: VolumeStore, now: @escaping () -> Date = { Date() }, dataRevision: Int = 0,
+    store: VolumeStore, historyStore: MuscleHistoryStore,
+    now: @escaping () -> Date = { Date() }, dataRevision: Int = 0,
     onShowSettings: (() -> Void)? = nil, onShowLibrary: (() -> Void)? = nil
   ) {
     self.store = store
+    self.historyStore = historyStore
     self.now = now
     self.dataRevision = dataRevision
     self.onShowSettings = onShowSettings
@@ -123,8 +131,13 @@ public struct WeeklyVolumeScreen: View {
       }
     }
     .safeAreaInset(edge: .bottom) {
-      // Offered only when there is something to map. An empty window's map is all zeros.
-      if let window = snapshot.value, window.report.hardSets > 0 {
+      // Offered where there is history to show, or where the lifter already owns it and may be owed
+      // the sheet's own empty state. A deload week has no working sets but still has a history, and
+      // showing the offer over nothing would be a claim about an empty dataset (D24 §2.4). No extra
+      // query: `hardSets` is in the report the screen already holds.
+      if let window = snapshot.value,
+        window.report.hardSets > 0 || (lifetime.hasLoaded && lifetime.isUnlocked)
+      {
         // Pinned over the list, so a hairline says where the list ends and the control begins.
         // Words and a chevron with no face; the whole row is the control.
         VStack(spacing: 0) {
@@ -133,10 +146,13 @@ public struct WeeklyVolumeScreen: View {
             .frame(height: Tokens.Stroke.hairline)
             .accessibilityHidden(true)
           Button {
-            presented = .map
+            // A fresh opening reads the history again; a previous opening's figures are not left on
+            // screen while the new read runs.
+            historySnapshot = SnapshotLoader()
+            presented = .muscleHistory
           } label: {
             HStack(spacing: Tokens.Spacing.snug) {
-              Text("Deep muscle map")
+              Text(MuscleHistoryCopy.title)
                 .frame(maxWidth: .infinity, alignment: .leading)
               Image(systemName: "chevron.right")
                 .font(Tokens.Text.caption.weight(.semibold))
@@ -157,7 +173,7 @@ public struct WeeklyVolumeScreen: View {
     }
     .sheet(item: $presented) { sheet in
       switch sheet {
-      case .map: mapSheet
+      case .muscleHistory: muscleHistorySheet
       case .methodology: methodologySheet
       case .working(let presentation):
         WorkedFromSheet(account: presentation.account)
@@ -176,30 +192,57 @@ public struct WeeklyVolumeScreen: View {
     }
   }
 
-  private var mapSheet: some View {
+  private var muscleHistorySheet: some View {
     NavigationStack {
       ScrollView {
-        // Says it is checking rather than flashing the purchase offer before the entitlement is
-        // known.
-        if !lifetime.hasLoaded {
+        switch lifetime.gate {
+        case .checking:
+          // Says it is checking rather than flashing the purchase offer before the entitlement is
+          // known.
           HardsetLoadingState("Checking your purchase…")
-        } else if lifetime.isUnlocked, let window = snapshot.value {
-          VStack(alignment: .leading, spacing: Tokens.Spacing.regular) {
-            // States why the map is open when it was not bought, such as a development build.
-            LifetimeDevelopmentNote(access: lifetime).padding(.horizontal, Tokens.Spacing.loose)
-            MuscleHeatmapView(
-              report: window.report, windowLabel: window.description,
-              onShowWorking: { mapWorking = workingPresentation(for: $0, in: window) })
-          }
-        } else {
+        case .offer:
+          // A free lifter sees what they would get, stated once, in the one offer this app has.
+          // Never their own figures, blurred or truncated: a blurred number is still a claim about
+          // their data (D24 §2.4).
           LifetimePurchaseSection(access: lifetime).padding(Tokens.Spacing.loose)
+        case .content:
+          VStack(alignment: .leading, spacing: Tokens.Spacing.regular) {
+            // States why the sheet is open when it was not bought, such as a development build.
+            LifetimeDevelopmentNote(access: lifetime).padding(.horizontal, Tokens.Spacing.loose)
+            if let reading = historySnapshot.value {
+              MuscleHistoryView(
+                history: reading.history,
+                onShowWorking: { muscle, figure in
+                  historyWorking = historyWorkingPresentation(
+                    for: muscle, figure: figure, in: reading)
+                },
+                onShowLibrary: onShowLibrary)
+            } else if historySnapshot.loadFailed {
+              VStack(alignment: .leading, spacing: Tokens.Spacing.regular) {
+                HardsetEmptyState(
+                  title: "Could not read your history",
+                  detail: "Your logged sets are safe. Try again.",
+                  systemImage: "exclamationmark.triangle",
+                  style: .quiet
+                )
+                Button("Try again") { Task { await loadHistory() } }
+                  .buttonStyle(HardsetButtonStyle(.secondary))
+              }
+              .padding(Tokens.Spacing.loose)
+            } else {
+              HardsetLoadingState("Reading your history…")
+            }
+          }
         }
       }
       .background(Tokens.Color.canvas)
-      .hardsetNavigationTitle("Deep muscle map")
+      .hardsetNavigationTitle(MuscleHistoryCopy.title)
       .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { presented = nil } } }
-      .task { await lifetime.load() }
-      .sheet(item: $mapWorking) { presentation in
+      .task {
+        await lifetime.load()
+        if lifetime.gate == .content { await loadHistory() }
+      }
+      .sheet(item: $historyWorking) { presentation in
         WorkedFromSheet(account: presentation.account)
           .hardsetSheet()
       }
@@ -237,6 +280,21 @@ public struct WeeklyVolumeScreen: View {
       working.account(windowLabel: window.description, format: WorkedFromFormat(unit: .kilograms)))
   }
 
+  /// The working behind a muscle's four-week comparison or lifetime figure, derived from the same
+  /// inputs and through the same `MuscleCountWorking` derivation the figure came from (D24 §3.6).
+  private func historyWorkingPresentation(
+    for muscle: Muscle, figure: MuscleHistoryFigure, in reading: MuscleHistoryReading
+  ) -> WorkedFromPresentation {
+    let account = reading.history.account(
+      muscle: muscle, figure: figure,
+      muscleName: ExercisePickerView.displayName(MuscleKey(muscle)),
+      attribution: reading.attribution, imported: reading.importedMovements,
+      name: reading.name(for:),
+      // A count holds no load, so the unit is never read; only the locale and dates are.
+      format: WorkedFromFormat(unit: .kilograms))
+    return WorkedFromPresentation(account)
+  }
+
   private func header(subtitle: String) -> some View {
     ScreenHeader(Self.title, subtitle: subtitle) {
       if let onShowSettings {
@@ -254,6 +312,15 @@ public struct WeeklyVolumeScreen: View {
     await snapshot.load {
       let reading = try await store.loadWindow(in: range)
       return VolumeWindow(reading: reading, range: range)
+    }
+  }
+
+  /// Reads all-history figures once per opening of the sheet, as of the moment it was opened.
+  private func loadHistory() async {
+    let store = historyStore
+    let openedAt = now()
+    await historySnapshot.load {
+      try await store.load(endingAt: openedAt)
     }
   }
 }

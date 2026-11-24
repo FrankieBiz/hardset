@@ -2,9 +2,11 @@ import HardsetCore
 import HardsetUI
 import Testing
 
+@testable import HardsetFeature
+
 /// Facts the component kit relies on, pinned as executable checks. Nothing here renders: it asserts
-/// the engine's certainty-by-reps rule and the UI's mapping of the engine's certainty onto its own
-/// scale, through public API only.
+/// the engine's certainty-by-reps rule, the UI's mapping of the engine's certainty onto its own
+/// scale, and the purchase gate's three-way decision, through public API only.
 @MainActor
 @Suite("Kit logic the screens depend on")
 struct KitLogicTests {
@@ -41,5 +43,21 @@ struct KitLogicTests {
     for certainty in Certainty.allCases {
       #expect(CertaintyLevel(rawValue: certainty.rawValue) == CertaintyLevel(certainty))
     }
+  }
+
+  /// D24 §4.4. The purchase gate is one pure decision, so it can be pinned without StoreKit or a
+  /// view: nothing is offered before the entitlement check finishes, a free lifter sees the one
+  /// offer, an owner sees the surface, and a development build never asks at all.
+  @Test func purchaseGateWaitsThenOffersOrOpens() {
+    #expect(
+      LifetimeAccess.gate(hasLoaded: false, isUnlocked: false, isDevelopmentBuild: false)
+        == .checking)
+    #expect(
+      LifetimeAccess.gate(hasLoaded: true, isUnlocked: false, isDevelopmentBuild: false) == .offer)
+    #expect(
+      LifetimeAccess.gate(hasLoaded: true, isUnlocked: true, isDevelopmentBuild: false) == .content)
+    // A development build is signed, not bought, and does not ask StoreKit, so it opens at once.
+    #expect(
+      LifetimeAccess.gate(hasLoaded: false, isUnlocked: false, isDevelopmentBuild: true) == .content)
   }
 }

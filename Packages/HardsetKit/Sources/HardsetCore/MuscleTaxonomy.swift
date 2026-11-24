@@ -473,9 +473,8 @@ public enum SetCounting {
 
   /// The certainty of any weekly per-muscle total.
   ///
-  /// This is `VolumeAnalyzer.doseResponse`'s answer and nothing else, so the volume rows, the deep
-  /// muscle map and the counting disclosure, which all state a certainty for the same counts, read
-  /// it from one rule. Never `.high`: that would require a trial measuring this muscle's growth from
+  /// This is `VolumeAnalyzer.doseResponse`'s answer and nothing else, so the volume rows and the
+  /// counting disclosure, which state a certainty for the same counts, read it from one rule. Never `.high`: that would require a trial measuring this muscle's growth from
   /// these movements, and an aggregate over many movements cannot qualify. `.moderate` for a
   /// `modelled` muscle, `.low` above roughly 25 fractional sets because few studies explored that
   /// range, and `.unevaluated` for a `counted` muscle, whose relationship was never fitted. The ~25

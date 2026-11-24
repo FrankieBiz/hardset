@@ -189,7 +189,7 @@ fail in review. Make the account and the code agree before the archive.
      people who already bought it.
    - Availability: all territories where the app is sold.
    - Localization (English U.S.): display name `Hardset Lifetime`; description
-     `Unlocks the deep muscle map. One purchase, no subscription.`
+     `Unlocks muscle history. One purchase, no subscription.`
    - Review screenshot: use `docs/release/screenshots/6.9/02-volume.png`, or a capture of
      Settings → Hardset Lifetime. App Review needs to see what the purchase unlocks.
    - Tax category: the default for an app unlock; confirm with the owner's tax adviser.
@@ -234,7 +234,7 @@ free.", and the paid feature can never be bought.
      **no** `com.apple.developer.icloud-*` and **no** `com.apple.developer.healthkit` (§3).
    - An App Store archive must not contain `embedded.mobileprovision`. If it does, the
      build is a development/ad-hoc build: `LifetimeAccess.detectDevelopmentBuild()` would
-     include the deep muscle map and show the development note, so the paywall would not
+     include muscle history and show the development note, so the paywall would not
      be tested. Re-export for **App Store Connect**.
 8. Confirm the product ID inside the signed build one more time:
    `strings "$APP/Hardset" | grep 'com.hardset.app.lifetime'` should print the ID. (The
@@ -252,7 +252,7 @@ free.", and the paid feature can never be bought.
 3. Wait for processing in App Store Connect → **TestFlight**. Processing can take from
    minutes to an hour.
 4. Add the owner as an internal tester, install the TestFlight build on a physical
-   iPhone, and run §9. TestFlight builds are App Store-signed, so the deep muscle map
+   iPhone, and run §9. TestFlight builds are App Store-signed, so muscle history
    starts locked and the development note must not appear.
 5. If the build is missing an entitlement or crashes at launch, fix it and upload a new
    build; do not reuse the build number.
@@ -270,16 +270,16 @@ failed.
 
 | # | Test | Steps | Expected result |
 | --- | --- | --- | --- |
-| 1 | Fresh purchase | Settings → Hardset Lifetime → Unlock Lifetime · price → confirm with Face ID/password | "Lifetime access is active." The deep muscle map opens. Relaunch: still unlocked. The transaction is finished, so it is not re-offered. |
-| 2 | Cancel the payment sheet | Tap Unlock, then cancel at Apple's sheet | No purchase, no error message, map stays locked, the offer is still available. |
-| 3 | Pending / Ask to Buy | Use an account with Ask to Buy, or a purchase that Apple marks pending | "Purchase is pending approval." No unlock yet. After approval, the transaction listener unlocks the map without a reinstall; if it does not, relaunch and confirm. |
-| 4 | Restore after reinstall | Delete the app, reinstall from TestFlight, Settings → Restore purchases | "Lifetime access restored." Map unlocked. No charge. |
-| 5 | Restore with no purchase | Use a sandbox account that never bought it → Restore purchases | "No lifetime purchase was found for this Apple Account." Map stays locked. No crash. |
-| 6 | Refund / revocation | Request a refund through Apple for the sandbox purchase; wait for Apple to revoke it, then relaunch the app | `Transaction.currentEntitlements` no longer contains a valid transaction; the map locks again. No crash. If the change has not propagated, relaunch and recheck; record how long it took. |
-| 7 | Offline launch with a cached entitlement | After a successful purchase, enable Airplane Mode, force-quit, relaunch | The entitlement is read from the device; the map stays unlocked. The product may not load, but the paid feature must not disappear. |
+| 1 | Fresh purchase | Settings → Hardset Lifetime → Unlock Lifetime · price → confirm with Face ID/password | "Lifetime access is active." Muscle history opens. Relaunch: still unlocked. The transaction is finished, so it is not re-offered. |
+| 2 | Cancel the payment sheet | Tap Unlock, then cancel at Apple's sheet | No purchase, no error message, muscle history stays locked, the offer is still available. |
+| 3 | Pending / Ask to Buy | Use an account with Ask to Buy, or a purchase that Apple marks pending | "Purchase is pending approval." No unlock yet. After approval, the transaction listener unlocks muscle history without a reinstall; if it does not, relaunch and confirm. |
+| 4 | Restore after reinstall | Delete the app, reinstall from TestFlight, Settings → Restore purchases | "Lifetime access restored." Muscle history unlocked. No charge. |
+| 5 | Restore with no purchase | Use a sandbox account that never bought it → Restore purchases | "No lifetime purchase was found for this Apple Account." Muscle history stays locked. No crash. |
+| 6 | Refund / revocation | Request a refund through Apple for the sandbox purchase; wait for Apple to revoke it, then relaunch the app | `Transaction.currentEntitlements` no longer contains a valid transaction; muscle history locks again. No crash. If the change has not propagated, relaunch and recheck; record how long it took. |
+| 7 | Offline launch with a cached entitlement | After a successful purchase, enable Airplane Mode, force-quit, relaunch | The entitlement is read from the device; muscle history stays unlocked. The product may not load, but the paid feature must not disappear. |
 | 8 | Product unavailable | Use a build whose product ID does not exist in the account, or block the network on a fresh install | "The lifetime purchase isn't available right now. Logging, history and exports stay free." No crash. Restore purchases is still offered. Free logging, history, import and export work. |
-| 9 | Free path | On a fresh account with no purchase, log a set, finish, read History, export JSON/CSV, import the JSON | All free features work. The map is the only gated feature. |
-| 10 | Development-build sanity | Install a development build with an embedded provisioning profile | The map is included and the app says "Development build: the deep muscle map is included. Nothing was purchased." This is expected and must not be used to judge the App Store paywall. |
+| 9 | Free path | On a fresh account with no purchase, log a set, finish, read History, export JSON/CSV, import the JSON | All free features work. Muscle history is the only gated feature. |
+| 10 | Development-build sanity | Install a development build with an embedded provisioning profile | Muscle history is included and the app says "Development build: muscle history is included. Nothing was purchased." This is expected and must not be used to judge the App Store paywall. |
 
 Notes:
 

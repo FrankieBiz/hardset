@@ -21,7 +21,7 @@ import SwiftUI
 /// where a muscle is counted but not modelled; certainty is a phrase under the name, as it is on
 /// the live session; the lower-bound caveat is a neutral note with a small `warning` glyph; and
 /// the muscles with nothing credited are plain type, not tags. The window controls, "How sets are
-/// counted" and the pinned "Deep muscle map" are words and a symbol with no face.
+/// counted" and the pinned "Muscle history" are words and a symbol with no face.
 ///
 /// The window is a rolling seven days, not a calendar week, and the copy says so: `period` is the
 /// phrase every sentence uses ("in the last 7 days"), so a Monday morning never reads as "this
@@ -252,7 +252,7 @@ public struct VolumeReportView: View {
   }
 
   /// Says what is wrong, that it is not the lifter's miscount, and where the part that can be fixed
-  /// is fixed. Shared with the deep muscle map, so the two screens give the same reason.
+  /// is fixed. Shared with muscle history, so the two screens give the same reason.
   ///
   /// A movement the lifter made, or one a workout import created, gets its muscles from a body part
   /// set in Library, on the Train tab. The message points at that one place for both.
@@ -283,7 +283,7 @@ public struct VolumeReportView: View {
           .foregroundStyle(Tokens.Color.chalkDim)
           .fixedSize(horizontal: false, vertical: true)
         // What the badge beside each count is about, said once here in words, from the engine's own
-        // sentence, so the deep muscle map and the counting disclosure say the same thing.
+        // sentence, so the counting disclosure says the same thing.
         Text(VolumeAnalyzer.certaintyMeaning)
           .font(Tokens.Text.caption)
           .foregroundStyle(Tokens.Color.chalkDim)
@@ -501,7 +501,7 @@ public struct VolumeReportView: View {
   }
 }
 
-/// What the volume report and the deep muscle map say about the muscles the catalogue has no movement
+/// What the volume report and muscle history say about the muscles the catalogue has no movement
 /// for yet, so the two screens give the same reason. A zero there is the catalogue's gap, not the
 /// lifter's, and the words say so.
 enum UncatalogedMuscleCopy {
@@ -519,14 +519,14 @@ enum UncatalogedMuscleCopy {
 /// The certainty beside one muscle's weekly count, drawn the same on every screen that shows one.
 ///
 /// It reads `VolumeAnalyzer.doseResponse`, the engine's one rule for where a count sits on the
-/// published research, and states nothing of its own. The volume rows and the deep muscle map both
-/// draw it, so the same count cannot carry two answers, and what it is about is said once in words
-/// by `VolumeAnalyzer.certaintyMeaning`.
+/// published research, and states nothing of its own. The volume rows draw it, so the same count
+/// cannot carry two answers, and what it is about is said once in words by
+/// `VolumeAnalyzer.certaintyMeaning`.
 struct MuscleCertaintyBadge: View {
   let muscle: Muscle
   let fractionalSets: Double
-  /// A capsule where the screen still draws them, a phrase where it has dropped them. The map keeps
-  /// the capsule until it is rebuilt; the Volume rows ask for the phrase.
+  /// A capsule where a surface wants one, a phrase where it has dropped one. The Volume rows ask
+  /// for the phrase.
   var style: CertaintyBadge.Style = .capsule
 
   var body: some View {
