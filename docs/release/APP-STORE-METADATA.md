@@ -206,20 +206,20 @@ Question-by-question:
 
 That matches "Data Not Collected". The manifest's comments still describe a private
 CloudKit database and an iCloud-entitled build. The 1.0 build has **no iCloud
-entitlement** (`Hardset/Hardset.entitlements` contains only `com.apple.developer.healthkit`
-today), so the comments are stale, not the machine-readable declarations. Do not edit the
-comments in this kit; correct them when the Health decision in §9.1 is executed.
+entitlement** and no HealthKit entitlement (`Hardset/Hardset.entitlements` is an empty
+dictionary; see §9.1), so the comments are stale, not the machine-readable declarations.
+Do not edit the comments in this kit.
 
-### 6.3 What the code that touches StoreKit and Health does
+### 6.3 What the code that touches StoreKit or Health does
 
 - `LifetimeAccess` uses StoreKit 2 only: `Product.products(for:)`,
   `Transaction.currentEntitlements`, `Transaction.updates`, and `AppStore.sync()`. There
   is no server, no receipt upload, and no third-party purchase SDK. The entitlement is
   verified on the device and the transaction is finished on the device.
-- `HealthBridge` reads body mass and workout summaries from HealthKit and writes
-  completed strength workouts and entered body mass, but only after the user chooses
-  Connect. `DeviceHealthStore` stores those samples in the local database. Nothing is
-  transmitted to Hardset. That code is still present on this branch; see §9.1.
+- Nothing in the 1.0 target touches HealthKit. The Health bridge, its Settings section and
+  its store were removed with decision D25; §9.1 lists the evidence. `deviceHealthSamples`
+  remains only as a retained schema table that no code reads or writes, so the app never
+  reads, writes, or transmits Health data.
 
 ---
 
@@ -296,10 +296,10 @@ branch/folder source; Pages accepts only `/` or `/docs` for a branch source and 
 in `site/README.md`. A custom domain can be added later without changing any page, and
 would only require updating the three values above and in App Store Connect.
 
-The site's copy is final for the 1.0 decision, subject to the Apple Health verification
-in §9.1: local-only, no account, no server, CSV/JSON/SQLite exports with JSON/CSV restore,
-the Lifetime limits, deletion, and the operator line. See `site/README.md` for the
-pre-publication checklist.
+The site's copy is final for the 1.0 decision, and §9.1 records the check that the build
+matches its Apple Health statement: local-only, no account, no server, CSV/JSON/SQLite
+exports with JSON/CSV restore, the Lifetime limits, deletion, and the operator line. See
+`site/README.md` for the pre-publication checklist.
 
 ---
 
@@ -308,32 +308,47 @@ pre-publication checklist.
 These are not marketing copy. They are the checks behind the claims above, including the
 places where the repository and the decision of record disagree today.
 
-### 9.1 D25 says Apple Health is removed from 1.0; this branch still links HealthKit
+### 9.1 Apple Health is removed in 1.0, and the build on `main` proves it
 
 The site, the description, and the App Privacy answer are written for a 1.0 that does not
-connect to Apple Health, per decision D25. **The code on this branch still does.** Verified
-on `31f7c45`:
+connect to Apple Health, per decision D25. The build now matches them. Verified on
+`1112e31` (merge of PR #32, "D25: remove the staged tour and Apple Health from 1.0"):
 
-- `Packages/HardsetKit/Sources/HardsetHealth/HealthBridge.swift` imports `HealthKit` and
-  requests read/write authorization.
-- `HardsetFeature/HealthSettingsSection.swift` is wired into `SettingsSheet` under
-  `#if os(iOS)` and is constructed by `HardsetRootView`.
-- `Hardset/Hardset.entitlements` carries `com.apple.developer.healthkit`.
-- `Hardset/Info.plist` carries `NSHealthShareUsageDescription` and
-  `NSHealthUpdateUsageDescription`.
+- `Hardset/Hardset.entitlements` is an empty `<dict>`: the build carries no
+  `com.apple.developer.healthkit`.
+- `Hardset/Info.plist` contains neither `NSHealthShareUsageDescription` nor
+  `NSHealthUpdateUsageDescription`, so no Health prompt can be shown.
+- There is no `HardsetHealth` target or module. `Packages/HardsetKit/Sources/` holds only
+  `HardsetAlarm`, `HardsetCore`, `HardsetFeature`, `HardsetStore` and `HardsetUI`; the
+  package manifest declares no Health product, and `project.pbxproj` names no Health
+  target.
+- `HealthSettingsSection` is deleted, so Settings has no Apple Health row and the app has
+  no code path that requests Health authorization.
+- `deviceHealthSamples` survives only as a retained schema table. `Migrations.swift`
+  creates it and its comment says why: the schema is permanent, and devices that ran a
+  pre-1.0 build with the Health feature still carry rows in it. No Swift code reads or
+  writes those rows; `Schema.swift` still declares the row type for the table.
 
-This is a release blocker for the copy, not a copy problem. D25 stands: the removal is a
-separate stream, and this kit does not touch app code. Before the 1.0 archive:
+Check the same evidence in the tree you are shipping:
 
-1. Remove the `HardsetHealth` target and its `HardsetFeature` dependency, or exclude it
-   from the 1.0 build.
-2. Remove the Health section from Settings and the Health usage descriptions and
-   entitlement.
-3. Re-run the app privacy check and this document. The "Data Not Collected" answer is
-   unchanged either way, because local Health access is not collection. The site's
-   "Apple Health" section and the support FAQ are the parts that must match.
-4. Do not submit until that separate removal has landed. Do not rewrite the site or the
-   description to include Apple Health in 1.0; D25 is the decision of record.
+```bash
+cat Hardset/Hardset.entitlements                     # <dict></dict>
+rg -n 'NSHealth' Hardset/Info.plist                  # no matches
+rg -n -i 'health' Hardset.xcodeproj/project.pbxproj  # no matches
+```
+
+**The App Privacy answer is unaffected: it stays "Data Not Collected".** Apple counts
+transmission to a server as collection, and Hardset has no server and transmits nothing to
+Hardset. Reading Health data on the device was never collection, and 1.0 does not read it
+at all. The retained table is inert: nothing in 1.0 adds, reads, or transmits rows, it is
+excluded from the sync registration, and a fresh 1.0 install leaves it empty. Rows can
+exist only on a phone that ran a pre-1.0 build with the Health feature, and they can leave
+that phone only through an export the person chooses to make or a device backup Apple
+controls from the device settings — neither of which is collection.
+
+D25 is the decision of record. Do not add Apple Health copy to the site, the description,
+or the answers above without a new decision, and do not drop `deviceHealthSamples` to make
+the removal look tidier.
 
 ### 9.2 The privacy manifest and the App Privacy answer
 
@@ -430,5 +445,5 @@ is expected, because it is a brand asset rather than a screen.
 - [ ] Screenshots uploaded from `docs/release/screenshots/` (see its README).
 - [ ] In-App Purchase created and attached (see `RELEASE-RUNBOOK.md`).
 - [ ] EU trader status answered (see `RELEASE-RUNBOOK.md`).
-- [ ] §9.1 Health decision executed or the copy revised.
+- [ ] §9.1's Health evidence re-checked on the archived tree.
 - [ ] The bundle ID / product ID trap in §9.4 closed.

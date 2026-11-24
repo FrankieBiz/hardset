@@ -7,9 +7,9 @@ the signing key, the bank/tax details, and the legal declarations. Do them in or
 step names what to write down so the next person does not derive it again.
 
 The app code and tests are not changed by this kit. Where a step requires a code change
-(the HealthKit removal, or the product identifier if the account already has a different
-one), it says so and stops; that change belongs on the release branch, not in this
-documentation PR.
+(the product identifier, if the account already has a different one), it says so and
+stops; that change belongs on the release branch, not in this documentation PR. The Apple
+Health removal is already in the tree (§3).
 
 ---
 
@@ -48,9 +48,8 @@ Exact code locations, so nobody greps twice:
   their own suffixes).
 - Version: `MARKETING_VERSION = 1.0`, `CURRENT_PROJECT_VERSION = 1` in the same file.
 - Minimum iOS: `IPHONEOS_DEPLOYMENT_TARGET = 26.1`.
-- Health entitlement and usage strings: `Hardset/Hardset.entitlements`,
-  `Hardset/Info.plist` (`NSHealthShareUsageDescription`,
-  `NSHealthUpdateUsageDescription`).
+- Apple Health: absent from 1.0. `Hardset/Hardset.entitlements` is an empty dictionary and
+  `Hardset/Info.plist` carries no `NSHealth*` usage string; §3 has the checks.
 
 ---
 
@@ -89,27 +88,40 @@ but do not submit to the EU store without it.
 
 ---
 
-## 3. Remove Apple Health for 1.0 (BLOCKING)
+## 3. Apple Health — removed for 1.0, and checked here
 
-Decision D25 says Apple Health is removed from 1.0. The public site, the description and
-the App Privacy answer in this kit are written for that 1.0. The current branch still
-links HealthKit; `docs/release/APP-STORE-METADATA.md` §9.1 lists the exact files. D25
-stands and the removal is a separate stream; this kit does not touch app code. Before
-archiving:
+Decision D25 removed Apple Health from 1.0, and the removal has landed: commit `1112e31`
+(merge of PR #32, 23 November 2026). The public site, the description and the App Privacy
+answer in this kit describe a 1.0 that does not connect to Apple Health, and the build now
+matches them. This step is complete; submission is not held on it.
 
-1. Remove the `HardsetHealth` target and its `HardsetFeature` dependency (or exclude it
-   from the 1.0 target), the Health section in `SettingsSheet`, the HealthKit entitlement,
-   and both Health usage strings.
-2. Build and run the app; confirm Settings has no Apple Health section and the app never
-   prompts for Health access.
-3. Re-check `site/privacy.html`, `site/support.html`, the description, and the App Privacy
-   answer. The "Data Not Collected" answer stays correct either way because local access
-   is not collection; the Health sections must match the build.
-4. Do not submit until that removal has landed. Do not ship HealthKit in 1.0 or rewrite
-   the public copy to include it; a future decision that changes D25 must revise this
-   runbook and the site first.
+Re-check the same evidence on the exact tree you are about to archive:
 
-Record the removal's commit and date here: **PLACEHOLDER — commit/date**.
+```bash
+cat Hardset/Hardset.entitlements                        # <dict></dict>: no HealthKit key
+rg -n 'NSHealth' Hardset/Info.plist                     # no matches
+rg -n -i 'health' Hardset.xcodeproj/project.pbxproj     # no matches
+rg -n 'HardsetHealth' Packages/HardsetKit/Package.swift # no matches
+rg -n 'deviceHealthSamples' \
+  Packages/HardsetKit/Sources/HardsetStore/Migrations.swift
+```
+
+- **The entitlement file is empty.** `Hardset/Hardset.entitlements` is a `<dict>` with no
+  keys, so the build carries no `com.apple.developer.healthkit`.
+- **No usage string remains.** Neither `NSHealthShareUsageDescription` nor
+  `NSHealthUpdateUsageDescription` is in `Hardset/Info.plist`, so the app has nothing that
+  would let it prompt for Health access.
+- **No Health target exists.** `HardsetHealth` and `HealthSettingsSection` are gone:
+  `Packages/HardsetKit/Sources/` holds only `HardsetAlarm`, `HardsetCore`, `HardsetFeature`,
+  `HardsetStore` and `HardsetUI`, and the project file names no Health target. Settings has
+  no Apple Health row.
+- **`deviceHealthSamples` is retained deliberately.** `Migrations.swift` still creates the
+  table, with a comment saying it stays because the schema is permanent and devices that
+  ran a pre-1.0 Health build still carry rows in it. Nothing in the app reads or writes
+  those rows, and the table is excluded from the sync registration. Do not drop it.
+
+The App Privacy answer stays **Data Not Collected**: local access to Health data was never
+collection, and 1.0 has no Hardset server to send anything to.
 
 ---
 
@@ -119,7 +131,8 @@ Record the removal's commit and date here: **PLACEHOLDER — commit/date**.
 2. Create an App ID for `com.francisbisignano.hardset` (explicit, not wildcard).
 3. Enable only the capabilities the 1.0 build uses:
    - **In-App Purchase** (enabled by default for an explicit App ID).
-   - **HealthKit** only if §3 keeps it; D25 says no.
+   - **HealthKit**: do not enable. The 1.0 build has no Health entitlement and no Health
+     usage string (§3).
    - **Push Notifications**: not needed. The `Info.plist` declares
      `UIBackgroundModes` `remote-notification` for an iCloud build that does not ship in
      1.0; it is not an App ID capability and does not require an entitlement.
@@ -218,8 +231,7 @@ free.", and the paid feature can never be bought.
    ```
 
    - The entitlements must contain only what §4 approves. In particular, there must be
-     **no** `com.apple.developer.icloud-*` and, after D25, **no**
-     `com.apple.developer.healthkit`.
+     **no** `com.apple.developer.icloud-*` and **no** `com.apple.developer.healthkit` (§3).
    - An App Store archive must not contain `embedded.mobileprovision`. If it does, the
      build is a development/ad-hoc build: `LifetimeAccess.detectDevelopmentBuild()` would
      include the deep muscle map and show the development note, so the paywall would not
@@ -343,7 +355,7 @@ before declaring.
 | Purchase succeeds but the map stays locked. | The build is a development build, or `currentEntitlements` has not refreshed. | Confirm the archive has no embedded profile; relaunch; check `Transaction.currentEntitlements`. |
 | Restore finds nothing. | Wrong Apple Account, or the product was never bought on that account. | Use the buying account; Apple's purchase history is authoritative. |
 | App Review cannot find the paid feature. | Review notes do not say where the map is, or the IAP is not attached to the version. | Update the notes; attach the IAP. |
-| App Review asks about Health access. | The 1.0 build still contains HealthKit. | Execute §3 or revise the copy; do not explain around it. |
+| App Review asks about Health access. | The archived build is not the 1.0 tree. | Check §3's evidence on the tree you archived; 1.0 has no HealthKit and no Health prompt to explain. |
 | Privacy label rejected. | The App Privacy answer and the manifest disagree. | Check `APP-STORE-METADATA.md` §9; the manifest is the machine-readable source. |
 | Screenshots rejected. | Wrong pixel size. | Re-run `Tools/render_store_screenshots.sh`; it verifies 1320x2868 and 1242x2688. |
 
@@ -352,7 +364,7 @@ before declaring.
 ## 13. The short version
 
 1. Buy the membership; accept the paid-app agreement; complete tax and banking.
-2. Remove Apple Health for 1.0 or revise the copy.
+2. Confirm Apple Health is absent from the 1.0 build (§3).
 3. Register the App ID, no iCloud.
 4. Create the app record.
 5. Create the non-consumable `com.hardset.app.lifetime`; make the code and account agree.

@@ -20,19 +20,10 @@ restore service.
 
 ## Apple Health
 
-Apple Health is optional. Hardset asks for access when you choose Connect Apple
-Health in Settings. You decide which data it may read and write in Apple's
-permission controls.
-
-When you ask it to copy recent Health data, Hardset stores body-mass readings and
-workout summaries on this iPhone. When you ask it to send workouts, it offers
-eligible completed strength workouts to Apple Health. An entered body mass is
-sent only when you choose to save it. Hardset does not use Health information for
-advertising or infer physical machine identities from it.
-
-You can change Health access in the Health app or iPhone Settings. Revoking
-access does not erase information previously copied to Hardset or previously
-saved to Apple Health. Manage Health's retained records in Apple's controls.
+Hardset 1.0 does not connect to Apple Health, does not request Health access, and
+does not read or write Health data. If a future version adds an optional Apple
+Health connection, this policy will be updated before that version is released,
+and the connection will be off until you choose it.
 
 ## Purchases
 
@@ -49,17 +40,18 @@ repeat imports.
 
 Exports and workout receipts are shared only through an action you choose.
 CSV contains logged training data and machine identifiers. JSON and SQLite
-exports also include device-local tables, including Health samples you copied.
+exports also include the device-local tables Hardset holds; in 1.0 that does not
+include Apple Health data, because 1.0 does not connect to Apple Health.
 The recipient or app you select controls the copies you share. Deleting data in
-Hardset does not delete those copies. Hardset's own exports are readable copies;
-the current app cannot restore its database from them.
+Hardset does not delete those copies. JSON is the complete restorable copy; CSV
+restores workouts; SQLite is for keeping and inspecting and cannot be read back
+into Hardset.
 
 ## Tracking and third parties
 
 The current app contains no advertising or analytics SDK and does not track you
 across other companies' apps or websites. Apple provides the system services
-used for purchases, Health permissions, alarms, and device backups under Apple's
-own policies.
+used for purchases, alarms, and device backups under Apple's own policies.
 
 ## Retention and deletion
 
@@ -68,11 +60,11 @@ and sets can be deleted through History and workout receipts; an active workout
 can be discarded after confirmation. Archiving a gym or machine retains its
 training history.
 
-Deleting Hardset removes its local app data, including copied Health samples
-and preferences. Offloading an app, restoring a device backup, and removing
+Deleting Hardset removes its local app data, including the workout database and
+preferences. Offloading an app, restoring a device backup, and removing
 records from Apple Health are different actions controlled by iOS. Exports,
-shared receipts, Apple Health records, and Apple's purchase records are not
-erased by deleting Hardset. Export anything you want to keep before deletion.
+shared receipts, Apple Health records (if any), and Apple's purchase records are
+not erased by deleting Hardset. Export anything you want to keep before deletion.
 
 ## Changes and contact
 

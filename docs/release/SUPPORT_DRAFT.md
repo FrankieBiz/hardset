@@ -21,8 +21,9 @@ Do not publish this draft with an unconfigured contact section.
 Tap a logged weight or reps to correct it, or open a movement's options and
 choose Correct set. Long-press a logged set for Undo log or Edit set. Use a
 movement's options to remove it. Discarding an active workout and deleting saved history require
-confirmation. These actions remove data; an export cannot currently be imported
-as a Hardset database restore.
+confirmation. These actions remove data. An export is a copy from the moment you
+made it: restoring a JSON or CSV file brings its workouts back and leaves what is
+already on the phone alone. It does not merge edits you made after the export.
 
 ## Change weight units
 
@@ -37,8 +38,10 @@ workouts to another device. Deleting the app deletes local history. Reinstall
 an update over the existing app when keeping that history.
 
 Use Settings → Your data to prepare and share a CSV, JSON, or SQLite copy. Save
-it somewhere you control. JSON and SQLite can include copied Apple Health data.
-Hardset's exports are readable copies, not an in-app restore format.
+it somewhere you control. JSON and SQLite contain the device-local tables
+Hardset holds; in 1.0 that does not include Apple Health data, because 1.0 does
+not connect to Apple Health. JSON and CSV can be brought back into Hardset;
+SQLite is a copy to keep and inspect, not a restore format.
 
 ## Rest alarms
 
@@ -52,10 +55,9 @@ the release build before this support text promises their behavior publicly.
 
 ## Apple Health
 
-Connection is optional. Choose Connect Apple Health in Settings, then use the
-explicit copy or send actions. Access is controlled in Apple Health. Denied read
-access can look like an empty result; it does not prove you have no Health data.
-Changing permissions does not delete existing copies or Health records.
+Hardset 1.0 does not connect to Apple Health. It does not request Health access
+and does not read or write Health data. There is nothing to connect, and there is
+no Health permission to revoke for this version.
 
 ## Lifetime purchase
 
@@ -72,5 +74,5 @@ Apple's sandbox before publication.
 
 The final page needs a monitored support address or form. Ask for the app version,
 iOS version, what happened, and steps to reproduce. Never ask for an Apple
-Account password or payment-card details. Only request workout or Health exports
-when necessary and with the person's informed choice.
+Account password or payment-card details. Only request a workout export when
+necessary and with the person's informed choice.
