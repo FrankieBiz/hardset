@@ -13,6 +13,7 @@ import UniformTypeIdentifiers
 struct DataPortabilitySection: View {
   let store: DataTransferStore
   let unit: WeightUnit
+  @Environment(\.openURL) private var openURL
   /// Whether this build keeps history on this phone only, so the plain warning above the export
   /// buttons is true. False when sync is on or the state is not known: the section then says
   /// nothing about where history lives rather than claim what it cannot back.
@@ -85,6 +86,17 @@ struct DataPortabilitySection: View {
         .foregroundStyle(Tokens.Color.chalkDim)
         .fixedSize(horizontal: false, vertical: true)
 
+      // The two pages the app publishes, one tap from the data they describe. A row whose address
+      // is blank is not drawn at all, so nothing here offers a link that goes nowhere.
+      VStack(spacing: Tokens.Spacing.snug) {
+        pageRow(
+          "Privacy policy", "What Hardset keeps, where it stays, and what it never collects.",
+          HardsetLinks.privacyPolicyURL)
+        pageRow(
+          "Support", "How to fix a problem yourself, and how to reach the person who reads reports.",
+          HardsetLinks.supportURL)
+      }
+
       SectionLabel("Restore or bring in workouts")
       Text("To restore, choose a JSON or CSV you exported from Hardset. It comes back as it was, and anything already on this iPhone is left alone.")
         .font(Tokens.Text.provenance)
@@ -152,6 +164,38 @@ struct DataPortabilitySection: View {
     }
     .onChange(of: exportMessage) { _, message in announce(message) }
     .onChange(of: importMessage) { _, message in announce(message) }
+  }
+
+  // MARK: - Published pages
+
+  /// A full-width row that opens a page in the browser. Draws nothing when the address is missing.
+  @ViewBuilder private func pageRow(_ title: String, _ detail: String, _ address: URL?) -> some View {
+    if let address {
+      Button { openURL(address) } label: {
+        HStack(spacing: Tokens.Spacing.regular) {
+          VStack(alignment: .leading, spacing: Tokens.Spacing.hairline) {
+            Text(title)
+              .font(Tokens.Text.headline)
+              .foregroundStyle(Tokens.Color.chalk)
+            Text(detail)
+              .font(Tokens.Text.caption)
+              .foregroundStyle(Tokens.Color.chalkDim)
+          }
+          .multilineTextAlignment(.leading)
+          .frame(maxWidth: .infinity, alignment: .leading)
+
+          // Leaves the app, unlike the chevron on the disclosures, which open in place.
+          Image(systemName: "arrow.up.right")
+            .font(Tokens.Text.caption.weight(.semibold))
+            .foregroundStyle(Tokens.Color.chalkDim)
+            .accessibilityHidden(true)
+        }
+      }
+      .buttonStyle(DisclosureRowButtonStyle())
+      // Named for the page, never for its address: the URL is not the label.
+      .accessibilityLabel(title)
+      .accessibilityHint("Opens in your browser")
+    }
   }
 
   // MARK: - Preview
