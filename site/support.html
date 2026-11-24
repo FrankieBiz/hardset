@@ -1,0 +1,188 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Support — Hardset</title>
+    <meta
+      name="description"
+      content="Hardset support: how to log a workout, correct a set, protect your local-only history, restore a purchase, and contact the developer."
+    />
+    <meta name="theme-color" content="#050608" />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <a class="skip" href="#main">Skip to content</a>
+
+    <header class="masthead">
+      <div class="wrap">
+        <a class="wordmark" href="index.html">Hardset <span>· the log that won’t lie to you</span></a>
+        <nav class="nav" aria-label="Site">
+          <a href="privacy.html">Privacy</a>
+          <a href="support.html" aria-current="page">Support</a>
+        </nav>
+      </div>
+    </header>
+
+    <main id="main" class="section">
+      <div class="wrap">
+        <div class="section-head">
+          <p class="eyebrow">Support</p>
+          <h1>One person reads this.</h1>
+          <p class="body">
+            Hardset is made by one developer. Email
+            <a class="email" href="mailto:frankabisignano@gmail.com">frankabisignano@gmail.com</a>
+            and I will help. I aim to reply within two business days. If a problem will take longer,
+            I will tell you rather than leave you waiting.
+          </p>
+          <p class="small">
+            There is no phone support and no live chat. Email is the route that keeps a written
+            record of the problem and the fix.
+          </p>
+        </div>
+
+        <div class="summary" role="note">
+          <p>
+            <strong>Before you write:</strong> include the Hardset version, your iOS version, what
+            you expected, what happened, and the steps that reproduce it. A screenshot helps. Never
+            send an Apple Account password or payment-card details. Only send a workout export if
+            you have decided you want to, and say what you want me to look at.
+          </p>
+        </div>
+
+        <div class="prose">
+          <section>
+            <h2>Record a workout</h2>
+            <ol>
+              <li>Choose a gym if you want to identify individual machines. You can start without one and add it during a workout.</li>
+              <li>Tap <strong>Start workout</strong>, then <strong>Add movement</strong>. Search the catalogue or add a custom movement when yours is not listed.</li>
+              <li>Enter the weight and repetitions, then tap the check to log the set. A green logged state means the save succeeded. Numbers entered without logging are drafts and are not promised to survive closing the app.</li>
+              <li>Add more sets or movements. Choose a rest duration when you want a timer.</li>
+              <li>Tap <strong>Finish workout</strong> and confirm. Open History to read the saved receipt.</li>
+            </ol>
+          </section>
+
+          <section>
+            <h2>Correct a mistake</h2>
+            <p>
+              Tap a logged weight or repetitions to correct it, or open a movement’s options and
+              choose <strong>Correct set</strong>. Long-press a logged set for <strong>Undo log</strong>
+              or <strong>Edit set</strong>. Use a movement’s options to remove it. Discarding an
+              active workout and deleting saved history require confirmation.
+            </p>
+            <p>
+              These actions remove data. An export is a copy from the moment you made it: restoring
+              a JSON or CSV file brings its workouts back and leaves what is already on the phone
+              alone. It does not merge edits you made after the export.
+            </p>
+          </section>
+
+          <section>
+            <h2>Change weight units</h2>
+            <p>
+              Open Settings from any main tab and select kilograms or pounds. Saved sets keep their
+              original stored loads; changing the unit converts their display. Unitless Strong CSV
+              weights are interpreted using the unit shown before import.
+            </p>
+          </section>
+
+          <section>
+            <h2>Protect your history</h2>
+            <p>
+              Hardset stores history on this iPhone only. It does not sync to another device, and
+              there is no account or cloud copy. <strong>Deleting the app deletes local history.</strong>
+              Install updates over the existing app; do not delete it first.
+            </p>
+            <p>
+              Use <strong>Settings → Your data</strong> to prepare and share a CSV, JSON, or SQLite
+              copy. Save it somewhere you control. JSON is the complete restorable copy, including
+              saved workouts and body mass. CSV restores workouts. SQLite is for keeping and
+              inspecting and cannot be read back into Hardset. An export is the copy that survives a
+              lost phone or a reinstall.
+            </p>
+          </section>
+
+          <section>
+            <h2>Rest alarms</h2>
+            <p>
+              Grant alarm access if you want system alerts outside the app. If access is denied, the
+              in-app timer remains available and the banner offers <strong>Open Settings</strong>. A
+              scheduling failure offers <strong>Retry</strong>. If saved timer state could not be
+              recovered, <strong>Reset rest timer</strong> clears only that timer state and keeps
+              workouts intact.
+            </p>
+          </section>
+
+          <section>
+            <h2>Hardset Lifetime</h2>
+            <p>
+              The optional one-time purchase unlocks the deep muscle map. Use
+              <strong>Restore purchases</strong> with the Apple Account that bought it. A temporary
+              product-loading failure does not mean a previous purchase has been lost. Logging,
+              history, importing, and exporting do not require Lifetime access.
+            </p>
+            <p>
+              Billing, refunds, and purchase history are handled by Apple. If the purchase is not
+              available, try again later or use Restore purchases; the free features keep working.
+            </p>
+          </section>
+
+          <section>
+            <h2>Apple Health</h2>
+            <p>
+              Hardset 1.0 does not connect to Apple Health. It does not request Health access and
+              does not read or write Health data. There is nothing to connect, and there is no
+              Health permission to revoke for this version.
+            </p>
+          </section>
+
+          <section>
+            <h2>Import from Strong or Hevy</h2>
+            <p>
+              Choose an English Strong or Hevy CSV under <strong>Restore or bring in workouts</strong>.
+              Unitless Strong loads are read as the weight unit selected above, and dates without an
+              offset use this device’s time zone. Timed, distance, and unweighted sets have no load
+              and repetitions to record, so they are listed and left out. Workouts already imported
+              from the same app are skipped.
+            </p>
+          </section>
+
+          <section>
+            <h2>Sync, devices, and platform</h2>
+            <p>
+              Hardset 1.0 is an iPhone app and requires iOS 26.1 or later. It is portrait only. It
+              does not sync between devices, and there is no iPad or web version. A second device
+              starts its own history; an export and restore is how you move a copy.
+            </p>
+          </section>
+
+          <section>
+            <h2>Contact</h2>
+            <p>
+              Frankie Bisignano · Hardset<br />
+              <a class="email" href="mailto:frankabisignano@gmail.com">frankabisignano@gmail.com</a>
+            </p>
+            <p class="small">
+              For privacy questions, see the <a href="privacy.html">privacy policy</a>. Never send
+              an Apple Account password or payment-card details.
+            </p>
+          </section>
+        </div>
+      </div>
+    </main>
+
+    <footer class="footer">
+      <div class="wrap">
+        <div>
+          <p>Hardset is made by Frankie Bisignano. © 2026 Frankie Bisignano.</p>
+          <p>Apple, iPhone, and App Store are trademarks of Apple Inc.</p>
+        </div>
+        <nav aria-label="Footer">
+          <a href="index.html">Home</a>
+          <a href="privacy.html">Privacy policy</a>
+          <a href="mailto:frankabisignano@gmail.com">Email</a>
+        </nav>
+      </div>
+    </footer>
+  </body>
+</html>
