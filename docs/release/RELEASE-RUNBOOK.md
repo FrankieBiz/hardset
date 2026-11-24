@@ -31,7 +31,7 @@ documentation PR.
 | In-App Purchase product ID | `LifetimeAccess.productID` | `com.hardset.app.lifetime` |
 | Launch price | decision D17 | **$19.99** |
 | Standing price after launch | decision D17 | **$29.99** |
-| Marketing, Support and Privacy URLs | `docs/release/APP-STORE-METADATA.md` §8 | The three URLs are in §8; that table is the only place they are written down. |
+| Marketing, Support and Privacy URLs | `docs/release/APP-STORE-METADATA.md` §8 | The three URLs are in §8; that table is the source. |
 | Review contact phone | owner | **PLACEHOLDER** |
 | EU trader status | owner/legal decision | **PLACEHOLDER** |
 

@@ -191,7 +191,7 @@ Question-by-question:
 | Data linked to the user | Not applicable | Nothing is collected. |
 | Data used to track | No | Nothing is collected or tracked. |
 
-**Privacy Policy URL:** `https://frankiebiz.github.io/hardset/privacy.html` (see §8).
+**Privacy Policy URL:** see §8.
 
 ### 6.2 What the manifest says
 
