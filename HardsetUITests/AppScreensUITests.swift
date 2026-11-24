@@ -411,11 +411,11 @@ final class AppScreensUITests: XCTestCase {
   }
 
   /// The first launch as a fresh install sees it: load a plate on the Welcome bar, through the
-  /// three pitches, the guided tour, Setup and into the app, saving a screenshot of each page.
+  /// three pitches, Setup and into the app, saving a screenshot of each page.
   ///
   /// It pins what the model tests cannot: that a swipe on the bar loads a plate instead of turning
-  /// the page, that the tour's second step waits for the lifter's own tap on the staged set's check
-  /// before "Next" appears, and that every page can be reached and completed.
+  /// the page, that the last pitch leads straight to Setup with no tour, and that every page can
+  /// be reached and completed.
   @MainActor
   func testOnboardingJourneyDark() throws {
     continueAfterFailure = true
@@ -470,49 +470,13 @@ final class AppScreensUITests: XCTestCase {
     capture(app, "46-onboarding-pitch-3")
     assertPitchProgress(app, page: 3)
     app.buttons["Next"].tap()
-    // What is on screen two seconds after the tap, kept in the log so a page that lands somewhere
-    // else is visible in the run rather than inferred.
-    Thread.sleep(forTimeInterval: 2)
-    print("ONBOARDING-TRACE after the third pitch's Next:", app.staticTexts.allElementsBoundByIndex.map(\.label))
+    // The last pitch leads straight to Setup: there is no tour page after it.
+    XCTAssertTrue(
+      app.staticTexts["Before your first set."].waitForExistence(timeout: 10),
+      "the third pitch's Next lands on Setup")
     capture(app, "46b-onboarding-after-pitch-3-next")
 
-    // The tour. Its first step waits while two staged apps are built.
-    XCTAssertTrue(app.staticTexts["Step 1 of 8"].waitForExistence(timeout: 90))
-    capture(app, "47-onboarding-tour-1")
-    assertStagedPhoneIsHidden(app, at: "tour step 1")
-    app.buttons["tour-next"].tap()
-
-    // Step 2 is the interactive one: no "Next" until the staged check is tapped.
-    XCTAssertTrue(app.staticTexts["Step 2 of 8"].waitForExistence(timeout: 10))
-    XCTAssertFalse(app.buttons["tour-next"].exists, "Next waits for the check to be tapped")
-    capture(app, "48-onboarding-tour-2")
-    audit(app, screen: "onboarding tour 2")
-    // The control for the hidden checks around it: while the staged phone is the thing to tap it is
-    // reachable, so a count of zero elsewhere is the phone being hidden and not the query finding
-    // nothing. Recorded rather than asserted, since it describes the interactive step.
-    auditReport.append(
-      "[onboarding tour 2] control: \(app.tabBars.count) tab bar(s) reachable while the staged phone is interactive"
-    )
-    // Tapped where the spotlight is. The staged row is one accessibility element with named actions,
-    // so there is no separate "Log set" button to query; a touch at the check's place is also the
-    // honest test that the hole lets a touch through while the scrim stops every other one. The
-    // check sits at the right of the third Leg Press row, about 61% of the way down the screen: the
-    // two logged rows above it each carry a "Matched" beat mark, which sits it lower than it was.
-    app.coordinate(withNormalizedOffset: CGVector(dx: 0.767, dy: 0.609)).tap()
-    XCTAssertTrue(app.buttons["tour-next"].waitForExistence(timeout: 10), "logging the staged set unlocks Next")
-    capture(app, "49-onboarding-tour-2-logged")
-    assertStagedPhoneIsHidden(app, at: "tour step 2 after the check")
-
-    for step in 3...8 {
-      app.buttons["tour-next"].tap()
-      XCTAssertTrue(app.staticTexts["Step \(step) of 8"].waitForExistence(timeout: 10))
-      capture(app, "5\(step - 3)-onboarding-tour-\(step)")
-      assertStagedPhoneIsHidden(app, at: "tour step \(step)")
-    }
-    app.buttons["tour-next"].tap()
-
     // Setup, then the app.
-    XCTAssertTrue(app.staticTexts["Before your first set."].waitForExistence(timeout: 10))
     XCTAssertTrue(app.buttons["Kilograms"].exists)
     XCTAssertTrue(app.buttons["Pounds"].exists)
     XCTAssertFalse(app.buttons["Skip"].exists, "Setup is where skip leads")
@@ -559,39 +523,6 @@ final class AppScreensUITests: XCTestCase {
     audit(app, screen: "onboarding pitch 3 (accessibility size)")
 
     writeAuditReport(named: "accessibility-audit-onboarding-ax")
-  }
-
-  /// The tour again, from Settings: the sheet closes, the same sequence plays in a full-screen cover
-  /// without Setup, and skipping it returns to the app. Run past onboarding, as the daily app is.
-  @MainActor
-  func testTourReplayDark() throws {
-    continueAfterFailure = true
-    let app = XCUIApplication()
-    launch(app)
-
-    guard waitForStartScreen(app) else { return }
-    app.buttons["Settings"].tap()
-    XCTAssertTrue(app.buttons["Done"].waitForExistence(timeout: 5))
-    let replay = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Show the tour again'"))
-      .firstMatch
-    var swipes = 0
-    while !replay.exists && swipes < 6 {
-      app.swipeUp()
-      swipes += 1
-    }
-    XCTAssertTrue(replay.exists, "Settings offers the tour again")
-    capture(app, "70-replay-settings-row")
-    replay.tap()
-
-    // The welcome page, then a skip from the second page ends the replay with no Setup page.
-    XCTAssertTrue(app.staticTexts["Hardset"].waitForExistence(timeout: 10))
-    capture(app, "71-replay-welcome")
-    app.buttons["Start"].tap()
-    XCTAssertTrue(app.staticTexts["One tap per set."].waitForExistence(timeout: 5))
-    app.buttons["Skip"].tap()
-    XCTAssertFalse(app.staticTexts["Before your first set."].exists, "a replay has no Setup")
-    guard waitForStartScreen(app) else { return }
-    capture(app, "72-replay-done")
   }
 
   // MARK: - Helpers
@@ -683,46 +614,6 @@ final class AppScreensUITests: XCTestCase {
     receiptDone.tap()
     XCTAssertTrue(waitUntilGone(receiptDone), "Done closes the receipt")
     XCTAssertTrue(app.buttons["Start workout"].waitForExistence(timeout: 5))
-  }
-
-  /// The staged phone is a picture of the app, so while it is not what the lifter is asked to tap,
-  /// none of it may be reachable by an assistive technology: not its buttons, and not the tab bar of
-  /// the root view inside it, which is UIKit-hosted and was still listed when the phone was only
-  /// hidden with `accessibilityHidden`. This is what an assistive technology is offered, as XCUITest
-  /// sees it; how VoiceOver reads the tour is for a device.
-  ///
-  /// **Both assertions currently fail, and are recorded as expected failures, not removed.** The
-  /// finding is open (`docs/KNOWN-ISSUES.md`). Each is strict: the day the defect is fixed it
-  /// stops failing, and `XCTExpectFailure` reports that, so the expectation is removed on purpose.
-  @MainActor
-  private func assertStagedPhoneIsHidden(_ app: XCUIApplication, at step: String) {
-    XCTExpectFailure(Self.stagedPhoneFinding, options: Self.stagedPhoneFindingOptions) {
-      XCTAssertEqual(
-        app.tabBars.count, 0, "\(step): the staged phone's tab bar is reachable by accessibility")
-    }
-    XCTExpectFailure(Self.stagedPhoneFinding, options: Self.stagedPhoneFindingOptions) {
-      XCTAssertFalse(
-        app.buttons["Start workout"].exists,
-        "\(step): the staged start screen's button is reachable by accessibility")
-    }
-  }
-
-  /// Why the two assertions above are expected to fail.
-  private static let stagedPhoneFinding =
-    "Open finding (docs/KNOWN-ISSUES.md): the staged phone is reachable by assistive technology "
-    + "at every inert tour step. CI run 44755327282, with ScaledPhoneFrame as on main, listed two "
-    + "tab bars and the staged start button at all eight steps. Three fixes failed: "
-    + "accessibilityHidden alone; a hosting controller per root, reverted because it changed the "
-    + "roots' appearance; and a single hidden leaf, reverted because it changed nothing the tree "
-    + "exposes. Strict: when this passes, the test fails so the finding is closed deliberately."
-
-  /// Strict, and limited to the assertion failures themselves: any other kind of issue raised in
-  /// the block is still a failure of the test.
-  private static var stagedPhoneFindingOptions: XCTExpectedFailure.Options {
-    let options = XCTExpectedFailure.Options()
-    options.isStrict = true
-    options.issueMatcher = { $0.type == .assertionFailure }
-    return options
   }
 
   /// Puts the keyboard down, so that what is audited is the screen and not the keyboard over it. The

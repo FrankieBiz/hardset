@@ -1,12 +1,12 @@
 # Owner's device checklist: the front-end rebuild
 
-CI proves what a runner can: the app builds, every component and staged screen renders to PNG, and
+CI proves what a runner can: the app builds, every component and screen renders to PNG, and
 the real app is driven through a workout and through the first launch with Apple's accessibility
 audit on each screen. It cannot prove how something feels in the hand, or how glass reads over a
 moving screen. These are the checks that remain, in the order a lifter meets them. Tick each on a
 physical iPhone, in the gym lighting where it matters.
 
-## First launch (delete the app, or use Settings, "Show the tour again")
+## First launch (delete the app)
 
 - [ ] **Welcome bar.** Tap each plate: it rises and lands with a `clank` that feels like a plate
       meeting a bar, not a buzz. Throw a plate upward with a swipe. The bar droops a few degrees
@@ -17,15 +17,9 @@ physical iPhone, in the gym lighting where it matters.
 - [ ] **Pitch pages.** The set row logs with a stamp and one `clank`. The estimate's four
       segments read high, moderate, low, not evaluated. The rest bar counts down and −15, +15, pause
       and skip each answer with a selection tick.
-- [ ] **Tour.** The staged phone is legible at its size and nothing is cropped. The callout card on
-      glass stays readable over both a bright (light mode) and a dark staged screen, and never
-      covers the control it points at. Step two lets only the staged check be tapped, and "Next"
-      appears after it. The keypad, machine picker and Settings steps open inside the phone.
 - [ ] **Setup.** On an install that already has a gym, the unit and the gym are preselected and no
       name field appears. On a fresh install a blank gym name starts logging.
 - [ ] **Reduce Motion, VoiceOver and the largest Dynamic Type** each reach "Start logging".
-- [ ] Settings, "Show the tour again" replays the tour without Setup and without touching the
-      stored version.
 
 ## The daily app
 

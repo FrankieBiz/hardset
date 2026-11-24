@@ -105,9 +105,6 @@ public struct LiveSessionScreen: View {
   private let gyms: GymStore?
   private let progression: ProgressionStore?
   private let gymName: String?
-  /// What the first-launch tour asks of this screen: the machine picker, open on the first
-  /// movement. Asks for nothing in the daily app.
-  @Environment(\.tourStaging) private var staging
   private let onShowSettings: (() -> Void)?
   private let onFinished: () -> Void
 
@@ -228,21 +225,12 @@ public struct LiveSessionScreen: View {
       onFinishAt: coordinator.lastLoggedAt == nil ? nil : { finish(at: $0) },
       onDiscard: discard
     )
-    // The tour opens the machine picker on the first movement, and closes it when its step ends.
-    .onChange(of: staging.opensMachinePicker, initial: true) { _, opens in
-      if opens {
-        guard canPickMachines, let first = coordinator.exercises.first else { return }
-        presented = .machine(first.id)
-      } else if case .machine = presented {
-        presented = nil
-      }
-    }
     // An old failure belongs to the notice it was shown under, not to the next set's.
     .onChange(of: coordinator.lastRecordsSetID) { _, _ in recordsWorkingError = nil }
     // One presentation for every sheet this screen opens. The four of them sat side by side on this
     // view, each driven by its own flag; now which one is up is `presented`, so two can never be
     // requested at once and SwiftUI is never asked to choose between sibling modifiers.
-    .stagedSheet(item: $presented, onDismiss: sheetDismissed) { sheet in
+    .sheet(item: $presented, onDismiss: sheetDismissed) { sheet in
       switch sheet {
       case .addMovement: addMovementSheet
       case .machine(let target): machineSheet(forExercise: target)

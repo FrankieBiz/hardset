@@ -95,8 +95,8 @@ public struct SessionView: View {
 
   @Environment(\.accessibilityReduceMotion) private var reduceMotion
   @Environment(\.dynamicTypeSize) private var dynamicTypeSize
-  /// What the first-launch tour asks of this screen. Asks for nothing in the daily app.
-  @Environment(\.tourStaging) private var staging
+  /// Where the reach check measures, and its one request: show the pad. Absent in the daily app.
+  @Environment(\.reachTargets) private var reachTargets
 
   /// - Parameter title: Draws a screen header when present. The live session passes "Workout";
   ///   previews and embedded uses can leave it out.
@@ -231,71 +231,90 @@ public struct SessionView: View {
   }
 
   public var body: some View {
+    sessionFeedback(
+      sessionKeypadObservers(
+        sessionDialogs(
+          sessionScroll,
+          isConfirmingRemoval: isConfirmingRemoval,
+          removal: removal,
+          onRemoveExercise: onRemoveExercise,
+          isConfirmingDiscard: $isConfirmingDiscard,
+          discardMessage: discardMessage,
+          onDiscard: onDiscard
+        )
+        .keypadSheetPresentation(
+          isPresented: isKeypadPresented, onDismiss: keypadDidDismiss,
+          inlineHeight: reachTargets == nil ? nil : padHeight
+        ) {
+          keypadSheet
+        }
+      )
+    )
+  }
+
+  // MARK: - Body in pieces
+  //
+  // The body is four expressions, not one. Held in one, the rows, both confirmation dialogs and ten
+  // observer modifiers overflowed the result builder's inference budget, and the compiler gave up
+  // naming a leaf with exactly one overload — `Text(String)` in the removal dialog. The boundaries
+  // below are the ones the screen already had; splitting there costs nothing at runtime and gives
+  // the type checker four small problems instead of one large one. Behaviour is unchanged.
+
+  /// The rows: no container around a movement, so the page margin is the only inset and movements
+  /// are separated by space. Each owns the space above it, so the gap is one rule in one place.
+  private var movementRows: some View {
+    LazyVStack(alignment: .leading, spacing: 0) {
+      if let title {
+        header(title: title)
+          .padding(.bottom, Tokens.Spacing.snug)
+      }
+
+      // Above the movements on purpose, unlike every other message: it is there when the
+      // screen opens, so it moves nothing under a thumb, and it is the first thing to read.
+      if showsStaleNotice {
+        staleNotice
+          .padding(.horizontal, Tokens.Spacing.loose)
+          .padding(.top, Tokens.Spacing.regular)
+          .hardsetArrival()
+      }
+
+      ForEach($exercises) { $exercise in
+        card(for: $exercise)
+          .padding(.horizontal, Tokens.Spacing.loose)
+          .padding(.top, Tokens.Spacing.block)
+      }
+
+      // An empty workout says so, and says what to do about it, rather than rendering a bare
+      // "Finish" button under nothing. When it is empty, the empty state carries the add
+      // action, so the add row below is not drawn twice.
+      if exercises.isEmpty {
+        HardsetEmptyState(
+          title: "Nothing added yet",
+          detail: "Add a movement to start logging sets.",
+          systemImage: "dumbbell",
+          actionTitle: onAddExercise == nil ? nil : "Add movement",
+          action: onAddExercise.map { add in { closeKeypad(then: add) } }
+        )
+        .padding(.top, Tokens.Spacing.block)
+      } else if let onAddExercise {
+        addMovementSlot { closeKeypad(then: onAddExercise) }
+          .padding(.horizontal, Tokens.Spacing.loose)
+          .padding(.top, Tokens.Spacing.section)
+      }
+
+      summary
+        .padding(.horizontal, Tokens.Spacing.loose)
+        .padding(.top, Tokens.Spacing.block)
+        .id(Self.finishAnchor)
+    }
+  }
+
+  /// The scroll, the background, the inset that measures the bar, and the proxy's one job.
+  private var sessionScroll: some View {
     ScrollViewReader { proxy in
       ScrollView {
-        // No container around a movement: the page margin is the only inset, and movements are
-        // separated by space. Each owns the space above it, so the gap is one rule in one place.
-        LazyVStack(alignment: .leading, spacing: 0) {
-          if let title {
-            header(title: title)
-              .padding(.bottom, Tokens.Spacing.snug)
-          }
-
-          // Above the movements on purpose, unlike every other message: it is there when the
-          // screen opens, so it moves nothing under a thumb, and it is the first thing to read.
-          if showsStaleNotice {
-            staleNotice
-              .padding(.horizontal, Tokens.Spacing.loose)
-              .padding(.top, Tokens.Spacing.regular)
-              .hardsetArrival()
-          }
-
-          ForEach($exercises) { $exercise in
-            card(for: $exercise)
-              .padding(.horizontal, Tokens.Spacing.loose)
-              .padding(.top, Tokens.Spacing.block)
-          }
-
-          // An empty workout says so, and says what to do about it, rather than rendering a bare
-          // "Finish" button under nothing. When it is empty, the empty state carries the add
-          // action, so the add row below is not drawn twice.
-          if exercises.isEmpty {
-            HardsetEmptyState(
-              title: "Nothing added yet",
-              detail: "Add a movement to start logging sets.",
-              systemImage: "dumbbell",
-              actionTitle: onAddExercise == nil ? nil : "Add movement",
-              action: onAddExercise.map { add in { closeKeypad(then: add) } }
-            )
-            .padding(.top, Tokens.Spacing.block)
-          } else if let onAddExercise {
-            addMovementSlot { closeKeypad(then: onAddExercise) }
-              .padding(.horizontal, Tokens.Spacing.loose)
-              .padding(.top, Tokens.Spacing.section)
-          }
-
-          summary
-            .padding(.horizontal, Tokens.Spacing.loose)
-            .padding(.top, Tokens.Spacing.block)
-            .id(Self.finishAnchor)
-        }
-        .padding(.bottom, Tokens.Spacing.section)
-        .confirmationDialog(
-          "Remove this movement?",
-          isPresented: isConfirmingRemoval,
-          titleVisibility: .visible,
-          presenting: removal
-        ) { request in
-          Button("Remove \(request.name)", role: .destructive) {
-            onRemoveExercise?(request.exerciseID)
-          }
-          Button("Keep it", role: .cancel) {}
-        } message: { request in
-          Text(
-            "The \(Self.setCount(request.loggedSets)) logged for \(request.name) in this workout "
-              + "will be deleted. This cannot be undone."
-          )
-        }
+        movementRows
+          .padding(.bottom, Tokens.Spacing.section)
       }
       .background(Tokens.Color.canvas)
       // The inset measures what it holds and reserves exactly its height, so the last row is never
@@ -318,9 +337,37 @@ public struct SessionView: View {
           }
         }
       }
+    }
+  }
+
+  /// The two dialogs this screen can raise. They are presentation modifiers, so they sit outside the
+  /// scroll instead of inside the builder that draws its rows.
+  private func sessionDialogs<Content: View>(
+    _ content: Content,
+    isConfirmingRemoval: Binding<Bool>,
+    removal: RemovalRequest?,
+    onRemoveExercise: ((UUID) -> Void)?,
+    isConfirmingDiscard: Binding<Bool>,
+    discardMessage: String,
+    onDiscard: (() -> Void)?
+  ) -> some View {
+    content
+      .confirmationDialog(
+        "Remove this movement?",
+        isPresented: isConfirmingRemoval,
+        titleVisibility: .visible,
+        presenting: removal
+      ) { request in
+        Button("Remove \(request.name)", role: .destructive) {
+          onRemoveExercise?(request.exerciseID)
+        }
+        Button("Keep it", role: .cancel) {}
+      } message: { request in
+        Text(Self.removalMessage(for: request))
+      }
       .confirmationDialog(
         "Discard this workout?",
-        isPresented: $isConfirmingDiscard,
+        isPresented: isConfirmingDiscard,
         titleVisibility: .visible
       ) {
         Button("Discard workout", role: .destructive) { onDiscard?() }
@@ -328,70 +375,85 @@ public struct SessionView: View {
       } message: {
         Text(discardMessage)
       }
-    }
-    .stagedSheet(isPresented: isKeypadPresented, inlineHeight: padHeight, onDismiss: keypadDidDismiss) {
-      keypadSheet
-    }
-    // The tour opens the keypad on the first set still to log, and closes it when its step ends.
-    .onChange(of: staging.opensKeypad, initial: true) { _, opens in
-      if opens {
-        guard keypad == nil, let next = firstUnloggedSlot else { return }
-        beginEditing(exerciseID: next.exerciseID, slotID: next.slotID, field: .weight)
-      } else if keypad != nil {
-        keypad = nil
+  }
+
+  /// The row a keypad is on can change underneath it, so these three observers end or reseed it.
+  private func sessionKeypadObservers<Content: View>(_ content: Content) -> some View {
+    content
+      // The reach check opens the keypad on the first set still to log so it can measure the pad.
+      .onChange(of: reachTargets?.opensKeypad, initial: true) { _, opens in
+        // `opensKeypad` is optional because the environment value is: no reach targets at all and
+        // no reach check is asking for the pad.
+        if opens == true {
+          guard keypad == nil, let next = firstUnloggedSlot else { return }
+          beginEditing(exerciseID: next.exerciseID, slotID: next.slotID, field: .weight)
+        } else if keypad != nil {
+          keypad = nil
+        }
       }
-    }
-    // A row the keypad is on can change underneath it: logged from its own check, removed, moved
-    // to another machine, or stepped with the −/+ buttons. Logged or gone closes the keypad; a
-    // new value reseeds it, so the keypad never shows a number the row does not hold.
-    .onChange(of: targetedSlot) { _, slot in
-      guard let target = keypad else { return }
-      // A saved figure's keystrokes live in the keypad's buffer until they are written, so the
-      // row is not reseeded from under them. Only the row going away, or being undone, ends it.
-      if target.isCorrection {
-        if slot?.isLogged != true { keypad = nil }
-        return
+      // A row the keypad is on can change underneath it: logged from its own check, removed, moved
+      // to another machine, or stepped with the −/+ buttons. Logged or gone closes the keypad; a
+      // new value reseeds it, so the keypad never shows a number the row does not hold.
+      .onChange(of: targetedSlot) { _, slot in
+        guard let target = keypad else { return }
+        // A saved figure's keystrokes live in the keypad's buffer until they are written, so the
+        // row is not reseeded from under them. Only the row going away, or being undone, ends it.
+        if target.isCorrection {
+          if slot?.isLogged != true { keypad = nil }
+          return
+        }
+        guard let slot, !slot.isLogged else {
+          keypad = nil
+          return
+        }
+        if !Self.buffer(keypadBuffer, agreesWith: slot.draft, field: target.field, unit: unit) {
+          keypadBuffer = Self.buffer(for: slot.draft, field: target.field, unit: unit)
+        }
       }
-      guard let slot, !slot.isLogged else {
-        keypad = nil
-        return
+      // The buffer is in the display unit; a unit change mid-entry would write pounds as kilograms.
+      .onChange(of: unit) { keypad = nil }
+  }
+
+  /// What the phone says and feels: the clank engine, and every announcement a lifter cannot see.
+  private func sessionFeedback<Content: View>(_ content: Content) -> some View {
+    content
+      // The clank is the anchor of the log moment, so its engine is running before the first set is
+      // logged and the first one is not the one that pays for starting it.
+      .onAppear { ClankPlayer.shared.prepare() }
+      // A failed save is felt as well as read: the check simply not stamping was easy to miss.
+      // Keyed on the failure as an event, so a retry that fails the same way is felt again.
+      .sensoryFeedback(Tokens.Haptic.error, trigger: errorSignal) { _, new in new.message != nil }
+      .onChange(of: errorSignal) { _, signal in
+        if let message = signal.message {
+          AccessibilityNotification.Announcement(message).post()
+        }
       }
-      if !Self.buffer(keypadBuffer, agreesWith: slot.draft, field: target.field, unit: unit) {
-        keypadBuffer = Self.buffer(for: slot.draft, field: target.field, unit: unit)
+      // Each rest control is felt, because the lifter pressing −15 or Skip is looking at the bar,
+      // not the phone, between sets. A selection tick, light like the row's machine step.
+      .sensoryFeedback(Tokens.Haptic.selection, trigger: restControlTaps)
+      // A rest ended by its deadline, with no alarm to say so, is felt and announced. Skip, −15 to
+      // zero and a dismissed alarm end it too, but the lifter did those and needs no telling.
+      .sensoryFeedback(trigger: restState) { [restEndsSilently] old, new in
+        Self.restEndedByDeadline(from: old, to: new, alarmless: restEndsSilently) ? Tokens.Haptic.warning : nil
       }
-    }
-    // The buffer is in the display unit; a unit change mid-entry would write pounds as kilograms.
-    .onChange(of: unit) { keypad = nil }
-    // The clank is the anchor of the log moment, so its engine is running before the first set is
-    // logged and the first one is not the one that pays for starting it.
-    .onAppear { ClankPlayer.shared.prepare() }
-    // A failed save is felt as well as read: the check simply not stamping was easy to miss.
-    // Keyed on the failure as an event, so a retry that fails the same way is felt again.
-    .sensoryFeedback(Tokens.Haptic.error, trigger: errorSignal) { _, new in new.message != nil }
-    .onChange(of: errorSignal) { _, signal in
-      if let message = signal.message {
-        AccessibilityNotification.Announcement(message).post()
+      .onChange(of: restState) { old, new in
+        if let announcement = Self.restAnnouncement(from: old, to: new, alarmless: restEndsSilently) {
+          AccessibilityNotification.Announcement(announcement).post()
+        }
       }
-    }
-    // Each rest control is felt, because the lifter pressing −15 or Skip is looking at the bar,
-    // not the phone, between sets. A selection tick, light like the row's machine step.
-    .sensoryFeedback(Tokens.Haptic.selection, trigger: restControlTaps)
-    // A rest ended by its deadline, with no alarm to say so, is felt and announced. Skip, −15 to
-    // zero and a dismissed alarm end it too, but the lifter did those and needs no telling.
-    .sensoryFeedback(trigger: restState) { [restEndsSilently] old, new in
-      Self.restEndedByDeadline(from: old, to: new, alarmless: restEndsSilently) ? Tokens.Haptic.warning : nil
-    }
-    .onChange(of: restState) { old, new in
-      if let announcement = Self.restAnnouncement(from: old, to: new, alarmless: restEndsSilently) {
+      .onChange(of: records) { _, records in
+        guard !records.isEmpty else { return }
+        let spoken = records.map { "\($0.kind.label), \(Self.describe($0, unit: unit))" }
+        let announcement: String = "New record. " + spoken.joined(separator: ". ")
         AccessibilityNotification.Announcement(announcement).post()
       }
-    }
-    .onChange(of: records) { _, records in
-      guard !records.isEmpty else { return }
-      let spoken = records.map { "\($0.kind.label), \(Self.describe($0, unit: unit))" }
-      let announcement: String = "New record. " + spoken.joined(separator: ". ")
-      AccessibilityNotification.Announcement(announcement).post()
-    }
+  }
+
+  /// The removal dialog's message, built outside the `ViewBuilder` so the message closure stays a
+  /// single non-generic call.
+  private static func removalMessage(for request: RemovalRequest) -> String {
+    "The \(Self.setCount(request.loggedSets)) logged for \(request.name) in this workout "
+      + "will be deleted. This cannot be undone."
   }
 
   // MARK: - Header
@@ -702,7 +764,7 @@ public struct SessionView: View {
         }
         if !records.isEmpty {
           recordsNotice
-            .tourTarget(.recordNotice)
+            .reachTarget(.recordNotice)
             .padding(.horizontal, Tokens.Spacing.regular)
             .hardsetArrival(beat: .follow)
         }
@@ -735,7 +797,7 @@ public struct SessionView: View {
               onSkipRest()
             }
           )
-          .tourTarget(.restBar)
+          .reachTarget(.restBar)
           .hardsetArrival(beat: .follow)
         }
       }
@@ -788,10 +850,9 @@ public struct SessionView: View {
   /// a new record has the line to itself, so the hint waits and is drawn, and counted as seen, only
   /// when it is actually in front of the lifter. At accessibility sizes it also waits while a rest
   /// runs, because it would stack on the rest bar and cover the set being logged; it is spent when it
-  /// is drawn, so it is still owed when the rest ends. The tour's staged phone never draws it, because
-  /// the lifter has not started training there.
+  /// is drawn, so it is still owed when the rest ends.
   private var isShowingCorrectionHint: Bool {
-    showsCorrectionHint && onCorrectSet != nil && !staging.presentsSheetsInline && !hasFeedback
+    showsCorrectionHint && onCorrectSet != nil && !hasFeedback
       && !(dynamicTypeSize.isAccessibilitySize && !isRestIdle)
       && exercises.contains { $0.loggedCount > 0 }
   }
@@ -1214,7 +1275,7 @@ public struct SessionView: View {
     return slot(exerciseID: keypad.exerciseID, slotID: keypad.slotID)
   }
 
-  /// The first set, in workout order, that is not logged: where the tour's keypad opens.
+  /// The first set, in workout order, that is not logged: where the reach check's keypad opens.
   private var firstUnloggedSlot: (exerciseID: UUID, slotID: UUID)? {
     for exercise in exercises {
       if let slot = exercise.slots.first(where: { !$0.isLogged }) {
@@ -1393,7 +1454,7 @@ public struct SessionView: View {
           canLog: targetedSlot?.draft.isLoggable ?? false,
           weightSteps: QuickSteps.weight(machineIncrementKg: machineIncrementKg, unit: unit)
         )
-        .tourTarget(.keypad)
+        .reachTarget(.keypad)
       }
       // Measured rather than fixed. A hard-coded 370 pt detent was shorter than the pad's own
       // minimum (380 pt before any larger text), so the bottom row could clip; the scroll view
@@ -1501,6 +1562,78 @@ private struct KeypadTarget: Hashable {
   let field: SetRowField
   /// The keypad is on a saved set's figure, correcting it, and not on an unsaved row's draft.
   var isCorrection = false
+}
+
+/// Presents the keypad from inside its own modifier body, so the screen's already large view
+/// builder is not asked to solve the sheet's generic presentation alongside everything else.
+/// Behaviour is the same as a `sheet(isPresented:onDismiss:content:)` on the screen itself.
+///
+/// `inlineHeight` is for the reach check only: with a height, the pad is drawn as a bottom panel
+/// inside the screen so its frame can be measured in the window. With `nil` — every shipped path —
+/// it is the real sheet.
+private struct KeypadSheetPresentation<Sheet: View>: ViewModifier {
+  @Binding var isPresented: Bool
+  let onDismiss: () -> Void
+  let inlineHeight: CGFloat?
+  let sheet: () -> Sheet
+
+  init(
+    isPresented: Binding<Bool>, onDismiss: @escaping () -> Void, inlineHeight: CGFloat?,
+    @ViewBuilder sheet: @escaping () -> Sheet
+  ) {
+    _isPresented = isPresented
+    self.onDismiss = onDismiss
+    self.inlineHeight = inlineHeight
+    self.sheet = sheet
+  }
+
+  func body(content: Content) -> some View {
+    if let inlineHeight {
+      content
+        .overlay(alignment: .bottom) {
+          if isPresented {
+            InlineKeypadSurface(height: inlineHeight, content: sheet)
+              .transition(.move(edge: .bottom).combined(with: .opacity))
+          }
+        }
+        .onChange(of: isPresented) { old, new in
+          if old && !new { onDismiss() }
+        }
+    } else {
+      content.sheet(isPresented: $isPresented, onDismiss: onDismiss, content: sheet)
+    }
+  }
+}
+
+/// The panel the keypad is measured on in the reach check: steel, with the card radius on its top
+/// corners and a hairline rim, at the same height the real sheet would take. It never ships.
+private struct InlineKeypadSurface<Content: View>: View {
+  let height: CGFloat
+  @ViewBuilder let content: () -> Content
+
+  var body: some View {
+    let shape = UnevenRoundedRectangle(
+      topLeadingRadius: Tokens.Radius.card, bottomLeadingRadius: 0, bottomTrailingRadius: 0,
+      topTrailingRadius: Tokens.Radius.card)
+    content()
+      .hardsetControlSurface(.steel)
+      .frame(maxWidth: .infinity)
+      .frame(height: height)
+      .background(Tokens.Color.steel, in: shape)
+      .overlay { shape.strokeBorder(Tokens.Color.hairline, lineWidth: Tokens.Stroke.hairline) }
+      .clipShape(shape)
+  }
+}
+
+extension View {
+  fileprivate func keypadSheetPresentation<Sheet: View>(
+    isPresented: Binding<Bool>, onDismiss: @escaping () -> Void, inlineHeight: CGFloat?,
+    @ViewBuilder sheet: @escaping () -> Sheet
+  ) -> some View {
+    modifier(
+      KeypadSheetPresentation(
+        isPresented: isPresented, onDismiss: onDismiss, inlineHeight: inlineHeight, sheet: sheet))
+  }
 }
 
 /// A failure message together with the event that produced it, so two failures with the same

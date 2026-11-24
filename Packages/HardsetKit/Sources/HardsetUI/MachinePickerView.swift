@@ -110,7 +110,6 @@ public struct MachinePickerView: View {
               SectionLabel("Used last time")
               heroCard(hero)
             }
-            .tourTarget(.machineList)
           } else if others.isEmpty, isLoading {
             // Before the first read has finished, an empty list says nothing about the gym.
             HardsetLoadingState("Loading this gym’s machines.")

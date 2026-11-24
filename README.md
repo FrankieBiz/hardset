@@ -8,12 +8,12 @@ machines you train on, and fast to log a set.
 **Status: the app, the widget and the analysis layer build and run.** Sessions, sets, prefill from
 history, the rest bar, recovery of an interrupted workout, personal records, a 50-movement seed
 catalogue and a picker; plus the permanent muscle vocabulary, fractional sets-per-muscle-per-week
-with coverage, per-machine load history, session history, onboarding and the guided tour. CI builds
-the app and widget (Debug and Release) on a macOS runner, renders every screen, and drives the real
-app in the Simulator through six lifter journeys and a light-mode pass.
+with coverage, per-machine load history, session history and onboarding. CI builds the app and
+widget (Debug and Release) on a macOS runner, renders every screen, and drives the real app in the
+Simulator through lifter journeys and a light-mode pass.
 
 **Still device-bound:** nothing has run on a physical iPhone, and no signed build has exercised
-CloudKit sync, AlarmKit alarms, HealthKit, or a real StoreKit purchase. Those remain the gates in
+CloudKit sync, AlarmKit alarms, or a real StoreKit purchase. Those remain the gates in
 `DEVICE-CHECKLIST.md` and `docs/OWNER-DEVICE-CHECKLIST.md`. On this Linux machine `xcodebuild`
 cannot run at all, so the app and widget are compiled by CI rather than locally.
 
@@ -28,7 +28,6 @@ HardsetUITests/            real-app journeys, screenshots and accessibility audi
 Packages/HardsetKit/
   HardsetCore              Foundation-only, nonisolated. Engine + alarm metadata. Tests on host.
   HardsetAlarm             iOS-only. AlarmKit conformance + rest-timer controller.
-  HardsetHealth            HealthKit reads and writes, behind an explicit opt-in.
   HardsetStore             GRDB/SQLiteData. Schema, migration, sync.
   HardsetUI                Tokens, set row, keypad, rest bar, session screen, picker, volume
                            report, per-machine chart, history, methodology disclosure.

@@ -15,8 +15,7 @@ public enum OnboardingVersion {
 /// sees the sequence once on update with Setup pre-filled from what it already has. The root view
 /// is not built until the sequence is done, so nothing behind it prepares or reads while the
 /// lifter is still on Welcome. Finishing cross-fades to the root rather than pushing, so the app
-/// does not look like one more onboarding page. Settings replays the sequence in a full-screen
-/// cover, which neither restarts the app nor touches the stored version.
+/// does not look like one more onboarding page.
 @MainActor
 public struct HardsetLaunchView: View {
   @AppStorage("hardset.onboardingVersion") private var onboardingVersion = 0
@@ -26,7 +25,6 @@ public struct HardsetLaunchView: View {
   /// Shared with the root view's own scene storage, so the gym named in Setup is the one the first
   /// workout starts at.
   @SceneStorage("hardset.pendingGymPick") private var pendingGymPick = ""
-  @State private var isReplaying = false
   @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
   private let environment: HardsetEnvironment
@@ -52,15 +50,9 @@ public struct HardsetLaunchView: View {
     ZStack {
       if hasSeenOnboarding {
         HardsetRootView(
-          environment: environment, unit: unit, hooks: hooks, restAfterSet: restAfterSet,
-          onShowTour: { isReplaying = true }
+          environment: environment, unit: unit, hooks: hooks, restAfterSet: restAfterSet
         )
         .transition(.opacity)
-        .replayCover(isPresented: $isReplaying) {
-          OnboardingFlow(
-            gyms: environment.gyms, useImperial: $useImperial, mode: .replay
-          ) { _ in isReplaying = false }
-        }
       } else {
         OnboardingFlow(gyms: environment.gyms, useImperial: $useImperial) { gymID in
           if let gymID { pendingGymPick = gymID.rawValue.uuidString }
@@ -73,19 +65,5 @@ public struct HardsetLaunchView: View {
     // Below the root view, so a screen far from Settings, such as a workout's receipt, can say where
     // the history it shows is kept without the root view passing it through every screen.
     .environment(\.syncStatus, environment.sync)
-  }
-}
-
-extension View {
-  /// A full-screen cover on iOS; the macOS host build, which only compiles the package, has no
-  /// such presentation and uses a sheet.
-  fileprivate func replayCover<Content: View>(
-    isPresented: Binding<Bool>, @ViewBuilder content: @escaping () -> Content
-  ) -> some View {
-    #if os(iOS)
-      fullScreenCover(isPresented: isPresented, content: content)
-    #else
-      sheet(isPresented: isPresented, content: content)
-    #endif
   }
 }

@@ -49,10 +49,9 @@ nonisolated enum RestoreSchema {
 
   /// In the order rows must be inserted: every table comes after the tables it references.
   ///
-  /// These are the tables the lifter's own work lives in. The device-local tables (Health copies,
-  /// the rest timer and its journal, the import ledger) describe this phone's state and are not
-  /// restored: Health is copied again from Settings, and a rest timer from another day is a
-  /// timer that never happened.
+  /// These are the tables the lifter's own work lives in. The device-local tables (the retained
+  /// device sample table, the rest timer and its journal, the import ledger) describe this phone's
+  /// state and are not restored: a rest timer from another day is a timer that never happened.
   static let tables: [Table] = [
     Table(name: "gyms", columns: [id(), text("name"), bool("isArchived"), date("createdAt")]),
     Table(name: "exercises", columns: [

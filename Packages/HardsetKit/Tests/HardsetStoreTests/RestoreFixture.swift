@@ -59,7 +59,7 @@ enum RestoreFixture {
   /// A lifter's database, built through the real stores where they exist and with explicit rows
   /// where the case needs exact control. It holds everything the CSV carries and, on purpose,
   /// several things it cannot: an open workout, an unused gym and machine, a plan row with no
-  /// sets, a saved workout, body mass and a Health copy.
+  /// sets, a saved workout, body mass and a row in the retained device-sample table.
   static func populated() async throws -> (DatabaseQueue, Fixture) {
     let db = try freshInstall()
     let seeder = CatalogSeeder(database: db)

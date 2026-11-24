@@ -127,8 +127,8 @@ else
     echo "==> Selected simulator: $SIM_NAME"
 
     echo "==> Building for iOS Simulator..."
-    # Signed locally rather than unsigned, so the HealthKit entitlement stays embedded and
-    # Connect Apple Health works, as CI does it.
+    # Signed locally rather than unsigned, so the app's entitlements stay embedded, as CI
+    # does it.
     xcodebuild build \
         -project Hardset.xcodeproj \
         -scheme Hardset \

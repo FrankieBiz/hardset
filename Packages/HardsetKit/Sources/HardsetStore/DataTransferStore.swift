@@ -212,8 +212,7 @@ public nonisolated struct DataTransferStore: Sendable {
       case .json:
         "Everything Hardset can restore: workouts, movements, gyms and machines, saved workouts "
           + "and body mass. Hardset can read this file back in. A workout still open when you "
-          + "export is not restored. It also holds any Apple Health data you chose to copy, "
-          + "which Hardset does not restore."
+          + "export is not restored."
       case .sqlite:
         "The database itself, for inspecting your data or keeping a full copy. Hardset can't read it back in."
       }

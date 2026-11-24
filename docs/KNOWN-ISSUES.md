@@ -4,48 +4,7 @@ Findings that are open. They are written down here with their evidence instead o
 test that was loosened or a report that was dismissed. When one is fixed, remove its entry in the
 same change.
 
-## 1. The staged phone is reachable by assistive technology at every tour step
-
-**Where.** The first-launch tour (`TourStage`) stages two real `HardsetRootView`s in a scaled
-phone (`ScaledPhoneFrame`). Only step two, the staged set's check, asks the lifter to touch it. At
-every other step the phone is meant to be a picture: inert to touch and hidden from VoiceOver.
-
-**What is wrong.** Inert to touch holds. Hidden from VoiceOver does not. XCUITest lists the staged
-roots' two tab bars (UIKit-hosted, from each root's `TabView`) and the staged start screen's
-"Start workout" button at all eight inert tour steps. What XCUITest lists is what an assistive
-technology is offered, so a VoiceOver user can swipe into a preview and meet controls that do
-nothing. How VoiceOver actually reads the tour has not been confirmed.
-
-**Evidence.** CI run 44755327282 on `1acb3b7`, with `ScaledPhoneFrame` as it is on main:
-`testOnboardingJourneyDark` recorded 32 failures, 16 of each of two assertions (tab bar count
-`2`, not `0`; "Start workout" exists), which is eight tour steps over two attempts. The reverse-order
-pass failed the same way. The control recorded in the same journey read `2` tab bars at the
-interactive step as well, so the marking changes nothing the tree lists.
-
-**Tried, and why each failed.**
-
-1. `accessibilityHidden(true)` on the frame. It does not reach the UIKit-hosted tab content
-   (`docs/superpowers/plans/2026-11-16-frontend-rebuild-phase-4-onboarding.md`, R66).
-2. A hosting controller per staged root. Reverted: it rendered the roots in the wrong appearance,
-   and XCUITest still listed the content.
-3. The frame made one accessibility leaf (`accessibilityElement(children: .ignore)`) and then hidden,
-   as a value rather than a branch so the frame kept its identity. Commit `45afb77`, reverted in
-   `fb3caf7` after CI run 44738794794: the same two tab bars and the same button were still listed,
-   and the interactive control read the same, so it changed nothing the tree exposes.
-
-**How the test records it.** `assertStagedPhoneIsHidden` in `HardsetUITests/AppScreensUITests.swift`
-keeps both assertions and wraps each in a strict `XCTExpectFailure`. The journey passes while the
-defect stands, and fails with "failure expected but none occurred" on the day it is fixed, so the
-expectation is removed deliberately. The assertions are not weakened.
-
-**Open question.** Which layer owns the fix. The candidates are the frame (the SwiftUI layer that has
-now failed twice), the staged roots' `TabView` (the UIKit tab bar controller is the thing still
-listed), a UIKit-level hide of that controller's view, or a change to what the tour stages. None of
-these has been tried or ruled out beyond the three attempts above.
-
-**Needs a device.** VoiceOver on the tour, at each step, on hardware.
-
-## 2. The scrolled Volume audit reports about fourteen contrast failures that the render does not show
+## 1. The scrolled Volume audit reports about fourteen contrast failures that the render does not show
 
 **Where.** `testWorkoutJourneyDark`, the audit named "volume with a workout, scrolled": Volume with
 a finished workout, after `swipeUp()` has brought the muscle rows into view.

@@ -13,8 +13,8 @@ import HardsetCore
 /// this version does not know, or a column it does not know is refused whole, because restoring
 /// around data it cannot read would look like a complete restore and not be one.
 nonisolated enum RestoreJSON {
-  /// Device-local tables: this phone's Health copies, rest timer and journal, and import ledger.
-  /// They are in the file for inspection and are not restored.
+  /// Device-local tables: this phone's retained device samples, rest timer and journal, and import
+  /// ledger. They are in the file for inspection and are not restored.
   private static let deviceTables: Set<String> = Set(HardsetMigrations.deviceLocalTableNames)
 
   static func looksLikeJSON(_ text: String) -> Bool {

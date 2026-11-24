@@ -125,7 +125,7 @@ merge semantics. Use the iPhone plus a simulator signed into the same iCloud acc
       still present and uploads.
 - [ ] **Account switch.** Sign into a *different* iCloud account on A. Local rows survive and the
       user is told the data belongs to the previous account.
-- [ ] **No health data in iCloud.** Add a bodyweight entry, then inspect the CloudKit console.
+- [ ] **No bodyweight data in iCloud.** Add a bodyweight entry, then inspect the CloudKit console.
       `bodyweightEntries` must be absent — it is deliberately unregistered with the SyncEngine
       under Guideline 5.1.3(ii). If it appears, stop and fix before any external build.
 

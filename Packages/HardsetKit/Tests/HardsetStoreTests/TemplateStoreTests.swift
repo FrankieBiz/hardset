@@ -301,9 +301,9 @@ struct TemplateStoreTests {
     #expect(loaded.first { $0.id == neverFinished.id }?.lastDoneAt == nil)
   }
 
-  /// What counts as having done a workout is one rule, shared by the rotation, "Repeat last workout"
-  /// and Apple Health: it ended, and it holds a working set. An accidental Start finished empty, or a
-  /// workout of warm-ups only, is none of them.
+  /// What counts as having done a workout is one rule, shared by the rotation and "Repeat last
+  /// workout": it ended, and it holds a working set. An accidental Start finished empty, or a
+  /// workout of warm-ups only, is neither.
   @Test("A workout finished with no working set does not move the rotation")
   func anEmptyFinishedWorkoutDoesNotAdvanceTheRotation() async throws {
     let database = try migratedDatabase()
@@ -357,8 +357,8 @@ struct TemplateStoreTests {
     #expect(found == real.session)
   }
 
-  @Test("The rotation, Repeat last workout and Apple Health count the same workouts")
-  func rotationRepeatAndHealthAgree() async throws {
+  @Test("The rotation and Repeat last workout count the same workouts")
+  func rotationAndRepeatAgree() async throws {
     let database = try migratedDatabase()
     let store = TemplateStore(database: database)
     let press = try seedExercise(database, name: "Chest Press")
@@ -377,12 +377,9 @@ struct TemplateStoreTests {
     let rotationCounts = Set(
       byTemplate.filter { pair in loaded.first { $0.id == pair.id }?.lastDoneAt != nil }
         .map(\.session.rawValue))
-    let healthCounts = Set(
-      try await DeviceHealthStore(database: database).workoutsToExport().map(\.id.rawValue))
     let repeatable = try LoggerStore(database: database).hasRepeatableWorkout()
 
     #expect(rotationCounts == [byTemplate[0].session.rawValue])
-    #expect(healthCounts == rotationCounts)
     #expect(repeatable)
   }
 

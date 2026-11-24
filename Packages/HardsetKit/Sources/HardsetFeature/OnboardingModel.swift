@@ -5,62 +5,23 @@ import Observation
 
 /// The first-launch sequence as plain state, so every rule can be tested without a pager.
 ///
-/// Welcome, three pitch pages, the tour, then Setup. The model knows where the lifter is, what
-/// "Next" and "Skip" do from there, whether the tour's current step may be left, and what Setup has
-/// to offer and save. It draws nothing and owns no unit: the unit is the app's one stored
-/// preference, and Setup edits it where it lives.
-///
-/// A replay from Settings runs the same pages without Setup, which the lifter has already done, and
-/// ends where the tour ends.
+/// Welcome, three pitch pages, then Setup. The model knows where the lifter is, what "Next" and
+/// "Skip" do from there, and what Setup has to offer and save. It draws nothing and owns no unit:
+/// the unit is the app's one stored preference, and Setup edits it where it lives.
 @MainActor
 @Observable
 public final class OnboardingModel {
-  /// Whether this is the first launch or a replay from Settings.
-  public enum Mode: Sendable {
-    case firstLaunch
-    case replay
-  }
-
   /// A page of the pager, in order.
   public enum Page: Int, CaseIterable, Hashable, Sendable {
     case welcome
     case pitchSetRow
     case pitchEstimate
     case pitchRest
-    case tour
     case setup
   }
 
-  /// A step of the tour, in order. Each is a place the staged phone shows.
-  public enum TourStep: Int, CaseIterable, Hashable, Sendable {
-    case train
-    case logSet
-    case keypad
-    case rest
-    case machines
-    case volume
-    case history
-    case settings
-
-    /// One-based, as the lifter counts: "3 of 8".
-    public var number: Int { rawValue + 1 }
-  }
-
-  public static let tourStepCount = TourStep.allCases.count
-
-  public let mode: Mode
-
   /// The page on screen. Bound to the pager, so a swipe sets it directly.
   public var page: Page
-
-  /// The tour's current step.
-  public private(set) var tourStep: TourStep = .train
-
-  /// Whether the lifter has tapped the staged set's check. Step two's "Next" waits for it.
-  public private(set) var hasLoggedTourSet = false
-
-  /// Set when a replay reaches its end or is skipped. The first launch ends in Setup instead.
-  public private(set) var isReplayFinished = false
 
   // MARK: - Setup
 
@@ -81,81 +42,33 @@ public final class OnboardingModel {
 
   private let gyms: GymStore
 
-  /// - Parameters:
-  ///   - startingPage: The page shown first. Only a capture or a test starts anywhere but Welcome.
-  ///   - startingTourStep: The tour step shown first, on the same terms.
-  public init(
-    gyms: GymStore, mode: Mode = .firstLaunch, startingPage: Page = .welcome,
-    startingTourStep: TourStep = .train
-  ) {
+  /// - Parameter startingPage: The page shown first. Only a capture or a test starts anywhere but
+  ///   Welcome.
+  public init(gyms: GymStore, startingPage: Page = .welcome) {
     self.gyms = gyms
-    self.mode = mode
     self.page = startingPage
-    self.tourStep = startingTourStep
   }
 
   // MARK: - Pages
 
-  /// The pages the pager holds. A replay has no Setup page.
-  public var pages: [Page] {
-    switch mode {
-    case .firstLaunch: Page.allCases
-    case .replay: Page.allCases.filter { $0 != .setup }
-    }
-  }
+  /// The pages the pager holds.
+  public var pages: [Page] { Page.allCases }
 
   /// "Skip" is offered from the second page on, and not on Setup, which is where it leads.
   public var canSkip: Bool {
     page != .welcome && page != .setup
   }
 
-  /// Leaves the pager's current page for the next one. On the tour it moves to the next step, or
-  /// out of the tour after the last, and does nothing while the step still waits on the lifter.
+  /// Leaves the pager's current page for the next one.
   public func next() {
-    switch page {
-    case .welcome, .pitchSetRow, .pitchEstimate, .pitchRest:
-      if let following = Page(rawValue: page.rawValue + 1) { page = following }
-    case .tour:
-      advanceTour()
-    case .setup:
-      break
-    }
+    guard let following = Page(rawValue: page.rawValue + 1) else { return }
+    page = following
   }
 
-  /// Jumps to where the sequence ends: Setup on a first launch, the end of a replay. Never from the
-  /// welcome page, which has no skip.
+  /// Jumps to where the sequence ends: Setup. Never from the welcome page, which has no skip.
   public func skip() {
     guard canSkip else { return }
-    leaveTour()
-  }
-
-  // MARK: - Tour
-
-  /// Whether the tour's "Next" is available. Step two is the one interactive step, so it waits for
-  /// the lifter to tap the check; every other step may be left at once.
-  public var canAdvanceTour: Bool {
-    tourStep != .logSet || hasLoggedTourSet
-  }
-
-  /// Records that the staged set was logged by the lifter's own tap.
-  public func didLogTourSet() {
-    hasLoggedTourSet = true
-  }
-
-  private func advanceTour() {
-    guard canAdvanceTour else { return }
-    if let following = TourStep(rawValue: tourStep.rawValue + 1) {
-      tourStep = following
-    } else {
-      leaveTour()
-    }
-  }
-
-  private func leaveTour() {
-    switch mode {
-    case .firstLaunch: page = .setup
-    case .replay: isReplayFinished = true
-    }
+    page = .setup
   }
 
   // MARK: - Setup

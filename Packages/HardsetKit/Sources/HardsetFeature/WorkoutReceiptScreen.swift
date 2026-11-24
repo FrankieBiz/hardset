@@ -511,8 +511,8 @@ struct WorkoutReceiptScreen: View {
   static func workoutDeletionMessage(setCount: Int) -> String {
     let sets = setCount == 1 ? "Its 1 set is" : "Its \(setCount) sets are"
     return (setCount == 0 ? "" : "\(sets) deleted with it. ")
-      + "History, weekly volume, load history and record baselines will change. A copy already "
-      + "sent to Apple Health is not removed. This cannot be undone."
+      + "History, weekly volume, load history and record baselines will change. This cannot be "
+      + "undone."
   }
 
   private func deleteSet(_ line: WorkoutReceipt.Line) async {

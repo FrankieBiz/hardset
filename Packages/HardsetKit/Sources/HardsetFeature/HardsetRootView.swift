@@ -16,7 +16,6 @@ public struct HardsetEnvironment {
   public let volume: VolumeStore
   public let history: HistoryStore
   public let progression: ProgressionStore
-  public let health: DeviceHealthStore
   public let receipts: ReceiptStore
   public let transfer: DataTransferStore
   public let gyms: GymStore
@@ -38,7 +37,6 @@ public struct HardsetEnvironment {
     self.gyms = GymStore(database: database)
     self.templates = TemplateStore(database: database)
     self.progressBoard = ProgressBoardStore(database: database)
-    self.health = DeviceHealthStore(database: database)
     self.receipts = ReceiptStore(database: database)
     self.transfer = DataTransferStore(database: database)
   }
@@ -93,9 +91,6 @@ public struct HardsetRootView: View {
   /// up, and why it could not be read when it could not.
   @State private var volumeWorking: WorkedFromPresentation?
   @State private var volumeWorkingError: String?
-  /// Set when Settings asked for the tour, so it opens once the sheet has finished closing: a
-  /// presentation started while another is still leaving is dropped.
-  @State private var wantsTour = false
   /// The newest finished workout, for the start screen. `nil` when there is none, and then the
   /// start screen shows nothing in its place rather than a placeholder that implies a history.
   @State private var lastWorkoutSnapshot = SnapshotLoader<[SessionSummary]>()
@@ -135,33 +130,21 @@ public struct HardsetRootView: View {
   @Environment(\.accessibilityReduceMotion) private var reduceMotion
   @Environment(\.scenePhase) private var scenePhase
   @Environment(\.dynamicTypeSize) private var dynamicTypeSize
-  /// What the first-launch tour asks of the root: a tab, or Settings open. Asks for nothing in the
-  /// daily app.
-  @Environment(\.tourStaging) private var staging
   private let environment: HardsetEnvironment
   /// Overrides the stored preference. Exists for previews and tests; the app passes `nil` so the
   /// user's own choice wins.
   private let unitOverride: WeightUnit?
   private let hooks: RestTimerHooks
-  /// Replays the first-launch tour. `nil` where nothing hosts one, and Settings then offers no row.
-  private let onShowTour: (() -> Void)?
-  /// False for the tour's staged roots, which must not read or write the scene's real pending gym
-  /// pick: their gyms are fixtures, and a drop would erase the daily app's choice.
-  private let restoresSceneState: Bool
 
   public init(
     environment: HardsetEnvironment,
     unit: WeightUnit? = nil,
     hooks: RestTimerHooks = .inert,
-    restAfterSet: Duration? = nil,
-    onShowTour: (() -> Void)? = nil,
-    restoresSceneState: Bool = true
+    restAfterSet: Duration? = nil
   ) {
     self.environment = environment
     self.unitOverride = unit
     self.hooks = hooks
-    self.onShowTour = onShowTour
-    self.restoresSceneState = restoresSceneState
     // The model builds every workout the app has, so the rest decision and the end of a rest are
     // wired once, here: a set starts the rest the lifter last chose for its movement, and a workout
     // closing, or the lifter skipping, cancels it.
@@ -202,17 +185,10 @@ public struct HardsetRootView: View {
       // Above every tab, so Settings opens from each tab's header alike, and outside anything
       // that changes when a workout starts or finishes, so finishing while it is open cannot pull
       // its anchor out from under it.
-      .stagedSheet(
-        isPresented: $isShowingSettings,
-        onDismiss: {
-          guard wantsTour else { return }
-          wantsTour = false
-          onShowTour?()
-        }
-      ) {
+      .sheet(isPresented: $isShowingSettings) {
         SettingsSheet(
           useImperial: $useImperial, transfer: environment.transfer,
-          health: environment.health, sync: environment.sync, gyms: environment.gyms,
+          sync: environment.sync, gyms: environment.gyms,
           // An import adds finished workouts, so the start screen's last workout may have
           // changed underneath the sheet, which does not make the start screen appear again.
           // A gym renamed or archived in Settings changes the names the start screen and the gym
@@ -228,12 +204,6 @@ public struct HardsetRootView: View {
             } catch {
               gymError = "Your gyms could not be re-read. Close and reopen the list to try again."
             }
-          },
-          onShowTour: onShowTour.map { _ in
-            {
-              wantsTour = true
-              isShowingSettings = false
-            }
           }
         ) { isShowingSettings = false }
           .hardsetSheet()
@@ -243,15 +213,6 @@ public struct HardsetRootView: View {
         guard phase == .active, !Calendar.current.isDate(today, inSameDayAs: .now) else { return }
         today = .now
       }
-      // The tour moves the root between tabs and opens Settings by asking through the environment.
-      .onChange(of: staging.tab, initial: true) { _, tab in
-        switch tab {
-        case .train: selectedTab = .train
-        case .volume: selectedTab = .volume
-        case .history: selectedTab = .history
-        }
-      }
-      .onChange(of: staging.showsSettings, initial: true) { _, shows in isShowingSettings = shows }
   }
 
   private var tabs: some View {
@@ -354,7 +315,7 @@ public struct HardsetRootView: View {
     model.weightUnit = unit
     await model.load()
     guard model.isReady else { return }
-    if restoresSceneState { restorePendingGymPick() }
+    restorePendingGymPick()
     await refreshLastWorkout()
     await refreshSavedWorkouts()
   }
@@ -501,7 +462,6 @@ public struct HardsetRootView: View {
                 .labelStyle(.titleAndIcon)
             }
             .buttonStyle(HardsetButtonStyle(startRole, size: .logger))
-            .tourTarget(.startAction)
 
             if startFailed {
               HardsetBanner(
@@ -959,7 +919,6 @@ public struct HardsetRootView: View {
   /// it, so iOS ending the app in the background between choosing and starting does not lose it.
   private func chooseGym(_ id: GymID?) {
     model.selectedGym = id
-    guard restoresSceneState else { return }
     pendingGymPick = id?.rawValue.uuidString ?? Self.noGymPick
   }
 
@@ -1039,7 +998,7 @@ public struct HardsetRootView: View {
       try model.startWorkout()
       startFailed = false
       // The pick is spent: the session recorded it, and the learned default takes over again.
-      if restoresSceneState { pendingGymPick = "" }
+      pendingGymPick = ""
     } catch {
       startFailed = true
     }

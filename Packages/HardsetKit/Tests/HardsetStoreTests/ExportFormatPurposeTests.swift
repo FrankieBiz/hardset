@@ -63,8 +63,7 @@ struct ExportFormatPurposeTests {
     #expect(purpose.contains("saved workouts"))
     #expect(purpose.contains("body mass"))
     #expect(purpose.contains("still open"))
-    #expect(purpose.contains("Apple Health"))
-    #expect(purpose.contains("does not restore"))
+    #expect(purpose.contains("not restored"))
   }
 
   @Test("The CSV's own copy says what it leaves out")
