@@ -1238,7 +1238,8 @@ public struct SessionView: View {
   private var discardMessage: String {
     let logged = exercises.reduce(0) { $0 + $1.loggedCount }
     if logged == 0 {
-      return "Nothing has been logged in it, so nothing is lost. It will not appear in History."
+      // The count, stated, so an empty workout is not a judgement call: there is nothing to save.
+      return "0 sets logged, so nothing is lost. It will not appear in History."
     }
     return "The \(Self.setCount(logged)) logged in it will be deleted, and it will not appear in "
       + "History. This cannot be undone."
