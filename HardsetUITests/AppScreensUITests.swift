@@ -221,9 +221,10 @@ final class AppScreensUITests: XCTestCase {
     XCTAssertTrue(corrected.label.contains(", 5 reps"), "Correcting the weight must keep the reps.")
     capture(app, "40b-correction-saved")
 
-    // Undo it from the row's long-press menu.
-    row.coordinate(withNormalizedOffset: CGVector(dx: 0.08, dy: 0.5)).press(forDuration: 1.2)
+    // Undo it from the row's long-press menu. The menu intermittently does not open on the first
+    // press under automation, so this one press is retried once; see `longPressForMenu`.
     let undo = app.buttons["Undo log"]
+    longPressForMenu(row, items: [undo])
     XCTAssertTrue(undo.waitForExistence(timeout: 5))
     capture(app, "41-set-corrections-menu")
     audit(app, screen: "set corrections menu")
@@ -641,6 +642,26 @@ final class AppScreensUITests: XCTestCase {
     let gone = XCTNSPredicateExpectation(
       predicate: NSPredicate(format: "exists == false"), object: element)
     return XCTWaiter().wait(for: [gone], timeout: timeout) == .completed
+  }
+
+  /// Long-presses a set row to open its context menu, pressing once more if nothing opened.
+  ///
+  /// The menu intermittently fails to open under automation: this press failed on bases `31f7c45`
+  /// and `e34e295` and passed on `1c935d5` and `09cb15e`, on the same app code. So a first press
+  /// that produces nothing says nothing about the app, and it is retried once -- the same shape as
+  /// the retry #22 added for a "Busy / installing" launch refusal. The caller's own assertion still
+  /// fails if the second press produces nothing either; nothing else in this suite is retried, and
+  /// no wait here is longer than the ones around it.
+  ///
+  /// - Parameter items: what the menu puts on screen. The press is retried only while none of them
+  ///   exists, so a menu that opened but has not settled is never pressed a second time.
+  @MainActor
+  private func longPressForMenu(_ row: XCUIElement, items: [XCUIElement], dx: CGFloat = 0.08) {
+    let point = row.coordinate(withNormalizedOffset: CGVector(dx: dx, dy: 0.5))
+    point.press(forDuration: 1.2)
+    if items.contains(where: { $0.waitForExistence(timeout: 3) }) { return }
+    // A swallowed press leaves no menu behind, so the second one starts from the same row.
+    point.press(forDuration: 1.2)
   }
 
   @MainActor

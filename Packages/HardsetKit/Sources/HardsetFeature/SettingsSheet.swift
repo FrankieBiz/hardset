@@ -334,7 +334,10 @@ private nonisolated enum Disclosure: Identifiable {
 /// Outlined with the measured control border rather than the decorative hairline, because the
 /// boundary is what tells the lifter the row can be tapped. Pressed, it sinks to the pressed fill;
 /// with Reduce Motion on, the scale is dropped and only the fill changes.
-private struct DisclosureRowButtonStyle: ButtonStyle {
+///
+/// Shared with the published-page rows in Settings' "Your data" area, which open in the browser
+/// rather than in place, so a row that opens anything looks the same wherever it sits.
+struct DisclosureRowButtonStyle: ButtonStyle {
   func makeBody(configuration: ButtonStyleConfiguration) -> some View {
     DisclosureRowButtonBody(configuration: configuration)
   }
