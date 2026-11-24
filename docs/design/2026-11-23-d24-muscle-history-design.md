@@ -457,14 +457,15 @@ hand-made fixture (`VolumeStoreTests.swift:14-27`), and sets written through `Lo
 
 ### 4.3 The query gate — `Tools/check_query_performance.py`
 
-Add both new shapes to `QUERIES` (`:24`) and run the existing 100,000-set fixture. Expected: the
-four-week and twelve-week reads are `SEARCH` on `loggedSets_on_completedAt` with no temporary sort;
-the grouped lifetime aggregate is a covering scan of `loggedSets_on_workingBenchmark`. The gate fails
-a bare `SCAN` unless the query is listed as whole-history work (`:112-117`). If — and only if — the
-aggregate shows a temporary b-tree, the answer is to whitelist it with that reason (it returns one
-row per movement, like `progress board sets`, `:88-91`, `:101`), not to add a sixth near-duplicate
-index: v9 already ships `(exerciseID, completedAt DESC, …) WHERE NOT isWarmup`
-(`Migrations.swift:446-454`).
+Add both new shapes to `QUERIES` (`:24`) and run the existing 100,000-set fixture. Measured here: the
+four-week and twelve-week reads are a `SEARCH` on `loggedSets_on_completedAt` with no temporary sort;
+the grouped lifetime aggregate is a covering scan of the partial working-set index (the fixture plans
+it on `loggedSets_on_workingReps`), with no temporary b-tree. A whole-history aggregate returns one
+row per movement and cannot be a keyed lookup, so it is listed in `WHOLE_HISTORY` (`:112-117`) with
+that reason, beside `progress board sets`. Do not add a sixth near-duplicate index: v9 already ships
+`(exerciseID, completedAt DESC, …) WHERE NOT isWarmup` (`Migrations.swift:446-454`). If a future
+change makes this aggregate build a temporary b-tree, that is a plan regression, not a reason for a
+new index.
 
 ### 4.4 Entitlement gating — simulator only, and extracted for exactly that reason
 
