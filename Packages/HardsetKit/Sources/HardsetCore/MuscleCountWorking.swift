@@ -3,7 +3,7 @@ import Foundation
 /// Which sets produced one muscle's weekly count, what each was credited and why, and what was left
 /// out.
 ///
-/// The working behind a figure on the Volume rows and the deep muscle map. It takes the same inputs
+/// The working behind a figure on the Volume rows and on muscle history. It takes the same inputs
 /// `VolumeAnalyzer.report` takes, a window's sets and the attribution of their movements, and asks
 /// the same question of every set through `VolumeAnalyzer.credit(for:attribution:)`, so the total
 /// here is the count on screen and a set cannot be counted one way in the report and another way in
@@ -159,14 +159,21 @@ public struct MuscleCountWorking: Hashable, Sendable {
   // MARK: - Words
 
   /// The counting rule, stated from the weights the arithmetic uses.
-  static func rule(format: WorkedFromFormat) -> String {
+  ///
+  /// - Parameter statesCertainty: `true` where the figure is a weekly count whose certainty the
+  ///   badge beside it means. `false` where the figures span more than a week, such as muscle
+  ///   history's four-week and lifetime totals: the confidence levels are placements on a weekly
+  ///   curve, and repeating them over a longer span would reinterpret the curve (D24 §3.2).
+  static func rule(format: WorkedFromFormat, statesCertainty: Bool = true) -> String {
     let direct = format.credit(SetCounting.weight(.direct))
     let indirect = format.credit(SetCounting.weight(.indirect))
     let stabilizer = format.sets(SetCounting.weight(.stabilizer))
-    return "A completed working set credits \(direct) set to each muscle the movement trains directly, "
+    let counting =
+      "A completed working set credits \(direct) set to each muscle the movement trains directly, "
       + "\(indirect) to each it trains indirectly, and \(stabilizer) to each it only stabilises. "
       + "Warm-ups never count. A count is a number of fractional sets, not a rating, and there is "
-      + "no target for it to meet. " + VolumeAnalyzer.certaintyMeaning
+      + "no target for it to meet. "
+    return statesCertainty ? counting + VolumeAnalyzer.certaintyMeaning : counting
   }
 
   static func roleWord(_ role: MuscleRole) -> String {
@@ -193,11 +200,14 @@ public struct MuscleCountWorking: Hashable, Sendable {
   /// - Parameters:
   ///   - muscleName: The muscle as the lifter reads it, so Core carries no display copy.
   ///   - windowLabel: The window the count covers, in words: "Last 7 days, 14 Nov to now".
+  ///   - statesCertainty: `false` where the figure is not a weekly count, so the account does not
+  ///     attach the weekly confidence to it. See `rule(format:statesCertainty:)`.
   public func account(
-    muscleName: String, windowLabel: String, format: WorkedFromFormat
+    muscleName: String, windowLabel: String, format: WorkedFromFormat,
+    statesCertainty: Bool = true
   ) -> WorkedFromAccount {
     let lowered = muscleName.lowercased()
-    let confidence = ScorecardCopy.confidenceWords(certainty)
+    let confidence = statesCertainty ? ScorecardCopy.confidenceWords(certainty) : nil
     let floor = isLowerBound ? "≥ " : ""
 
     let creditedLines = credited.map { movement in
@@ -290,13 +300,16 @@ public struct MuscleCountWorking: Hashable, Sendable {
     }
     if unrelatedSets > 0 { leftParts.append("\(Self.sets(unrelatedSets)) on other muscles' movements") }
     let leftSentence = leftParts.isEmpty ? "Nothing was left out." : "Left out: \(leftParts.joined(separator: ", "))."
+    let confidenceWords = confidence.map { ", \($0)" } ?? ""
     let spoken =
       "\(muscleName), \(isLowerBound ? "at least " : "")\(format.sets(total)) fractional sets, "
-      + "\(windowLabel), \(confidence). \(creditedSentence) \(leftSentence)"
+      + "\(windowLabel)\(confidenceWords). \(creditedSentence) \(leftSentence)"
 
     return WorkedFromAccount(
       title: "\(muscleName), fractional sets", figure: "\(floor)\(format.sets(total)) sets",
-      figureCaption: "\(windowLabel) · \(confidence)", ruleHeading: "How sets are counted",
-      rule: Self.rule(format: format), sections: sections, spoken: spoken)
+      figureCaption: confidence.map { "\(windowLabel) · \($0)" } ?? windowLabel,
+      ruleHeading: "How sets are counted",
+      rule: Self.rule(format: format, statesCertainty: statesCertainty), sections: sections,
+      spoken: spoken)
   }
 }

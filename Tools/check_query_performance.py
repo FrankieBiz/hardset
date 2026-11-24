@@ -30,6 +30,22 @@ QUERIES = {
         'SELECT * FROM loggedSets WHERE completedAt >= ? AND completedAt < ? ORDER BY completedAt',
         ("2026-10-28", "2026-11-04"),
     ),
+    # Muscle history reads the same seven-day window twelve times, once per `weeksBack`; this is the
+    # shape those twelve reads share, so the gate holds it to the same plan as the free volume screen.
+    "muscle history windows": (
+        'SELECT * FROM loggedSets WHERE completedAt >= ? AND completedAt < ? ORDER BY completedAt',
+        ("2026-10-28", "2026-11-04"),
+    ),
+    # Muscle history's one grouped read: one row per movement, all working sets for the lifetime
+    # total, and the filtered count and dates that keep a future-dated set out of timing (D31).
+    "muscle history counts": (
+        'SELECT exerciseID, count(exerciseID), '
+        'count(exerciseID) FILTER (WHERE completedAt <= ?), '
+        'max(completedAt) FILTER (WHERE completedAt <= ?), '
+        'min(completedAt) FILTER (WHERE completedAt <= ?) '
+        'FROM loggedSets WHERE NOT isWarmup GROUP BY exerciseID',
+        ("2026-11-04", "2026-11-04", "2026-11-04"),
+    ),
     "progression": (
         'SELECT * FROM loggedSets WHERE exerciseID = ? AND NOT isWarmup ORDER BY completedAt DESC, setOrdinal DESC, id DESC',
         ("exercise-3",),
@@ -99,6 +115,10 @@ QUERIES = {
 # is the size of the answer. They may scan, but they may not sort or build a temporary tree.
 WHOLE_HISTORY = {
     "progress board sets", "import movement candidates", "recent native movements",
+    # Muscle history's lifetime aggregate returns one row per movement over the whole history, so
+    # the work is the size of the answer and it is answered by a covering scan of the partial
+    # working-set index. Twelve near-duplicate indexes would not make it a keyed lookup (D24 §4.3).
+    "muscle history counts",
     # History search reads the names of movements, machines and gyms whole and matches them in
     # Swift, by the movement picker's rules; these are catalogues of hundreds of rows, not history.
     "history search movement names", "history search machine names", "history search gym names",

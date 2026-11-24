@@ -17,7 +17,7 @@ Personal (free) team builds — the current setup, team 26XMKJFG8P, bundle
   Reinstall over the existing app (same bundle ID and team) to renew it. **Never delete the app
   first**: with no iCloud, deleting it erases every workout on the phone. Export from Settings first
   if a copy is needed; an export is a copy, not a restorable backup.
-- The deep muscle map is unlocked in development builds and says so; App Store builds keep the
+- Muscle history is unlocked in development builds and says so; App Store builds keep the
   purchase.
 
 ---

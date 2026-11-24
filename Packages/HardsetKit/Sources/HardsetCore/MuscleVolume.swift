@@ -102,6 +102,39 @@ public struct MuscleVolumeReport: Hashable, Sendable {
   }
 }
 
+extension MuscleVolumeReport {
+  /// The report for two adjacent windows counted together.
+  ///
+  /// Exact rather than approximate: every set falls in exactly one window, so the fractional credits,
+  /// the working-set count, the unattributed count and the per-group set counts are all additive.
+  /// `fractionalSets` keeps its absent-means-zero rule, so merging into an empty report leaves the
+  /// keys that were credited only once.
+  public func merging(_ other: MuscleVolumeReport) -> MuscleVolumeReport {
+    var fractional = fractionalSets
+    for (key, value) in other.fractionalSets {
+      fractional[key, default: 0] += value
+    }
+    var touching = setsTouchingGroup
+    for (group, count) in other.setsTouchingGroup {
+      touching[group, default: 0] += count
+    }
+    return MuscleVolumeReport(
+      fractionalSets: fractional,
+      hardSets: hardSets + other.hardSets,
+      unattributedHardSets: unattributedHardSets + other.unattributedHardSets,
+      setsTouchingGroup: touching
+    )
+  }
+
+  /// The report for a run of adjacent windows, oldest or newest first; order does not matter.
+  public static func merge(_ reports: [MuscleVolumeReport]) -> MuscleVolumeReport {
+    reports.reduce(
+      MuscleVolumeReport(
+        fractionalSets: [:], hardSets: 0, unattributedHardSets: 0, setsTouchingGroup: [:])
+    ) { $0.merging($1) }
+  }
+}
+
 /// Counts fractional sets. Takes sets and attribution, and nothing else.
 ///
 /// The function is structurally unable to see a target or a band, so no threshold can leak from
@@ -234,7 +267,7 @@ extension VolumeAnalyzer {
   /// The count is what was logged, credited by a stated convention. The certainty is not about it:
   /// it is about whether the published research on weekly sets reaches that muscle at that volume.
   /// Every screen that shows a certainty beside a muscle's count says this, from here, so the volume
-  /// rows, the deep muscle map and the counting disclosure cannot describe it differently.
+  /// rows and the counting disclosure cannot describe it differently.
   public static let certaintyMeaning =
     "Confidence is about the research, not your count. It says whether published studies of "
     + "weekly sets reach this muscle at this many sets. Not evaluated means they do not; the "

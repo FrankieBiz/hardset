@@ -40,7 +40,7 @@ and the code that ships must agree, and one of them currently needs a release de
 | Product ID | `com.hardset.app.lifetime` |
 | Reference name | `Hardset Lifetime` |
 | Display name (English U.S.) | `Hardset Lifetime` |
-| Description | `Unlocks the deep muscle map. One purchase, no subscription.` |
+| Description | `Unlocks muscle history. One purchase, no subscription.` |
 | Launch price | **$19.99** |
 | Standing price | **$29.99** after the launch period (D17) |
 | Review screenshot | `docs/release/screenshots/6.9/02-volume.png`, or a capture of Settings → Hardset Lifetime |
@@ -90,7 +90,7 @@ YOUR DATA, YOUR COPY
 Export every finished workout as CSV, JSON, or SQLite. JSON is the complete restorable copy, including saved workouts and body mass. CSV restores workouts. SQLite is the database itself, for keeping and inspecting, and cannot be read back in. There is no account and no cloud copy. Deleting the app deletes local history, so export first.
 
 HARDSET LIFETIME
-The app is free. Logging, history, CSV import, and every export are free. An optional one-time In-App Purchase, Hardset Lifetime, unlocks the deep muscle map. It does not unlock your own history and there is no subscription. $19.99 at launch; $29.99 after the launch period. One purchase, no recurring fee.
+The app is free. Logging, history, CSV import, and every export are free. An optional one-time In-App Purchase, Hardset Lifetime, unlocks muscle history: when each muscle was last trained, the last four weeks against the four before, your lifetime total, and the shape of your last twelve weeks. It does not unlock your own history and there is no subscription. $19.99 at launch; $29.99 after the launch period. One purchase, no recurring fee.
 
 WHAT HARDSET IS NOT
 - Not a social network: no profiles, followers, likes, or leaderboards.
@@ -239,10 +239,10 @@ green seal means the write succeeded. Finish the workout and open History to rea
 receipt. Settings → Your data prepares CSV, JSON and SQLite exports; JSON and CSV can be
 chosen again under "Restore or bring in workouts".
 
-Hardset Lifetime is one non-consumable In-App Purchase. It unlocks the deep muscle map
+Hardset Lifetime is one non-consumable In-App Purchase. It unlocks muscle history
 on the Volume tab. Logging, history, imports and exports stay free. Use a sandbox Apple
 Account to buy it; then use Settings → Hardset Lifetime → Restore purchases to verify
-restore. A development build includes the map and says "Nothing was purchased"; an App
+restore. A development build includes muscle history and says "Nothing was purchased"; an App
 Store build does not.
 
 The app stores history on the device only. Deleting the app deletes the history, which
@@ -254,7 +254,7 @@ Rest alarms use AlarmKit and ask for alarm permission only when the user chooses
 timer. The in-app timer works if permission is denied. The app has no web view, no
 user-generated content shown to others, no ads, and no analytics.
 
-If the deep muscle map is not visible, the Lifetime product may not have loaded; the free
+If muscle history is not visible, the Lifetime product may not have loaded; the free
 screens remain usable. The product identifier in the build is
 com.hardset.app.lifetime.
 ```

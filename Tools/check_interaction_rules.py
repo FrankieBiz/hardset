@@ -242,6 +242,10 @@ CAPPED_ESTIMATE_HOOKUPS = {
     "HardsetFeature/ProgressScreen.swift": ("loadChangeWorking", "WorkedFromSheet("),
     "HardsetFeature/WorkoutReceiptScreen.swift": ("ChangeWorking.lastTime", "WorkedFromSheet("),
     "HardsetFeature/LiveSessionScreen.swift": ("RecordWorking.liveAccount", "WorkedFromSheet("),
+    # Muscle history's four-week and lifetime figures are fractional credits, so each opens the
+    # working it was made from: the control on the view, the sheet in the screen that owns it.
+    "HardsetUI/MuscleHistoryView.swift": ("onShowWorking", "WorkedFromButton("),
+    "HardsetFeature/WeeklyVolumeScreen.swift": ("historyWorkingPresentation", "WorkedFromSheet("),
 }
 
 

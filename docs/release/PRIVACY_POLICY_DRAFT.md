@@ -37,7 +37,7 @@ saved to Apple Health. Manage Health's retained records in Apple's controls.
 ## Purchases
 
 Apple handles the optional one-time Lifetime purchase. Hardset checks verified
-StoreKit transactions on the device to decide whether the deep muscle map is
+StoreKit transactions on the device to decide whether muscle history is
 unlocked. Hardset does not receive your payment-card details. Workouts, personal
 history, CSV import, and exports remain available without this purchase.
 

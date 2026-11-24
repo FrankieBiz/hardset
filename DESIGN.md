@@ -26,12 +26,12 @@ the code does yet, so a reader does not look for a screen that has not moved.
   glyph, rule, colour or motion. The onboarding demo and the catalogue's set rows keep the compact
   row, and History's row figures, the keypad display and the welcome bar keep their sizes.
 - Every monument and every capped estimate opens "Worked from" (see Inspectable figures): the two
-  monuments, a Progress row's six-week change, the scorecard's biggest gain and the live record
-  notice. The audit there lists every figure and says which derivation explains it.
+  monuments, a Progress row's six-week change, the scorecard's biggest gain, the live record
+  notice and muscle history's four-week comparison and lifetime figures. The audit there lists every
+  figure and says which derivation explains it.
 - Not yet in code, so the bullets below that name these describe where they are going: whatever a
-  screen draws for itself instead of through the kit. That is the scorecard headline's type role, the
-  deep muscle map, and the
-  onboarding surfaces. It also includes three private outlined-card button styles that each draw their own
+  screen draws for itself instead of through the kit. That is the scorecard headline's type role and
+  the onboarding surfaces. It also includes three private outlined-card button styles that each draw their own
   stroke: the History row, the Settings disclosure row and the receipt's link row, plus the
   methodology citation card. A screen that uses the kit picks up the new look with no change; one that draws its own
   face or stroke keeps the old one until it is migrated.
@@ -254,6 +254,7 @@ The audit, every figure the app draws above body size or capped as an estimate, 
 | Volume | Weekly count of working sets | Counted | `monument` 88 | Yes. `WorkingSetCountWorking`: a line per movement, warm-ups under Left out, equal to the report's own count |
 | Train | Last workout's volume | Summed | `monumentAside` 72 | Yes. `SessionVolumeWorking`: a line per set as weight × reps, warm-ups under Left out, equal to the history summary's volume (a Store test holds them equal) |
 | Volume | A muscle's weekly count; a map tile | Estimate (fractional credit) | `setEntry` 22 | Yes. `MuscleCountWorking` |
+| Muscle history | A muscle's last four weeks, the four before, their difference and its lifetime count | Estimate (fractional credit) | `readout` 28 at most | Yes. `MuscleHistory.account`: the two four-week accounts and the lifetime account materialised from the grouped counts, each adding up to its figure. No certainty badge: the weekly curve is not placed on a four-week or lifetime total |
 | Progress chart | A machine's latest estimated max; a record star | Estimate; derived | legend figure | Yes. `EstimateWorking`, `RecordWorking` |
 | Receipt | A record on a set; the scorecard's record line | Derived | 17 | Yes. `RecordWorking` |
 | Rest bar | The countdown | A deadline the lifter chose | `countdown` 64 | Not applicable: nothing was worked out |
@@ -955,33 +956,37 @@ Selection rows, the unit switch and pickers stay silent.
   adopted convention, so they stay in `setEntry`. The window
   controls "Earlier" and "Later" and "How sets are counted" are inline controls in `chalk`, with "Later"
   dimmed to 40% on the newest window; the two window controls stack one above the other when they
-  cannot sit side by side, because a word that says what the control does is never truncated; "Deep muscle map" is a pinned row under a hairline, words and a
-  chevron, a 56 pt control. It adds no token and no motion.
+  cannot sit side by side, because a word that says what the control does is never truncated;
+  "Muscle history" is a pinned row under a hairline, words and a chevron, a 56 pt control. It adds no
+  token and no motion.
 - **Certainty on a muscle's count**: the badge beside a weekly count is about the research, not the
   count: whether published studies of weekly sets reach that muscle at that many sets. It is moderate
   for the six modelled muscles up to about 25 fractional sets, low above that, and not evaluated for
   every other muscle, whose count is still shown. The rule is `VolumeAnalyzer.doseResponse` and
-  nothing else: the volume rows and the deep muscle map draw the same `MuscleCertaintyBadge` from it,
-  so one count never carries two answers, and the map carries no badge of its own for the week. The
-  Volume rows draw it as the `.language` phrase under the muscle's name; the map keeps the capsule
-  until it is rebuilt.
-  `VolumeAnalyzer.certaintyMeaning` says what the badge is about, once, in words on the Volume screen,
-  on the map and at the top of the "How sets are counted" disclosure; the disclosure's capsule is the
-  best level a count can reach, `VolumeAnalyzer.bestCertainty`, and `certaintyScale` names where each
-  level applies. Settings opens the same disclosure. No new token, no motion.
+  nothing else: the volume rows draw the `MuscleCertaintyBadge`, so one count never carries two
+  answers. The Volume rows draw it as the `.language` phrase under the muscle's name.
+  `VolumeAnalyzer.certaintyMeaning` says what the badge is about, once, in words on the Volume screen
+  and at the top of the "How sets are counted" disclosure; the disclosure's capsule is the best level
+  a count can reach, `VolumeAnalyzer.bestCertainty`, and `certaintyScale` names where each level
+  applies. Settings opens the same disclosure. No new token, no motion.
+  Muscle history carries no badge at all: its figures cover four weeks or a lifetime, and a weekly
+  curve placed on a longer total would be a claim the research does not make (D24 §3.2). It says once,
+  above its rows, that the badge on Volume is about weekly sets and the sheet does not rate a
+  four-week total.
 - **Lower bounds and muscles the catalogue cannot train yet**: the caveat "Counts below are
   lower bounds" says the cause and the way out. The Volume screen draws it as a neutral note, a card
-  with a small `warning` glyph and `chalk` words, as the stale-workout notice is drawn, and the map
-  keeps the `caveat` banner until it is rebuilt; both say the same words: sets
-  on a movement with no muscles recorded count toward no muscle, and a movement the lifter made, or one
-  a workout import created, gets its muscles from a body part set in Library on the Train tab. The
-  muscles no built-in movement trains directly (`ExerciseCatalog.unauthoredDirectTokens`) are
+  with a small `warning` glyph and `chalk` words, as the stale-workout notice is drawn; it says
+  sets on a movement with no muscles recorded count toward no muscle, and a movement the lifter made,
+  or one a workout import created, gets its muscles from a body part set in Library on the Train tab.
+  The muscles no built-in movement trains directly (`ExerciseCatalog.unauthoredDirectTokens`) are
   not listed under "Nothing logged for", where a zero would blame the lifter; the Volume screen names
   the ones with nothing credited in their own section, "Not counted directly yet", with the reason
-  ("This is a gap in the catalogue, not in your training"), and a tile on the map with nothing
-  credited says the same. On Volume the muscles in both sections are plain `label` type in `chalkDim`
-  joined by " · ", not tags, because nothing there can be tapped; the map keeps its tags. No new
-  token, no motion.
+  ("This is a gap in the catalogue, not in your training"). On Volume the muscles in both sections
+  are plain `label` type in `chalkDim` joined by " · ", not tags, because nothing there can be tapped.
+  Muscle history keeps the same distinctions per muscle: content debt says the catalogue's gap, an
+  absence is a plain "No credited sets", and a history with unattributed sets makes it "No credited
+  sets · N working sets have no body part recorded" with the Library route (D24 §3.4). No new token,
+  no motion.
 - **Charts**: nothing around the chart: the metric control, then the metric's name, what is plotted and
   its certainty as a `.language` phrase, the plot, a hairline and the legend sit straight on the canvas.
   One series per machine with its own colour and point symbol (the first is chalk, see the palette notes),
@@ -1079,11 +1084,14 @@ components rather than native spinners.
   correction to an earlier workout can change a later workout's records when it changes the
   baseline they were judged against; that is the ledger being true and not a bug. It adds no token
   and no motion.
-- The optional deep muscle map uses the existing palette and fractional-set method,
-  with labelled values and comparative tracks, never target bands. It uses two
-  columns at ordinary sizes and one at accessibility sizes. Unknown attribution
-  keeps the lower-bound caveat; counted-only muscle tokens retain that disclosure.
-  No new colour, radius, typography or motion token is introduced.
+- Muscle history, the optional paid surface, uses the existing palette and fractional-set method,
+  never target bands. It is one row per muscle in declaration order: last trained, the last four
+  weeks against the four before, the lifetime total, and a twelve-week shape that includes zero so an
+  untrained week sits on the floor. No figure is a monument and no figure carries the weekly certainty
+  badge, because the badge is a placement on a weekly curve. Unknown attribution keeps the
+  lower-bound mark and the Library route; counted-only and unauthored muscle tokens keep their own
+  words. The shape is dropped at accessibility sizes, as the Progress sparkline is. No new colour,
+  radius, typography or motion token is introduced.
 - The machine picker’s load-step editor uses the existing numeric pad and an explicit
   Save action. Blank means unknown. Changing a saved step preserves all current draft
   values; logger VoiceOver actions expose the same one-step adjustments as the buttons.

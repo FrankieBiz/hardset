@@ -104,14 +104,59 @@
       }
     }
 
-    @Test func deepMuscleMap() async throws {
-      let report = MuscleVolumeReport(fractionalSets: [MuscleKey(.chest): 8, MuscleKey(.triceps): 4],
-        hardSets: 10, unattributedHardSets: 2, setsTouchingGroup: [:])
-      try await Snapshot.capture("muscle-map-dark-375", size: Snapshot.narrow) {
-        ScrollView { MuscleHeatmapView(report: report) }.background(Tokens.Color.canvas)
+    /// Muscle history, the paid surface: a trained muscle with all four figures, a muscle with no
+    /// credited set, and the future-dated sentence. The empty state is the owner's first opening.
+    @Test func muscleHistory() async throws {
+      let now = Date(timeIntervalSince1970: 1_793_527_200)
+      let day = 86_400.0
+      func report(_ chest: Double, _ triceps: Double, hard: Int) -> MuscleVolumeReport {
+        MuscleVolumeReport(
+          fractionalSets: [MuscleKey(.chest): chest, MuscleKey(.triceps): triceps],
+          hardSets: hard, unattributedHardSets: 0, setsTouchingGroup: [:])
       }
-      try await Snapshot.capture("muscle-map-light-ax3", style: .light, typeSize: .accessibility3) {
-        ScrollView { MuscleHeatmapView(report: report) }.background(Tokens.Color.canvas)
+      // Newest first, as the analyzer is given them.
+      let shape: [(Double, Double)] = [
+        (8, 4), (6, 3), (0, 0), (4, 2), (9, 4), (3, 1), (7, 3), (5, 2), (2, 1), (6, 3), (4, 2), (8, 4),
+      ]
+      let weeks = shape.enumerated().map { item -> MuscleHistoryWeek in
+        let range = VolumeWindowRange(endingAt: now, weeksBack: item.offset)
+        return MuscleHistoryWeek(
+          start: range.start, end: range.end, lastDay: range.lastDay,
+          report: report(item.element.0, item.element.1, hard: Int(item.element.0)), sets: [])
+      }
+      let chest = ExerciseID()
+      let history = MuscleHistoryAnalyzer.history(
+        counts: [
+          MuscleHistoryCount(
+            exerciseID: chest, setCount: 72, lastAt: now - 2 * day, firstAt: now - 80 * day),
+          MuscleHistoryCount(
+            exerciseID: ExerciseID(), setCount: 2, pastSetCount: 0, lastAt: nil, firstAt: nil),
+        ],
+        weeks: weeks,
+        attribution: AttributionIndex([
+          chest: [
+            MuscleContribution(
+              .chest, role: .direct, certainty: .moderate, source: .anatomy),
+            MuscleContribution(
+              .triceps, role: .indirect, certainty: .moderate, source: .anatomy),
+          ]
+        ]),
+        imported: [chest], names: [chest: "Barbell Bench Press"])
+      try await Snapshot.capture("muscle-history-dark-375", size: Snapshot.narrow) {
+        ScrollView { MuscleHistoryView(history: history) }.background(Tokens.Color.canvas)
+      }
+      try await Snapshot.capture("muscle-history-light-ax3", style: .light, typeSize: .accessibility3) {
+        ScrollView { MuscleHistoryView(history: history) }.background(Tokens.Color.canvas)
+      }
+      let empty = MuscleHistory(
+        current: report(0, 0, hard: 0), previous: report(0, 0, hard: 0),
+        lifetime: report(0, 0, hard: 0), weeks: [],
+        lastTrained: [:], firstSetAt: nil, futureDatedSets: 0,
+        currentSpan: MuscleHistorySpan(start: now, end: now, lastDay: now),
+        previousSpan: MuscleHistorySpan(start: now, end: now, lastDay: now),
+        includesImportedHistory: false, counts: [])
+      try await Snapshot.capture("muscle-history-empty-dark-375", size: Snapshot.narrow) {
+        ScrollView { MuscleHistoryView(history: empty) }.background(Tokens.Color.canvas)
       }
     }
 

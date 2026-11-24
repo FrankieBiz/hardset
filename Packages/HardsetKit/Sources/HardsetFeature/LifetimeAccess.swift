@@ -7,20 +7,20 @@ import StoreKit
 ///
 /// The exception is a development build: the simulator, or any install that carries an embedded
 /// provisioning profile, which App Store and TestFlight installs never do. A personal team cannot
-/// sell an In-App Purchase, so on such a build the product can never load and the deep muscle map
-/// would be locked away from the person who built it. There the map is included, StoreKit is not
+/// sell an In-App Purchase, so on such a build the product can never load and muscle history would
+/// be locked away from the person who built it. There the surface is included, StoreKit is not
 /// asked, and `developmentNote` is shown beside it so the build never implies a purchase was made.
 /// App Store and TestFlight builds keep the paid gate unchanged.
 @MainActor
 @Observable
 final class LifetimeAccess {
   /// The one instance the app uses, so a purchase or restore made in Settings is the same state the
-  /// Volume tab's map reads, and an owner never sees the offer while a second instance loads.
+  /// Volume tab's sheet reads, and an owner never sees the offer while a second instance loads.
   static let shared = LifetimeAccess()
 
-  /// Shown wherever a development build presents the map as included.
+  /// Shown wherever a development build presents the surface as included.
   static let developmentNote =
-    "Development build: the deep muscle map is included. Nothing was purchased."
+    "Development build: muscle history is included. Nothing was purchased."
 
   private(set) var product: Product?
   private(set) var isUnlocked: Bool
@@ -136,5 +136,32 @@ final class LifetimeAccess {
         transaction.expirationDate == nil { unlocked = true }
     }
     isUnlocked = unlocked
+  }
+}
+
+extension LifetimeAccess {
+  /// What a surface that sells the unlock may draw, decided in one place rather than in three `if`s
+  /// inside a view body.
+  enum Gate: Hashable, Sendable {
+    /// The entitlement check has not finished, so the offer must not be shown yet.
+    case checking
+    /// No entitlement: the one offer, with no figures from the lifter's own history.
+    case offer
+    /// The surface itself.
+    case content
+  }
+
+  /// The three-way decision, as a pure function so it can be tested without StoreKit or a screen.
+  ///
+  /// A development build never asks StoreKit and never shows the offer: its entitlement is the way
+  /// it was signed, and the note beside the surface says nothing was purchased.
+  static func gate(hasLoaded: Bool, isUnlocked: Bool, isDevelopmentBuild: Bool) -> Gate {
+    if isDevelopmentBuild { return .content }
+    guard hasLoaded else { return .checking }
+    return isUnlocked ? .content : .offer
+  }
+
+  var gate: Gate {
+    Self.gate(hasLoaded: hasLoaded, isUnlocked: isUnlocked, isDevelopmentBuild: isDevelopmentBuild)
   }
 }

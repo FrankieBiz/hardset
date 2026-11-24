@@ -7,7 +7,7 @@ struct LifetimePurchaseSection: View {
   var body: some View {
     VStack(alignment: .leading, spacing: Tokens.Spacing.regular) {
       SectionLabel("Hardset Lifetime")
-      Text("An optional one-time purchase for the deep muscle map. Your workouts, personal history, CSV import, and CSV, JSON and SQLite exports stay free. Existing gym and machine logging stays available.")
+      Text("An optional one-time purchase for muscle history: when each muscle was last trained, the last four weeks against the four before, your lifetime total, and the shape of your last twelve weeks. Your workouts, personal history, CSV import, and CSV, JSON and SQLite exports stay free. Existing gym and machine logging stays available.")
         .font(Tokens.Text.provenance).foregroundStyle(Tokens.Color.chalkDim)
         .fixedSize(horizontal: false, vertical: true)
       if access.isDevelopmentBuild {
@@ -40,7 +40,7 @@ struct LifetimePurchaseSection: View {
   }
 }
 
-/// The line a development build shows beside the deep muscle map and in Settings, so the map
+/// The line a development build shows beside muscle history and in Settings, so the surface
 /// being open is never mistaken for a purchase. Draws nothing in App Store and TestFlight builds.
 struct LifetimeDevelopmentNote: View {
   let access: LifetimeAccess

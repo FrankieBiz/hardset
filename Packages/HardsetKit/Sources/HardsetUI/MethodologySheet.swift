@@ -139,7 +139,7 @@ public struct MethodologySheet: View {
   }
 
   /// Maps engine certainty onto the UI's own scale. Delegates to `CertaintyLevel(_:)`, the one
-  /// mapping in the kit, so the progression chart and the muscle map keep their call sites.
+  /// mapping in the kit, so the progression chart keeps its call site.
   static func level(for certainty: Certainty) -> CertaintyLevel {
     CertaintyLevel(certainty)
   }

@@ -14,6 +14,9 @@ public struct HardsetEnvironment {
   public let logger: LoggerStore
   public let catalog: CatalogSeeder
   public let volume: VolumeStore
+  /// All-history muscle figures for the paid sheet. A separate reader because it is a different
+  /// window of time, reading the same sets and attribution the volume screen reads.
+  public let muscleHistory: MuscleHistoryStore
   public let history: HistoryStore
   public let progression: ProgressionStore
   public let receipts: ReceiptStore
@@ -32,6 +35,7 @@ public struct HardsetEnvironment {
     self.logger = LoggerStore(database: database)
     self.catalog = CatalogSeeder(database: database)
     self.volume = VolumeStore(database: database)
+    self.muscleHistory = MuscleHistoryStore(database: database)
     self.history = HistoryStore(database: database)
     self.progression = ProgressionStore(database: database)
     self.gyms = GymStore(database: database)
@@ -286,7 +290,8 @@ public struct HardsetRootView: View {
           // A change saved in Settings re-reads the window on screen, keeping the figures visible
           // and the window the lifter stepped to while the read runs.
           WeeklyVolumeScreen(
-            store: environment.volume, dataRevision: dataRevision,
+            store: environment.volume, historyStore: environment.muscleHistory,
+            dataRevision: dataRevision,
             onShowSettings: { isShowingSettings = true },
             onShowLibrary: { showLibraryFromAnotherTab() }
           )

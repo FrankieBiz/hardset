@@ -101,7 +101,10 @@ public nonisolated struct VolumeStore: Sendable {
   }
 
   /// Every movement's name, archived ones included, and which of them a workout import created.
-  private static func readMovements(in db: Database) throws
+  ///
+  /// Shared with `MuscleHistoryStore` rather than copied, so the history cannot decide which
+  /// movements exist differently from the week on screen (D24 §2.1).
+  static func readMovements(in db: Database) throws
     -> (names: [ExerciseID: String], imported: Set<ExerciseID>)
   {
     var names: [ExerciseID: String] = [:]
@@ -114,7 +117,7 @@ public nonisolated struct VolumeStore: Sendable {
     return (names, imported)
   }
 
-  private static func readCountableSets(from: Date, to: Date, in db: Database) throws
+  static func readCountableSets(from: Date, to: Date, in db: Database) throws
     -> [CountableSet]
   {
     try LoggedSet
@@ -125,7 +128,12 @@ public nonisolated struct VolumeStore: Sendable {
       .map { CountableSet(exerciseID: ExerciseID(rawValue: $0.exerciseID), isWarmup: $0.isWarmup) }
   }
 
-  private static func readAttributionEntries(in db: Database) throws -> [CatalogEntry] {
+  /// Attribution for every exercise that is not archived.
+  ///
+  /// Shared with `MuscleHistoryStore`, so a lifetime total and the twelve-week shape above it read
+  /// the same attribution. Archived movements are absent, which makes their sets unattributed and
+  /// every per-muscle figure a floor rather than a silent under-count.
+  static func readAttributionEntries(in db: Database) throws -> [CatalogEntry] {
     try Exercise.where { !$0.isArchived }.fetchAll(db).map(CatalogEntry.init(row:))
   }
 
