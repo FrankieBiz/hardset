@@ -83,8 +83,9 @@
       }
     }
 
-    /// A request for a row's working that failed, said under that row's own control. The Hammer Strength
-    /// chest press is the first row, so the line sits under its certainty phrase and control.
+    /// A request for a row's working that failed, said under that row's own control. The first row
+    /// of the first section is the one asked about, so the line sits under its certainty phrase
+    /// and control.
     @Test func boardWithAFailedWorking() async throws {
       let board = Self.board
       let press = try #require(board.sections.first?.rows.first)
