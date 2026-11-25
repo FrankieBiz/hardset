@@ -64,6 +64,7 @@ public struct SettingsSheet: View {
           if let transfer {
             DataPortabilitySection(
               store: transfer, unit: unit, isLocalOnly: sync == .localOnly,
+              isDevelopmentBuild: lifetime.isDevelopmentBuild,
               onDataChanged: { onDataChanged?() })
           }
           if let gyms { gymsSection(gyms) }
@@ -178,13 +179,15 @@ public struct SettingsSheet: View {
             .foregroundStyle(Tokens.Color.chalk)
           // Sync, not backup, is what this build lacks; whether a device backup includes the
           // database is iOS's to say. A local-only build says plainly that its history is on this
-          // phone, that an export is how to keep it, and that an update goes over the old app,
-          // because a free profile expires and deleting the app is the natural reaction.
+          // phone, that an export is how to keep it, and that updating keeps it. Only a
+          // development install adds that an update goes over the old app, because a free profile
+          // expires and deleting the app is the natural reaction; an App Store or TestFlight
+          // install has no such profile, so it is never told about one.
           VStack(alignment: .leading, spacing: Tokens.Spacing.tight) {
             ForEach(
               sync.isSyncing
                 ? ["Workouts replicate to your private iCloud database while you are signed in to iCloud."]
-                : DataSafetyCopy.localOnly,
+                : DataSafetyCopy.localOnly(developmentBuild: lifetime.isDevelopmentBuild),
               id: \.self
             ) { paragraph in
               Text(paragraph)
