@@ -486,4 +486,233 @@ struct TemplateStoreTests {
     let lastFinished = try await store.lastFinishedSession(for: original.id)
     #expect(lastFinished == started.session)
   }
+
+  // MARK: - History
+
+  /// A set as the history tests log it.
+  private struct HistorySet {
+    let weightKg: Double
+    let reps: Int
+    var isWarmup = false
+  }
+
+  /// One movement in a history test session, and whether its plan row survives.
+  private struct HistoryMovement {
+    enum Plan { case kept, removed, never }
+    let exercise: ExerciseID
+    let machine: MachineID?
+    let sets: [HistorySet]
+    let plan: Plan
+
+    init(
+      _ exercise: ExerciseID, machine: MachineID? = nil, plan: Plan = .kept,
+      _ sets: [HistorySet]
+    ) {
+      self.exercise = exercise
+      self.machine = machine
+      self.sets = sets
+      self.plan = plan
+    }
+  }
+
+  /// A session written directly, with the movements and sets a read should report. A `.removed`
+  /// plan row is inserted, linked to its sets, then deleted, as removing a movement mid-workout
+  /// does; a `.never` movement has no plan row at all, as one added mid-workout does.
+  @discardableResult
+  private func seedHistorySession(
+    _ database: DatabaseQueue, template: TemplateID?, startedAt: Date,
+    notes: String = "", finished: Bool = true, movements: [HistoryMovement]
+  ) throws -> SessionID {
+    let session = SessionID()
+    try database.write { db in
+      try Session.insert {
+        Session.Draft(
+          id: session.rawValue, title: "Upper A", notes: notes, startedAt: startedAt,
+          finishedAt: finished ? startedAt.addingTimeInterval(3_600) : nil,
+          templateID: template?.rawValue)
+      }
+      .execute(db)
+      for (position, movement) in movements.enumerated() {
+        var row: UUID?
+        if movement.plan != .never {
+          let id = UUID()
+          row = id
+          try SessionExercise.insert {
+            SessionExercise.Draft(
+              id: id, sessionID: session.rawValue, exerciseID: movement.exercise.rawValue,
+              machineID: movement.machine?.rawValue, position: position, plannedSets: 3)
+          }
+          .execute(db)
+        }
+        for (ordinal, set) in movement.sets.enumerated() {
+          try LoggedSet.insert {
+            LoggedSet.Draft(
+              id: UUID(), sessionID: session.rawValue, exerciseID: movement.exercise.rawValue,
+              machineID: movement.machine?.rawValue, sessionExerciseID: row, setOrdinal: ordinal,
+              weightKg: set.weightKg, reps: set.reps, isWarmup: set.isWarmup,
+              completedAt: startedAt.addingTimeInterval(Double(ordinal) * 60))
+          }
+          .execute(db)
+        }
+        if movement.plan == .removed, let row {
+          try SessionExercise.where { $0.id.eq(row) }.delete().execute(db)
+        }
+      }
+    }
+    return session
+  }
+
+  @Test("Only sessions started from this plan appear, never another plan's or an import's")
+  func historyKeepsOnlyThisPlansSessions() async throws {
+    let database = try migratedDatabase()
+    let store = TemplateStore(database: database)
+    let press = try seedExercise(database, name: "Chest Press")
+    let upperA = template("Upper A", [planned(press, "Chest Press")])
+    let upperB = template("Upper B", position: 1, [planned(press, "Chest Press")])
+    try await store.save(upperA, now: start)
+    try await store.save(upperB, now: start)
+    let mine = try seedHistorySession(
+      database, template: upperA.id, startedAt: day(-3),
+      movements: [HistoryMovement(press, [HistorySet(weightKg: 100, reps: 8)])])
+    try seedHistorySession(
+      database, template: upperB.id, startedAt: day(-2),
+      movements: [HistoryMovement(press, [HistorySet(weightKg: 80, reps: 10)])])
+    // An import carries no templateID, so it belongs to no saved workout.
+    try seedHistorySession(
+      database, template: nil, startedAt: day(-1), notes: "Imported from Strong",
+      movements: [HistoryMovement(press, [HistorySet(weightKg: 60, reps: 12)])])
+
+    let history = try await store.history(for: upperA.id)
+
+    #expect(history.sessions.map(\.id) == [mine])
+    #expect(history.totalSessionCount == 1)
+  }
+
+  @Test("An open session and one finished with no working set do not appear")
+  func historyCountsOnlyFinishedWorkoutsWithWorkingSets() async throws {
+    let database = try migratedDatabase()
+    let store = TemplateStore(database: database)
+    let press = try seedExercise(database, name: "Chest Press")
+    let upperA = template("Upper A", [planned(press, "Chest Press")])
+    try await store.save(upperA, now: start)
+    let done = try seedHistorySession(
+      database, template: upperA.id, startedAt: day(-4),
+      movements: [HistoryMovement(press, [HistorySet(weightKg: 100, reps: 8)])])
+    // Still in progress, with a set logged: a workout not finished is not history.
+    try seedHistorySession(
+      database, template: upperA.id, startedAt: day(-1), finished: false,
+      movements: [HistoryMovement(press, [HistorySet(weightKg: 100, reps: 8)])])
+    // Finished, but only warmed up: `isCounted` says that is not having done it.
+    try seedHistorySession(
+      database, template: upperA.id, startedAt: day(-2),
+      movements: [
+        HistoryMovement(press, [HistorySet(weightKg: 40, reps: 10, isWarmup: true)])
+      ])
+
+    let history = try await store.history(for: upperA.id)
+
+    #expect(history.sessions.map(\.id) == [done])
+    #expect(history.totalSessionCount == 1)
+  }
+
+  @Test("A movement's removed plan row still appears from its sets, with warm-ups excluded")
+  func historyReportsWhatTheSessionLogged() async throws {
+    let database = try migratedDatabase()
+    let store = TemplateStore(database: database)
+    let press = try seedExercise(database, name: "Chest Press")
+    let row = try seedExercise(database, name: "Cable Row")
+    let curl = try seedExercise(database, name: "Curl")
+    let hammer = try seedMachine(database, name: "Chest Press", brand: "Hammer Strength")
+    let cybex = try seedMachine(database, name: "Chest Press", brand: "Cybex")
+    let upperA = template(
+      "Upper A",
+      [
+        planned(press, "Chest Press", machine: hammer),
+        planned(row, "Cable Row"),
+        planned(press, "Chest Press", machine: cybex),
+      ])
+    try await store.save(upperA, now: start)
+    try seedHistorySession(
+      database, template: upperA.id, startedAt: day(-2),
+      movements: [
+        HistoryMovement(
+          press, machine: hammer,
+          [
+            HistorySet(weightKg: 40, reps: 10, isWarmup: true),
+            HistorySet(weightKg: 100, reps: 10),
+            HistorySet(weightKg: 100, reps: 8),
+            HistorySet(weightKg: 90, reps: 10),
+          ]),
+        // Removed mid-workout: the plan row is gone, the sets it logged are not.
+        HistoryMovement(
+          row, plan: .removed, [HistorySet(weightKg: 60, reps: 12), HistorySet(weightKg: 60, reps: 10)]),
+        HistoryMovement(press, machine: cybex, [HistorySet(weightKg: 80, reps: 6)]),
+        // Added mid-workout: no plan row, still part of the session.
+        HistoryMovement(curl, plan: .never, [HistorySet(weightKg: 20, reps: 15)]),
+      ])
+
+    let history = try await store.history(for: upperA.id)
+
+    let session = try #require(history.sessions.first)
+    // The current plan's order first, then movements the plan no longer holds by name. The row's
+    // session plan row was deleted, but the saved workout still holds it, so it keeps its place.
+    #expect(
+      session.movements.map(\.exerciseName)
+        == ["Chest Press", "Cable Row", "Chest Press", "Curl"])
+    #expect(
+      session.movements.map(\.machineName)
+        == ["Hammer Strength Chest Press", nil, "Cybex Chest Press", nil])
+    let first = session.movements[0]
+    let firstVolume = 100.0 * 10.0 + 100.0 * 8.0 + 90.0 * 10.0
+    let rowVolume = 60.0 * 12.0 + 60.0 * 10.0
+    let cybexVolume = 80.0 * 6.0
+    let curlVolume = 20.0 * 15.0
+    #expect(first.workingSetCount == 3)
+    #expect(first.volumeKg == firstVolume)
+    #expect(session.movements[1].workingSetCount == 2)
+    #expect(session.movements[1].volumeKg == rowVolume)
+    #expect(session.movements[2].workingSetCount == 1)
+    #expect(session.movements[2].volumeKg == cybexVolume)
+    #expect(session.movements[3].machineName == nil)
+    #expect(session.workingSetCount == 7)
+    #expect(session.volumeKg == firstVolume + rowVolume + cybexVolume + curlVolume)
+  }
+
+  @Test("The page is limited, while the total counts every finished session")
+  func historyLimitsThePageAndCountsTheWholeHistory() async throws {
+    let database = try migratedDatabase()
+    let store = TemplateStore(database: database)
+    let press = try seedExercise(database, name: "Chest Press")
+    let upperA = template("Upper A", [planned(press, "Chest Press")])
+    try await store.save(upperA, now: start)
+    var seeded: [SessionID] = []
+    for offset in -3 ... -1 {
+      seeded.append(
+        try seedHistorySession(
+          database, template: upperA.id, startedAt: day(offset),
+          movements: [HistoryMovement(press, [HistorySet(weightKg: 100, reps: 8)])]))
+    }
+
+    let page = try await store.history(for: upperA.id, limit: 2)
+    let whole = try await store.history(for: upperA.id)
+
+    #expect(page.sessions.map(\.id) == [seeded[2], seeded[1]])
+    #expect(page.sessions.count == 2)
+    #expect(page.totalSessionCount == 3)
+    #expect(whole.sessions.count == 3)
+  }
+
+  @Test("A failed read throws rather than returning an empty history")
+  func historyFailureIsNotAnEmptyHistory() async throws {
+    // A database with no schema stands in for a read that cannot happen: it is the same path the
+    // sheet needs to tell from "nothing yet". A queue read after `close()` crashes GRDB here
+    // instead of throwing, so the failure is a genuinely unreadable database rather than a closed
+    // one.
+    let database = try DatabaseQueue()
+    let store = TemplateStore(database: database)
+
+    await #expect(throws: (any Error).self) {
+      try await store.history(for: TemplateID())
+    }
+  }
 }

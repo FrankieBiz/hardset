@@ -51,6 +51,12 @@ private nonisolated struct LastWorkoutReceipt: Identifiable {
   let id: SessionID
 }
 
+/// Which saved workout's history sheet is open. `TemplateID` is not `Identifiable`, so the sheet's
+/// item carries it in this wrapper rather than the plain id.
+private nonisolated struct WorkoutHistoryTarget: Identifiable {
+  let id: TemplateID
+}
+
 /// One read of the saved workouts, and how the one up next went the last time it was done.
 private nonisolated struct SavedWorkouts: Sendable {
   let templates: [WorkoutTemplate]
@@ -126,6 +132,9 @@ public struct HardsetRootView: View {
   @State private var savedWorkouts = SnapshotLoader<SavedWorkouts>()
   /// The workout editor, open on a saved workout or on a new one.
   @State private var workoutEditor: WorkoutEditorTarget?
+  /// The saved workout whose history sheet is open. Attached to the cards themselves, not to the
+  /// actions below them, because a second sheet on one anchor never presents.
+  @State private var historyTemplate: WorkoutHistoryTarget?
   @State private var isShowingLibrary = false
   /// The day the start screen's header names. Read when the view is made and again whenever the
   /// app returns to the foreground on a later day; read only while drawing, the header went on
@@ -570,8 +579,22 @@ public struct HardsetRootView: View {
           guard let template = saved.templates.first(where: { $0.id == id }) else { return }
           workoutEditor = WorkoutEditorTarget(
             template: template, others: saved.templates.filter { $0.id != id })
-        }
+        },
+        onHistory: { historyTemplate = WorkoutHistoryTarget(id: $0) }
       )
+      // Its own anchor, inside the cards. The editor sheet is already on the actions below, and a
+      // second sheet on one anchor never presents.
+      .sheet(item: $historyTemplate) { target in
+        TemplateHistorySheet(
+          templateID: target.id,
+          // Only a card can set this, so the name is always here; the fallback keeps the title
+          // honest if a read ever lands between the tap and the sheet.
+          workoutName: saved.templates.first { $0.id == target.id }?.name ?? "Workout history",
+          store: environment.templates,
+          unit: unit
+        )
+        .hardsetSheet()
+      }
     }
   }
 

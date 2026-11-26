@@ -20,6 +20,7 @@ public struct WorkoutCardsView: View {
   private let cards: [WorkoutCard]
   private let onStart: (TemplateID) -> Void
   private let onEdit: (TemplateID) -> Void
+  private let onHistory: (TemplateID) -> Void
   /// A start that failed, and the card whose Start it was, so the failure is drawn under that
   /// card's own button rather than somewhere off screen.
   private let failedStartTemplate: TemplateID?
@@ -36,13 +37,15 @@ public struct WorkoutCardsView: View {
     failedStartTemplate: TemplateID? = nil,
     failedStartMessage: String? = nil,
     onStart: @escaping (TemplateID) -> Void,
-    onEdit: @escaping (TemplateID) -> Void
+    onEdit: @escaping (TemplateID) -> Void,
+    onHistory: @escaping (TemplateID) -> Void
   ) {
     self.cards = cards
     self.failedStartTemplate = failedStartTemplate
     self.failedStartMessage = failedStartMessage
     self.onStart = onStart
     self.onEdit = onEdit
+    self.onHistory = onHistory
   }
 
   public var body: some View {
@@ -93,14 +96,14 @@ public struct WorkoutCardsView: View {
         HardsetBanner(.error, message: failedStartMessage)
       }
 
-      editButton(card)
+      secondaryVerbs(card)
     }
     .frame(maxWidth: .infinity, alignment: .leading)
   }
 
-  /// A row: the name and its line, and the two verbs as words at the trailing edge, or under the
-  /// text at accessibility sizes so a long name keeps the width. The hairline above it is where it
-  /// meets the row before it, or the label.
+  /// A row: the name and its line, and its verbs as words at the trailing edge, or under the text
+  /// at accessibility sizes so a long name keeps the width. The hairline above it is where it meets
+  /// the row before it, or the label.
   private func otherWorkout(_ card: WorkoutCard) -> some View {
     VStack(alignment: .leading, spacing: 0) {
       Rectangle()
@@ -122,7 +125,7 @@ public struct WorkoutCardsView: View {
         .accessibilityElement(children: .combine)
         .frame(maxWidth: .infinity, alignment: .leading)
 
-        HStack(spacing: Tokens.Spacing.regular) {
+        verbs {
           Button {
             onStart(card.id)
           } label: {
@@ -134,6 +137,7 @@ public struct WorkoutCardsView: View {
           .buttonStyle(InlineControlStyle(minHeight: Tokens.minimumTapTarget, alignment: .leading))
           .accessibilityLabel("Start \(card.name)")
 
+          historyButton(card)
           editButton(card)
         }
       }
@@ -144,6 +148,42 @@ public struct WorkoutCardsView: View {
           .padding(.bottom, Tokens.Spacing.snug)
       }
     }
+  }
+
+  /// History and Edit under the up-next workout's Start: one line when they fit, stacked when a
+  /// long name or an accessibility size leaves them too little width.
+  private func secondaryVerbs(_ card: WorkoutCard) -> some View {
+    ViewThatFits(in: .horizontal) {
+      HStack(spacing: Tokens.Spacing.regular) {
+        historyButton(card)
+        editButton(card)
+      }
+      VStack(alignment: .leading, spacing: Tokens.Spacing.snug) {
+        historyButton(card)
+        editButton(card)
+      }
+    }
+  }
+
+  /// A row's verbs: one line when they fit, stacked when they do not, so the third verb never
+  /// squeezes the words a lifter reads.
+  private func verbs<Content: View>(@ViewBuilder _ content: () -> Content) -> some View {
+    ViewThatFits(in: .horizontal) {
+      HStack(alignment: .center, spacing: Tokens.Spacing.regular) { content() }
+      VStack(alignment: .leading, spacing: Tokens.Spacing.snug) { content() }
+    }
+  }
+
+  private func historyButton(_ card: WorkoutCard) -> some View {
+    Button {
+      onHistory(card.id)
+    } label: {
+      Text("History")
+        .font(Tokens.Text.headline)
+        .foregroundStyle(Tokens.Color.chalkDim)
+    }
+    .buttonStyle(InlineControlStyle(minHeight: Tokens.minimumTapTarget, alignment: .leading))
+    .accessibilityLabel("History \(card.name)")
   }
 
   private func editButton(_ card: WorkoutCard) -> some View {
@@ -248,7 +288,7 @@ public struct WorkoutCardActions: View {
             id: TemplateID(), name: "Upper A", movementCount: 1, isUpNext: false,
             contextLine: "Last done 4 days ago", movementsLine: "1 movement"),
         ],
-        onStart: { _ in }, onEdit: { _ in }
+        onStart: { _ in }, onEdit: { _ in }, onHistory: { _ in }
       )
       .padding(Tokens.Spacing.loose)
     }
