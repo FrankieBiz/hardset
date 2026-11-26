@@ -212,7 +212,7 @@ public struct SettingsSheet: View {
     VStack(alignment: .leading, spacing: Tokens.Spacing.snug) {
       SectionLabel("Gyms and machines")
       NavigationLink {
-        GymManagementScreen(store: gyms, onChanged: { onDataChanged?() })
+        GymManagementScreen(store: gyms, unit: unit, onChanged: { onDataChanged?() })
       } label: {
         HStack(spacing: Tokens.Spacing.regular) {
           VStack(alignment: .leading, spacing: Tokens.Spacing.hairline) {
