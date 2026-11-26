@@ -18,6 +18,10 @@ struct DataPortabilitySection: View {
   /// buttons is true. False when sync is on or the state is not known: the section then says
   /// nothing about where history lives rather than claim what it cannot back.
   var isLocalOnly = false
+  /// Whether this install is a development build (`LifetimeAccess.isDevelopmentBuild`), so the
+  /// warning may add that new builds go over the old app. No default: a caller decides it, so the
+  /// development advice cannot reach an App Store or TestFlight install by omission.
+  let isDevelopmentBuild: Bool
   /// Called after an import writes workouts, so screens showing history can re-read it.
   var onDataChanged: () -> Void = {}
   @State private var isChoosingFile = false
@@ -50,7 +54,7 @@ struct DataPortabilitySection: View {
         .font(Tokens.Text.provenance)
         .foregroundStyle(Tokens.Color.chalkDim)
       if isLocalOnly {
-        Text(DataSafetyCopy.beforeExporting)
+        Text(DataSafetyCopy.beforeExporting(developmentBuild: isDevelopmentBuild))
           .font(Tokens.Text.provenance)
           .foregroundStyle(Tokens.Color.chalk)
           .fixedSize(horizontal: false, vertical: true)
