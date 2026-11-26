@@ -37,7 +37,8 @@ private nonisolated enum VolumeSheet: Identifiable {
 @MainActor
 public struct WeeklyVolumeScreen: View {
   @State private var snapshot = SnapshotLoader<VolumeWindow>()
-  /// Muscle history's own read, loaded when the sheet opens and kept for that opening. It is a
+  /// Muscle history's own read, loaded for each opening of the sheet and again whenever the gate
+  /// opens it, including a purchase or restore completed while the sheet is already up. It is a
   /// different snapshot because it covers all history, not the week the free screen is showing.
   @State private var historySnapshot = SnapshotLoader<MuscleHistoryReading>()
   /// The sheet that is up, or `nil`. One value for both, so the screen holds one presentation.
@@ -218,17 +219,19 @@ public struct WeeklyVolumeScreen: View {
                 },
                 onShowLibrary: onShowLibrary)
             } else if historySnapshot.loadFailed {
-              VStack(alignment: .leading, spacing: Tokens.Spacing.regular) {
-                HardsetEmptyState(
-                  title: "Could not read your history",
-                  detail: "Your logged sets are safe. Try again.",
-                  systemImage: "exclamationmark.triangle",
-                  style: .quiet
-                )
-                Button("Try again") { Task { await loadHistory() } }
-                  .buttonStyle(HardsetButtonStyle(.secondary))
-              }
-              .padding(Tokens.Spacing.loose)
+              // A read that genuinely failed says so rather than leaving "Reading your history…"
+              // up forever, and offers the one thing that can move it forward. No figures are
+              // drawn in its place: an unread history is not an empty one (D24 §2.4).
+              HardsetEmptyState(
+                title: "Could not read your history",
+                detail: "Your logged sets are safe. Try again.",
+                systemImage: "exclamationmark.triangle",
+                actionTitle: "Try again",
+                actionSystemImage: "arrow.clockwise",
+                style: .quiet,
+                action: { Task { await loadHistory() } }
+              )
+              .padding(.horizontal, Tokens.Spacing.loose)
             } else {
               HardsetLoadingState("Reading your history…")
             }
@@ -240,7 +243,15 @@ public struct WeeklyVolumeScreen: View {
       .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { presented = nil } } }
       .task {
         await lifetime.load()
-        if lifetime.gate == .content { await loadHistory() }
+      }
+      // Keyed on the gate rather than run once on appearance: a purchase or a restore completed
+      // while this sheet is already up flips `checking`/`offer` to `content` without a new
+      // appearance, and the content branch has nothing to show until this read runs. Keying on the
+      // value means the first opening and every later transition take one path, and a gate that
+      // does not change never reads twice.
+      .task(id: lifetime.gate) {
+        guard lifetime.gate == .content else { return }
+        await loadHistory()
       }
       .sheet(item: $historyWorking) { presentation in
         WorkedFromSheet(account: presentation.account)
@@ -315,7 +326,9 @@ public struct WeeklyVolumeScreen: View {
     }
   }
 
-  /// Reads all-history figures once per opening of the sheet, as of the moment it was opened.
+  /// Reads all-history figures as of the moment the gate opens the sheet, and again if a purchase
+  /// or restore opens it after the sheet is already up. Safe to re-run: the retry the failure state
+  /// offers calls it a second time against the same store.
   private func loadHistory() async {
     let store = historyStore
     let openedAt = now()
