@@ -338,6 +338,78 @@ struct ReceiptStoreTests {
     #expect(total == 3)
   }
 
+  // MARK: - Planned against done
+
+  @Test("A receipt counts a plan row's working sets against the plan, and a warm-up counts for neither")
+  func plannedAgainstDone() async throws {
+    let (db, logger, bench, _) = try Self.fixture()
+    let start = Date(timeIntervalSince1970: 30_000)
+    let session = try logger.startSession(at: start)
+    let row = try logger.addExercise(to: session, exerciseID: bench, position: 0, plannedSets: 4)
+    for index in 0..<3 {
+      _ = try logger.logSet(
+        sessionID: session, exerciseID: bench, sessionExerciseID: row,
+        draft: SetEntryDraft(weightKg: 60, reps: 10),
+        at: start.addingTimeInterval(Double(index + 1) * 60))
+    }
+    _ = try logger.logSet(
+      sessionID: session, exerciseID: bench, sessionExerciseID: row,
+      draft: SetEntryDraft(weightKg: 40, reps: 10), isWarmup: true,
+      at: start.addingTimeInterval(240))
+    try logger.finishSession(session, at: start.addingTimeInterval(600))
+
+    let planned = try #require(try await ReceiptStore(database: db).load(session).planned)
+
+    #expect(planned.rows.count == 1)
+    #expect(planned.rows.first?.id == row)
+    #expect(planned.rows.first?.plannedSets == 4)
+    #expect(planned.rows.first?.doneSets == 3)
+    #expect(planned.plannedTotal == 4)
+    #expect(planned.doneTotal == 3)
+  }
+
+  @Test("A movement removed from the workout is absent, not drawn back as a zero")
+  func removedMovementIsAbsent() async throws {
+    let (db, logger, bench, row) = try Self.fixture()
+    let start = Date(timeIntervalSince1970: 30_000)
+    let session = try logger.startSession(at: start)
+    let benchRow = try logger.addExercise(to: session, exerciseID: bench, position: 0, plannedSets: 4)
+    let rowRow = try logger.addExercise(to: session, exerciseID: row, position: 1, plannedSets: 3)
+    _ = try logger.logSet(
+      sessionID: session, exerciseID: bench, sessionExerciseID: benchRow,
+      draft: SetEntryDraft(weightKg: 60, reps: 10), at: start.addingTimeInterval(60))
+    _ = try logger.logSet(
+      sessionID: session, exerciseID: row, sessionExerciseID: rowRow,
+      draft: SetEntryDraft(weightKg: 50, reps: 10), at: start.addingTimeInterval(120))
+    try logger.removeSessionExercise(rowID: benchRow, sessionID: session, exerciseID: bench)
+    try logger.finishSession(session, at: start.addingTimeInterval(600))
+
+    let planned = try #require(try await ReceiptStore(database: db).load(session).planned)
+
+    #expect(planned.rows.map(\.id) == [rowRow])
+    #expect(planned.rows.allSatisfy { $0.exerciseID != bench })
+    #expect(planned.rows.first?.doneSets == 1)
+    #expect(planned.plannedTotal == 3)
+  }
+
+  @Test("A planned movement with no sets is counted as 0 of 1, not omitted")
+  func plannedButNotLogged() async throws {
+    let (db, logger, bench, _) = try Self.fixture()
+    let start = Date(timeIntervalSince1970: 30_000)
+    let session = try logger.startSession(at: start)
+    let row = try logger.addExercise(to: session, exerciseID: bench, position: 0, plannedSets: 1)
+    try logger.finishSession(session, at: start.addingTimeInterval(600))
+
+    let receipt = try await ReceiptStore(database: db).load(session)
+    let planned = try #require(receipt.planned)
+
+    #expect(receipt.lines.isEmpty)
+    #expect(planned.rows.map(\.id) == [row])
+    #expect(planned.rows.first?.plannedSets == 1)
+    #expect(planned.rows.first?.doneSets == 0)
+    #expect(planned.rows.map { PlannedVsDoneCopy.rowText($0) } == ["0 of 1 planned sets"])
+  }
+
   // MARK: - Fixtures
 
   /// Bench is a barbell movement, Row a machine movement; neither has a machine recorded.
