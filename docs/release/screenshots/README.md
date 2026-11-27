@@ -29,8 +29,9 @@ the screen, at 3x. The screen itself is the live view at the width of the target
   typed. The rest timer is running. There is no "From another machine" note: this is a
   same-machine state, which is the only state in which the app can announce a record. The
   two-record notice and the rest bar cover most of the list at phone height, so the card hosts
-  the live screen taller than itself and shows its lower part: the title and gym line are
-  cropped away, and the three rows, the notice and the rest bar stay on screen.
+  the live screen taller than itself and shows its lower part: the title, gym line and machine
+  line are cropped away, the card's top edge falls on the first set row, and the three rows, the
+  notice and the rest bar stay on screen with no line of text cut through.
 - **Volume.** 14 working sets in the last 7 days, with Chest 10, Front delts 7.5 and
   Triceps 6 visible. The screen's own disclosure says there is no target line because no
   weekly set target is established, and "Not evaluated" is explained. "Worked from" and
