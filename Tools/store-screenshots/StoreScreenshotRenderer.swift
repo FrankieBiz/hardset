@@ -92,7 +92,7 @@
     /// Points of the live session hosted above the card's top edge, so its rows clear the pinned stack.
     /// The shorter the card, the more is hosted above it: 280 pt at the 6.5-inch card, 220 at the 6.9.
     private static func sessionCrop(for cardHeight: CGFloat) -> CGFloat {
-      max(0, 1_031 - cardHeight)
+      max(0, 1_005 - cardHeight)
     }
 
     private static func session() -> some View {
@@ -276,19 +276,15 @@
         imported: [],
         names: [incline: "Incline Chest Press"])
 
-      let sheet = NavigationStack {
-        ScrollView {
-          MuscleHistoryView(history: history, onShowWorking: { _, _ in })
-        }
-        .background(Tokens.Color.canvas)
-        .hardsetNavigationTitle(MuscleHistoryCopy.title)
+      let sheet = ScrollView {
+        MuscleHistoryView(history: history, onShowWorking: { _, _ in })
       }
-      .tint(Tokens.Color.plateBlue)
-      .background(Tokens.Color.canvas.ignoresSafeArea())
+      .background(Tokens.Color.canvas)
 
       // The sheet is hosted taller than the card and anchored at the bottom, so the card shows
       // its lower part: the rows for Chest, Front delts and Side delts rather than the
-      // explanatory text above them. Nothing is drawn or moved by hand.
+      // sheet's title and explanatory text above them. The sheet's navigation title is cropped
+      // away with them; nothing is drawn or moved by hand.
       return GeometryReader { proxy in
         sheet
           .frame(width: proxy.size.width, height: proxy.size.height + Self.sheetCrop)
@@ -298,7 +294,7 @@
     }
 
     /// Points of the muscle history sheet hosted above the card's top edge.
-    private static let sheetCrop: CGFloat = 480
+    private static let sheetCrop: CGFloat = 300
 
     // MARK: - Rendering
 
