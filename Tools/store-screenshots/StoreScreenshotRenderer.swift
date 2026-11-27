@@ -90,9 +90,11 @@
     // MARK: - The four screens
 
     /// Points of the live session hosted above the card's top edge, so its rows clear the pinned stack.
-    /// The shorter the card, the more is hosted above it: 147 pt at the 6.5-inch card, 87 at the 6.9.
+    /// 147 pt at the 6.5-inch card and 107 at the 6.9. Each lands the card's top edge on a clean
+    /// boundary: the 6.5 starts at the first set row, and the 6.9 starts below the machine line, so
+    /// no line of text is cut through its glyphs. A change here needs a look at both renders.
     private static func sessionCrop(for cardHeight: CGFloat) -> CGFloat {
-      max(0, 935 - cardHeight)
+      cardHeight > 820 ? 107 : 147
     }
 
     private static func session() -> some View {
