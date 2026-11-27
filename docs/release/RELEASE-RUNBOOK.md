@@ -190,7 +190,7 @@ fail in review. Make the account and the code agree before the archive.
    - Availability: all territories where the app is sold.
    - Localization (English U.S.): display name `Hardset Lifetime`; description
      `Unlocks muscle history. One purchase, no subscription.`
-   - Review screenshot: use `docs/release/screenshots/6.9/02-volume.png`, or a capture of
+   - Review screenshot: use `docs/release/screenshots/6.9/04-muscle-history.png`, or a capture of
      Settings → Hardset Lifetime. App Review needs to see what the purchase unlocks.
    - Tax category: the default for an app unlock; confirm with the owner's tax adviser.
    - **Cleared for sale**: yes.

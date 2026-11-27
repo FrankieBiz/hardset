@@ -2,7 +2,7 @@
 //
 // This file is NOT part of the package. `Tools/render_store_screenshots.sh` copies it into
 // Packages/HardsetKit/Tests/HardsetUISnapshotTests for the duration of one run, builds that test
-// target for the iOS Simulator, renders the three gallery screens at the two required App Store
+// target for the iOS Simulator, renders the four gallery screens at the two required App Store
 // pixel sizes, and removes it again. Keeping it here means the kit adds no test target, no test
 // assertion and no CI step to the shipping project.
 //
@@ -12,6 +12,7 @@
 #if canImport(UIKit)
   import Foundation
   import HardsetCore
+  import HardsetStore
   import HardsetUI
   import SwiftUI
   import Testing
@@ -49,6 +50,13 @@
         ) {
           Self.Shot(caption: "Different machines. Never merged.") { Self.progress() }
         }
+        try await Self.capture(
+          "04-muscle-history-\(spec.label)", size: spec.size, directory: directory
+        ) {
+          Self.Shot(caption: "Muscle history. One purchase, no subscription.") {
+            Self.muscleHistory()
+          }
+        }
       }
     }
 
@@ -79,37 +87,45 @@
       }
     }
 
-    // MARK: - The three screens
+    // MARK: - The four screens
 
     private static func session() -> some View {
+      // Same-machine history, so every mark on this screen is one the app can produce: last time
+      // was 215 lb x 8 on this machine, today's two logged sets are 225 lb x 8 (a real +10 lb
+      // beat, exactly one 10 lb step), and the third row is the next set to log. No `priorNote`:
+      // a note about another machine would contradict the same-machine history.
       let exerciseID = ExerciseID()
       let machineID = MachineID()
       let key = ProgressionKey(exerciseID: exerciseID, machineID: machineID)
+      let lastTimeKg = WeightUnit.pounds.toKilograms(215)
+      let todayKg = WeightUnit.pounds.toKilograms(225)
+      let stepKg = WeightUnit.pounds.toKilograms(10)
+      let lastTime = PriorSetRecord(weightKg: lastTimeKg, reps: 8, completedAt: .distantPast)
       let history = PriorPerformance(
         key: key,
-        lastSets: [
-          PriorSetRecord(weightKg: 102.05828325, reps: 8, completedAt: .distantPast),
-          PriorSetRecord(weightKg: 102.05828325, reps: 8, completedAt: .distantPast),
-          PriorSetRecord(weightKg: 102.05828325, reps: 8, completedAt: .distantPast),
-        ],
-        heaviestSet: PriorSetRecord(
-          weightKg: 102.05828325, reps: 8, completedAt: .distantPast)
+        lastSets: [lastTime, lastTime, lastTime],
+        heaviestSet: lastTime
       )
       var state = ExerciseLogState(
         exerciseID: exerciseID,
         machineID: machineID,
         exerciseName: "Incline Chest Press",
         machineName: "Plate-Loaded Incline",
-        machineIncrementKg: 4.5359237,
+        machineIncrementKg: stepKg,
         prior: history,
-        priorNote: "From another machine",
         weightUnit: .pounds,
         slots: [
-          SetSlot(draft: SetEntryDraft(weightKg: 102.05828325, reps: 8)),
-          SetSlot(draft: SetEntryDraft(weightKg: 102.05828325, reps: 8)),
-          SetSlot(draft: SetEntryDraft(weightKg: 102.05828325, reps: 8)),
+          SetSlot(draft: SetEntryDraft(weightKg: todayKg, reps: 8)),
+          SetSlot(draft: SetEntryDraft(weightKg: todayKg, reps: 8)),
+          SetSlot(draft: SetEntryDraft(weightKg: todayKg, reps: 8)),
         ]
       )
+      // What the logger computes for a set logged today: the comparison excludes the current
+      // session, so it is the same-machine history above, and not the first logged set.
+      let records = PersonalRecordDetector.records(
+        for: PersonalRecordDetector.Candidate(weightKg: todayKg, reps: 8),
+        history: history.lastSets,
+        increment: stepKg)
       state.markLogged(slotID: state.slots[0].id, setID: SetID())
       state.markLogged(slotID: state.slots[1].id, setID: SetID())
       let meter = RestMetadata(
@@ -125,11 +141,7 @@
         lastLoggedAt: Date(),
         restState: .running(endsAt: Date().addingTimeInterval(102)),
         restMetadata: meter,
-        records: [
-          PersonalRecord(
-            kind: .estimatedOneRepMax, weightKg: 102.05828325, reps: 8,
-            previousWeightKg: nil)
-        ],
+        records: records,
         recordsExerciseName: "Incline Chest Press",
         onLogSet: { _, _ in },
         onAddExercise: {},
@@ -204,6 +216,56 @@
           onShowSettings: {}, onSelect: { _ in }
         )
         .hardsetTabRoot()
+      }
+      .tint(Tokens.Color.plateBlue)
+      .background(Tokens.Color.canvas.ignoresSafeArea())
+    }
+
+    /// Muscle history, the paid screen, built by `MuscleHistoryAnalyzer.history` from counts and
+    /// weekly reports that are themselves derived from one attribution, so no figure is typed.
+    /// Incline Chest Press credits Chest directly and Front delts indirectly; every other muscle,
+    /// Side delts included, reads "No credited sets". Twelve weeks, one of them zero, the last four
+    /// above the four before, and no imported history.
+    private static func muscleHistory() -> some View {
+      let now = Date(timeIntervalSince1970: 1_793_527_200)
+      let day = 86_400.0
+      let incline = ExerciseID()
+      let contributions = [
+        MuscleContribution(.chest, role: .direct, certainty: .moderate, source: .anatomy),
+        MuscleContribution(.frontDelts, role: .indirect, certainty: .moderate, source: .anatomy),
+      ]
+      // Working sets of the movement per week, newest first. The zero is week ten.
+      let setsPerWeek = [6, 5, 5, 4, 3, 4, 3, 3, 4, 0, 3, 2]
+      let weeks = setsPerWeek.enumerated().map { item -> MuscleHistoryWeek in
+        let range = VolumeWindowRange(endingAt: now, weeksBack: item.offset)
+        var fractional: [MuscleKey: Double] = [:]
+        for contribution in contributions where item.element > 0 {
+          fractional[contribution.key, default: 0] += Double(item.element) * contribution.setWeight
+        }
+        return MuscleHistoryWeek(
+          start: range.start, end: range.end, lastDay: range.lastDay,
+          report: MuscleVolumeReport(
+            fractionalSets: fractional, hardSets: item.element, unattributedHardSets: 0,
+            setsTouchingGroup: [:]),
+          sets: [])
+      }
+      let history = MuscleHistoryAnalyzer.history(
+        counts: [
+          MuscleHistoryCount(
+            exerciseID: incline, setCount: setsPerWeek.reduce(0, +),
+            lastAt: now - 1 * day, firstAt: now - 80 * day)
+        ],
+        weeks: weeks,
+        attribution: AttributionIndex([incline: contributions]),
+        imported: [],
+        names: [incline: "Incline Chest Press"])
+
+      return NavigationStack {
+        ScrollView {
+          MuscleHistoryView(history: history, onShowWorking: { _, _ in })
+        }
+        .background(Tokens.Color.canvas)
+        .hardsetNavigationTitle(MuscleHistoryCopy.title)
       }
       .tint(Tokens.Color.plateBlue)
       .background(Tokens.Color.canvas.ignoresSafeArea())

@@ -43,7 +43,7 @@ and the code that ships must agree, and one of them currently needs a release de
 | Description | `Unlocks muscle history. One purchase, no subscription.` |
 | Launch price | **$19.99** |
 | Standing price | **$29.99** after the launch period (D17) |
-| Review screenshot | `docs/release/screenshots/6.9/02-volume.png`, or a capture of Settings → Hardset Lifetime |
+| Review screenshot | `docs/release/screenshots/6.9/04-muscle-history.png`, or a capture of Settings → Hardset Lifetime |
 | Status | Create it in App Store Connect and make it match `LifetimeAccess.productID`; see `RELEASE-RUNBOOK.md` §6. This is a blocking step. |
 
 ---
