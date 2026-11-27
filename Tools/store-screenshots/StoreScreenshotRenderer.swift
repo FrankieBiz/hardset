@@ -90,9 +90,9 @@
     // MARK: - The four screens
 
     /// Points of the live session hosted above the card's top edge, so its rows clear the pinned stack.
-    /// The shorter the card, the more is hosted above it: 280 pt at the 6.5-inch card, 220 at the 6.9.
+    /// The shorter the card, the more is hosted above it: 147 pt at the 6.5-inch card, 87 at the 6.9.
     private static func sessionCrop(for cardHeight: CGFloat) -> CGFloat {
-      max(0, 1_005 - cardHeight)
+      max(0, 935 - cardHeight)
     }
 
     private static func session() -> some View {
@@ -294,7 +294,7 @@
     }
 
     /// Points of the muscle history sheet hosted above the card's top edge.
-    private static let sheetCrop: CGFloat = 300
+    private static let sheetCrop: CGFloat = 270
 
     // MARK: - Rendering
 
