@@ -30,18 +30,53 @@
         exerciseName: name, machineName: machine)
     }
 
-    /// Three body parts and one movement with none, an estimate with its badge, a heaviest-load row,
-    /// a stalled row, a row with no six-week window and a bodyweight row measured in reps.
+    /// A row built the way the app builds one: from the sets, through `ProgressTrendAnalyzer`, so its
+    /// metric, change, certainty, stall flag and whether its figure is a measured single are derived
+    /// and cannot contradict one another. A hand-built row once drew "Estimated max" beside "High
+    /// confidence", which no set can produce: only a measured single is High, and it is a "Max".
+    /// Each tuple is days before the latest session, load in kilograms and reps.
+    private static func derivedRow(
+      _ name: String, machine: String?, sets: [(daysBack: Int, kg: Double, reps: Int)],
+      incrementKg: Double? = 2.5, estimatesOneRepMax: Bool = true
+    ) -> ProgressBoard.Row {
+      let machineID = machine == nil ? nil : MachineID()
+      let key = ProgressionKey(exerciseID: ExerciseID(), machineID: machineID)
+      let samples = sets.map {
+        ProgressionSample(
+          sessionID: SessionID(), machineID: machineID, weightKg: $0.kg, reps: $0.reps,
+          completedAt: day.addingTimeInterval(-Double($0.daysBack) * 86_400))
+      }
+      let trend = ProgressTrendAnalyzer.trend(
+        key: key, samples: samples, incrementKg: incrementKg, estimatesOneRepMax: estimatesOneRepMax)!
+      return ProgressBoard.Row(trend: trend, exerciseName: name, machineName: machine)
+    }
+
+    /// Three body parts and one movement with none, an estimate with its badge, a measured single
+    /// that says "Max" with its High confidence, a heaviest-load row, a stalled row, a row with no
+    /// six-week window and a bodyweight row measured in reps. Every row is derived from sets.
     private static var board: ProgressBoard {
-      let press = row("Chest press", machine: "Hammer Strength Chest Press", metric: .estimatedMax,
-        change: 0.08, certainty: .moderate)
-      let fly = row("Cable fly", machine: nil, metric: .estimatedMax, change: 0.05, certainty: .high)
-      let row2 = row("Lever row", machine: "Nautilus Lever Row", metric: .estimatedMax,
-        change: 0.12, stalled: 3, certainty: .low)
-      let squat = row("Back squat", machine: nil, metric: .heaviestLoad, change: nil)
-      let pullup = row("Pull-up", machine: nil, metric: .repsAtTopLoad, change: 0.2,
-        sparkline: [6, 7, 8, 8, 9, 10])
-      let mystery = row("Pendulum squat", machine: nil, metric: .heaviestLoad, change: -0.03)
+      // Five-rep sets: a formula's figure, so Moderate and "Estimated max".
+      let press = derivedRow("Chest press", machine: "Hammer Strength Chest Press", sets: [
+        (42, 100, 5), (35, 98, 5), (28, 100, 5), (21, 102, 5), (14, 104, 5), (0, 108, 5),
+      ])
+      // Singles: measured, so High and "Max". The latest beats the earlier best by a plate step.
+      let fly = derivedRow("Cable fly", machine: nil, sets: [
+        (42, 40, 1), (35, 38, 1), (28, 39, 1), (21, 39, 1), (14, 39.5, 1), (0, 42, 1),
+      ], incrementKg: 1)
+      // Twelve-rep sets: Low, and the last three sessions set no record.
+      let row2 = derivedRow("Lever row", machine: "Nautilus Lever Row", sets: [
+        (42, 50, 12), (35, 49, 12), (28, 56, 12), (21, 52, 12), (14, 54, 12), (0, 56, 12),
+      ])
+      // Fifteen reps are above the estimating limit, and no session sits in the six-week band.
+      let squat = derivedRow("Back squat", machine: nil, sets: [
+        (25, 100, 15), (20, 100, 15), (15, 102.5, 15), (10, 102.5, 15), (5, 105, 15), (0, 105, 15),
+      ])
+      let pullup = derivedRow("Pull-up", machine: nil, sets: [
+        (42, 0, 10), (35, 0, 9), (28, 0, 10), (21, 0, 11), (14, 0, 11), (0, 0, 12),
+      ], estimatesOneRepMax: false)
+      let mystery = derivedRow("Pendulum squat", machine: nil, sets: [
+        (42, 100, 15), (35, 100, 15), (28, 100, 15), (21, 100, 15), (14, 100, 15), (0, 97, 15),
+      ])
       // Through `make`, so the fixture's Most improved order is the analyser's order. Hand-ordering
       // it once put the Low-confidence stalled row above a Moderate one and made the render
       // contradict the rule C6 fixed.
@@ -182,7 +217,10 @@
 
     @Test func mixedMetricsNeverShareARanking() async throws {
       let rows = [
-        Self.row("Chest press", machine: "Hammer Strength", metric: .estimatedMax, change: 0.08, certainty: .high),
+        // Singles, so the figure is measured: High, and named "Max", through the analyser.
+        Self.derivedRow("Chest press", machine: "Hammer Strength", sets: [
+          (42, 100, 1), (28, 102.5, 1), (14, 105, 1), (0, 108, 1),
+        ]),
         Self.row("High-rep squat", machine: nil, metric: .heaviestLoad, change: 0.9),
         Self.row("Pull-up", machine: nil, metric: .repsAtTopLoad, change: 0.99),
       ]

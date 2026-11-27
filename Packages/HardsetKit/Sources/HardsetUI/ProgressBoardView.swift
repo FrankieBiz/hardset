@@ -164,7 +164,7 @@ public struct ProgressBoardView: View {
 
   private func mostImprovedStrip(_ rows: [ProgressBoard.Row], metric: TrendMetric) -> some View {
     VStack(alignment: .leading, spacing: Tokens.Spacing.snug) {
-      SectionLabel("Most improved · " + ProgressCopy.metricName(metric).lowercased())
+      SectionLabel(ProgressCopy.mostImprovedHeading(rows.map(\.trend), metric: metric))
       // The order is not by percentage alone, so the strip says what it is.
       Text(ProgressCopy.mostImprovedOrdering)
         .font(Tokens.Text.caption)

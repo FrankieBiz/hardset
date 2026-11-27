@@ -18,6 +18,13 @@ public enum ProgressCopy {
   /// The metric's name. `measured` is true when every claim behind the figure is a measured single,
   /// which estimates nothing: that figure is the lifter's max and says "Max", not "Estimated max".
   /// Only the estimated-max metric has a measured form; the others are unchanged.
+  /// "Most improved · estimated max", or "Most improved · max" when every row behind the strip is a
+  /// measured single, so the heading never calls a measured figure an estimate.
+  public static func mostImprovedHeading(_ trends: [MovementTrend], metric: TrendMetric) -> String {
+    let measured = !trends.isEmpty && trends.allSatisfy(\.isMeasured)
+    return "Most improved · " + metricName(metric, measured: measured).lowercased()
+  }
+
   public static func metricName(_ metric: TrendMetric, measured: Bool = false) -> String {
     switch metric {
     case .estimatedMax: measured ? "Max" : "Estimated max"

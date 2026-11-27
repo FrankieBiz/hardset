@@ -165,4 +165,119 @@ struct MeasuredMaxLabelTests {
     #expect(!working.isMeasured)
     #expect(working.account(format: format).title == "Estimated max since last time")
   }
+
+  // MARK: - The board
+
+  private typealias Sets = [(daysBack: Int, kg: Double, reps: Int)]
+
+  private func row(
+    _ name: String, _ sets: Sets, incrementKg: Double? = 2.5, estimates: Bool = true
+  ) throws -> ProgressBoard.Row {
+    let key = ProgressionKey(exerciseID: ExerciseID())
+    let samples = sets.enumerated().map { index, set in
+      ProgressionSample(
+        sessionID: sessionID(index), machineID: nil, weightKg: set.kg, reps: set.reps,
+        completedAt: epoch.addingTimeInterval(-Double(set.daysBack) * 86_400))
+    }
+    let trend = try #require(
+      ProgressTrendAnalyzer.trend(
+        key: key, samples: samples, incrementKg: incrementKg, estimatesOneRepMax: estimates))
+    return ProgressBoard.Row(trend: trend, exerciseName: name)
+  }
+
+  private let singles: Sets = [(42, 100, 1), (28, 102.5, 1), (14, 105, 1), (0, 108, 1)]
+  private let fives: Sets = [(42, 100, 5), (28, 102, 5), (14, 104, 5), (0, 108, 5)]
+
+  @Test("Two 1-rep claims read Max in the row, the section row, the strip heading and the scorecard gain; a 5-rep set stays Estimated max")
+  func everySurfaceNamesTheSingleAMax() throws {
+    let single = try row("Chest press", singles)
+    let five = try row("Hack squat", fives)
+    #expect(single.trend.isMeasured)
+    #expect(single.trend.certainty == .high)
+    #expect(!five.trend.isMeasured)
+    #expect(five.trend.certainty == .moderate)
+
+    // The board, as the Progress tab reads it: section rows and the Most improved strip.
+    let measuredBoard = ProgressBoard.make([.init(row: single, bodyPart: .chest)])
+    let sectionRow = try #require(measuredBoard.sections.first?.rows.first)
+    #expect(ProgressCopy.changeText(for: sectionRow.trend) == "Max +8% in 6 weeks")
+    #expect(ProgressCopy.spokenRow(sectionRow).contains("Max +8% in 6 weeks"))
+    #expect(!ProgressCopy.spokenRow(sectionRow).contains("Estimated"))
+    #expect(
+      ProgressCopy.mostImprovedHeading(measuredBoard.mostImproved.map(\.trend), metric: .estimatedMax)
+        == "Most improved · max")
+
+    let estimatedBoard = ProgressBoard.make([.init(row: five, bodyPart: .chest)])
+    let estimatedRow = try #require(estimatedBoard.sections.first?.rows.first)
+    #expect(ProgressCopy.changeText(for: estimatedRow.trend) == "Estimated max +8% in 6 weeks")
+    #expect(
+      ProgressCopy.mostImprovedHeading(estimatedBoard.mostImproved.map(\.trend), metric: .estimatedMax)
+        == "Most improved · estimated max")
+
+    // One estimated row behind the strip keeps the whole heading an estimate.
+    let mixed = ProgressBoard.make([.init(row: single, bodyPart: .chest), .init(row: five, bodyPart: .back)])
+    #expect(mixed.mostImproved.count == 2)
+    #expect(
+      ProgressCopy.mostImprovedHeading(mixed.mostImproved.map(\.trend), metric: .estimatedMax)
+        == ProgressCopy.mostImprovedTitle)
+
+    // The scorecard gain built from the same two sessions of each.
+    func card(_ sets: Sets) -> WorkoutScorecard {
+      let ordered = sets.sorted { $0.daysBack > $1.daysBack }
+      let first = ordered.first!
+      let last = ordered.last!
+      return WorkoutScorecard.make([
+        ScorecardInput(
+          key: ProgressionKey(exerciseID: ExerciseID()), exerciseName: "Chest press",
+          currentSets: [prior(last.kg, last.reps, day: 42)],
+          previousSets: [prior(first.kg, first.reps, day: 0)])
+      ])
+    }
+    #expect(ScorecardCopy.gainText(card(singles)) == "Biggest gain: Chest press, max +8%")
+    #expect(ScorecardCopy.gainText(card(fives)) == "Biggest gain: Chest press, estimated max +8%")
+  }
+
+  /// The Progress render's fixture rows, rebuilt here from the same sets, because the render itself
+  /// only runs where SwiftUI compiles. It pins that each row's pair of words is one the analyser can
+  /// produce: "High confidence" only ever beside "Max".
+  @Test("The Progress fixture's rows are what the analyser says they are")
+  func progressFixture() throws {
+    let press = try row("Chest press", [(42, 100, 5), (35, 98, 5), (28, 100, 5), (21, 102, 5), (14, 104, 5), (0, 108, 5)])
+    let fly = try row("Cable fly", [(42, 40, 1), (35, 38, 1), (28, 39, 1), (21, 39, 1), (14, 39.5, 1), (0, 42, 1)], incrementKg: 1)
+    let lever = try row("Lever row", [(42, 50, 12), (35, 49, 12), (28, 56, 12), (21, 52, 12), (14, 54, 12), (0, 56, 12)])
+    let squat = try row("Back squat", [(25, 100, 15), (20, 100, 15), (15, 102.5, 15), (10, 102.5, 15), (5, 105, 15), (0, 105, 15)])
+    let pullup = try row("Pull-up", [(42, 0, 10), (35, 0, 9), (28, 0, 10), (21, 0, 11), (14, 0, 11), (0, 0, 12)], estimates: false)
+    let mystery = try row("Pendulum squat", [(42, 100, 15), (35, 100, 15), (28, 100, 15), (21, 100, 15), (14, 100, 15), (0, 97, 15)])
+
+    func change(_ r: ProgressBoard.Row) -> Double { r.trend.sixWeekChange ?? .nan }
+    #expect(press.trend.metric == .estimatedMax && !press.trend.isMeasured && press.trend.certainty == .moderate)
+    #expect(abs(change(press) - 0.08) < 1e-9)
+    #expect(fly.trend.metric == .estimatedMax && fly.trend.isMeasured && fly.trend.certainty == .high)
+    #expect(abs(change(fly) - 0.05) < 1e-9)
+    #expect(lever.trend.metric == .estimatedMax && !lever.trend.isMeasured && lever.trend.certainty == .low)
+    #expect(abs(change(lever) - 0.12) < 1e-9)
+    #expect(lever.trend.stalledSessions == 3)
+    #expect(squat.trend.metric == .heaviestLoad && squat.trend.sixWeekChange == nil)
+    #expect(pullup.trend.metric == .repsAtTopLoad && abs(change(pullup) - 0.2) < 1e-9)
+    #expect(mystery.trend.metric == .heaviestLoad && abs(change(mystery) + 0.03) < 1e-9)
+
+    // No row anywhere pairs "Estimated max" with High confidence.
+    for fixture in [press, fly, lever, squat, pullup, mystery] {
+      let words = ProgressCopy.changeText(for: fixture.trend) ?? ProgressCopy.noChangeText(for: fixture.trend)
+      if fixture.trend.certainty == .high { #expect(!words.contains("Estimated")) }
+    }
+    #expect(ProgressCopy.changeText(for: fly.trend) == "Max +5% in 6 weeks")
+    #expect(ProgressCopy.changeText(for: press.trend) == "Estimated max +8% in 6 weeks")
+
+    // The strip: a High row, a Moderate row and a Low row, so the heading stays "estimated max".
+    let board = ProgressBoard.make([
+      .init(row: press, bodyPart: .chest), .init(row: fly, bodyPart: .chest),
+      .init(row: lever, bodyPart: .back), .init(row: pullup, bodyPart: .back),
+      .init(row: squat, bodyPart: .quads), .init(row: mystery, bodyPart: nil),
+    ])
+    #expect(board.mostImproved.map(\.exerciseName) == ["Cable fly", "Chest press", "Lever row"])
+    #expect(
+      ProgressCopy.mostImprovedHeading(board.mostImproved.map(\.trend), metric: .estimatedMax)
+        == "Most improved · estimated max")
+  }
 }
