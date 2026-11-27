@@ -90,11 +90,13 @@
     // MARK: - The four screens
 
     /// Points of the live session hosted above the card's top edge, so its rows clear the pinned stack.
-    /// 147 pt at the 6.5-inch card and 107 at the 6.9. Each lands the card's top edge on a clean
-    /// boundary: the 6.5 starts at the first set row, and the 6.9 starts below the machine line, so
-    /// no line of text is cut through its glyphs. A change here needs a look at both renders.
+    /// 240 pt at the 6.5-inch card and 197 at the 6.9, measured once the list has settled (the
+    /// capture waits three seconds, because the session scrolls itself to the next set to log).
+    /// Each lands the card's top edge on a clean boundary: the 6.5 starts at the first set row and
+    /// the 6.9 at the column header, and both end with the third row whole above the notice, so no
+    /// line of text is cut through its glyphs. A change here needs a look at both renders.
     private static func sessionCrop(for cardHeight: CGFloat) -> CGFloat {
-      cardHeight > 820 ? 107 : 147
+      cardHeight > 820 ? 197 : 240
     }
 
     private static func session() -> some View {
@@ -316,7 +318,7 @@
       window.makeKeyAndVisible()
       host.view.frame = window.bounds
       host.view.layoutIfNeeded()
-      try await Task.sleep(for: .milliseconds(1_200))
+      try await Task.sleep(for: .milliseconds(3_000))
       host.view.layoutIfNeeded()
 
       let format = UIGraphicsImageRendererFormat()
