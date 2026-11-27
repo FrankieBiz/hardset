@@ -158,6 +158,9 @@ public struct WorkoutCardsView: View {
         historyButton(card)
         editButton(card)
       }
+      // A word never breaks to make the row fit: the line is measured at its real width, so when
+      // the words do not fit `ViewThatFits` takes the stacked layout instead of wrapping "History".
+      .fixedSize(horizontal: true, vertical: false)
       VStack(alignment: .leading, spacing: Tokens.Spacing.snug) {
         historyButton(card)
         editButton(card)
@@ -170,6 +173,9 @@ public struct WorkoutCardsView: View {
   private func verbs<Content: View>(@ViewBuilder _ content: () -> Content) -> some View {
     ViewThatFits(in: .horizontal) {
       HStack(alignment: .center, spacing: Tokens.Spacing.regular) { content() }
+        // Without this the wrapping labels always report a width that fits, so "Start" splits into
+        // "Star t" rather than the column stacking. The words measure at their real width here.
+        .fixedSize(horizontal: true, vertical: false)
       VStack(alignment: .leading, spacing: Tokens.Spacing.snug) { content() }
     }
   }
