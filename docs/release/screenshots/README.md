@@ -27,7 +27,10 @@ the screen, at 3x. The screen itself is the live view at the width of the target
   "+10 lb" beat mark, and the third row is next up. The record panel is whatever
   `PersonalRecordDetector.records` returns for 225 lb × 8 against that history; nothing in it is
   typed. The rest timer is running. There is no "From another machine" note: this is a
-  same-machine state, which is the only state in which the app can announce a record.
+  same-machine state, which is the only state in which the app can announce a record. The
+  two-record notice and the rest bar cover most of the list at phone height, so the card hosts
+  the live screen taller than itself and shows its lower part: the title and gym line are
+  cropped away, and the three rows, the notice and the rest bar stay on screen.
 - **Volume.** 14 working sets in the last 7 days, with Chest 10, Front delts 7.5 and
   Triceps 6 visible. The screen's own disclosure says there is no target line because no
   weekly set target is established, and "Not evaluated" is explained. "Worked from" and
@@ -43,7 +46,8 @@ the screen, at 3x. The screen itself is the live view at the width of the target
   muscle, Side delts included, reads "No credited sets". Twelve weeks of sets include one zero
   week, and the last four weeks sit above the four before. There is no imported history. The
   figures come from `MuscleHistoryAnalyzer.history` over counts and weekly reports derived from
-  one attribution.
+  one attribution. The card shows the sheet below its title and explanatory text, cropped the
+  same way, so the Side delts "No credited sets" row is on screen.
 
 ## Regenerate
 
