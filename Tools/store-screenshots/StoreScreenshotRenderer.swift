@@ -89,6 +89,9 @@
 
     // MARK: - The four screens
 
+    /// Points of the live session hosted above the card's top edge, so its rows clear the pinned stack.
+    private static let sessionCrop: CGFloat = 200
+
     private static func session() -> some View {
       // Same-machine history, so every mark on this screen is one the app can produce: last time
       // was 215 lb x 8 on this machine, today's two logged sets are 225 lb x 8 (a real +10 lb
@@ -132,7 +135,7 @@
         exerciseName: "Incline Chest Press", setOrdinal: 2, plannedSets: 3,
         machineName: "Plate-Loaded Incline", totalRest: .seconds(102))
 
-      return SessionView(
+      let screen = SessionView(
         exercises: .constant([state]),
         unit: .pounds,
         title: "Workout",
@@ -150,6 +153,16 @@
         onShowSettings: {},
         onFinish: {}
       )
+      // Two records stack a tall notice on the rest bar, and together they cover the rows. The
+      // real screen is hosted taller than the card and anchored at the bottom, so the card shows
+      // its lower part: the logged rows, the next-up row, the notice and the rest bar. Nothing is
+      // drawn or moved; the part cropped away is the title, the gym line and the machine line.
+      return GeometryReader { proxy in
+        screen
+          .frame(width: proxy.size.width, height: proxy.size.height + Self.sessionCrop)
+          .frame(width: proxy.size.width, height: proxy.size.height, alignment: .bottom)
+          .clipped()
+      }
     }
 
     private static func volume() -> some View {
@@ -261,7 +274,7 @@
         names: [incline: "Incline Chest Press"])
 
       return NavigationStack {
-        ScrollView {
+        ScrolledSheet {
           MuscleHistoryView(history: history, onShowWorking: { _, _ in })
         }
         .background(Tokens.Color.canvas)
@@ -269,6 +282,17 @@
       }
       .tint(Tokens.Color.plateBlue)
       .background(Tokens.Color.canvas.ignoresSafeArea())
+    }
+
+    /// The sheet's own `ScrollView`, opened past the explanatory text so the rows are on screen:
+    /// the position a lifter reaches by scrolling, not a different layout.
+    private struct ScrolledSheet<Content: View>: View {
+      @State private var position = ScrollPosition(y: 480)
+      @ViewBuilder let content: Content
+
+      var body: some View {
+        ScrollView { content }.scrollPosition($position)
+      }
     }
 
     // MARK: - Rendering
