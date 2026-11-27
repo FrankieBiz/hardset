@@ -90,7 +90,10 @@
     // MARK: - The four screens
 
     /// Points of the live session hosted above the card's top edge, so its rows clear the pinned stack.
-    private static let sessionCrop: CGFloat = 200
+    /// The shorter the card, the more is hosted above it: 280 pt at the 6.5-inch card, 220 at the 6.9.
+    private static func sessionCrop(for cardHeight: CGFloat) -> CGFloat {
+      max(0, 1_068 - cardHeight)
+    }
 
     private static func session() -> some View {
       // Same-machine history, so every mark on this screen is one the app can produce: last time
@@ -159,7 +162,7 @@
       // drawn or moved; the part cropped away is the title, the gym line and the machine line.
       return GeometryReader { proxy in
         screen
-          .frame(width: proxy.size.width, height: proxy.size.height + Self.sessionCrop)
+          .frame(width: proxy.size.width, height: proxy.size.height + Self.sessionCrop(for: proxy.size.height))
           .frame(width: proxy.size.width, height: proxy.size.height, alignment: .bottom)
           .clipped()
       }
@@ -287,11 +290,13 @@
     /// The sheet's own `ScrollView`, opened past the explanatory text so the rows are on screen:
     /// the position a lifter reaches by scrolling, not a different layout.
     private struct ScrolledSheet<Content: View>: View {
-      @State private var position = ScrollPosition(y: 480)
+      @State private var position = ScrollPosition()
       @ViewBuilder let content: Content
 
       var body: some View {
-        ScrollView { content }.scrollPosition($position)
+        ScrollView { content }
+          .scrollPosition($position)
+          .task { position.scrollTo(y: 480) }
       }
     }
 
