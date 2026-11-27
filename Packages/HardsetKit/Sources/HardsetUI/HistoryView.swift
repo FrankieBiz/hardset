@@ -294,9 +294,9 @@ public struct HistoryView: View {
     parts.append(volumeText(row.volume, unit: unit))
     if row.hasImplausibleDuration {
       parts.append("length unknown, this session was left open")
-    } else if let duration = row.duration {
+    } else if let spoken = row.duration?.workoutLengthSpoken {
       // Spoken as a length of time, not a clock face, which VoiceOver reads as a time of day.
-      parts.append(ExerciseSectionView.spoken(duration))
+      parts.append(spoken)
     }
     return parts.joined(separator: ", ")
   }
@@ -462,8 +462,8 @@ private struct HistoryRowContent: View {
           Tokens.Color.warningSurface,
           in: RoundedRectangle(cornerRadius: Tokens.Radius.control / 2)
         )
-    } else if let duration = row.duration {
-      Text(duration.clockString)
+    } else if let length = row.duration?.workoutLengthText {
+      Text(length)
         .font(Tokens.Text.figure)
         .foregroundStyle(Tokens.Color.chalkDim)
     }

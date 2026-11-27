@@ -136,6 +136,8 @@ public struct RecordWorking: Hashable, Sendable {
     case words(String)
     case set(Double, Int)
     case load(Double)
+    /// A difference or threshold, kept at full precision.
+    case margin(Double)
     case estimate(Double)
   }
 
@@ -145,6 +147,7 @@ public struct RecordWorking: Hashable, Sendable {
       case .words(let text): text
       case .set(let kg, let reps): spoken ? format.setSpoken(weightKg: kg, reps: reps) : format.set(weightKg: kg, reps: reps)
       case .load(let kg): spoken ? format.loadSpoken(kg) : format.load(kg)
+      case .margin(let kg): spoken ? format.marginSpoken(kg) : format.margin(kg)
       case .estimate(let kg): spoken ? format.estimateSpoken(kg) : format.estimate(kg)
       }
     }.joined()
@@ -176,9 +179,9 @@ public struct RecordWorking: Hashable, Sendable {
       pieces.append(.words("Beat your previous heaviest weight, "))
       pieces.append(contentsOf: previous(fallback: [.load(old)]))
       pieces.append(.words(", by "))
-      pieces.append(.load(gain))
+      pieces.append(.margin(gain))
       pieces.append(.words(" (\(share)). A new heaviest weight needs at least "))
-      pieces.append(.load(required))
+      pieces.append(.margin(required))
       pieces.append(.words(" more: the greater of \(relative) of "))
       pieces.append(.load(old))
       pieces.append(.words(" and one plate step."))
@@ -203,9 +206,9 @@ public struct RecordWorking: Hashable, Sendable {
       pieces.append(.words("Beat "))
       pieces.append(contentsOf: previous(fallback: [.set(old, oldReps)]))
       pieces.append(.words(" by "))
-      pieces.append(.load(gain))
+      pieces.append(.margin(gain))
       pieces.append(.words(" (\(share)). It needs at least "))
-      pieces.append(.load(required))
+      pieces.append(.margin(required))
       pieces.append(
         .words(" more than the best earlier set of \(record.reps) reps or more: the greater of \(relative) of "))
       pieces.append(.load(old))

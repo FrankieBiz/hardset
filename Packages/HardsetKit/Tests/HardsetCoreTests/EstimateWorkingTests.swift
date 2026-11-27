@@ -404,7 +404,7 @@ struct EstimateWorkingTests {
     let account = working.account(format: lb)
     #expect(account.figure == "257 lb")
     #expect(account.rule.contains("nearest 1 lb"))
-    #expect(account.sections[0].lines[0].headline == "220.46 lb × 5")
+    #expect(account.sections[0].lines[0].headline == "220.5 lb × 5")
   }
 
   @Test("The day is the day in the lifter's own time zone")

@@ -54,6 +54,17 @@ public struct WorkedFromFormat: Hashable, Sendable {
     }
   }
 
+  /// A margin or threshold with its unit, at full precision: "2.27 kg". A rule that needed at least
+  /// 2.27 kg is not stated as 2.2.
+  public func margin(_ kilograms: Double) -> String {
+    "\(LoadText.exact(kilograms, in: unit, locale: locale)) \(unit.abbreviation)"
+  }
+
+  /// A margin or threshold read aloud: "2.27 kilograms".
+  public func marginSpoken(_ kilograms: Double) -> String {
+    "\(LoadText.exact(kilograms, in: unit, locale: locale)) \(unitSpoken)"
+  }
+
   /// A load read aloud: "102.5 kilograms".
   public func loadSpoken(_ kilograms: Double) -> String {
     "\(LoadText.entered(kilograms, in: unit, locale: locale)) \(unitSpoken)"

@@ -137,11 +137,11 @@ struct WorkoutReceiptTests {
   }
 
   /// Six fraction digits of a converted pound value in a shared message reads as a measurement.
-  @Test("Shared loads use the logger's precision, never default floating-point digits")
+  @Test("Shared loads show one decimal in the display unit, never default floating-point digits")
   func textPrecision() {
     let text = receipt([line(bench, "Bench", .freeWeight, weight: 100)])
       .text(unit: .pounds, locale: Locale(identifier: "en_US_POSIX"))
-    #expect(text.contains("  220.46 lb × 8"))
+    #expect(text.contains("  220.5 lb × 8"))
   }
 }
 
@@ -149,16 +149,35 @@ struct WorkoutReceiptTests {
 struct LoadTextTests {
   private let posix = Locale(identifier: "en_US_POSIX")
 
-  @Test("An entered load shows at most two decimals, like the keypad that took it")
+  /// A hundredth of a pound is precision nobody typed: 80 kg is 176.37 lb. Storage stays exact in
+  /// kilograms; only what is written changes.
+  @Test("An entered load shows at most one decimal in the display unit, and none when it is whole")
   func entered() {
-    #expect(LoadText.entered(100, in: .kilograms, locale: posix) == "100")
-    #expect(LoadText.entered(102.25, in: .kilograms, locale: posix) == "102.25")
-    #expect(LoadText.entered(100, in: .pounds, locale: posix) == "220.46")
+    #expect(LoadText.entered(80, in: .kilograms, locale: posix) == "80")
+    #expect(LoadText.entered(80, in: .pounds, locale: posix) == "176.4")
+    #expect(LoadText.entered(WeightUnit.pounds.toKilograms(100), in: .kilograms, locale: posix) == "45.4")
+    #expect(LoadText.entered(100, in: .pounds, locale: posix) == "220.5")
+    // A whole value keeps no decimal in either unit.
     #expect(LoadText.entered(WeightUnit.pounds.toKilograms(225), in: .pounds, locale: posix) == "225")
+    #expect(LoadText.entered(100, in: .kilograms, locale: posix) == "100")
+    #expect(LoadText.entered(102.5, in: .kilograms, locale: posix) == "102.5")
+    // The trade-off: a hundredth typed on the keypad is not shown. 100.25 lb reads 100.3, half up,
+    // whichever way the conversion's binary noise falls.
+    #expect(LoadText.entered(WeightUnit.pounds.toKilograms(100.25), in: .pounds, locale: posix) == "100.3")
+    #expect(LoadText.entered(102.25, in: .kilograms, locale: posix) == "102.3")
     // No digit grouping: the logger writes a typed 1002.5 the way the keypad took it.
     #expect(LoadText.entered(1002.5, in: .kilograms, locale: posix) == "1002.5")
     #expect(
       LoadText.entered(1002.5, in: .kilograms, locale: Locale(identifier: "de_DE")) == "1002,5")
+  }
+
+  /// A plate to load, a step to take and a margin to clear are not rounded: 1.25 kg is not 1.3.
+  @Test("A step, a target or a margin keeps up to two decimals")
+  func exact() {
+    #expect(LoadText.exact(1.25, in: .kilograms, locale: posix) == "1.25")
+    #expect(LoadText.exact(43.75, in: .kilograms, locale: posix) == "43.75")
+    #expect(LoadText.exact(100, in: .kilograms, locale: posix) == "100")
+    #expect(LoadText.exact(100, in: .pounds, locale: posix) == "220.46")
   }
 
   /// An estimate implying ten-gram precision reads as a measurement.

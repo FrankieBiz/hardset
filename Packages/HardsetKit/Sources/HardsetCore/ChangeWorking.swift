@@ -80,6 +80,17 @@ public struct ChangeWorking: Hashable, Sendable {
   /// Earlier sessions older than the one compared. Last-time only.
   public let olderThanBaseline: Tally
 
+  /// True when this is an estimated-max change whose two figures are both measured singles, so the
+  /// account says "Max" as the row and the scorecard do. Decided from the sets, by the same function
+  /// the row's and the scorecard's own flags use.
+  public var isMeasured: Bool {
+    metric == .estimatedMax
+      && ProgressTrendAnalyzer.isMeasured([
+        ProgressTrendAnalyzer.bestEstimateClaim(in: current.figures),
+        ProgressTrendAnalyzer.bestEstimateClaim(in: baseline.figures),
+      ])
+  }
+
   /// The latest, or this workout's, value on the metric.
   public var currentValue: Double? {
     ProgressTrendAnalyzer.value(of: metric, in: current.figures)
@@ -280,7 +291,7 @@ public struct ChangeWorking: Hashable, Sendable {
   public func account(format: WorkedFromFormat) -> WorkedFromAccount {
     let roles =
       basis == .sixWeek ? (current: "Latest session", baseline: "Baseline") : (current: "This workout", baseline: "Last time")
-    let metricName = ProgressCopy.metricName(metric)
+    let metricName = ProgressCopy.metricName(metric, measured: isMeasured)
     let rounded = (fraction * 100).rounded()
     let figure = rounded == 0 ? "Unchanged" : ProgressCopy.signedPercent(fraction)
     let confidence = certainty.map(ScorecardCopy.confidenceWords) ?? "Measured, not estimated"

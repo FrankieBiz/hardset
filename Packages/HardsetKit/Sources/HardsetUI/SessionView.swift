@@ -1064,7 +1064,7 @@ public struct SessionView: View {
   ///
   /// Written in the unit the lifter reads everything else in. Hard-coding "kg" here told a lifter
   /// training in pounds that they had set a record of 102 kg, a number they never saw anywhere.
-  static func describe(_ record: PersonalRecord, unit: WeightUnit = .kilograms) -> String {
+  public static func describe(_ record: PersonalRecord, unit: WeightUnit = .kilograms) -> String {
     let weight = "\(Self.trim(unit.fromKilograms(record.weightKg))) \(unit.abbreviation)"
     switch record.kind {
     case .heaviestLoad:

@@ -23,7 +23,7 @@ public enum ScorecardCopy {
   /// when nothing grew.
   public static func gainText(_ card: WorkoutScorecard) -> String? {
     guard let gain = card.biggestGain else { return nil }
-    let metric = ProgressCopy.metricName(gain.metric).lowercased()
+    let metric = ProgressCopy.metricName(gain.metric, measured: gain.isMeasured).lowercased()
     return "Biggest gain: \(gain.exerciseName), \(metric) \(ProgressCopy.signedPercent(gain.fraction))"
   }
 

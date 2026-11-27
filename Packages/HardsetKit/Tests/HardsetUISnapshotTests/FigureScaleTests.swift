@@ -1,3 +1,4 @@
+import HardsetCore
 import HardsetUI
 import SwiftUI
 import Testing
@@ -59,6 +60,21 @@ struct FigureScaleTests {
     #expect(Role.monumentAside.baseSize < Role.monument.baseSize)
     #expect(Role.monumentAside.baseSize > Role.countdown.baseSize)
     #expect(Role.countdown.baseSize > Role.figureXL.baseSize)
+  }
+
+  /// A bare "800 lb" under a bench press reads as a lift. Train's monument says what it measures in
+  /// the unit word beside the figure, as History's "800 lb volume" does, and never changes size.
+  @Test func trainsMonumentNamesWhatItMeasures() {
+    for (unit, abbreviation) in [(WeightUnit.pounds, "lb"), (.kilograms, "kg")] {
+      let item = StatLedger.Item.volume(800, unit: unit)
+      #expect(item.value == "800")
+      #expect(item.unit == "\(abbreviation) volume")
+      #expect(item.unit?.contains("volume") == true)
+      #expect(!item.isEstimate)
+      #expect(StatLedger.figureRole(for: item, monument: .aside) == .monumentAside)
+    }
+    // A figure that rounds to zero is left to the caller, which draws no monument at all.
+    #expect(StatLedger.Item.volume(12_800, unit: .pounds).unit == "lb volume")
   }
 
   /// The three scale roles stop at accessibility1 and every other role keeps growing, measured by

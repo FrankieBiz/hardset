@@ -162,3 +162,52 @@ struct WorkoutScorecardTests {
   }
 
 }
+
+/// The receipt-scorecard render is built from these inputs through `WorkoutScorecard.make`, so its
+/// counts, its records line and its rows come from one derivation. This pins what that fixture says,
+/// on a machine that can run Core, since the render itself runs only where SwiftUI compiles.
+@Suite("The scorecard fixture reconciles with what it draws")
+struct ScorecardFixtureReconcilesTests {
+  private func set(_ kg: Double, _ reps: Int) -> PriorSetRecord {
+    PriorSetRecord(weightKg: kg, reps: reps, completedAt: .distantPast)
+  }
+
+  private func input(
+    _ name: String, current: [PriorSetRecord], previous: [PriorSetRecord], record: Bool = false,
+    equipment: WorkoutReceipt.Equipment? = nil
+  ) -> ScorecardInput {
+    ScorecardInput(
+      key: ProgressionKey(exerciseID: ExerciseID()), exerciseName: name, currentSets: current,
+      previousSets: previous, setRecord: record, equipment: equipment)
+  }
+
+  @Test("Three of five beat last time, one record, two first times, and a gain the rows can reach")
+  func fixture() throws {
+    let card = WorkoutScorecard.make([
+      input("Incline Press", current: [set(85, 8)], previous: [set(80, 8)],
+        equipment: .machine("Cybex · Station 2")),
+      input("Cable Row", current: [set(52.5, 11)], previous: [set(50, 10)]),
+      input("Pec Deck", current: [set(60, 10)], previous: [set(60, 10)], record: true),
+      input("Lateral Raise", current: [set(10, 12)], previous: [set(10, 12)]),
+      input("Hack Squat", current: [set(120, 8)], previous: [], equipment: .machine("Hack Squat Sled")),
+      input("Barbell Row", current: [set(70, 8)], previous: [], equipment: .freeWeight),
+      input("Curl", current: [set(30, 9)], previous: [set(30, 10)]),
+    ])
+    #expect(card.headline == "Beat last time on 3 of 5")
+    #expect(card.recordMovementCount == 1)
+    #expect(ScorecardCopy.recordsText(card) == "A record on 1 movement")
+
+    // Rows: the three that beat last time, the match and the two first times. The curl fell short,
+    // which the headline's count carries, so it has no row; six rows over five compared movements.
+    let marks = card.entries.compactMap { ScorecardCopy.markText($0, unit: .kilograms) }
+    #expect(marks == [
+      "+5 kg", "+2.5 kg · +1 rep", "Record", "Matched", "First time on this machine", "First time",
+    ])
+    #expect(card.entries.filter { if case .beat = $0.outcome { true } else { false } }.count
+      == card.beatenCount)
+
+    let gain = try #require(card.biggestGain)
+    #expect(card.entries.contains { $0.exerciseName == gain.exerciseName })
+    #expect(ScorecardCopy.gainText(card) == "Biggest gain: Cable Row, estimated max +8%")
+  }
+}

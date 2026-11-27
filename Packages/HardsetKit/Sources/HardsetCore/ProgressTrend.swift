@@ -36,6 +36,10 @@ public struct MovementTrend: Hashable, Sendable, Identifiable {
   /// observed metrics have none.
   public let certainty: Certainty?
   public let loadAssumption: String?
+  /// True when `metric` is the estimated max and every estimate behind the figure is a measured
+  /// single: a one-rep set is the observation, not an estimate, so the row says "Max". False for
+  /// every other metric, and for a change between a single and a formula's estimate.
+  public let isMeasured: Bool
 
   public var id: ProgressionKey { key }
 
@@ -49,7 +53,8 @@ public struct MovementTrend: Hashable, Sendable, Identifiable {
     latestDate: Date,
     firstDate: Date? = nil,
     certainty: Certainty? = nil,
-    loadAssumption: String? = nil
+    loadAssumption: String? = nil,
+    isMeasured: Bool = false
   ) {
     self.key = key
     self.metric = metric
@@ -61,6 +66,7 @@ public struct MovementTrend: Hashable, Sendable, Identifiable {
     self.firstDate = firstDate
     self.certainty = certainty
     self.loadAssumption = loadAssumption
+    self.isMeasured = isMeasured && metric == .estimatedMax
   }
 }
 
@@ -116,8 +122,18 @@ public enum ProgressTrendAnalyzer {
       latestDate: latestSession.date,
       firstDate: sessions.first?.date,
       certainty: comparison.certainty,
-      loadAssumption: assumesAddedLoad ? ExerciseModality.unknownLoadAssumption : nil
+      loadAssumption: assumesAddedLoad ? ExerciseModality.unknownLoadAssumption : nil,
+      isMeasured: comparison.isMeasured
     )
+  }
+
+  /// True when there is at least one claim and every one is a measured single, the only estimate
+  /// that is not a formula's. One definition for the Progress row, the scorecard and the account
+  /// that explains them, so the three cannot name the same figure differently.
+  static func isMeasured(_ claims: [Claim<Double>?]) -> Bool {
+    let present = claims.compactMap { $0 }
+    return !present.isEmpty && claims.count == present.count
+      && present.allSatisfy { $0.source.id == StrengthMath.measuredSource.id }
   }
 
   /// One record the detector found while replaying a series, with the set that set it.
@@ -269,6 +285,8 @@ public enum ProgressTrendAnalyzer {
     let topLoad: Double
     /// The estimate's own certainty, for the estimated-max metric only.
     let certainty: Certainty?
+    /// Whether the session's best estimate is a measured single, for the estimated-max metric only.
+    let measured: Bool
   }
 
   /// What a six-week change is built from: the metric, each session's value on it, the latest session,
@@ -291,6 +309,8 @@ public enum ProgressTrendAnalyzer {
     /// How far to trust the change: the weaker of its two estimates, `.low` for an added load whose
     /// body mass is unknown, and none for a measured metric.
     let certainty: Certainty?
+    /// True when the latest figure, and the baseline's when there is a change, are measured singles.
+    let isMeasured: Bool
   }
 
   static func comparison(
@@ -314,7 +334,9 @@ public enum ProgressTrendAnalyzer {
       return ComparisonPoint(
         sessionID: session.id, date: session.date, value: value,
         topLoad: session.samples.map(\.weightKg).max() ?? 0,
-        certainty: metric == .estimatedMax ? bestEstimateClaim(in: session.samples)?.certainty : nil)
+        certainty: metric == .estimatedMax ? bestEstimateClaim(in: session.samples)?.certainty : nil,
+        measured: metric == .estimatedMax
+          && isMeasured([bestEstimateClaim(in: session.samples)]))
     }
     guard let latest = points.last else { return nil }
 
@@ -348,7 +370,8 @@ public enum ProgressTrendAnalyzer {
         ? .low
         : metric == .estimatedMax
           ? Certainty.combine([latest.certainty, change == nil ? nil : base?.certainty].compactMap { $0 })
-          : nil)
+          : nil,
+      isMeasured: metric == .estimatedMax && latest.measured && (change == nil || base?.measured == true))
   }
 
   // MARK: - Session reduction
