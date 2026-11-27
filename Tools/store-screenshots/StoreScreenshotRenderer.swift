@@ -92,7 +92,7 @@
     /// Points of the live session hosted above the card's top edge, so its rows clear the pinned stack.
     /// The shorter the card, the more is hosted above it: 280 pt at the 6.5-inch card, 220 at the 6.9.
     private static func sessionCrop(for cardHeight: CGFloat) -> CGFloat {
-      max(0, 1_068 - cardHeight)
+      max(0, 1_031 - cardHeight)
     }
 
     private static func session() -> some View {
@@ -276,8 +276,8 @@
         imported: [],
         names: [incline: "Incline Chest Press"])
 
-      return NavigationStack {
-        ScrolledSheet {
+      let sheet = NavigationStack {
+        ScrollView {
           MuscleHistoryView(history: history, onShowWorking: { _, _ in })
         }
         .background(Tokens.Color.canvas)
@@ -285,20 +285,20 @@
       }
       .tint(Tokens.Color.plateBlue)
       .background(Tokens.Color.canvas.ignoresSafeArea())
-    }
 
-    /// The sheet's own `ScrollView`, opened past the explanatory text so the rows are on screen:
-    /// the position a lifter reaches by scrolling, not a different layout.
-    private struct ScrolledSheet<Content: View>: View {
-      @State private var position = ScrollPosition()
-      @ViewBuilder let content: Content
-
-      var body: some View {
-        ScrollView { content }
-          .scrollPosition($position)
-          .task { position.scrollTo(y: 480) }
+      // The sheet is hosted taller than the card and anchored at the bottom, so the card shows
+      // its lower part: the rows for Chest, Front delts and Side delts rather than the
+      // explanatory text above them. Nothing is drawn or moved by hand.
+      return GeometryReader { proxy in
+        sheet
+          .frame(width: proxy.size.width, height: proxy.size.height + Self.sheetCrop)
+          .frame(width: proxy.size.width, height: proxy.size.height, alignment: .bottom)
+          .clipped()
       }
     }
+
+    /// Points of the muscle history sheet hosted above the card's top edge.
+    private static let sheetCrop: CGFloat = 480
 
     // MARK: - Rendering
 
