@@ -1064,6 +1064,13 @@ components rather than native spinners.
 - Settings adds file import/export and a StoreKit Lifetime section. Reuse existing spacing, typography, buttons and semantic error colours.
   Import previews state unknown equipment and unit/time-zone interpretation before
   saving. Busy operations disable their controls and expose native progress.
+- The import/restore preview names the span of workout starts the file holds, "Workout dates
+  3 Jan 2024 to 8 Nov 2026", and how many starts are later than now. It describes the file's starts,
+  not what will be inserted: a workout already here is skipped and a file can hold duplicates. Dates
+  are drawn in the device's calendar and time zone, so a start recorded just before midnight in
+  another zone can show the neighbouring day. A later-than-now start is neither clamped nor
+  reordered, and the line claims nothing about the file being complete or safe to commit. It draws
+  no dates line at all when the file holds no workouts.
 - History opens a static receipt of committed sets. It states equipment provenance,
   caveats and same-machine record definitions. Native share sheets handle text and a
   deliberately dark image; long sessions retain text sharing rather than render an
