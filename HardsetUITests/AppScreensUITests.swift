@@ -17,6 +17,9 @@ import XCTest
 /// needs data makes it through the real screens first.
 final class AppScreensUITests: XCTestCase {
   private var auditReport: [String] = []
+  /// What a coverage journey could not drive and why, written beside the screenshots so a state that
+  /// is missing from the captures is explained there and not by its absence.
+  private var coverageNotes: [String] = []
 
   /// The start screen, Settings and the two other tabs, in dark mode.
   @MainActor
@@ -525,6 +528,711 @@ final class AppScreensUITests: XCTestCase {
     audit(app, screen: "onboarding pitch 3 (accessibility size)")
 
     writeAuditReport(named: "accessibility-audit-onboarding-ax")
+  }
+
+  // MARK: - Coverage wave 1
+
+  /// The screens a lifter meets first that no journey had driven, only seen as component renders:
+  /// Progress, Muscle history, Library, the live rest bar and its issue details, and a finished
+  /// workout's receipt in correcting and removing mode. History's month jump and Settings' data
+  /// transfer are added where they cost one tap.
+  ///
+  /// History is made through the real screens, as the other journeys make theirs: Bench Press four
+  /// times (the first by hand, the next three by "Repeat last workout", so the movement has the four
+  /// sessions a "No record in 3 sessions" row needs), then a workout with a Back Squat at 100 for 8 and
+  /// a Deadlift at 140 for 1, so the board holds an estimated row and a measured one. Every set is
+  /// logged today, so no row has a six-week change; what that leaves undriven is written to the
+  /// coverage notes beside the screenshots.
+  ///
+  /// Each state is its own segment. A segment that cannot reach its screen fails with what it was
+  /// looking for and goes back to the start screen, so one missing control does not hide every
+  /// capture after it.
+  @MainActor
+  func testCoverageWaveOneScreensDark() throws {
+    continueAfterFailure = true
+    let app = XCUIApplication()
+    launch(app)
+
+    guard waitForStartScreen(app) else { return }
+    guard seedCoverageHistory(app) else {
+      writeCoverageNotes(named: "coverage-wave1-notes")
+      return
+    }
+
+    driveProgress(app)
+    driveMuscleHistory(app)
+    driveLibrary(app)
+    driveHistoryAndReceipt(app)
+    driveSettingsData(app)
+    driveLiveRest(app)
+
+    writeAuditReport(named: "accessibility-audit-coverage-wave1")
+    writeCoverageNotes(named: "coverage-wave1-notes")
+  }
+
+  /// Five finished workouts: Bench Press 100 for 8 four times, then Back Squat 100 for 8 and
+  /// Conventional Deadlift 140 for 1 in one. Returns false when a step could not be taken, with the
+  /// failure recorded, because every segment after it reads this history.
+  @MainActor
+  private func seedCoverageHistory(_ app: XCUIApplication) -> Bool {
+    finishOneWorkout(app)
+    guard app.buttons["Start workout"].exists else {
+      XCTFail("The first seeded workout did not return to the start screen")
+      return false
+    }
+    // Three more of the same, started from "Repeat last workout". Each is typed out again, not
+    // relied on to be prefilled, so the four sessions hold the same set whatever the prefill does.
+    for index in 2...4 {
+      let again = app.buttons["Repeat last workout"]
+      guard again.waitForExistence(timeout: 10) else {
+        XCTFail("Seeded workout \(index): 'Repeat last workout' was not offered")
+        return false
+      }
+      again.tap()
+      guard typeAndLogPendingSet(app, weight: ["1", "0", "0"], reps: ["8"], loggedCount: 1),
+        finishWorkout(app)
+      else { return false }
+    }
+
+    let start = app.buttons["Start workout"]
+    guard start.waitForExistence(timeout: 10) else {
+      XCTFail("Seeded workout 5: the start screen did not offer 'Start workout'")
+      return false
+    }
+    start.tap()
+    guard addMovement(app, named: "Barbell Back Squat"),
+      typeAndLogPendingSet(app, weight: ["1", "0", "0"], reps: ["8"], loggedCount: 1),
+      addMovement(app, named: "Conventional Deadlift"),
+      typeAndLogPendingSet(app, weight: ["1", "4", "0"], reps: ["1"], loggedCount: 2),
+      finishWorkout(app)
+    else { return false }
+    return true
+  }
+
+  // MARK: Progress
+
+  /// The board with a measured row, an estimated row and a "No record in 3 sessions" row, then the
+  /// movement's chart and the working behind its estimated max.
+  @MainActor
+  private func driveProgress(_ app: XCUIApplication) {
+    dismissSheets(app)
+    openTab(app, "Progress")
+    let rows = app.descendants(matching: .any)
+    let stalled = rows.matching(
+      NSPredicate(
+        format: "label BEGINSWITH 'Barbell Bench Press' AND label CONTAINS 'No record in 3 sessions'")
+    ).firstMatch
+    let estimated = rows.matching(
+      NSPredicate(
+        format: "label BEGINSWITH 'Barbell Back Squat' AND label CONTAINS 'Estimated max'")
+    ).firstMatch
+    let measured = rows.matching(
+      NSPredicate(
+        format:
+          "label BEGINSWITH 'Conventional Deadlift' AND label CONTAINS 'Max \u{00B7} no 6-week comparison' AND NOT (label CONTAINS 'Estimated max')"
+      )
+    ).firstMatch
+    guard stalled.waitForExistence(timeout: 20) else {
+      capture(app, "50-progress-board")
+      XCTFail("Progress did not draw a Bench Press row that says 'No record in 3 sessions'")
+      return
+    }
+    XCTAssertTrue(estimated.exists, "Progress did not draw an estimated row for the Back Squat")
+    XCTAssertTrue(
+      measured.exists, "Progress did not draw a measured row ('Max', not 'Estimated max') for the Deadlift")
+    capture(app, "50-progress-board")
+    audit(app, screen: "progress board")
+
+    // "Worked from" on a row needs a six-week change, which needs a session 5 to 7 weeks before the
+    // latest. Every set here is logged today, so none can have one.
+    let rowWorking = rows.matching(
+      NSPredicate(format: "label BEGINSWITH 'Worked from,' AND label CONTAINS ' change'"))
+    if rowWorking.count == 0 {
+      note(
+        "Progress row 'Worked from': not drawn. A row offers it only with a six-week change, which needs a "
+          + "session 5 to 7 weeks before the latest; the app cannot log a set into the past, so a UI test "
+          + "cannot make one. The movement chart's own 'Worked from' (the estimated max) is captured instead "
+          + "as 52-progress-worked-from.")
+    }
+
+    stalled.tap()
+    let legend = rows.matching(NSPredicate(format: "label CONTAINS 'latest estimate on'")).firstMatch
+    guard legend.waitForExistence(timeout: 15) else {
+      capture(app, "51-progress-chart")
+      XCTFail("The movement's chart did not draw its estimated-max figure")
+      dismissSheets(app)
+      return
+    }
+    capture(app, "51-progress-chart")
+    audit(app, screen: "progress chart")
+    if !legend.isHittable { _ = scrollUntilHittable(legend, in: app, maxSwipes: 4) }
+    legend.tap()
+    guard app.navigationBars["Worked from"].waitForExistence(timeout: 10) else {
+      XCTFail("The estimated max's 'Worked from' did not open")
+      dismissSheets(app)
+      return
+    }
+    capture(app, "52-progress-worked-from")
+    audit(app, screen: "progress worked from")
+    tapDone(app, in: "Worked from")
+    dismissSheets(app)
+  }
+
+  // MARK: Muscle history
+
+  /// The paid sheet, unlocked because the simulator is a development build, then one account.
+  @MainActor
+  private func driveMuscleHistory(_ app: XCUIApplication) {
+    dismissSheets(app)
+    openTab(app, "Volume")
+    let open = app.buttons["Muscle history"]
+    guard open.waitForExistence(timeout: 20) else {
+      capture(app, "53-muscle-history")
+      XCTFail("Volume did not offer 'Muscle history' with a week of logged sets behind it")
+      return
+    }
+    open.tap()
+    let working = app.descendants(matching: .any).matching(
+      NSPredicate(format: "label BEGINSWITH 'Worked from,' AND label ENDSWITH 'last four weeks'")
+    ).firstMatch
+    guard working.waitForExistence(timeout: 20) else {
+      capture(app, "53-muscle-history")
+      XCTFail("Muscle history did not draw a four-week 'Worked from' beside any muscle")
+      dismissSheets(app)
+      return
+    }
+    capture(app, "53-muscle-history")
+    audit(app, screen: "muscle history")
+    if !working.isHittable { _ = scrollUntilHittable(working, in: app, maxSwipes: 6) }
+    working.tap()
+    guard app.navigationBars["Worked from"].waitForExistence(timeout: 10) else {
+      XCTFail("Muscle history's 'Worked from' did not open")
+      dismissSheets(app)
+      return
+    }
+    capture(app, "54-muscle-history-worked-from")
+    audit(app, screen: "muscle history worked from")
+    tapDone(app, in: "Worked from")
+    tapDone(app, in: "Muscle history")
+    XCTAssertTrue(
+      waitUntilGone(app.navigationBars["Muscle history"]), "Done closes Muscle history")
+  }
+
+  // MARK: Library
+
+  /// The Library from Train: the grouped list, and the editor its plus opens.
+  @MainActor
+  private func driveLibrary(_ app: XCUIApplication) {
+    dismissSheets(app)
+    openTab(app, "Train")
+    let library = app.buttons["Library"]
+    guard library.waitForExistence(timeout: 10) else {
+      XCTFail("Train did not offer 'Library'")
+      return
+    }
+    library.tap()
+    let newMovement = app.buttons["New movement"]
+    guard newMovement.waitForExistence(timeout: 15) else {
+      capture(app, "55-library")
+      XCTFail("The Library did not open with its 'New movement' control")
+      return
+    }
+    capture(app, "55-library")
+    audit(app, screen: "library")
+    newMovement.tap()
+    let cancel = app.buttons["Cancel"]
+    guard cancel.waitForExistence(timeout: 10) else {
+      capture(app, "56-library-movement-editor")
+      XCTFail("'New movement' did not open the movement editor")
+      return
+    }
+    capture(app, "56-library-movement-editor")
+    audit(app, screen: "movement editor")
+    cancel.tap()
+    XCTAssertTrue(waitUntilGone(cancel), "Cancel closes the movement editor")
+    // The Library is pushed onto Train, so its bar's first button is the way back.
+    let back = app.navigationBars["Library"].buttons.element(boundBy: 0)
+    if back.exists { back.tap() }
+    XCTAssertTrue(
+      app.buttons["Start workout"].waitForExistence(timeout: 10), "Back returns to the start screen")
+  }
+
+  // MARK: History month jump and the receipt
+
+  /// History's month jump, then the newest workout's receipt: correcting mode, one set corrected
+  /// through the keypad, and the remove-a-set confirmation, which is cancelled so nothing is lost.
+  @MainActor
+  private func driveHistoryAndReceipt(_ app: XCUIApplication) {
+    dismissSheets(app)
+    openTab(app, "History")
+
+    let jump = app.buttons["Jump to a month"]
+    if jump.waitForExistence(timeout: 15) {
+      jump.tap()
+      if app.navigationBars["Jump to a month"].waitForExistence(timeout: 10) {
+        capture(app, "76-history-month-jump")
+        audit(app, screen: "history month jump")
+        app.buttons["Cancel"].tap()
+        XCTAssertTrue(
+          waitUntilGone(app.navigationBars["Jump to a month"]), "Cancel closes the month jump")
+      } else {
+        XCTFail("The calendar button did not open the month jump")
+        dismissSheets(app)
+      }
+    } else {
+      XCTFail("History did not offer 'Jump to a month'")
+    }
+
+    let row = app.buttons.matching(NSPredicate(format: "label CONTAINS ' volume'")).firstMatch
+    guard row.waitForExistence(timeout: 15) else {
+      XCTFail("History did not list the seeded workouts")
+      return
+    }
+    row.tap()
+    let corrections = app.buttons["Correct"]
+    guard corrections.waitForExistence(timeout: 15) else {
+      XCTFail("The receipt did not open with its 'Correct' menu")
+      dismissSheets(app)
+      return
+    }
+    corrections.tap()
+    let correctASet = app.buttons["Correct a set"]
+    guard correctASet.waitForExistence(timeout: 5) else {
+      XCTFail("The 'Correct' menu did not offer 'Correct a set'")
+      dismissSheets(app)
+      return
+    }
+    correctASet.tap()
+    let pencil = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Correct set,'")).firstMatch
+    guard pencil.waitForExistence(timeout: 10) else {
+      XCTFail("Correcting mode did not put a pencil beside any set")
+      dismissSheets(app)
+      return
+    }
+    capture(app, "57-receipt-correcting")
+    audit(app, screen: "receipt correcting")
+
+    pencil.tap()
+    let next = app.buttons["Next"]
+    guard next.waitForExistence(timeout: 10) else {
+      XCTFail("The pencil did not open the set correction sheet")
+      dismissSheets(app)
+      return
+    }
+    XCTAssertFalse(
+      app.keyboards.firstMatch.exists, "The correction sheet's keypad is the logger's own; no system keyboard.")
+    for key in ["1", "0", "5"] { app.buttons[key].tap() }
+    capture(app, "58-receipt-correction-keypad")
+    audit(app, screen: "receipt correction keypad")
+    next.tap()
+    let save = app.buttons["Save correction"]
+    guard save.waitForExistence(timeout: 5) else {
+      XCTFail("'Next' did not move the correction keypad to the reps with 'Save correction'")
+      dismissSheets(app)
+      return
+    }
+    save.tap()
+    XCTAssertTrue(waitUntilGone(save, timeout: 10), "Saving the correction closes the sheet")
+    let corrected = app.buttons.matching(
+      NSPredicate(format: "label BEGINSWITH 'Correct set,' AND label CONTAINS '105'")
+    ).firstMatch
+    XCTAssertTrue(
+      corrected.waitForExistence(timeout: 10), "The receipt must show the corrected weight, 105")
+    capture(app, "59-receipt-corrected")
+
+    // Removing is the other mode; the menu switches to it, and the confirmation is read, not taken.
+    app.buttons["Correct"].tap()
+    let removeASet = app.buttons["Remove a set"]
+    guard removeASet.waitForExistence(timeout: 5) else {
+      XCTFail("The 'Correct' menu did not offer 'Remove a set'")
+      dismissSheets(app)
+      return
+    }
+    removeASet.tap()
+    let minus = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Delete set,'")).firstMatch
+    guard minus.waitForExistence(timeout: 10) else {
+      XCTFail("Removing mode did not put a minus beside any set")
+      dismissSheets(app)
+      return
+    }
+    minus.tap()
+    let confirmDelete = app.buttons["Delete set"]
+    guard confirmDelete.waitForExistence(timeout: 5) else {
+      XCTFail("The minus did not ask 'Delete this set?'")
+      dismissSheets(app)
+      return
+    }
+    capture(app, "59b-receipt-remove-confirm")
+    app.buttons["Cancel"].tap()
+    XCTAssertTrue(waitUntilGone(confirmDelete), "Cancel closes the confirmation")
+    XCTAssertTrue(
+      app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Delete set,'")).firstMatch.exists,
+      "Cancelling must leave the set where it was")
+
+    // The first Done ends the mode; the second closes the receipt.
+    tapDone(app, in: "Workout receipt")
+    tapDone(app, in: "Workout receipt")
+    XCTAssertTrue(
+      waitUntilGone(app.navigationBars["Workout receipt"]), "Done closes the receipt")
+  }
+
+  // MARK: Settings, data transfer
+
+  /// The export options, one export made, and the import section. The import preview needs a file
+  /// chosen in the system's Files picker; see the notes written below for why that is not driven.
+  @MainActor
+  private func driveSettingsData(_ app: XCUIApplication) {
+    dismissSheets(app)
+    openTab(app, "Train")
+    let settings = app.buttons["Settings"]
+    guard settings.waitForExistence(timeout: 10) else {
+      XCTFail("Train did not offer Settings")
+      return
+    }
+    settings.tap()
+    guard app.buttons["Done"].waitForExistence(timeout: 10) else {
+      XCTFail("Settings did not open")
+      return
+    }
+    let exportCSV = app.buttons["Export CSV"]
+    guard scrollUntilHittable(exportCSV, in: app, maxSwipes: 10) else {
+      capture(app, "77-settings-data-export")
+      XCTFail("Settings' data transfer section did not offer 'Export CSV'")
+      dismissSheets(app)
+      return
+    }
+    capture(app, "77-settings-data-export")
+    audit(app, screen: "settings data export")
+    exportCSV.tap()
+    let shareLink = app.descendants(matching: .any).matching(
+      NSPredicate(format: "label BEGINSWITH 'Save or share'")
+    ).firstMatch
+    if shareLink.waitForExistence(timeout: 20) {
+      if !shareLink.isHittable { _ = scrollUntilHittable(shareLink, in: app, maxSwipes: 3) }
+      capture(app, "78-settings-data-export-ready")
+    } else {
+      capture(app, "78-settings-data-export-ready")
+      XCTFail("'Export CSV' did not produce a file to save or share")
+    }
+
+    let choose = app.buttons["Choose workout file"]
+    guard scrollUntilHittable(choose, in: app, maxSwipes: 8) else {
+      XCTFail("Settings did not offer 'Choose workout file'")
+      dismissSheets(app)
+      return
+    }
+    capture(app, "79-settings-data-import")
+    audit(app, screen: "settings data import")
+    // Opening the picker is as far as a test can go: it is the system's, out of process, and the
+    // simulator's Files holds no workout CSV that a test could put there.
+    choose.tap()
+    let pickerCancel = app.buttons["Cancel"]
+    if pickerCancel.waitForExistence(timeout: 8) {
+      capture(app, "79b-settings-file-picker")
+      pickerCancel.tap()
+      _ = waitUntilGone(pickerCancel)
+      note(
+        "Data transfer import preview: not driven. 'Choose workout file' opens the system's Files picker "
+          + "(captured as 79b-settings-file-picker), and the simulator's Files holds no workout CSV; a UI "
+          + "test cannot create a file there, and the picker is out of process, so no fixture could be "
+          + "selected and the preview, its duplicate state, the commit and the undo stay undriven.")
+    } else {
+      note(
+        "Data transfer import preview: not driven. 'Choose workout file' did not put a picker with a "
+          + "Cancel control in front of the test within 8 seconds, so no fixture could be selected.")
+    }
+    dismissSheets(app)
+  }
+
+  // MARK: Live rest
+
+  /// A rest started from the card, the running bar, the next-rest chooser, pause and resume, and,
+  /// where the simulator denies alarms, the issue banner and its details sheet at an accessibility
+  /// size, where the banner becomes one control that opens them.
+  @MainActor
+  private func driveLiveRest(_ app: XCUIApplication) {
+    dismissSheets(app)
+    openTab(app, "Train")
+    let start = app.buttons["Start workout"]
+    guard start.waitForExistence(timeout: 10) else {
+      XCTFail("Rest: the start screen did not offer 'Start workout'")
+      return
+    }
+    start.tap()
+    guard addMovement(app, named: "Barbell Bench Press") else { return }
+
+    // No rest has been chosen for this movement, so the card offers a menu of lengths, not a
+    // one-tap rest. Three minutes, so the rest is still running after the relaunch below.
+    let startRest = app.buttons["Start rest"]
+    guard startRest.waitForExistence(timeout: 10) else {
+      XCTFail("Rest: the card did not offer 'Start rest'")
+      return
+    }
+    startRest.tap()
+    let threeMinutes = app.buttons["3 minutes"]
+    guard threeMinutes.waitForExistence(timeout: 5) else {
+      XCTFail("Rest: the 'Start rest' menu did not offer 3 minutes")
+      return
+    }
+    threeMinutes.tap()
+    answerAlarmPermission(app)
+
+    let resting = app.descendants(matching: .any).matching(
+      NSPredicate(format: "label BEGINSWITH 'Resting,'")
+    ).firstMatch
+    guard resting.waitForExistence(timeout: 10) else {
+      capture(app, "70-rest-running")
+      XCTFail("Rest: choosing 3 minutes did not start the rest bar")
+      return
+    }
+    capture(app, "70-rest-running")
+    audit(app, screen: "rest running")
+
+    let nextRest = app.buttons["Next rest, 3 minutes"]
+    if nextRest.waitForExistence(timeout: 5) {
+      nextRest.tap()
+      let twoMinutes = app.buttons["2 minutes"]
+      if twoMinutes.waitForExistence(timeout: 5) {
+        capture(app, "71-rest-chooser")
+        twoMinutes.tap()
+        XCTAssertTrue(
+          app.buttons["Next rest, 2 minutes"].waitForExistence(timeout: 5),
+          "Choosing 2 minutes must become the next rest")
+      } else {
+        XCTFail("Rest: the next-rest row did not open the lengths")
+      }
+    } else {
+      XCTFail("Rest: the bar did not offer 'Next rest, 3 minutes'")
+    }
+
+    let pause = app.buttons["Pause rest"]
+    if pause.waitForExistence(timeout: 5) {
+      pause.tap()
+      let resume = app.buttons["Resume rest"]
+      if resume.waitForExistence(timeout: 5) {
+        capture(app, "72-rest-paused")
+        resume.tap()
+        XCTAssertTrue(
+          app.buttons["Pause rest"].waitForExistence(timeout: 5), "Resume must run the rest again")
+      } else {
+        XCTFail("Rest: Pause did not become Resume")
+      }
+    } else {
+      XCTFail("Rest: the bar did not offer 'Pause rest'")
+    }
+
+    let issueText = app.descendants(matching: .any).matching(
+      NSPredicate(format: "label CONTAINS 'Rest alerts are off'")
+    ).firstMatch
+    guard issueText.waitForExistence(timeout: 5) else {
+      note(
+        "Rest issue banner and details sheet: not forced. The simulator answered the rest start without "
+          + "denying alarms (no permission prompt was denied and no 'Rest alerts are off' banner drew), so "
+          + "there was no issue to open. The details sheet is only reachable at an accessibility size, where "
+          + "the banner becomes one control, and that needs the issue first.")
+      return
+    }
+    capture(app, "73-rest-issue-banner")
+
+    // At an accessibility size the banner is one control that opens the same words in a sheet. The
+    // rest is stored as an absolute deadline, so it is still running after the relaunch.
+    app.terminate()
+    launch(app, keepsStore: true, contentSize: "UICTContentSizeCategoryAccessibilityXL")
+    let compact = app.buttons.matching(
+      NSPredicate(format: "label CONTAINS 'Rest alerts are off'")
+    ).firstMatch
+    guard compact.waitForExistence(timeout: 30) else {
+      capture(app, "74-rest-issue-compact-ax")
+      XCTFail("Rest: at an accessibility size the issue did not draw as one control after a relaunch")
+      return
+    }
+    capture(app, "74-rest-issue-compact-ax")
+    compact.tap()
+    guard app.navigationBars["Rest timer"].waitForExistence(timeout: 10) else {
+      XCTFail("Rest: the compact issue control did not open the 'Rest timer' details sheet")
+      return
+    }
+    capture(app, "75-rest-issue-details")
+    audit(app, screen: "rest issue details (accessibility size)")
+    tapDone(app, in: "Rest timer")
+    XCTAssertTrue(waitUntilGone(app.navigationBars["Rest timer"]), "Done closes the rest details")
+  }
+
+  // MARK: Coverage helpers
+
+  /// Opens the picker from the live session's "Add movement" and chooses `name`, typing it into the
+  /// search field when the row is not already on screen. The catalogue is long, and a row below the
+  /// fold is not in the accessibility tree.
+  @MainActor
+  private func addMovement(_ app: XCUIApplication, named name: String) -> Bool {
+    let add = app.buttons["Add movement"]
+    guard add.waitForExistence(timeout: 10) else {
+      XCTFail("'Add movement' was not offered before choosing \(name)")
+      return false
+    }
+    add.tap()
+    let row = app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", name)).firstMatch
+    if !row.waitForExistence(timeout: 4) {
+      let search = app.textFields.firstMatch
+      if search.waitForExistence(timeout: 3) {
+        search.tap()
+        search.typeText(name)
+      }
+    }
+    guard row.waitForExistence(timeout: 8) else {
+      XCTFail("The movement picker did not list \(name)")
+      return false
+    }
+    row.tap()
+    return true
+  }
+
+  /// Types a weight and reps into the first set row that is not yet logged, through the logger's own
+  /// keypad as the other journeys do, logs it, and waits until `loggedCount` rows are logged.
+  @MainActor
+  private func typeAndLogPendingSet(
+    _ app: XCUIApplication, weight: [String], reps: [String], loggedCount: Int
+  ) -> Bool {
+    let pending = app.descendants(matching: .any).matching(
+      NSPredicate(format: "label BEGINSWITH 'Set 1' AND NOT (label CONTAINS ', logged')")
+    ).firstMatch
+    guard pending.waitForExistence(timeout: 10) else {
+      XCTFail("No set row was waiting to be logged")
+      return false
+    }
+    pending.coordinate(withNormalizedOffset: CGVector(dx: 0.44, dy: 0.5)).tap()
+    guard app.buttons["Next field"].waitForExistence(timeout: 5) else {
+      XCTFail("The weight did not open the keypad")
+      return false
+    }
+    for key in weight { app.buttons[key].tap() }
+    app.buttons["Next field"].tap()
+    for key in reps { app.buttons[key].tap() }
+    app.buttons["Done"].tap()
+    pending.coordinate(withNormalizedOffset: CGVector(dx: 0.93, dy: 0.5)).tap()
+    let logged = app.descendants(matching: .any).matching(
+      NSPredicate(format: "label BEGINSWITH 'Set 1,' AND label CONTAINS ', logged'"))
+    let deadline = Date().addingTimeInterval(10)
+    while logged.count < loggedCount && Date() < deadline { Thread.sleep(forTimeInterval: 0.2) }
+    guard logged.count >= loggedCount else {
+      XCTFail("The typed set was not saved: \(logged.count) logged rows, expected \(loggedCount)")
+      return false
+    }
+    return true
+  }
+
+  /// Finishes the live workout and closes its receipt, ending on the start screen.
+  @MainActor
+  private func finishWorkout(_ app: XCUIApplication) -> Bool {
+    let finish = app.buttons["Finish workout"]
+    var swipes = 0
+    while !finish.exists && swipes < 3 {
+      app.swipeUp()
+      swipes += 1
+    }
+    guard finish.waitForExistence(timeout: 5) else {
+      XCTFail("The live workout did not offer 'Finish workout'")
+      return false
+    }
+    finish.tap()
+    guard app.buttons["Finish"].waitForExistence(timeout: 5) else {
+      XCTFail("'Finish workout' did not ask for confirmation")
+      return false
+    }
+    app.buttons["Finish"].tap()
+    let receiptDone = app.buttons["Done"]
+    guard receiptDone.waitForExistence(timeout: 10) else {
+      XCTFail("Finishing a workout did not open its receipt")
+      return false
+    }
+    receiptDone.tap()
+    guard waitUntilGone(receiptDone), app.buttons["Start workout"].waitForExistence(timeout: 5) else {
+      XCTFail("Done did not close the receipt back to the start screen")
+      return false
+    }
+    return true
+  }
+
+  /// Answers the system's alarm permission prompt, if the simulator raises one, by denying it: a
+  /// denied alarm is the issue the rest banner exists to state. Returns whether a prompt appeared.
+  @discardableResult
+  @MainActor
+  private func answerAlarmPermission(_ app: XCUIApplication) -> Bool {
+    let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
+    let alert = springboard.alerts.firstMatch
+    guard alert.waitForExistence(timeout: 6) else {
+      note("Alarm permission: no system prompt appeared when the first rest started.")
+      return false
+    }
+    capture(app, "73a-rest-alarm-permission")
+    let deny = alert.buttons.matching(NSPredicate(format: "label BEGINSWITH[c] 'Don'")).firstMatch
+    (deny.exists ? deny : alert.buttons.element(boundBy: 0)).tap()
+    return true
+  }
+
+  /// Taps the Done in the navigation bar titled `title`, which is the top sheet's when sheets are
+  /// stacked and each has its own Done.
+  @MainActor
+  private func tapDone(_ app: XCUIApplication, in title: String) {
+    let scoped = app.navigationBars[title].buttons["Done"]
+    if scoped.waitForExistence(timeout: 3) {
+      scoped.tap()
+    } else {
+      app.buttons["Done"].firstMatch.tap()
+    }
+  }
+
+  /// Closes whatever sheets a segment left open, so the next one starts at a tab bar.
+  @MainActor
+  private func dismissSheets(_ app: XCUIApplication) {
+    for _ in 0..<4 {
+      let done = app.buttons["Done"]
+      let cancel = app.buttons["Cancel"]
+      if done.exists, done.isHittable {
+        done.firstMatch.tap()
+      } else if cancel.exists, cancel.isHittable {
+        cancel.firstMatch.tap()
+      } else {
+        return
+      }
+      Thread.sleep(forTimeInterval: 0.6)
+    }
+  }
+
+  /// Swipes up until the element can be tapped, for a control below the fold of a scroll view or a
+  /// sheet. Returns whether it got there.
+  @MainActor
+  private func scrollUntilHittable(
+    _ element: XCUIElement, in app: XCUIApplication, maxSwipes: Int
+  ) -> Bool {
+    var swipes = 0
+    while !(element.exists && element.isHittable) && swipes < maxSwipes {
+      app.swipeUp()
+      swipes += 1
+    }
+    return element.exists && element.isHittable
+  }
+
+  /// Records what a coverage journey could not drive, and why.
+  @MainActor
+  private func note(_ text: String) {
+    coverageNotes.append(text)
+  }
+
+  @MainActor
+  private func writeCoverageNotes(named name: String) {
+    let text =
+      coverageNotes.isEmpty
+      ? "Every state this journey set out to drive was reached.\n"
+      : coverageNotes.joined(separator: "\n\n") + "\n"
+    let attachment = XCTAttachment(string: text)
+    attachment.name = name
+    attachment.lifetime = .keepAlways
+    add(attachment)
+    if let directory = Self.outputDirectory {
+      try? text.write(
+        to: directory.appendingPathComponent("\(name).txt"), atomically: true, encoding: .utf8)
+    }
   }
 
   // MARK: - Helpers
