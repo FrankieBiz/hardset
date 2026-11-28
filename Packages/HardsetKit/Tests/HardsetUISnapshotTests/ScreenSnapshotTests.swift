@@ -181,17 +181,51 @@
 
     /// The workout as the lifter leaves it a moment after the log tap, at an accessibility size: the
     /// first set is logged while the screen is up, the rest bar and record notice are pinned, and the
-    /// screen scrolls the next set to just above them. The harness logs the set 0.4 s after the first
-    /// frame, as the coordinator does, so the screen sees the logged count rise; it settles for
-    /// longer than the follow beat and the scroll together.
+    /// screen scrolls the next set to just above them. The capture logs the set from the test's own
+    /// task 0.3 s after the first frame, so the screen sees the logged count rise, and settles for
+    /// longer than the follow beat and the scroll together. Besides the render it reads the scroll
+    /// view's offset: scrolled at an accessibility size, and not at the default size.
     @Test func liveSessionScrollsToTheNextSetAfterALog() async throws {
-      try await Snapshot.capture(
-        "session-after-log-dark-ax3", typeSize: .accessibility3, settle: .milliseconds(2_000)
-      ) { LogsOneSetHarness() }
-      try await Snapshot.capture(
-        "session-after-log-light-ax3", style: .light, typeSize: .accessibility3,
-        settle: .milliseconds(2_000)
-      ) { LogsOneSetHarness() }
+      guard Snapshot.directory != nil else { return }
+      for (name, style, typeSize, scrolls) in [
+        ("session-after-log-dark-ax3", UIUserInterfaceStyle.dark, DynamicTypeSize.accessibility3, true),
+        ("session-after-log-light-ax3", .light, .accessibility3, true),
+        ("session-after-log-dark", .dark, .large, false),
+      ] {
+        let model = LogsOneSetModel()
+        var offset: CGFloat = -1
+        try await Snapshot.capture(
+          name, style: style, typeSize: typeSize, settle: .milliseconds(1_500),
+          act: {
+            try? await Task.sleep(for: .milliseconds(300))
+            model.logFirstSet()
+          },
+          inspect: { view in offset = Self.scrollOffset(in: view) }
+        ) { LogsOneSetHarness(model: model) }
+        #expect(model.loggedCount == 1, "\(name): the harness logged one set")
+        if scrolls {
+          #expect(offset > 0, "\(name): the next set was scrolled into view (offset \(offset))")
+        } else {
+          #expect(offset <= 0.5, "\(name): nothing scrolled at the default size (offset \(offset))")
+        }
+      }
+    }
+
+    /// How far the screen's own scroll view has moved from its top: the tallest scroll view in the
+    /// hosted hierarchy, which is the list.
+    private static func scrollOffset(in view: UIView) -> CGFloat {
+      var best: UIScrollView?
+      func walk(_ view: UIView) {
+        if let scroll = view as? UIScrollView,
+          scroll.contentSize.height > (best?.contentSize.height ?? 0)
+        {
+          best = scroll
+        }
+        view.subviews.forEach(walk)
+      }
+      walk(view)
+      guard let best else { return -1 }
+      return best.contentOffset.y + best.adjustedContentInset.top
     }
 
     /// The list with nothing pinned over it, so every row can be seen. The first row not yet written
@@ -582,6 +616,8 @@
     /// palette can be rendered without changing the Simulator's settings. `settle` is how long the
     /// window runs before the frame is taken: the default covers a view's own tasks, and a screen
     /// that reads a database through the real stores needs longer.
+    /// `act` runs once the first frame is up and before the settle; `inspect` runs after the settle, on
+    /// the hosted view, for a capture that also asserts something about what it drew.
     static func capture<Content: View>(
       _ name: String,
       size: CGSize = Snapshot.phone,
@@ -589,6 +625,8 @@
       typeSize: DynamicTypeSize = .large,
       contrast: UIAccessibilityContrast = .normal,
       settle: Duration = .milliseconds(800),
+      act: (@MainActor () async -> Void)? = nil,
+      inspect: (@MainActor (UIView) -> Void)? = nil,
       @ViewBuilder _ content: () -> Content
     ) async throws {
       guard let directory else { return }
@@ -607,9 +645,13 @@
       window.makeKeyAndVisible()
       host.view.frame = window.bounds
       host.view.layoutIfNeeded()
+      // What the capture does to the screen once it is up, such as logging a set, from the test's own
+      // task and not the view's, so it cannot depend on the view's `.task` having started.
+      await act?()
       // `.task` modifiers, database reads and the first full layout land on later run-loop turns.
       try await Task.sleep(for: settle)
       host.view.layoutIfNeeded()
+      inspect?(host.view)
 
       let format = UIGraphicsImageRendererFormat()
       format.scale = 2
@@ -910,22 +952,31 @@
     }
   }
 
-  /// The live session with a workout it logs a set of on its own, so a capture shows what the
-  /// screen does after the log and not only the state it starts in.
+  /// A workout the capture logs a set of, so the screen sees the logged count rise as it does in the
+  /// app, where the coordinator marks the row.
   @MainActor
-  private struct LogsOneSetHarness: View {
-    @State private var exercises = [
+  @Observable
+  private final class LogsOneSetModel {
+    var exercises = [
       Fixtures.legPress(firstSetLogged: false),
       Fixtures.calfRaise(),
     ]
 
+    var loggedCount: Int { exercises.reduce(0) { $0 + $1.loggedCount } }
+
+    func logFirstSet() {
+      guard let slot = exercises[0].slots.first else { return }
+      exercises[0].markLogged(slotID: slot.id, setID: SetID())
+    }
+  }
+
+  @MainActor
+  private struct LogsOneSetHarness: View {
+    let model: LogsOneSetModel
+
     var body: some View {
-      Fixtures.session(exercises: $exercises)
-        .task {
-          try? await Task.sleep(for: .milliseconds(400))
-          let slot = exercises[0].slots[0]
-          exercises[0].markLogged(slotID: slot.id, setID: SetID())
-        }
+      Fixtures.session(
+        exercises: Binding(get: { model.exercises }, set: { model.exercises = $0 }))
     }
   }
 #endif

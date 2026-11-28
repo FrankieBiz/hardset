@@ -410,7 +410,9 @@ public struct ProgressionChartView: View {
           AxisMarks(values: ticks) { _ in
             AxisGridLine(stroke: StrokeStyle(lineWidth: gridWidth))
               .foregroundStyle(grid)
-            AxisValueLabel(anchor: .top)
+            // A day, said explicitly: these ticks sit at the sessions' time of day, and left to
+            // choose, Charts labelled them "7:33:2…".
+            AxisValueLabel(format: DateAxisLayout.labelFormat, anchor: .top)
               .font(axisFont)
               .foregroundStyle(axisText)
           }
@@ -886,6 +888,9 @@ struct DateAxisLayout: Equatable {
   static let maximumTicks = 4
   static let minimumTicks = 2
   static let minimumInset: CGFloat = 16
+
+  /// How an evenly spaced tick is labelled: the month and day, "Nov 2".
+  static let labelFormat = Date.FormatStyle().month(.abbreviated).day()
 
   let tickCount: Int
   /// Kept clear at each end of the x axis: half a label and a margin, so an end label is whole.

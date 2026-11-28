@@ -83,6 +83,18 @@
       #expect(steps.allSatisfy { abs($0 - steps[0]) < 0.001 })
     }
 
+    /// The first render of the even ticks read "7:33:2…": ticks at a session's time of day, left to
+    /// Charts, were labelled as times.
+    @Test("An even tick is labelled with its day, whatever its time of day")
+    func tickLabelIsADay() {
+      let style = DateAxisLayout.labelFormat
+        .locale(Locale(identifier: "en_US")).timeZone(TimeZone(identifier: "UTC")!)
+      let date = Date(timeIntervalSince1970: 1_793_000_000 + 7 * 3_600 + 33 * 60 + 27)
+      let text = date.formatted(style)
+      #expect(!text.contains(":"))
+      #expect(text.hasPrefix("Oct") || text.hasPrefix("Nov"))
+    }
+
     @Test("A chart with one date has no span to divide, so the automatic ticks stay")
     func noSpan() {
       let day = Date(timeIntervalSince1970: 1_000_000)
