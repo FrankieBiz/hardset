@@ -71,7 +71,8 @@ public struct ExerciseProgressScreen: View {
               assumesAddedLoad: history.assumesAddedLoad,
               onExplain: { presented = .methodology },
               onShowEstimateWorking: { showEstimateWorking($0) },
-              onShowRecordWorking: { showRecordWorking() }
+              onShowRecordWorking: { showRecordWorking() },
+              onShowRepLadderWorking: { showRepLadderWorking($0, reps: $1) }
             )
             // Imported history is a line of its own, never joined to a machine's. Said under the
             // chart whenever one of its lines is imported, so the legend's label is not the only hint.
@@ -117,6 +118,9 @@ public struct ExerciseProgressScreen: View {
   /// now reads first in the legend.
   private var seriesInputs: [ProgressionChartView.SeriesInput] {
     guard let history = snapshot.value else { return [] }
+    // One ladder per movement-on-one-machine, from the same working sets the chart was built
+    // from. A machine's ladder is its own; two machines are never combined.
+    let ladders = RepLadder.ladders(for: exerciseID, from: history.samples)
     return history.series
       .sorted { lhs, rhs in
         (lhs.points.last?.date ?? .distantPast) > (rhs.points.last?.date ?? .distantPast)
@@ -125,7 +129,8 @@ public struct ExerciseProgressScreen: View {
         ProgressionChartView.SeriesInput(
           label: history.label(for: $0.key), points: $0.points,
           recordSessionIDs: history.recordSessionIDs[$0.key] ?? [],
-          bestAtWeight: history.bestAtWeight[$0.key] ?? [], key: $0.key)
+          bestAtWeight: history.bestAtWeight[$0.key] ?? [],
+          repLadderRungs: ladders[$0.key]?.rungs ?? [], key: $0.key)
       }
   }
 
@@ -151,6 +156,18 @@ public struct ExerciseProgressScreen: View {
         estimatesOneRepMax: history.estimatesOneRepMax,
         incrementKg: history.incrementKg(for:), label: history.label(for:),
         format: WorkedFromFormat(unit: unit))
+    else { return }
+    presented = .working(WorkedFromPresentation(account))
+  }
+
+  /// Opens the set behind one rung of the rep ladder. Derived from the history on screen, by the
+  /// same function the ladder's rungs came from, when it is asked for.
+  private func showRepLadderWorking(_ key: ProgressionKey, reps: Int) {
+    guard let history = snapshot.value,
+      let account = RepLadder.ladder(for: key, from: history.samples)
+        .working(
+          reps: reps, from: history.samples, label: history.label(for: key),
+          format: WorkedFromFormat(unit: unit))
     else { return }
     presented = .working(WorkedFromPresentation(account))
   }

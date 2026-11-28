@@ -407,4 +407,26 @@ struct ProgressionStoreTests {
     #expect(history.bestAtWeight[keyA]?.first?.reps == 12)
     #expect(history.bestAtWeight[keyB]?.first?.reps == 8)
   }
+
+  /// The ladder is built from the history's working sets, so a heavy warm-up cannot become a rung.
+  @Test("A warm-up never becomes a rung of the rep ladder")
+  func warmUpsStayOffTheRepLadder() async throws {
+    let (database, store, progression, exercise, gym) = try fixture()
+    let hammer = try machine(database, gym, "Hammer Strength")
+    try session(
+      store, exercise, hammer, sets: [(200, 1)], at: now.addingTimeInterval(-2 * 86_400),
+      isWarmup: true)
+    try session(
+      store, exercise, hammer, sets: [(100, 8), (90, 10)],
+      at: now.addingTimeInterval(-86_400))
+
+    let history = try await progression.loadHistory(for: exercise)
+    let key = try #require(history.series.first?.key)
+    let ladder = RepLadder.ladder(for: key, from: history.samples)
+
+    #expect(ladder.rung(reps: 1) == nil)
+    #expect(ladder.rungs.map(\.reps) == [8, 10])
+    #expect(ladder.rung(reps: 8)?.weightKg == 100)
+    #expect(ladder.rung(reps: 10)?.weightKg == 90)
+  }
 }
