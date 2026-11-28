@@ -10,16 +10,23 @@ public enum LastDoneText {
   /// today rather than as a negative number.
   public static func text(for lastDone: Date?, now: Date, calendar: Calendar = .current) -> String {
     guard let lastDone else { return "not done yet" }
+    return "last done " + phrase(for: lastDone, now: now, calendar: calendar)
+  }
+
+  /// The same calendar-day wording without the "last done" prefix: "today", "yesterday",
+  /// "4 days ago", then weeks from two weeks on, then months from two months on. Shared so a
+  /// live card's dated "Last time" line cannot drift from the workout cards' wording.
+  public static func phrase(for lastDone: Date, now: Date, calendar: Calendar = .current) -> String {
     let days =
       calendar.dateComponents(
         [.day], from: calendar.startOfDay(for: lastDone), to: calendar.startOfDay(for: now)
       ).day ?? 0
     switch days {
-    case ..<1: return "last done today"
-    case 1: return "last done yesterday"
-    case 2..<14: return "last done \(days) days ago"
-    case 14..<60: return "last done \(days / 7) weeks ago"
-    default: return "last done \(days / 30) months ago"
+    case ..<1: return "today"
+    case 1: return "yesterday"
+    case 2..<14: return "\(days) days ago"
+    case 14..<60: return "\(days / 7) weeks ago"
+    default: return "\(days / 30) months ago"
     }
   }
 }
