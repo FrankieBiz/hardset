@@ -87,8 +87,10 @@
     /// Charts, were labelled as times.
     @Test("An even tick is labelled with its day, whatever its time of day")
     func tickLabelIsADay() {
-      let style = DateAxisLayout.labelFormat
-        .locale(Locale(identifier: "en_US")).timeZone(TimeZone(identifier: "UTC")!)
+      // Set as properties: the `.timeZone(_:)` method on a format style adds a zone-name field.
+      var style = DateAxisLayout.labelFormat
+      style.locale = Locale(identifier: "en_US")
+      style.timeZone = TimeZone(identifier: "UTC")!
       let date = Date(timeIntervalSince1970: 1_793_000_000 + 7 * 3_600 + 33 * 60 + 27)
       let text = date.formatted(style)
       #expect(!text.contains(":"))
