@@ -3,12 +3,12 @@
 #
 # This runs on macOS with Xcode because the views are SwiftUI and the renderer needs
 # UIKit. It uses the existing render technique and the real `SessionView`,
-# `VolumeReportView` and `ProgressBoardView`; it draws no mockup by hand. The renderer
+# `VolumeReportView`, `ProgressBoardView` and `MuscleHistoryView`; it draws no mockup by hand. The renderer
 # source lives in Tools/store-screenshots/ and is copied into the snapshot test target
 # only for the duration of the run, then removed. The committed project keeps no test
 # target, no test assertion and no CI step for this.
 #
-# Output: docs/release/screenshots/6.9/ and 6.5/, six PNGs total:
+# Output: docs/release/screenshots/6.9/ and 6.5/, eight PNGs total:
 #   6.9-inch: 1320 x 2868 px  (440 x 956 pt at 3x)
 #   6.5-inch: 1242 x 2688 px  (414 x 896 pt at 3x)
 #
@@ -19,7 +19,7 @@
 #   HARDSET_STORE_SHOT_DESTINATION  xcodebuild destination (default iPhone 17 simulator)
 #   HARDSET_STORE_SHOT_KEEP_TEMP    set to 1 to keep the raw captures and the log
 #
-# Toolchain note: the renderer and the six images were verified on Xcode 27.2 by running
+# Toolchain note: the renderer and the eight images were verified on Xcode 27.2 by running
 # this same xcodebuild invocation in a throwaway copy that excluded two unrelated existing
 # test targets. Xcode 27.2 fails to compile an existing Store test
 # ("Conformance of 'Row' to 'Sendable' is unavailable") before the renderer runs, so the
@@ -69,7 +69,7 @@ trap cleanup EXIT INT TERM
 mkdir -p "$OUT/6.9" "$OUT/6.5"
 cp "$RENDERER" "$INSTALLED"
 
-echo "Rendering six gallery images on $DESTINATION"
+echo "Rendering eight gallery images on $DESTINATION"
 echo "Renderer: $RENDERER (installed for this run only)"
 
 set +e
@@ -110,7 +110,7 @@ for size in 6.9 6.5; do
     6.9) want="1320 2868" ;;
     6.5) want="1242 2688" ;;
   esac
-  for screen in 01-train 02-volume 03-progress; do
+  for screen in 01-train 02-volume 03-progress 04-muscle-history; do
     src="$TMP/$screen-$size.png"
     [[ -f "$src" ]] || {
       echo "error: the renderer did not write $src" >&2

@@ -2,7 +2,7 @@
 //
 // This file is NOT part of the package. `Tools/render_store_screenshots.sh` copies it into
 // Packages/HardsetKit/Tests/HardsetUISnapshotTests for the duration of one run, builds that test
-// target for the iOS Simulator, renders the three gallery screens at the two required App Store
+// target for the iOS Simulator, renders the four gallery screens at the two required App Store
 // pixel sizes, and removes it again. Keeping it here means the kit adds no test target, no test
 // assertion and no CI step to the shipping project.
 //
@@ -12,6 +12,7 @@
 #if canImport(UIKit)
   import Foundation
   import HardsetCore
+  import HardsetStore
   import HardsetUI
   import SwiftUI
   import Testing
@@ -49,6 +50,13 @@
         ) {
           Self.Shot(caption: "Different machines. Never merged.") { Self.progress() }
         }
+        try await Self.capture(
+          "04-muscle-history-\(spec.label)", size: spec.size, directory: directory
+        ) {
+          Self.Shot(caption: "Muscle history. One purchase, no subscription.") {
+            Self.muscleHistory()
+          }
+        }
       }
     }
 
@@ -79,44 +87,62 @@
       }
     }
 
-    // MARK: - The three screens
+    // MARK: - The four screens
+
+    /// Points of the live session hosted above the card's top edge, so its rows clear the pinned stack.
+    /// 240 pt at the 6.5-inch card and 197 at the 6.9, measured once the list has settled (the
+    /// capture waits three seconds, because the session scrolls itself to the next set to log).
+    /// Each lands the card's top edge on a clean boundary: the 6.5 starts at the first set row and
+    /// the 6.9 at the column header, and both end with the third row whole above the notice, so no
+    /// line of text is cut through its glyphs. A change here needs a look at both renders.
+    private static func sessionCrop(for cardHeight: CGFloat) -> CGFloat {
+      cardHeight > 820 ? 197 : 240
+    }
 
     private static func session() -> some View {
+      // Same-machine history, so every mark on this screen is one the app can produce: last time
+      // was 215 lb x 8 on this machine, today's two logged sets are 225 lb x 8 (a real +10 lb
+      // beat, exactly one 10 lb step), and the third row is the next set to log. No `priorNote`:
+      // a note about another machine would contradict the same-machine history.
       let exerciseID = ExerciseID()
       let machineID = MachineID()
       let key = ProgressionKey(exerciseID: exerciseID, machineID: machineID)
+      let lastTimeKg = WeightUnit.pounds.toKilograms(215)
+      let todayKg = WeightUnit.pounds.toKilograms(225)
+      let stepKg = WeightUnit.pounds.toKilograms(10)
+      let lastTime = PriorSetRecord(weightKg: lastTimeKg, reps: 8, completedAt: .distantPast)
       let history = PriorPerformance(
         key: key,
-        lastSets: [
-          PriorSetRecord(weightKg: 102.05828325, reps: 8, completedAt: .distantPast),
-          PriorSetRecord(weightKg: 102.05828325, reps: 8, completedAt: .distantPast),
-          PriorSetRecord(weightKg: 102.05828325, reps: 8, completedAt: .distantPast),
-        ],
-        heaviestSet: PriorSetRecord(
-          weightKg: 102.05828325, reps: 8, completedAt: .distantPast)
+        lastSets: [lastTime, lastTime, lastTime],
+        heaviestSet: lastTime
       )
       var state = ExerciseLogState(
         exerciseID: exerciseID,
         machineID: machineID,
         exerciseName: "Incline Chest Press",
         machineName: "Plate-Loaded Incline",
-        machineIncrementKg: 4.5359237,
+        machineIncrementKg: stepKg,
         prior: history,
-        priorNote: "From another machine",
         weightUnit: .pounds,
         slots: [
-          SetSlot(draft: SetEntryDraft(weightKg: 102.05828325, reps: 8)),
-          SetSlot(draft: SetEntryDraft(weightKg: 102.05828325, reps: 8)),
-          SetSlot(draft: SetEntryDraft(weightKg: 102.05828325, reps: 8)),
+          SetSlot(draft: SetEntryDraft(weightKg: todayKg, reps: 8)),
+          SetSlot(draft: SetEntryDraft(weightKg: todayKg, reps: 8)),
+          SetSlot(draft: SetEntryDraft(weightKg: todayKg, reps: 8)),
         ]
       )
+      // What the logger computes for a set logged today: the comparison excludes the current
+      // session, so it is the same-machine history above, and not the first logged set.
+      let records = PersonalRecordDetector.records(
+        for: PersonalRecordDetector.Candidate(weightKg: todayKg, reps: 8),
+        history: history.lastSets,
+        increment: stepKg)
       state.markLogged(slotID: state.slots[0].id, setID: SetID())
       state.markLogged(slotID: state.slots[1].id, setID: SetID())
       let meter = RestMetadata(
         exerciseName: "Incline Chest Press", setOrdinal: 2, plannedSets: 3,
         machineName: "Plate-Loaded Incline", totalRest: .seconds(102))
 
-      return SessionView(
+      let screen = SessionView(
         exercises: .constant([state]),
         unit: .pounds,
         title: "Workout",
@@ -125,11 +151,7 @@
         lastLoggedAt: Date(),
         restState: .running(endsAt: Date().addingTimeInterval(102)),
         restMetadata: meter,
-        records: [
-          PersonalRecord(
-            kind: .estimatedOneRepMax, weightKg: 102.05828325, reps: 8,
-            previousWeightKg: nil)
-        ],
+        records: records,
         recordsExerciseName: "Incline Chest Press",
         onLogSet: { _, _ in },
         onAddExercise: {},
@@ -138,6 +160,16 @@
         onShowSettings: {},
         onFinish: {}
       )
+      // Two records stack a tall notice on the rest bar, and together they cover the rows. The
+      // real screen is hosted taller than the card and anchored at the bottom, so the card shows
+      // its lower part: the logged rows, the next-up row, the notice and the rest bar. Nothing is
+      // drawn or moved; the part cropped away is the title, the gym line and the machine line.
+      return GeometryReader { proxy in
+        screen
+          .frame(width: proxy.size.width, height: proxy.size.height + Self.sessionCrop(for: proxy.size.height))
+          .frame(width: proxy.size.width, height: proxy.size.height, alignment: .bottom)
+          .clipped()
+      }
     }
 
     private static func volume() -> some View {
@@ -209,6 +241,65 @@
       .background(Tokens.Color.canvas.ignoresSafeArea())
     }
 
+    /// Muscle history, the paid screen, built by `MuscleHistoryAnalyzer.history` from counts and
+    /// weekly reports that are themselves derived from one attribution, so no figure is typed.
+    /// Incline Chest Press credits Chest directly and Front delts indirectly; every other muscle,
+    /// Side delts included, reads "No credited sets". Twelve weeks, one of them zero, the last four
+    /// above the four before, and no imported history.
+    private static func muscleHistory() -> some View {
+      let now = Date(timeIntervalSince1970: 1_793_527_200)
+      let day = 86_400.0
+      let incline = ExerciseID()
+      let contributions = [
+        MuscleContribution(.chest, role: .direct, certainty: .moderate, source: .anatomy),
+        MuscleContribution(.frontDelts, role: .indirect, certainty: .moderate, source: .anatomy),
+      ]
+      // Working sets of the movement per week, newest first. The zero is week ten.
+      let setsPerWeek = [6, 5, 5, 4, 3, 4, 3, 3, 4, 0, 3, 2]
+      let weeks = setsPerWeek.enumerated().map { item -> MuscleHistoryWeek in
+        let range = VolumeWindowRange(endingAt: now, weeksBack: item.offset)
+        var fractional: [MuscleKey: Double] = [:]
+        for contribution in contributions where item.element > 0 {
+          fractional[contribution.key, default: 0] += Double(item.element) * contribution.setWeight
+        }
+        return MuscleHistoryWeek(
+          start: range.start, end: range.end, lastDay: range.lastDay,
+          report: MuscleVolumeReport(
+            fractionalSets: fractional, hardSets: item.element, unattributedHardSets: 0,
+            setsTouchingGroup: [:]),
+          sets: [])
+      }
+      let history = MuscleHistoryAnalyzer.history(
+        counts: [
+          MuscleHistoryCount(
+            exerciseID: incline, setCount: setsPerWeek.reduce(0, +),
+            lastAt: now - 1 * day, firstAt: now - 80 * day)
+        ],
+        weeks: weeks,
+        attribution: AttributionIndex([incline: contributions]),
+        imported: [],
+        names: [incline: "Incline Chest Press"])
+
+      let sheet = ScrollView {
+        MuscleHistoryView(history: history, onShowWorking: { _, _ in })
+      }
+      .background(Tokens.Color.canvas)
+
+      // The sheet is hosted taller than the card and anchored at the bottom, so the card shows
+      // its lower part: the rows for Chest, Front delts and Side delts rather than the
+      // sheet's title and explanatory text above them. The sheet's navigation title is cropped
+      // away with them; nothing is drawn or moved by hand.
+      return GeometryReader { proxy in
+        sheet
+          .frame(width: proxy.size.width, height: proxy.size.height + Self.sheetCrop)
+          .frame(width: proxy.size.width, height: proxy.size.height, alignment: .bottom)
+          .clipped()
+      }
+    }
+
+    /// Points of the muscle history sheet hosted above the card's top edge.
+    private static let sheetCrop: CGFloat = 270
+
     // MARK: - Rendering
 
     private enum RenderError: Error { case noImage }
@@ -227,7 +318,7 @@
       window.makeKeyAndVisible()
       host.view.frame = window.bounds
       host.view.layoutIfNeeded()
-      try await Task.sleep(for: .milliseconds(1_200))
+      try await Task.sleep(for: .milliseconds(3_000))
       host.view.layoutIfNeeded()
 
       let format = UIGraphicsImageRendererFormat()

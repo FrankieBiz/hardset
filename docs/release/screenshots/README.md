@@ -1,6 +1,6 @@
 # App Store gallery screenshots
 
-Three screens, two required App Store sizes, six PNG files. The images are renders of
+Four screens, two required App Store sizes, eight PNG files. The images are renders of
 Hardset's real SwiftUI views and real `Tokens` typography, fed a fixed fixture state. They
 are not mockups drawn by hand, and they are not screenshots taken from a device. That is
 the distinction decision D27 asks for: the interface shown is the interface that ships.
@@ -10,23 +10,28 @@ the distinction decision D27 asks for: the interface shown is the interface that
 | `6.9/01-train.png` | Live workout (`SessionView`) | It tells you when it's estimating. | 1320 × 2868 |
 | `6.9/02-volume.png` | Volume (`VolumeReportView`) | Shows its math. Refuses to invent targets. | 1320 × 2868 |
 | `6.9/03-progress.png` | Progress (`ProgressBoardView`) | Different machines. Never merged. | 1320 × 2868 |
+| `6.9/04-muscle-history.png` | Muscle history (`MuscleHistoryView`) | Muscle history. One purchase, no subscription. | 1320 × 2868 |
 | `6.5/01-train.png` | Live workout (`SessionView`) | It tells you when it's estimating. | 1242 × 2688 |
 | `6.5/02-volume.png` | Volume (`VolumeReportView`) | Shows its math. Refuses to invent targets. | 1242 × 2688 |
 | `6.5/03-progress.png` | Progress (`ProgressBoardView`) | Different machines. Never merged. | 1242 × 2688 |
+| `6.5/04-muscle-history.png` | Muscle history (`MuscleHistoryView`) | Muscle history. One purchase, no subscription. | 1242 × 2688 |
 
-The captions are the three chosen in `docs/LAUNCH-PLAN.md` §2. They are set in
+The first three captions are the ones chosen in `docs/LAUNCH-PLAN.md` §2; the fourth reuses the words of the Lifetime in-app purchase description, so the gallery says that this screen is paid. They are set in
 `Tokens.Text.display` (the app's 28 pt semibold title role) on `Tokens.Color.canvas`, above
 the screen, at 3x. The screen itself is the live view at the width of the target device.
 
 ## What state each image shows
 
 - **Train.** A live session for Incline Chest Press on a Plate-Loaded Incline with 10 lb
-  steps and a prior-history note, "From another machine · Low confidence". Two 225 lb × 8
-  sets are logged; the record panel shows "Best estimated 1RM: About 285 lb" with
-  Moderate confidence. The rest timer is running. The logged rows are green seals, the
-  record is the yellow trophy, and the rest bar is the running countdown. The app's
-  `ExerciseLogState` and `SessionView` decide the layout; the fixture only supplies the
-  values.
+  steps and same-machine history of 215 lb × 8. Two 225 lb × 8 sets are logged, each with a
+  "+10 lb" beat mark, and the third row is next up. The record panel is whatever
+  `PersonalRecordDetector.records` returns for 225 lb × 8 against that history; nothing in it is
+  typed. The rest timer is running. There is no "From another machine" note: this is a
+  same-machine state, which is the only state in which the app can announce a record. The
+  two-record notice and the rest bar cover most of the list at phone height, so the card hosts
+  the live screen taller than itself and shows its lower part: the title, gym line and machine
+  line are cropped away, the card's top edge falls on the first set row, and the three rows, the
+  notice and the rest bar stay on screen with no line of text cut through.
 - **Volume.** 14 working sets in the last 7 days, with Chest 10, Front delts 7.5 and
   Triceps 6 visible. The screen's own disclosure says there is no target line because no
   weekly set target is established, and "Not evaluated" is explained. "Worked from" and
@@ -36,6 +41,14 @@ the screen, at 3x. The screen itself is the live view at the width of the target
   Chest Press on Hammer Strength at +8%. Both Leg Press rows are separate series; the
   second is not merged into the first. Quads follows with the same two rows and their
   sparklines.
+
+- **Muscle history.** The paid screen. Incline Chest Press credits Chest directly and Front
+  delts indirectly, so those two rows carry figures and "Worked from" controls; every other
+  muscle, Side delts included, reads "No credited sets". Twelve weeks of sets include one zero
+  week, and the last four weeks sit above the four before. There is no imported history. The
+  figures come from `MuscleHistoryAnalyzer.history` over counts and weekly reports derived from
+  one attribution. The card shows the sheet below its title and explanatory text, cropped the
+  same way, so the Side delts "No credited sets" row is on screen.
 
 ## Regenerate
 
@@ -48,10 +61,10 @@ Tools/render_store_screenshots.sh
 The script copies `Tools/store-screenshots/StoreScreenshotRenderer.swift` into
 `Packages/HardsetKit/Tests/HardsetUISnapshotTests/` for the duration of one `xcodebuild
 test` run, renders at 440 × 956 pt and 414 × 896 pt at 3x, verifies the four pixel
-dimensions with `sips`, copies the six files here, and removes the temporary source. It
+dimensions with `sips`, copies the eight files here, and removes the temporary source. It
 leaves no test target or test file change in the repository.
 
-Toolchain: the renderer and the six images were verified on Xcode 27.2 by running the same
+Toolchain: the renderer and the images were verified on Xcode 27.2 by running the same
 `xcodebuild` invocation in a throwaway copy that excluded two unrelated existing test
 targets. Xcode 27.2 currently fails to compile an unrelated existing Store test
 (`Conformance of 'Row' to 'Sendable' is unavailable`) before the renderer runs. The
@@ -66,10 +79,10 @@ on every run and fails loudly if they are wrong.
 ## Upload
 
 - App Store Connect requires the 6.9-inch iPhone size for a new app. Upload
-  `6.9/01-train.png`, `6.9/02-volume.png`, `6.9/03-progress.png` first; they are the
+  `6.9/01-train.png`, `6.9/02-volume.png`, `6.9/03-progress.png`, `6.9/04-muscle-history.png` first; they are the
   primary gallery.
 - The 6.5-inch set is for the older size slot. Upload it only if App Store Connect asks
-  for it or the owner wants the older-device gallery. Both sets show the same three
+  for it or the owner wants the older-device gallery. Both sets show the same four
   screens and captions.
 - Do not add a device frame, a marketing background image, or a different caption. The
   gallery's job is to show the app; the caption is the only added element.
