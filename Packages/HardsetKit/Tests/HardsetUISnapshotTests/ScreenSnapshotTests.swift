@@ -187,11 +187,12 @@
     /// view's offset: scrolled at an accessibility size, and not at the default size.
     @Test func liveSessionScrollsToTheNextSetAfterALog() async throws {
       guard Snapshot.directory != nil else { return }
-      for (name, style, typeSize, scrolls) in [
-        ("session-after-log-dark-ax3", UIUserInterfaceStyle.dark, DynamicTypeSize.accessibility3, true),
+      let cases: [(String, UIUserInterfaceStyle, DynamicTypeSize, Bool)] = [
+        ("session-after-log-dark-ax3", .dark, .accessibility3, true),
         ("session-after-log-light-ax3", .light, .accessibility3, true),
         ("session-after-log-dark", .dark, .large, false),
-      ] {
+      ]
+      for (name, style, typeSize, scrolls) in cases {
         let model = LogsOneSetModel()
         var offset: CGFloat = -1
         try await Snapshot.capture(
