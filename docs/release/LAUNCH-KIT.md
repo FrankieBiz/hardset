@@ -96,7 +96,7 @@ Rules for all three, written down because they are the easiest to break:
   are right.
 - One post per place. Do not cross-post the same text.
 - **The first-person lines are drafts for the owner to make true.** "I count weekly sets in a
-  spreadsheet", "my log used to show me", "I read where the formula stops" are written as
+  spreadsheet", "my log used to show me", "I am not sure the thresholds are right" are written as
   plausible openings, not as facts about Frankie. Rewrite each to what actually happened, or cut
   it. Do not post an anecdote that did not happen: this product's whole claim is that it does not
   invent things, and a community that checks numbers will check a story.
