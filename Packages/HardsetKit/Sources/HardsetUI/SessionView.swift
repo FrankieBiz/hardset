@@ -340,9 +340,6 @@ public struct SessionView: View {
     }
   }
 
-  /// How many sets are logged across the whole workout.
-  private var loggedSetCount: Int { exercises.reduce(0) { $0 + $1.loggedCount } }
-
   /// After a set is logged at an accessibility size, scrolls the next set that can be logged to just
   /// above the pinned stack, so the row the lifter is about to log is on screen. It waits for the
   /// log moment's follow beat, when the rest bar and the record notice have taken their place in the
