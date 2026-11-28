@@ -50,6 +50,11 @@ public struct ProgressionChartView: View {
   @Environment(\.accessibilityReduceMotion) private var reduceMotion
   /// Grows with the axis labels, so larger text does not squeeze the plot itself.
   @ScaledMetric(relativeTo: .footnote) private var plotHeight: CGFloat = 220
+  /// The axis labels' point size at the current Dynamic Type size (the caption role is Footnote), so
+  /// the date axis can ask how many labels the width holds.
+  @ScaledMetric(relativeTo: .footnote) private var axisPointSize: CGFloat = 13
+  /// The chart's measured width, `0` until the first layout.
+  @State private var chartWidth: CGFloat = 0
 
   /// A series plus the label the store resolved for it, so this view does no lookups.
   public struct SeriesInput: Identifiable, Hashable, Sendable {
@@ -311,8 +316,12 @@ public struct ProgressionChartView: View {
     let axisFont = Tokens.Text.caption
     let lineWidth = Tokens.Stroke.selected
     let gridWidth = Tokens.Stroke.hairline
+    let axis = DateAxisLayout(chartWidth: chartWidth, labelPointSize: axisPointSize)
+    let dates = plotted.flatMap { plottable($0.points).map(\.date) }
+    let firstDate = dates.min()
+    let lastDate = dates.max()
 
-    return Chart {
+    let styled = Chart {
       ForEach(plotted) { entry in
         ForEach(plottable(entry.points)) { point in
           LineMark(
@@ -374,20 +383,9 @@ public struct ProgressionChartView: View {
     .chartSymbolScale(domain: names, range: shapes)
     .chartLegend(.hidden)
     // The newest point sat on the plot's trailing edge, leaving its date label no room, so it
-    // collapsed to an ellipsis. Inset both ends so the first and last dates read in full.
-    .chartXScale(range: .plotDimension(startPadding: 16, endPadding: 32))
-    .chartXAxis {
-      // Four labels at most, each centred under its tick. Charts starts a date label at its tick
-      // by default, so the newest date needed its whole width past the last tick and truncated to
-      // "Nov…"; centred, it needs half, which the scale's end padding provides.
-      AxisMarks(values: .automatic(desiredCount: 4)) { _ in
-        AxisGridLine(stroke: StrokeStyle(lineWidth: gridWidth))
-          .foregroundStyle(grid)
-        AxisValueLabel(anchor: .top)
-          .font(axisFont)
-          .foregroundStyle(axisText)
-      }
-    }
+    // collapsed to an ellipsis. Inset both ends by half a label, so the first and last dates read
+    // in full whatever the text size.
+    .chartXScale(range: .plotDimension(startPadding: axis.edgeInset, endPadding: axis.edgeInset))
     .chartYAxis {
       AxisMarks { _ in
         AxisGridLine(stroke: StrokeStyle(lineWidth: gridWidth))
@@ -398,6 +396,37 @@ public struct ProgressionChartView: View {
       }
     }
     .frame(height: plotHeight)
+    .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { chartWidth = $0 }
+
+    // As many date labels as the width holds at this text size, four at most, each centred under
+    // its tick. Charts starts a date label at its tick by default, so the newest date needed its
+    // whole width past the last tick and truncated to "Nov…"; centred, it needs half, which the
+    // scale's end padding provides. Where fewer than four fit, the ticks are placed evenly between
+    // the first and last date rather than left to `desiredCount`, which is only a hint. Two
+    // `chartXAxis` calls under an `if`, because the axis builder takes one kind of mark values.
+    return Group {
+      if let ticks = axis.ticks(from: firstDate, to: lastDate) {
+        styled.chartXAxis {
+          AxisMarks(values: ticks) { _ in
+            AxisGridLine(stroke: StrokeStyle(lineWidth: gridWidth))
+              .foregroundStyle(grid)
+            AxisValueLabel(anchor: .top)
+              .font(axisFont)
+              .foregroundStyle(axisText)
+          }
+        }
+      } else {
+        styled.chartXAxis {
+          AxisMarks(values: .automatic(desiredCount: axis.tickCount)) { _ in
+            AxisGridLine(stroke: StrokeStyle(lineWidth: gridWidth))
+              .foregroundStyle(grid)
+            AxisValueLabel(anchor: .top)
+              .font(axisFont)
+              .foregroundStyle(axisText)
+          }
+        }
+      }
+    }
   }
 
   // MARK: - Legend
@@ -836,3 +865,50 @@ public struct ProgressionChartView: View {
       .background(Tokens.Color.canvas)
   }
 #endif
+
+/// How many dates the movement chart's x axis can label at a given width and text size, and the
+/// room to keep at each end so the first and last labels are drawn whole.
+///
+/// The plot grows vertically with Dynamic Type but is always as wide as the screen, so a fixed
+/// four labels that fit at the default size overprint each other at accessibility sizes. A label is
+/// estimated as `labelEms` of the axis font ("Nov 12"), a tick slot as a label and a gap, and the
+/// count is how many slots fit between the two end insets. Plain values in and out, so the
+/// arithmetic is tested without a chart.
+struct DateAxisLayout: Equatable {
+  /// The widest label as a multiple of the font's point size: "Nov 12" and its relatives.
+  static let labelEms: CGFloat = 3.6
+  /// What the y axis's labels take from the chart's width, in the same unit: a three-digit number.
+  static let yAxisEms: CGFloat = 2.4
+  /// Clear space kept between two neighbouring labels.
+  static let gap: CGFloat = 12
+  /// The width assumed before the chart has been measured: a 402 pt phone less the page margins.
+  static let assumedWidth: CGFloat = 370
+  static let maximumTicks = 4
+  static let minimumTicks = 2
+  static let minimumInset: CGFloat = 16
+
+  let tickCount: Int
+  /// Kept clear at each end of the x axis: half a label and a margin, so an end label is whole.
+  let edgeInset: CGFloat
+
+  init(chartWidth: CGFloat, labelPointSize: CGFloat) {
+    let width = chartWidth > 0 ? chartWidth : Self.assumedWidth
+    let label = labelPointSize * Self.labelEms
+    let inset = max(Self.minimumInset, (label / 2).rounded(.up) + 8)
+    let usable = width - labelPointSize * Self.yAxisEms - 2 * inset
+    // Ticks are `spacing` apart and `n` of them span `n - 1` gaps, each of which must hold a label
+    // and a gap: n - 1 <= usable / (label + gap).
+    let fitting = Int((usable / (label + Self.gap)).rounded(.down)) + 1
+    self.tickCount = min(Self.maximumTicks, max(Self.minimumTicks, fitting))
+    self.edgeInset = inset
+  }
+
+  /// Evenly spaced tick dates between the first and last, or `nil` where the automatic ticks are
+  /// kept: when the full four fit, or there is no span to divide.
+  func ticks(from first: Date?, to last: Date?) -> [Date]? {
+    guard tickCount < Self.maximumTicks, let first, let last, last > first else { return nil }
+    let step = last.timeIntervalSince(first) / Double(tickCount - 1)
+    return (0..<tickCount).map { first.addingTimeInterval(step * Double($0)) }
+  }
+}
+

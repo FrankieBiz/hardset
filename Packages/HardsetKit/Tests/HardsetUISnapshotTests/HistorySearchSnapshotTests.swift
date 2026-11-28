@@ -80,6 +80,13 @@
       try await Snapshot.capture("history-search-idle-dark") {
         Self.list(rows: Self.matches, text: "", state: .idle)
       }
+      // At an accessibility size the field says only "Search" and the scopes wrap on a line under it.
+      try await Snapshot.capture("history-search-idle-dark-ax3", typeSize: .accessibility3) {
+        Self.list(rows: Self.matches, text: "", state: .idle)
+      }
+      try await Snapshot.capture("history-search-idle-light", style: .light) {
+        Self.list(rows: Self.matches, text: "", state: .idle)
+      }
       let subtitle = HistoryCopy.anchoredSubtitle(month: "March 2023", shown: 3, total: 3)
       try await Snapshot.capture("history-anchored-dark") {
         Self.list(rows: Self.matches, text: "", state: .idle, subtitle: subtitle, anchored: true)

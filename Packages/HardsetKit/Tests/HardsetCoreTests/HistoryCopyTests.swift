@@ -30,8 +30,21 @@ struct HistoryCopyTests {
   @Test("The prompt names the three things search reads")
   func prompt() {
     for word in ["movement", "machine", "gym"] {
-      #expect(HistoryCopy.searchPrompt.contains(word))
+      #expect(HistoryCopy.searchPrompt.lowercased().contains(word))
     }
+  }
+
+  /// The prompt is drawn in a single-line field beside the month button, and the longer
+  /// "Search movement, machine or gym" was clipped after "machine". Its length is the guard; the
+  /// scopes it cannot hold at accessibility sizes are said in full by the hint and a wrapping line.
+  @Test("The prompt is short enough to read whole, and the scopes are said in full beside it")
+  func promptFitsAndScopesAreInFull() {
+    #expect(HistoryCopy.searchPrompt.count <= 24)
+    #expect(HistoryCopy.searchPromptCompact.count <= 8)
+    for word in ["movement", "machine", "gym"] {
+      #expect(HistoryCopy.searchScopes.contains(word))
+    }
+    #expect(HistoryCopy.searchLabel.contains("Search"))
   }
 
   @Test("A list that starts at a month says so, and says newer workouts are not on it")

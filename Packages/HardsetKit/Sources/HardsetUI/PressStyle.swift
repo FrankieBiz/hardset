@@ -168,19 +168,26 @@ private struct ControlPressBody<S: InsettableShape>: View {
 /// control is dimmed to 40% only when `dimsWhenDisabled` says so: an inert title keeps its
 /// contrast, an action that cannot be used does not.
 public struct InlineControlStyle: ButtonStyle {
+  let minWidth: CGFloat?
   let minHeight: CGFloat
   let alignment: Alignment
   let fullWidth: Bool
   let dimsWhenDisabled: Bool
   let outlinesRegion: Bool
 
+  /// - Parameter minWidth: A floor on the hit region's width, for a control whose label can be
+  ///   narrower than a fingertip, such as a single digit and a glyph. The label keeps its
+  ///   `alignment` inside the region, so a trailing figure stays on its column's edge. `nil`, the
+  ///   default, leaves the width to the label.
   public init(
+    minWidth: CGFloat? = nil,
     minHeight: CGFloat = Tokens.minimumTapTarget,
     alignment: Alignment = .leading,
     fullWidth: Bool = false,
     dimsWhenDisabled: Bool = false,
     outlinesRegion: Bool = false
   ) {
+    self.minWidth = minWidth
     self.minHeight = minHeight
     self.alignment = alignment
     self.fullWidth = fullWidth
@@ -190,13 +197,14 @@ public struct InlineControlStyle: ButtonStyle {
 
   public func makeBody(configuration: Configuration) -> some View {
     InlineControlBody(
-      configuration: configuration, minHeight: minHeight, alignment: alignment,
+      configuration: configuration, minWidth: minWidth, minHeight: minHeight, alignment: alignment,
       fullWidth: fullWidth, dimsWhenDisabled: dimsWhenDisabled, outlinesRegion: outlinesRegion)
   }
 }
 
 private struct InlineControlBody: View {
   let configuration: ButtonStyleConfiguration
+  let minWidth: CGFloat?
   let minHeight: CGFloat
   let alignment: Alignment
   let fullWidth: Bool
@@ -220,7 +228,9 @@ private struct InlineControlBody: View {
               .strokeBorder(Tokens.Color.controlEdge, lineWidth: Tokens.Stroke.hairline)
           }
         }
-        .frame(maxWidth: fullWidth ? .infinity : nil, minHeight: minHeight, alignment: alignment)
+        .frame(
+          minWidth: minWidth, maxWidth: fullWidth ? .infinity : nil, minHeight: minHeight,
+          alignment: alignment)
         // A control whose region is its outline, such as a footer action, is outlined around the
         // whole region and not around its label.
         .overlay {

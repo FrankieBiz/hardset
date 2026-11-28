@@ -8,6 +8,8 @@ import SwiftUI
 public struct HardsetSearchField: View {
   @Binding private var text: String
   private let prompt: String
+  private let accessibilityLabel: String?
+  private let accessibilityHint: String?
   private let requestsFocus: Bool
 
   @FocusState private var isFocused: Bool
@@ -15,11 +17,19 @@ public struct HardsetSearchField: View {
   /// - Parameter requestsFocus: Focuses the field, raising the keyboard, whenever this becomes
   ///   true, including on first appearance. A screen whose answer is usually typed passes true;
   ///   one that is browsed first leaves it false, so the keyboard does not cover the list.
+  /// - Parameter accessibilityLabel: The field's spoken name when the placeholder is not a name,
+  ///   such as a list of what is searched. `nil` speaks the prompt.
+  /// - Parameter accessibilityHint: What searching does or reads, spoken after the name, for a
+  ///   placeholder too short to say it.
   public init(
-    text: Binding<String>, prompt: String = "Search movements", requestsFocus: Bool = false
+    text: Binding<String>, prompt: String = "Search movements",
+    accessibilityLabel: String? = nil, accessibilityHint: String? = nil,
+    requestsFocus: Bool = false
   ) {
     self._text = text
     self.prompt = prompt
+    self.accessibilityLabel = accessibilityLabel
+    self.accessibilityHint = accessibilityHint
     self.requestsFocus = requestsFocus
   }
 
@@ -33,8 +43,9 @@ public struct HardsetSearchField: View {
       // The prompt is drawn in `chalkDim` rather than the system placeholder grey, which is
       // not measured against these surfaces.
       TextField(text: $text, prompt: Text(prompt).foregroundStyle(Tokens.Color.chalkDim)) {
-        Text(prompt)
+        Text(accessibilityLabel ?? prompt)
       }
+      .accessibilityHint(accessibilityHint ?? "")
       .font(Tokens.Text.label)
       .foregroundStyle(Tokens.Color.chalk)
       .tint(Tokens.Color.plateBlue)

@@ -179,6 +179,21 @@
       }
     }
 
+    /// The workout as the lifter leaves it a moment after the log tap, at an accessibility size: the
+    /// first set is logged while the screen is up, the rest bar and record notice are pinned, and the
+    /// screen scrolls the next set to just above them. The harness logs the set 0.4 s after the first
+    /// frame, as the coordinator does, so the screen sees the logged count rise; it settles for
+    /// longer than the follow beat and the scroll together.
+    @Test func liveSessionScrollsToTheNextSetAfterALog() async throws {
+      try await Snapshot.capture(
+        "session-after-log-dark-ax3", typeSize: .accessibility3, settle: .milliseconds(2_000)
+      ) { LogsOneSetHarness() }
+      try await Snapshot.capture(
+        "session-after-log-light-ax3", style: .light, typeSize: .accessibility3,
+        settle: .milliseconds(2_000)
+      ) { LogsOneSetHarness() }
+    }
+
     /// The list with nothing pinned over it, so every row can be seen. The first row not yet written
     /// is a blank warm-up, which cannot be logged, so the one blue control is the working set behind
     /// it: the primary action owns the accent wherever its row sits.
@@ -641,7 +656,9 @@
       }
     }
 
-    static func legPress() -> ExerciseLogState {
+    /// - Parameter firstSetLogged: `false` leaves every planned set unlogged, for a fixture that logs
+    ///   the first one itself.
+    static func legPress(firstSetLogged: Bool = true) -> ExerciseLogState {
       let exercise = ExerciseID()
       let machine = MachineID()
       let key = ProgressionKey(exerciseID: exercise, machineID: machine)
@@ -662,23 +679,25 @@
         machineIncrementKg: 10,
         snapshot: snapshot
       )
-      state.markLogged(slotID: state.slots[0].id, setID: SetID())
+      if firstSetLogged { state.markLogged(slotID: state.slots[0].id, setID: SetID()) }
       state.appendSlot(isWarmup: true)
       return state
     }
 
+    static func calfRaise() -> ExerciseLogState {
+      .build(
+        exerciseID: ExerciseID(),
+        exerciseName: "Standing Calf Raise",
+        snapshot: .empty(capturedAt: .distantPast))
+    }
+
     /// - Parameter pinned: Draws the rest bar and a record notice over the list, as the live screen
     ///   does just after a set; `false` leaves the list clear, so every row can be looked at.
-    static func session(pinned: Bool = true) -> some View {
+    /// - Parameter exercises: The workout, when a capture changes it after the first frame. `nil` is
+    ///   the fixed two-movement workout with its first set logged.
+    static func session(pinned: Bool = true, exercises: Binding<[ExerciseLogState]>? = nil) -> some View {
       SessionView(
-        exercises: .constant([
-          legPress(),
-          .build(
-            exerciseID: ExerciseID(),
-            exerciseName: "Standing Calf Raise",
-            snapshot: .empty(capturedAt: .distantPast)
-          ),
-        ]),
+        exercises: exercises ?? .constant([legPress(), calfRaise()]),
         unit: .kilograms,
         title: "Workout",
         gymName: "Metroflex Gym",
@@ -888,6 +907,25 @@
         }
       }
       .background(Tokens.Color.canvas)
+    }
+  }
+
+  /// The live session with a workout it logs a set of on its own, so a capture shows what the
+  /// screen does after the log and not only the state it starts in.
+  @MainActor
+  private struct LogsOneSetHarness: View {
+    @State private var exercises = [
+      Fixtures.legPress(firstSetLogged: false),
+      Fixtures.calfRaise(),
+    ]
+
+    var body: some View {
+      Fixtures.session(exercises: $exercises)
+        .task {
+          try? await Task.sleep(for: .milliseconds(400))
+          let slot = exercises[0].slots[0]
+          exercises[0].markLogged(slotID: slot.id, setID: SetID())
+        }
     }
   }
 #endif

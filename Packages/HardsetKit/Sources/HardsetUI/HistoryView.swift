@@ -193,7 +193,9 @@ public struct HistoryView: View {
   private func header(_ title: String, subtitle: String?) -> some View {
     ScreenHeader(title, subtitle: subtitle) {
       if let onShowSettings {
-        HeaderIconButton(systemImage: "gearshape", accessibilityLabel: "Settings", action: onShowSettings)
+        HeaderIconButton(
+          systemImage: "gearshape", accessibilityLabel: "Settings", style: .bare,
+          action: onShowSettings)
       }
     }
   }

@@ -208,7 +208,9 @@ public struct PitchEstimateDemo: View {
         citation: claim.source.citation)
       HardsetSegmentedControl(
         selection: $reps,
-        segments: Self.repOptions.map { HardsetSegment(Self.repsLabel($0), value: $0) })
+        segments: Self.repOptions.map { HardsetSegment(Self.repsLabel($0), value: $0) },
+        // Four equal columns at an accessibility size left "rep" and an orphaned "s".
+        accessibilityColumns: 2)
       Text("\(claim.source.title). \(claim.source.validRange ?? "")")
         .hardsetText(.caption)
         .foregroundStyle(Tokens.Color.chalkDim)
