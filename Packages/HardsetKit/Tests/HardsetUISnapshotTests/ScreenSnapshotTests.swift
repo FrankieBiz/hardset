@@ -36,6 +36,29 @@
         ScrollView { WorkoutReceiptView(receipt: receipt, unit: .pounds) }
           .background(Tokens.Color.canvas)
       }
+      // The planned-against-done ledger: two movements, the second with nothing logged, so the row
+      // it shows is a count and not a failure. The total is drawn because there are two rows.
+      let planned = PlannedVsDone(rows: [
+        .init(
+          id: UUID(), exerciseID: ExerciseID(), exerciseName: "Incline Press",
+          equipment: .machine("Cybex · Station 2"), plannedSets: 4, doneSets: 1),
+        .init(
+          id: UUID(), exerciseID: ExerciseID(), exerciseName: "Cable Row",
+          equipment: .freeWeight, plannedSets: 3, doneSets: 0),
+      ])
+      let plannedReceipt = WorkoutReceipt(
+        id: SessionID(), title: "Push", startedAt: Date(timeIntervalSince1970: 1793527200),
+        finishedAt: Date(timeIntervalSince1970: 1793530800),
+        lines: [
+          .init(
+            id: SetID(), exerciseName: "Incline Press", machineName: "Cybex · Station 2",
+            weightKg: 80, reps: 8, isWarmup: false)
+        ],
+        planned: planned)
+      try await Snapshot.capture("receipt-planned-dark-375", size: Snapshot.narrow) {
+        ScrollView { WorkoutReceiptView(receipt: plannedReceipt, unit: .kilograms) }
+          .background(Tokens.Color.canvas)
+      }
     }
 
     /// The scorecard at the top of a finished workout's receipt: a record on the yellow surface, the

@@ -54,6 +54,9 @@ public struct WorkoutReceiptView: View {
           .font(Tokens.Text.provenance)
           .foregroundStyle(Tokens.Color.chalkDim)
       }
+      if let planned = receipt.planned, !planned.rows.isEmpty {
+        plannedBlock(planned)
+      }
       if let scorecard = receipt.scorecard {
         scorecardBlock(scorecard)
       }
@@ -88,6 +91,41 @@ public struct WorkoutReceiptView: View {
     .foregroundStyle(Tokens.Color.chalk)
     .padding(Tokens.Spacing.section)
     .background(Tokens.Color.canvas)
+  }
+
+  // MARK: - Planned against done
+
+  /// What the plan asked for and what the record shows, as a quiet ledger beneath the date.
+  ///
+  /// Counts only, one line per movement: no card, divider, badge, colour or icon, and no failure
+  /// state for a movement that was not done. The total is stated only when there is more than one
+  /// row. The same view is rendered into the shared image, so this block holds no control.
+  private func plannedBlock(_ planned: PlannedVsDone) -> some View {
+    VStack(alignment: .leading, spacing: Tokens.Spacing.snug) {
+      Text(PlannedVsDoneCopy.heading)
+        .font(Tokens.Text.headline)
+        .foregroundStyle(Tokens.Color.chalkDim)
+        .accessibilityAddTraits(.isHeader)
+      ForEach(planned.rows) { row in
+        HStack(alignment: .firstTextBaseline, spacing: Tokens.Spacing.regular) {
+          Text(row.exerciseName)
+            .foregroundStyle(Tokens.Color.chalk)
+            .fixedSize(horizontal: false, vertical: true)
+          Spacer(minLength: Tokens.Spacing.regular)
+          Text(PlannedVsDoneCopy.rowText(row))
+            .foregroundStyle(Tokens.Color.chalkDim)
+            .fixedSize(horizontal: false, vertical: true)
+        }
+        .font(Tokens.Text.provenance)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(PlannedVsDoneCopy.accessibilityLabel(row))
+      }
+      if let total = PlannedVsDoneCopy.totalText(planned) {
+        Text(total)
+          .font(Tokens.Text.provenance)
+          .foregroundStyle(Tokens.Color.chalkDim)
+      }
+    }
   }
 
   // MARK: - Scorecard

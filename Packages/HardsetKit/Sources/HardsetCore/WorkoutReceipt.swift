@@ -12,14 +12,17 @@ public struct WorkoutReceipt: Hashable, Sendable, Identifiable {
   /// How the workout compares with last time, or nil when it cannot say: an imported workout makes
   /// no claim, and a workout with no working sets has nothing to compare.
   public let scorecard: WorkoutScorecard?
+  /// How much of the session's own plan was done, or nil when there is nothing to compare: an
+  /// imported workout, a workout built by hand, or a plan whose rows carried no set counts.
+  public let planned: PlannedVsDone?
 
   public init(
     id: SessionID, title: String, startedAt: Date, finishedAt: Date, lines: [Line],
-    notes: String = "", scorecard: WorkoutScorecard? = nil
+    notes: String = "", scorecard: WorkoutScorecard? = nil, planned: PlannedVsDone? = nil
   ) {
     self.id = id; self.title = title; self.startedAt = startedAt
     self.finishedAt = finishedAt; self.lines = lines; self.notes = notes
-    self.scorecard = scorecard
+    self.scorecard = scorecard; self.planned = planned
   }
 
   /// What a set was performed on, as far as the record shows.
