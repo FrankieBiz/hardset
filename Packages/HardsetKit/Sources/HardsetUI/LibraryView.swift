@@ -21,11 +21,17 @@ import SwiftUI
 /// on screen, because a word repeated on every row says nothing, though its spoken label still says
 /// it. The one warning on the screen is a small glyph beside "Needs a body part".
 ///
+/// Under those words, and only when the movement has logged working sets, a dim provenance line
+/// says how many and when it was last done. It is a count of what was logged, never a target, and a
+/// movement with nothing logged (or only warm-ups) draws no line at all.
+///
 /// Draws only its scrolling content. The screen that hosts it owns the title, the reads and the
 /// editor, because those need storage this view does not have.
 public struct LibraryView: View {
   private let sections: [LibrarySection]
   private let counts: [(category: MuscleFilterCategory, count: Int)]
+  private let usage: [ExerciseID: LibraryUsage]
+  private let now: Date
   private let onSelect: (CatalogEntry) -> Void
 
   @Environment(\.dynamicTypeSize) private var dynamicTypeSize
@@ -33,14 +39,22 @@ public struct LibraryView: View {
   /// - Parameters:
   ///   - sections: `LibraryIndex.sections`, in the order to draw them.
   ///   - counts: `LibraryIndex.counts`, one entry per body part.
+  ///   - usage: `CatalogSeeder.libraryUsage`, keyed by movement. A movement with no entry draws no
+  ///     usage line.
+  ///   - now: The moment the entries and usage were read, so "last done" is measured from the same
+  ///     instant as the counts.
   ///   - onSelect: Called for a movement the lifter can edit. Never called for a curated one.
   public init(
     sections: [LibrarySection],
     counts: [(category: MuscleFilterCategory, count: Int)],
+    usage: [ExerciseID: LibraryUsage],
+    now: Date,
     onSelect: @escaping (CatalogEntry) -> Void
   ) {
     self.sections = sections
     self.counts = counts
+    self.usage = usage
+    self.now = now
     self.onSelect = onSelect
   }
 
@@ -123,7 +137,9 @@ public struct LibraryView: View {
           // Said as a whole, with the word the screen does not draw, so a curated movement still
           // announces what it is.
           .accessibilityElement(children: .ignore)
-          .accessibilityLabel(Self.curatedSpokenLabel(entry))
+          .accessibilityLabel(
+            Self.curatedSpokenLabel(entry, usage: usage[entry.id], now: now)
+          )
       } else {
         Button {
           onSelect(entry)
@@ -157,6 +173,13 @@ public struct LibraryView: View {
         Text(Self.detail(for: entry))
           .font(Tokens.Text.provenance)
           .foregroundStyle(Tokens.Color.chalkDim)
+        if let line = usage[entry.id]?.line(now: now) {
+          Text(line)
+            .font(Tokens.Text.provenance.monospacedDigit())
+            .foregroundStyle(Tokens.Color.chalkDim)
+            .fixedSize(horizontal: false, vertical: true)
+            .accessibilityLabel(usage[entry.id]?.spokenLine(now: now) ?? line)
+        }
         if dynamicTypeSize.isAccessibilitySize {
           HStack(spacing: Tokens.Spacing.regular) { marks(for: entry) }
             .padding(.top, Tokens.Spacing.tight)
@@ -193,9 +216,10 @@ public struct LibraryView: View {
   }
 
   /// "Barbell Back Squat, Quads, also Glutes, Barbell, Curated": what the row draws, plus the word it
-  /// leaves out.
-  static func curatedSpokenLabel(_ entry: CatalogEntry) -> String {
-    [entry.name, detail(for: entry), entry.modality?.label, "Curated"]
+  /// leaves out. The usage line is appended last, spoken with commas, because a curated row is read
+  /// as one element and would otherwise omit what the screen now draws.
+  static func curatedSpokenLabel(_ entry: CatalogEntry, usage: LibraryUsage?, now: Date) -> String {
+    [entry.name, detail(for: entry), entry.modality?.label, "Curated", usage?.spokenLine(now: now)]
       .compactMap { $0 }
       .joined(separator: ", ")
   }
@@ -260,6 +284,7 @@ public struct LibraryView: View {
     ]
     return LibraryView(
       sections: LibraryIndex.sections(entries), counts: LibraryIndex.counts(entries),
+      usage: [:], now: .now,
       onSelect: { _ in }
     )
   }

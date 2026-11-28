@@ -13,7 +13,7 @@ import SwiftUI
 /// could check. A failed save keeps the editor up with everything typed and says why in an alert.
 @MainActor
 public struct LibraryScreen: View {
-  @State private var snapshot = SnapshotLoader<[CatalogEntry]>()
+  @State private var snapshot = SnapshotLoader<Loaded>()
   @State private var editor: LibraryEditorTarget?
   @State private var saveError: String?
   /// Bumped to re-read after a save.
@@ -42,10 +42,12 @@ public struct LibraryScreen: View {
           )
           .padding(.top, Tokens.Spacing.section)
         }
-      } else if let entries = snapshot.value {
+      } else if let loaded = snapshot.value {
         LibraryView(
-          sections: LibraryIndex.sections(entries),
-          counts: LibraryIndex.counts(entries),
+          sections: LibraryIndex.sections(loaded.entries),
+          counts: LibraryIndex.counts(loaded.entries),
+          usage: loaded.usage,
+          now: loaded.readAt,
           onSelect: { editor = .editing($0) }
         )
       } else {
@@ -81,7 +83,13 @@ public struct LibraryScreen: View {
 
   private func load() async {
     let catalog = catalog
-    await snapshot.load { try catalog.libraryExercises() }
+    await snapshot.load {
+      // One moment for both reads, so a count and a "last done" cannot describe different clocks.
+      let now = Date.now
+      let entries = try catalog.libraryExercises()
+      let usage = try catalog.libraryUsage(asOf: now)
+      return Loaded(entries: entries, usage: usage, readAt: now)
+    }
   }
 
   private func save(_ target: LibraryEditorTarget, name: String, attribution: CustomAttribution) {
@@ -110,6 +118,15 @@ public struct LibraryScreen: View {
       saveError = "“\(name)” could not be saved. Try again."
     }
   }
+}
+
+/// One read of the Library: the movements, what the lifter has logged on each, and the moment both
+/// were read. The usage read is bounded by `readAt`, so the line's "last done" is measured from the
+/// same instant as the counts.
+private nonisolated struct Loaded: Sendable {
+  let entries: [CatalogEntry]
+  let usage: [ExerciseID: LibraryUsage]
+  let readAt: Date
 }
 
 /// What the library's editor is open on: a new movement, or one the lifter is retagging.
