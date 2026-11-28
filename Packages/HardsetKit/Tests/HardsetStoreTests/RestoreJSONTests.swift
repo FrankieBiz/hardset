@@ -349,4 +349,26 @@ struct RestoreJSONTests {
     let text = "\u{FEFF}\n  " + (try await RestoreFixture.exportJSON(source))
     #expect(try WorkoutCSVImport.preview(text, strongUnit: .kilograms).restore?.layout == .json)
   }
+
+  /// The card's dates come from the preview the store hands it, not a second read of the file.
+  @Test("The preview's own sessions give the span of dates the card draws")
+  func previewSpanNamesTheFileDates() async throws {
+    let (source, _) = try await RestoreFixture.populated()
+    let preview = try RestoreJSON.preview(try await RestoreFixture.exportJSON(source))
+    let starts = preview.sessions.map(\.startedAt)
+    let earliest = try #require(starts.min())
+    let latest = try #require(starts.max())
+    let span = try #require(ImportSpan(starts: starts, now: Date(timeIntervalSince1970: 1_800_000_000)))
+    #expect(span.earliestStart == earliest)
+    #expect(span.latestStart == latest)
+    #expect(span.futureStarts == 0)
+
+    var calendar = Calendar(identifier: .gregorian)
+    calendar.timeZone = TimeZone(identifier: "UTC")!
+    let locale = Locale(identifier: "en_GB")
+    let style = Date.FormatStyle(locale: locale, timeZone: calendar.timeZone)
+      .day().month(.abbreviated).year()
+    #expect(span.line(calendar: calendar, locale: locale)
+      == "Workout dates \(earliest.formatted(style)) to \(latest.formatted(style))")
+  }
 }
