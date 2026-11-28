@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Changelog — Hardset</title>
+    <meta
+      name="description"
+      content="What each Hardset release changes, written for lifters deciding whether to update."
+    />
+    <meta name="theme-color" content="#050608" />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <a class="skip" href="#main">Skip to content</a>
+
+    <header class="masthead">
+      <div class="wrap">
+        <a class="wordmark" href="index.html">Hardset <span>· the log that won’t lie to you</span></a>
+        <nav class="nav" aria-label="Site">
+          <a href="privacy.html">Privacy</a>
+          <a href="support.html">Support</a>
+        </nav>
+      </div>
+    </header>
+
+    <main id="main" class="section">
+      <div class="wrap">
+        <div class="section-head">
+          <p class="eyebrow">Changelog</p>
+          <h1>What changed, in plain terms.</h1>
+          <p class="body">
+            Newest release first. Each entry says what you can do now that you could not before,
+            and anything that could affect the history already on your phone.
+          </p>
+        </div>
+
+        <div class="prose">
+          <section>
+            <h2>1.0 — first release</h2>
+            <p class="small">
+              Hardset 1.0 is being prepared and is not yet on the App Store. It needs an iPhone
+              running iOS 26.1 or later, in portrait.
+            </p>
+            <h3>Logging</h3>
+            <ul>
+              <li>Log a set with one tap on its check, or type the weight and reps on Hardset’s own keypad. The system keyboard never opens while you log.</li>
+              <li>Correct a saved set from the live workout or from a finished workout’s receipt. Volume, records, and progress are recalculated from the corrected figures.</li>
+              <li>A rest countdown that keeps its own deadline, so leaving the app does not restart it.</li>
+              <li>History is kept per movement and per machine. Switching machines starts a separate series, and the app never draws progress across the switch.</li>
+            </ul>
+            <h3>Numbers that say how they were made</h3>
+            <ul>
+              <li>Estimated one-rep maxes show their confidence. A formula’s estimate is Moderate up to 10 reps, Low at 11 and 12, and not produced above 12. Only a measured single is High.</li>
+              <li>The weekly Volume view counts a working set as 1.0 for each direct muscle and 0.5 for each indirect one, draws no target line, and opens the sets behind any count under “Worked from.”</li>
+              <li>A new record names the set it beat, and “Worked from” lists the sets that fed it and the ones left out.</li>
+            </ul>
+            <h3>Your data</h3>
+            <ul>
+              <li>No account, no server, and no sync. Everything is stored on the phone.</li>
+              <li>Export your history as CSV, JSON, or SQLite from Settings. JSON and CSV can be restored in Hardset; SQLite is a copy for keeping and inspecting, and Hardset cannot read it back.</li>
+              <li>Import a Strong or Hevy CSV. Imported history stays on its own series because it records no machine.</li>
+            </ul>
+            <h3>Hardset Lifetime</h3>
+            <ul>
+              <li>Logging, history, import, and every export are free. The optional one-time Lifetime purchase adds muscle history: when each muscle was last trained, the last four weeks against the four before, your lifetime total, and the shape of the last twelve weeks. There is no subscription.</li>
+            </ul>
+            <p>
+              <strong>Updating:</strong> this is the first release, so there is nothing to carry
+              over. Because the phone holds the only copy of your history, export a JSON file
+              before you delete the app or move to a new phone.
+            </p>
+          </section>
+        </div>
+      </div>
+    </main>
+
+    <footer class="footer">
+      <div class="wrap">
+        <div>
+          <p>Hardset is made by Frankie Bisignano. © 2026 Frankie Bisignano.</p>
+          <p>Apple, iPhone, and App Store are trademarks of Apple Inc.</p>
+        </div>
+        <nav aria-label="Footer">
+          <a href="index.html">Home</a>
+          <a href="privacy.html">Privacy policy</a>
+          <a href="support.html">Support</a>
+          <a href="mailto:frankabisignano@gmail.com">Email</a>
+        </nav>
+      </div>
+    </footer>
+  </body>
+</html>

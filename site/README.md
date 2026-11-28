@@ -1,6 +1,6 @@
 # Hardset static site
 
-Three public pages and one stylesheet. Plain HTML and CSS only: no framework, no
+Four public pages and one stylesheet. Plain HTML and CSS only: no framework, no
 build step, no JavaScript, no analytics, no cookies, no external fonts, and no
 requests to any third party.
 
@@ -9,6 +9,7 @@ requests to any third party.
 | `index.html` | Landing and marketing page |
 | `privacy.html` | Privacy policy |
 | `support.html` | Support and troubleshooting |
+| `changelog.html` | Release notes in user terms |
 | `styles.css` | The whole site's styling |
 
 The copy is grounded in `docs/release/PRIVACY_POLICY_DRAFT.md` and
