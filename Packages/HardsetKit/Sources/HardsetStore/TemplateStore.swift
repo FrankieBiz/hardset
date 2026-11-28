@@ -105,6 +105,27 @@ public nonisolated struct TemplateStore: Sendable {
     return draft
   }
 
+  /// How this workout has gone: its recent finished sessions, newest first, with the movements
+  /// each session actually logged, their working sets and their measured volume.
+  ///
+  /// Sessions follow the same rule as the rotation (`Session.isCounted`): finished, with at least
+  /// one working set. Open sessions, imported sessions (they carry no `templateID`) and another
+  /// plan's sessions never appear. A movement comes from the sets themselves, grouped by movement
+  /// and machine, so one added or removed mid-workout is still reported from what was logged.
+  ///
+  /// One read of the page, one count of the whole history, one read of the page's sets, and one
+  /// read for the names those sets use. Volume is summed from the fetched rows by `SessionVolume`'s
+  /// definition, Σ weight × reps over working sets, because that type is built from live logger
+  /// state and cannot take a plain set list.
+  public func history(for id: TemplateID, limit: Int = 12) async throws -> TemplateHistory {
+    try Task.checkCancellation()
+    let history = try await database.read { db in
+      try Self.readHistory(for: id, limit: limit, in: db)
+    }
+    try Task.checkCancellation()
+    return history
+  }
+
   /// The most recent session started from this workout that counts as done, if any: finished, with
   /// a working set. It is the "last time" the up-next card compares against, so it follows the same
   /// rule as the rotation.
@@ -177,6 +198,106 @@ public nonisolated struct TemplateStore: Sendable {
         lastDoneAt: lastDone[row.id]
       )
     }
+  }
+
+  /// The plan's movement order, by movement and machine. A set whose movement is no longer in the
+  /// plan has no place and sorts after the plan by its movement name, rather than being dropped.
+  private struct MovementKey: Hashable {
+    let exerciseID: UUID
+    let machineID: UUID?
+
+    init(exerciseID: UUID, machineID: UUID?) {
+      self.exerciseID = exerciseID
+      self.machineID = machineID
+    }
+
+    /// `"exerciseID|machineID"`, the id a movement's row carries across renders.
+    var id: String {
+      let exercise = ExerciseID(rawValue: exerciseID).description
+      let machine = machineID.map { MachineID(rawValue: $0).description } ?? ""
+      return "\(exercise)|\(machine)"
+    }
+  }
+
+  private static func readHistory(
+    for id: TemplateID, limit: Int, in db: Database
+  ) throws -> TemplateHistory {
+    let pageLimit = max(limit, 0)
+    let sessions = try Session
+      .where { $0.templateID.eq(id.rawValue) && $0.isCounted }
+      .order { ($0.startedAt.desc(), $0.id.desc()) }
+      .limit(pageLimit)
+      .fetchAll(db)
+    let total = try Session
+      .where { $0.templateID.eq(id.rawValue) && $0.isCounted }
+      .fetchCount(db)
+    guard !sessions.isEmpty else {
+      return TemplateHistory(sessions: [], totalSessionCount: total, limit: pageLimit)
+    }
+
+    let sessionIDs = sessions.map(\.id)
+    // The plan's current order, so the sheet lists movements the way the workout does. A set from a
+    // movement the plan no longer holds has no rank and falls back to its name below.
+    let planRows = try StoredTemplateExercise
+      .where { $0.templateID.eq(id.rawValue) }
+      .order { ($0.position, $0.createdAt, $0.id) }
+      .fetchAll(db)
+    var planRank: [MovementKey: Int] = [:]
+    for (rank, row) in planRows.enumerated() {
+      planRank[MovementKey(exerciseID: row.exerciseID, machineID: row.machineID)] = rank
+    }
+
+    // One read for every working set on the page. Warm-ups are excluded here, in SQL, exactly as
+    // `SessionVolume` excludes them.
+    let sets = try LoggedSet
+      .where { $0.sessionID.in(sessionIDs) && !$0.isWarmup }
+      .order { ($0.completedAt, $0.setOrdinal, $0.id) }
+      .fetchAll(db)
+
+    let exerciseNames = try exerciseNames(Set(sets.map(\.exerciseID)), in: db)
+    let machineNames = try machineNames(Set(sets.compactMap(\.machineID)), in: db)
+    let setsBySession = Dictionary(grouping: sets, by: \.sessionID)
+
+    let page = sessions.map { session in
+      let grouped = Dictionary(
+        grouping: setsBySession[session.id] ?? [],
+        by: { MovementKey(exerciseID: $0.exerciseID, machineID: $0.machineID) })
+      let movements = grouped.map { key, own -> (rank: Int, movement: TemplateHistory.Movement) in
+        (
+          planRank[key] ?? Int.max,
+          TemplateHistory.Movement(
+            id: key.id,
+            exerciseName: exerciseNames[key.exerciseID] ?? "Unknown movement",
+            machineName: key.machineID.flatMap { machineNames[$0] },
+            workingSetCount: workingSetCount(of: own),
+            volumeKg: workingVolume(of: own)
+          )
+        )
+      }
+      .sorted { lhs, rhs in
+        if lhs.rank != rhs.rank { return lhs.rank < rhs.rank }
+        if lhs.movement.exerciseName != rhs.movement.exerciseName {
+          return lhs.movement.exerciseName < rhs.movement.exerciseName
+        }
+        return (lhs.movement.machineName ?? "") < (rhs.movement.machineName ?? "")
+      }
+      .map(\.movement)
+      return TemplateHistory.Session(
+        id: SessionID(rawValue: session.id),
+        // `isCounted` requires a finish time; the start is only a type-level fallback.
+        finishedAt: session.finishedAt ?? session.startedAt,
+        movements: movements)
+    }
+    return TemplateHistory(sessions: page, totalSessionCount: total, limit: pageLimit)
+  }
+
+  /// Working sets in rows the read already filtered: warm-ups never reach here.
+  private static func workingSetCount(of sets: [LoggedSet]) -> Int { sets.count }
+
+  /// Σ weight × reps over those rows, which is `SessionVolume`'s definition. Kept beside the count
+  /// so a history row and the session total cannot be summed two different ways.
+  private static func workingVolume(of sets: [LoggedSet]) -> Double {
+    sets.reduce(0) { $0 + $1.weightKg * Double($1.reps) }
   }
 
   private static func readDraft(

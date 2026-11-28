@@ -47,7 +47,7 @@
             WorkoutCardsView(
               cards: cards, failedStartTemplate: failedStartTemplate,
               failedStartMessage: failedStartMessage,
-              onStart: { _ in }, onEdit: { _ in })
+              onStart: { _ in }, onEdit: { _ in }, onHistory: { _ in })
           }
           VStack(alignment: .leading, spacing: Tokens.Spacing.regular) {
             Button {
