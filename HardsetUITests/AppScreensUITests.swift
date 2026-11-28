@@ -580,8 +580,10 @@ final class AppScreensUITests: XCTestCase {
       XCTFail("The first seeded workout did not return to the start screen")
       return false
     }
-    // Three more of the same, started from "Repeat last workout". Each is typed out again, not
-    // relied on to be prefilled, so the four sessions hold the same set whatever the prefill does.
+    // Three more of the same, started from "Repeat last workout". The row opens prefilled from last
+    // time ("Set 1, 100 lb, 8 reps, last time 100 lb for 8, next to log"), so one tap on its check
+    // logs it; typing over a prefilled row is ambiguous, because its reps figure is itself a button
+    // labelled "8" beside the keypad's key.
     for index in 2...4 {
       let again = app.buttons["Repeat last workout"]
       guard again.waitForExistence(timeout: 10) else {
@@ -589,7 +591,8 @@ final class AppScreensUITests: XCTestCase {
         return false
       }
       again.tap()
-      guard typeAndLogPendingSet(app, weight: ["1", "0", "0"], reps: ["8"], loggedCount: 1),
+      guard typeAndLogPendingSet(
+        app, weight: ["1", "0", "0"], reps: ["8"], loggedCount: 1, usesPrefill: true),
         finishWorkout(app)
       else { return false }
     }
@@ -1088,10 +1091,13 @@ final class AppScreensUITests: XCTestCase {
   }
 
   /// Types a weight and reps into the first set row that is not yet logged, through the logger's own
-  /// keypad as the other journeys do, logs it, and waits until `loggedCount` rows are logged.
+  /// keypad as the other journeys do, logs it, and waits until `loggedCount` rows are logged. With
+  /// `usesPrefill` the row must already hold the figures (a repeated workout's does) and is logged
+  /// by its check alone.
   @MainActor
   private func typeAndLogPendingSet(
-    _ app: XCUIApplication, weight: [String], reps: [String], loggedCount: Int
+    _ app: XCUIApplication, weight: [String], reps: [String], loggedCount: Int,
+    usesPrefill: Bool = false
   ) -> Bool {
     let pending = app.descendants(matching: .any).matching(
       NSPredicate(format: "label BEGINSWITH 'Set 1' AND NOT (label CONTAINS ', logged')")
@@ -1100,15 +1106,22 @@ final class AppScreensUITests: XCTestCase {
       XCTFail("No set row was waiting to be logged")
       return false
     }
-    pending.coordinate(withNormalizedOffset: CGVector(dx: 0.44, dy: 0.5)).tap()
-    guard app.buttons["Next field"].waitForExistence(timeout: 5) else {
-      XCTFail("The weight did not open the keypad")
-      return false
+    if usesPrefill {
+      XCTAssertTrue(
+        pending.label.contains("\(weight.joined()) ")
+          && pending.label.contains(", \(reps.joined()) reps"),
+        "A repeated workout's row must open prefilled with last time's set: \(pending.label)")
+    } else {
+      pending.coordinate(withNormalizedOffset: CGVector(dx: 0.44, dy: 0.5)).tap()
+      guard app.buttons["Next field"].waitForExistence(timeout: 5) else {
+        XCTFail("The weight did not open the keypad")
+        return false
+      }
+      for key in weight { app.buttons[key].tap() }
+      app.buttons["Next field"].tap()
+      for key in reps { app.buttons[key].tap() }
+      app.buttons["Done"].tap()
     }
-    for key in weight { app.buttons[key].tap() }
-    app.buttons["Next field"].tap()
-    for key in reps { app.buttons[key].tap() }
-    app.buttons["Done"].tap()
     pending.coordinate(withNormalizedOffset: CGVector(dx: 0.93, dy: 0.5)).tap()
     let logged = app.descendants(matching: .any).matching(
       NSPredicate(format: "label BEGINSWITH 'Set 1,' AND label CONTAINS ', logged'"))
