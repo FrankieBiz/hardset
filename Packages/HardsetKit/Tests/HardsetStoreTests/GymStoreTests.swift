@@ -344,4 +344,158 @@ struct GymStoreTests {
     // Unknown stays nil rather than defaulting to a plausible-looking number.
     #expect(byName["Cable"]?.stackIncrementKg == nil)
   }
+
+  // MARK: - Usage
+
+  /// What a machine's row states: its working sets, the sessions holding them, and the newest
+  /// work. A warm-up is not a working set even when it is the heaviest load in the room.
+  @Test("Usage counts sessions and working sets, excludes warm-ups and dates the work")
+  func machineUsageCountsWorkingSets() async throws {
+    let (_, gyms, logger, exercise) = try fixture()
+    let gym = try gyms.createGym(name: "Gym", now: now)
+    let machine = try gyms.createMachine(at: gym, name: "Leg Press", now: now)
+
+    let first = try logger.startSession(gymID: gym, at: now)
+    _ = try logger.logSet(
+      sessionID: first, exerciseID: exercise, machineID: machine,
+      draft: SetEntryDraft(weightKg: 100, reps: 8), setOrdinal: 0,
+      at: now.addingTimeInterval(60))
+    _ = try logger.logSet(
+      sessionID: first, exerciseID: exercise, machineID: machine,
+      draft: SetEntryDraft(weightKg: 110, reps: 6), setOrdinal: 1,
+      at: now.addingTimeInterval(120))
+    // Heavier than every working set, and still not work.
+    _ = try logger.logSet(
+      sessionID: first, exerciseID: exercise, machineID: machine,
+      draft: SetEntryDraft(weightKg: 200, reps: 5), setOrdinal: 2, isWarmup: true,
+      at: now.addingTimeInterval(180))
+
+    let second = try logger.startSession(gymID: gym, at: now.addingTimeInterval(86_400))
+    let newest = now.addingTimeInterval(86_460)
+    _ = try logger.logSet(
+      sessionID: second, exerciseID: exercise, machineID: machine,
+      draft: SetEntryDraft(weightKg: 105, reps: 8), setOrdinal: 0, at: newest)
+
+    let inventory = try await gyms.inventory()
+    let usage = try #require(inventory.first { $0.gym.id == gym }?.usage[machine])
+    #expect(usage.sessionCount == 2)
+    #expect(usage.workingSetCount == 3)
+    #expect(usage.heaviestLoadKg == 110)
+    #expect(usage.lastUsedAt == newest)
+  }
+
+  @Test("One machine's sets never enter another's usage")
+  func machineUsageIsScopedToItsOwnMachine() async throws {
+    let (_, gyms, logger, exercise) = try fixture()
+    let gym = try gyms.createGym(name: "Gym", now: now)
+    let press = try gyms.createMachine(at: gym, name: "Leg Press", now: now)
+    let row = try gyms.createMachine(at: gym, name: "Chest Press", now: now)
+
+    let pressSession = try logger.startSession(gymID: gym, at: now)
+    _ = try logger.logSet(
+      sessionID: pressSession, exerciseID: exercise, machineID: press,
+      draft: SetEntryDraft(weightKg: 100, reps: 8), setOrdinal: 0, at: now.addingTimeInterval(60))
+    _ = try logger.logSet(
+      sessionID: pressSession, exerciseID: exercise, machineID: press,
+      draft: SetEntryDraft(weightKg: 110, reps: 6), setOrdinal: 1, at: now.addingTimeInterval(120))
+
+    let rowSession = try logger.startSession(gymID: gym, at: now.addingTimeInterval(86_400))
+    _ = try logger.logSet(
+      sessionID: rowSession, exerciseID: exercise, machineID: row,
+      draft: SetEntryDraft(weightKg: 300, reps: 5), setOrdinal: 0,
+      at: now.addingTimeInterval(86_460))
+
+    let inventory = try await gyms.inventory()
+    let usage = try #require(inventory.first { $0.gym.id == gym }?.usage)
+    #expect(usage[press]?.sessionCount == 1)
+    #expect(usage[press]?.workingSetCount == 2)
+    #expect(usage[press]?.heaviestLoadKg == 110)
+    #expect(usage[row]?.sessionCount == 1)
+    #expect(usage[row]?.workingSetCount == 1)
+    #expect(usage[row]?.heaviestLoadKg == 300)
+  }
+
+  /// A set's own `machineID` is its only attribution. A set with none is not inferred from its
+  /// session or its plan row, because a lifter can switch machines mid-exercise.
+  @Test("A set with no machine counts for no machine")
+  func unattributedSetsBelongToNoMachine() async throws {
+    let (_, gyms, logger, exercise) = try fixture()
+    let gym = try gyms.createGym(name: "Gym", now: now)
+    let machine = try gyms.createMachine(at: gym, name: "Leg Press", now: now)
+
+    let attributed = try logger.startSession(gymID: gym, at: now)
+    _ = try logger.logSet(
+      sessionID: attributed, exerciseID: exercise, machineID: machine,
+      draft: SetEntryDraft(weightKg: 100, reps: 8), setOrdinal: 0, at: now.addingTimeInterval(60))
+
+    let freeWeight = try logger.startSession(gymID: gym, at: now.addingTimeInterval(86_400))
+    _ = try logger.logSet(
+      sessionID: freeWeight, exerciseID: exercise,
+      draft: SetEntryDraft(weightKg: 400, reps: 1), setOrdinal: 0,
+      at: now.addingTimeInterval(86_460))
+
+    let inventory = try await gyms.inventory()
+    let usage = try #require(inventory.first { $0.gym.id == gym }?.usage)
+    #expect(usage.count == 1)
+    #expect(usage[machine]?.workingSetCount == 1)
+    #expect(usage[machine]?.heaviestLoadKg == 100)
+  }
+
+  /// Absence is the answer for a machine nothing has been logged on; a zero entry would let a
+  /// caller compose facts the log does not hold.
+  @Test("A machine with no working sets has no usage entry")
+  func unusedMachineIsAbsent() async throws {
+    let (_, gyms, logger, exercise) = try fixture()
+    let gym = try gyms.createGym(name: "Gym", now: now)
+    let used = try gyms.createMachine(at: gym, name: "Leg Press", now: now)
+    let unused = try gyms.createMachine(at: gym, name: "Cable", now: now)
+
+    let session = try logger.startSession(gymID: gym, at: now)
+    _ = try logger.logSet(
+      sessionID: session, exerciseID: exercise, machineID: used,
+      draft: SetEntryDraft(weightKg: 100, reps: 8), setOrdinal: 0, at: now)
+
+    let inventory = try await gyms.inventory()
+    let usage = try #require(inventory.first { $0.gym.id == gym }?.usage)
+    #expect(usage[unused] == nil)
+    #expect(usage[used]?.workingSetCount == 1)
+  }
+
+  /// Usage is keyed by identity, so correcting a typo'd name does not orphan the history.
+  @Test("Renaming a machine keeps its usage")
+  func renameKeepsUsage() async throws {
+    let (_, gyms, logger, exercise) = try fixture()
+    let gym = try gyms.createGym(name: "Gym", now: now)
+    let machine = try gyms.createMachine(at: gym, name: "Leg Pres", now: now)
+
+    let session = try logger.startSession(gymID: gym, at: now)
+    _ = try logger.logSet(
+      sessionID: session, exerciseID: exercise, machineID: machine,
+      draft: SetEntryDraft(weightKg: 100, reps: 8), setOrdinal: 0, at: now)
+
+    try gyms.renameMachine(machine, name: "Leg Press", brand: "Cybex")
+    let inventory = try await gyms.inventory()
+    let item = try #require(inventory.first { $0.gym.id == gym })
+    #expect(item.machines.map(\.displayName) == ["Cybex Leg Press"])
+    #expect(item.usage[machine]?.workingSetCount == 1)
+    #expect(item.usage[machine]?.heaviestLoadKg == 100)
+  }
+
+  @Test("An archived machine's usage is not in the inventory")
+  func archivedMachineUsageIsAbsent() async throws {
+    let (_, gyms, logger, exercise) = try fixture()
+    let gym = try gyms.createGym(name: "Gym", now: now)
+    let machine = try gyms.createMachine(at: gym, name: "Leg Press", now: now)
+
+    let session = try logger.startSession(gymID: gym, at: now)
+    _ = try logger.logSet(
+      sessionID: session, exerciseID: exercise, machineID: machine,
+      draft: SetEntryDraft(weightKg: 100, reps: 8), setOrdinal: 0, at: now)
+
+    try gyms.archiveMachine(machine)
+    let inventory = try await gyms.inventory()
+    let item = try #require(inventory.first { $0.gym.id == gym })
+    #expect(item.machines.isEmpty)
+    #expect(item.usage[machine] == nil)
+  }
 }

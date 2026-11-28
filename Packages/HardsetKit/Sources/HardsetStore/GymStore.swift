@@ -1,4 +1,5 @@
 import Foundation
+import GRDB
 import HardsetCore
 import SQLiteData
 
@@ -118,18 +119,66 @@ public nonisolated struct GymStore: Sendable {
     return trimmed
   }
 
-  /// Every live gym with its live machines, by name, from one read. For managing what was
-  /// added, not for choosing: the pickers stay recency-first.
+  /// Every live gym with its live machines and what the log holds for each machine, by name, from
+  /// one read. For managing what was added, not for choosing: the pickers stay recency-first.
   public func inventory() async throws -> [GymInventory] {
     try Task.checkCancellation()
     return try await database.read { db in
       let gyms = try Gym.where { !$0.isArchived }.order { ($0.name, $0.id) }.fetchAll(db)
       let machines = try Machine.where { !$0.isArchived }.order { ($0.name, $0.brand, $0.id) }.fetchAll(db)
+      // One grouped read of the whole log, then keep only the machines this inventory draws. The
+      // filter is what keeps an archived machine's working sets, or a live machine at an archived
+      // gym, from reappearing beside live equipment; it never adds a machine the existing machine
+      // read left out.
+      let liveGymIDs = Set(gyms.map(\.id))
+      let shownIDs = Set(machines.filter { liveGymIDs.contains($0.gymID) }.map(\.id))
+      let usage = try Self.readMachineUsage(in: db).filter { shownIDs.contains($0.key.rawValue) }
       let byGym = Dictionary(grouping: machines, by: \.gymID)
       return gyms.map { gym in
-        GymInventory(gym: GymRecord(row: gym), machines: (byGym[gym.id] ?? []).map(MachineRecord.init(row:)))
+        GymInventory(
+          gym: GymRecord(row: gym),
+          machines: (byGym[gym.id] ?? []).map(MachineRecord.init(row:)),
+          usage: usage
+        )
       }
     }
+  }
+
+  /// What each machine's own working sets add up to, from one grouped pass over the log.
+  ///
+  /// Only the set's `machineID` attributes it: a set with no machine belongs to no machine, never
+  /// to its session's or its plan row's. Warm-ups are excluded by the query, so they cannot be
+  /// counted and then subtracted. A machine with no working sets has no row here, and therefore no
+  /// entry in the returned map: the absence is the answer, not a zero.
+  private static func readMachineUsage(
+    in db: Database
+  ) throws -> [MachineID: MachineUsage] {
+    let rows = try Row.fetchAll(
+      db,
+      sql: """
+        SELECT machineID,
+               COUNT(DISTINCT sessionID) AS sessionCount,
+               COUNT(*) AS workingSetCount,
+               MAX(weightKg) AS heaviestLoadKg,
+               MAX(completedAt) AS lastUsedAt
+        FROM loggedSets
+        WHERE machineID IS NOT NULL AND isWarmup = 0
+        GROUP BY machineID
+        """
+    )
+    return Dictionary(
+      uniqueKeysWithValues: rows.compactMap { row in
+        guard let id: UUID = row["machineID"] else { return nil }
+        return (
+          MachineID(rawValue: id),
+          MachineUsage(
+            sessionCount: row["sessionCount"],
+            workingSetCount: row["workingSetCount"],
+            heaviestLoadKg: row["heaviestLoadKg"],
+            lastUsedAt: row["lastUsedAt"]
+          )
+        )
+      })
   }
 
   // MARK: - Machines
@@ -323,6 +372,19 @@ public nonisolated enum MachineProfileError: Error, Equatable, Sendable {
 public nonisolated struct GymInventory: Hashable, Sendable, Identifiable {
   public let gym: GymRecord
   public let machines: [MachineRecord]
+  /// What the log holds for each machine, keyed by identity. A machine with no working sets is
+  /// absent rather than present with zeros, so the screen can say it has none without inventing
+  /// a row of numbers.
+  public let usage: [MachineID: MachineUsage]
+
+  public init(
+    gym: GymRecord, machines: [MachineRecord], usage: [MachineID: MachineUsage] = [:]
+  ) {
+    self.gym = gym
+    self.machines = machines
+    self.usage = usage
+  }
+
   public var id: GymID { gym.id }
 }
 

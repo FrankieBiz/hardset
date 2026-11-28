@@ -14,6 +14,9 @@ import SwiftUI
 /// and "Archive" promises both. Adding the same name later makes a new row with a new identity.
 struct GymManagementScreen: View {
   let store: GymStore
+  /// The unit the log's loads are read in. Required, because a machine's heaviest load is one of
+  /// the facts this list states and there is no neutral way to write it.
+  let unit: WeightUnit
   /// Called after a rename or archive is saved, so screens showing gym names can re-read them.
   let onChanged: () -> Void
 
@@ -106,11 +109,23 @@ struct GymManagementScreen: View {
       ForEach(item.machines) { machine in
         ManagedRow(
           title: machine.displayName,
-          detail: "Machine at \(item.gym.name)",
+          // The gym name is the section above, so this line is the machine's own log: when it was
+          // last used, how much work it holds, and its heaviest working load. A machine with no
+          // working sets says so instead of showing zeros.
+          detail: MachineUsageLine.text(usage: item.usage[machine.id], unit: unit),
           onRename: { editing = .machine(machine) },
           onArchive: { archiving = .machine(machine, gym: item.gym.name) }
         )
         .padding(.leading, Tokens.Spacing.loose)
+      }
+      if !item.machines.isEmpty {
+        // Said once per gym, because the same caveat applies to every machine above it. Imported
+        // sets count when the file named a machine this app knows; free weights name none.
+        Text(MachineUsageCopy.importsAndFreeWeights)
+          .font(Tokens.Text.caption)
+          .foregroundStyle(Tokens.Color.chalkDim)
+          .fixedSize(horizontal: false, vertical: true)
+          .padding(.leading, Tokens.Spacing.loose)
       }
     }
   }
