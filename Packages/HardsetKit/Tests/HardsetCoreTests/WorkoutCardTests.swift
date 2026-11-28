@@ -109,4 +109,15 @@ struct WorkoutCardTests {
   func noTemplatesNoCards() {
     #expect(WorkoutCard.cards(templates: [], now: now, calendar: calendar).isEmpty)
   }
+
+  @Test("Last done is the shared phrase with its own prefix, so the two cannot drift")
+  func lastDoneKeepsItsPrefix() {
+    #expect(LastDoneText.text(for: nil, now: now) == "not done yet")
+    for days in [0.0, 4, 21, 90] {
+      let date = ago(days: days)
+      #expect(
+        LastDoneText.text(for: date, now: now, calendar: calendar)
+          == "last done " + LastDoneText.phrase(for: date, now: now, calendar: calendar))
+    }
+  }
 }

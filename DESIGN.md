@@ -929,6 +929,16 @@ Selection rows, the unit switch and pickers stay silent.
     take a control's face, so a tag never imitates a control.
   - Reduce Motion drops the scale and keeps only the fill or opacity change. Disabled controls are
     never dimmed by a press style, so saved rows and inert titles keep full contrast.
+- **Dated Last time** (set row header): when a movement's "Last time" column quotes sets saved on
+  this machine, the card says when they were done in one quiet line under the machine chip, or under
+  the name when there is no chip: "Last time 25 Oct · 2 weeks ago", or "Last time today" for sets
+  logged today, in `provenance` and `chalkDim`. The date is the newest `completedAt` among the sets
+  the column quotes, not the heaviest set, which can be years old. Borrowed history gets no second
+  line: the existing "From another machine" badge takes the date into its context ("From another
+  machine · 25 Oct · 2 weeks ago · Low confidence"). A movement with no prior, or a prior with no
+  sets, draws nothing — never "never". It states what the row already relies on: no advice, no
+  detraining model, no "you may be weaker", and no cutoff for a "long" gap. No icon, capsule, tap
+  target or motion.
 - **Target line** (set row): when a movement has a rep range and history on this exact machine, an
   unlogged row is prefilled with the double-progression target and says where it came from in `provenance`
   and `chalkDim`: "Target · One more rep than last time", "Top of your range; hold it", or "Every set hit
