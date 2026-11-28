@@ -68,7 +68,9 @@ extension ScreenHeader where Trailing == EmptyView {
 
 /// How a header icon control is drawn.
 public enum HeaderIconStyle: Sendable, Hashable {
-  /// A round flat fill behind the glyph. Every tab screen's header uses it.
+  /// A round flat fill behind the glyph, for a control that sits among others in a sheet or an
+  /// editor and for the month jump beside History's search. No tab screen's header uses it: each
+  /// draws its Settings glyph `.bare`.
   case circle
   /// The glyph alone, in the same 44 pt region, for a screen that has dropped its containers. It
   /// wears the `controlEdge` outline only where Increase Contrast or Button Shapes asks.

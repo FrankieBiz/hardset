@@ -7,7 +7,22 @@ import Foundation
 /// workout was not found when the truth is that nothing was searched, and "no match" is an answer
 /// with its own message rather than a blank screen.
 public enum HistoryCopy {
-  public static let searchPrompt = "Search movement, machine or gym"
+  /// What the field shows while it is empty: short enough to be read whole in a single-line field
+  /// beside the month button at the default size. The longer "Search movement, machine or gym" was
+  /// clipped after "machine".
+  public static let searchPrompt = "Movement, machine or gym"
+
+  /// What the field shows at a size too large for `searchPrompt` to fit on one line. The scopes are
+  /// then said by `searchScopes`, wrapped, on a line of their own.
+  public static let searchPromptCompact = "Search"
+
+  /// The accessible name of the search field, whatever its placeholder shows.
+  public static let searchLabel = "Search workouts"
+
+  /// What search reads, in full. It is the field's accessibility hint at every size, and at
+  /// accessibility sizes also a visible line under the field, which wraps where a placeholder
+  /// cannot.
+  public static let searchScopes = "Searches movement, machine and gym names."
 
   /// Under the header while a search is showing: how many workouts matched, and when the list is a
   /// page of them, how many of the matches are shown. "Latest 50 of 120 workouts match “bench”".

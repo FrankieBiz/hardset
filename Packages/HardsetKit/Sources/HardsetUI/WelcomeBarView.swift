@@ -6,7 +6,8 @@ import SwiftUI
 /// Tap a plate in the tray, or throw it up, and it rises to the sleeve and lands with a `clank`.
 /// Plates stack outward in the order chosen, on both sleeves, and the bar bends a few degrees in
 /// proportion to the load and settles on `Motion.state`. Tapping a loaded plate returns it to the
-/// tray. The running total is in `hero` beside the bar, in the lifter's unit.
+/// tray; so does the "Unload plate" control under the total, a 44 pt target that takes the outer
+/// plate off, one per tap. The running total is in `hero` beside the bar, in the lifter's unit.
 ///
 /// If the lifter does nothing for four seconds the bar loads one 20 kg plate per side on its own,
 /// with the same clank, so the screen demonstrates itself; any touch hands control back. With
@@ -43,6 +44,7 @@ public struct WelcomeBarView: View {
     VStack(spacing: Tokens.Spacing.section) {
       bar
       total
+      unloadControl
       PlateTray { plate in load(plate, byLifter: true) }
     }
     .simultaneousGesture(DragGesture(minimumDistance: 0).onChanged { _ in touch() })
@@ -98,6 +100,29 @@ public struct WelcomeBarView: View {
         .foregroundStyle(Tokens.Color.chalkDim)
     }
     .accessibilityHidden(true)
+  }
+
+  /// The one place to take a plate off: the outermost, one per tap. A loaded plate is 14 pt wide
+  /// and two points from its neighbour, so tapping it works but cannot be promised and cannot be
+  /// widened without overlapping the next; this control is the 44 by 44 pt target that can. It is
+  /// always laid out, and only dimmed to nothing while the bar is empty, so loading a plate moves
+  /// no other element. The bar's spoken "Remove the outer plate" does the same thing.
+  private var unloadControl: some View {
+    Button {
+      if !perSide.isEmpty { remove(perSide.count - 1) }
+    } label: {
+      Label("Unload plate", systemImage: "minus.circle")
+        .font(Tokens.Text.provenance)
+        .foregroundStyle(Tokens.Color.chalkDim)
+    }
+    .buttonStyle(
+      InlineControlStyle(
+        minWidth: Tokens.minimumTapTarget, minHeight: Tokens.minimumTapTarget, alignment: .center)
+    )
+    .opacity(perSide.isEmpty ? 0 : 1)
+    .animation(Tokens.Motion.adaptive(Tokens.Motion.state, reduceMotion: reduceMotion), value: perSide.isEmpty)
+    .disabled(perSide.isEmpty)
+    .accessibilityHidden(perSide.isEmpty)
   }
 
   // MARK: - Loading

@@ -362,7 +362,11 @@ public struct VolumeReportView: View {
               .accessibilityHidden(true)
           }
         }
-        .buttonStyle(InlineControlStyle(alignment: .trailing))
+        // A single-digit count is narrower than a fingertip (37 pt measured), so the region has a
+        // 44 pt width floor and the figure stays on the trailing edge of its column.
+        .buttonStyle(
+          InlineControlStyle(minWidth: Tokens.minimumTapTarget, alignment: .trailing)
+        )
         // Begins with the figure the control shows, so a Voice Control user can say what they see.
         .accessibilityLabel("\(figureSpoken), \(name)")
         .accessibilityHint("Shows the sets this count was worked from")

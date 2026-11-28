@@ -216,7 +216,9 @@ public struct HistoryScreen: View {
   private var header: some View {
     ScreenHeader(Self.title) {
       if let onShowSettings {
-        HeaderIconButton(systemImage: "gearshape", accessibilityLabel: "Settings", action: onShowSettings)
+        HeaderIconButton(
+          systemImage: "gearshape", accessibilityLabel: "Settings", style: .bare,
+          action: onShowSettings)
       }
     }
   }

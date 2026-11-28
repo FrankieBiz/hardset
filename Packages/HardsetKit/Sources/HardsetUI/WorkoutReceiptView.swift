@@ -92,7 +92,7 @@ public struct WorkoutReceiptView: View {
 
   // MARK: - Scorecard
 
-  /// How the workout went against last time, at the top: the headline in the figure role, the
+  /// How the workout went against last time, at the top: the headline in `title` with tabular digits, the
   /// records on the record surface, the biggest gain, and a mark for each movement that earned one.
   ///
   /// Counted by movement, and every word comes from `ScorecardCopy`, which the share text uses too,
@@ -101,8 +101,11 @@ public struct WorkoutReceiptView: View {
   /// not drawn as a failure. The same view is rendered into the shared image, so it holds no controls.
   private func scorecardBlock(_ card: WorkoutScorecard) -> some View {
     VStack(alignment: .leading, spacing: Tokens.Spacing.regular) {
+      // A sentence that holds a figure is `title` with tabular digits; condensed is for the figure
+      // alone, and the count here is prose.
       Text(card.headline)
-        .font(Tokens.Text.readout)
+        .font(Tokens.Text.title)
+        .monospacedDigit()
         .fixedSize(horizontal: false, vertical: true)
         .accessibilityAddTraits(.isHeader)
 

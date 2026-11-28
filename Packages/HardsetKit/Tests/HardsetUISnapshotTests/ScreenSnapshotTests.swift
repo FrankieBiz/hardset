@@ -179,6 +179,67 @@
       }
     }
 
+    /// The workout as the lifter leaves it a moment after the log tap, at an accessibility size: the
+    /// first set is logged while the screen is up, the rest bar and record notice are pinned, and the
+    /// screen scrolls the next set to just above them. The capture logs the set from the test's own
+    /// task 0.3 s after the first frame, so the screen sees the logged count rise, and settles for
+    /// longer than the follow beat and the scroll together. Besides the render it reads the scroll
+    /// view's offset: scrolled at an accessibility size, and not at the default size.
+    @Test func liveSessionScrollsToTheNextSetAfterALog() async throws {
+      guard Snapshot.directory != nil else { return }
+      let cases: [(String, UIUserInterfaceStyle, DynamicTypeSize, Bool)] = [
+        ("session-after-log-dark-ax3", .dark, .accessibility3, true),
+        ("session-after-log-light-ax3", .light, .accessibility3, true),
+        ("session-after-log-dark", .dark, .large, false),
+      ]
+      for (name, style, typeSize, scrolls) in cases {
+        let driver = LogsOneSetDriver()
+        var offset: CGFloat = -1
+        var overflow: CGFloat = -1
+        var logged: Int?
+        try await Snapshot.capture(
+          name, style: style, typeSize: typeSize, settle: .milliseconds(1_500),
+          act: {
+            try? await Task.sleep(for: .milliseconds(300))
+            driver.log?()
+          },
+          // Read while the view is still up: its state is gone once the capture tears it down.
+          inspect: { view in
+            (offset, overflow) = Self.scrollMetrics(in: view)
+            logged = driver.loggedCount?()
+          }
+        ) { LogsOneSetHarness(driver: driver) }
+        #expect(logged == 1, "\(name): the harness logged one set")
+        if scrolls {
+          // Rules out a fixture that fits: there is something to scroll to.
+          #expect(overflow > 0, "\(name): the list is taller than its viewport (by \(overflow))")
+          #expect(offset > 0, "\(name): the next set was scrolled into view (offset \(offset))")
+        } else {
+          #expect(offset <= 0.5, "\(name): nothing scrolled at the default size (offset \(offset))")
+        }
+      }
+    }
+
+    /// How far the screen's own scroll view has moved from its top, and by how much its content is
+    /// taller than what it shows: the tallest scroll view in the hosted hierarchy, which is the list.
+    private static func scrollMetrics(in view: UIView) -> (offset: CGFloat, overflow: CGFloat) {
+      var best: UIScrollView?
+      func walk(_ view: UIView) {
+        if let scroll = view as? UIScrollView,
+          scroll.contentSize.height > (best?.contentSize.height ?? 0)
+        {
+          best = scroll
+        }
+        view.subviews.forEach(walk)
+      }
+      walk(view)
+      guard let best else { return (-1, -1) }
+      let visible = best.bounds.height - best.adjustedContentInset.top - best.adjustedContentInset.bottom
+      return (
+        best.contentOffset.y + best.adjustedContentInset.top, best.contentSize.height - visible
+      )
+    }
+
     /// The list with nothing pinned over it, so every row can be seen. The first row not yet written
     /// is a blank warm-up, which cannot be logged, so the one blue control is the working set behind
     /// it: the primary action owns the accent wherever its row sits.
@@ -567,6 +628,8 @@
     /// palette can be rendered without changing the Simulator's settings. `settle` is how long the
     /// window runs before the frame is taken: the default covers a view's own tasks, and a screen
     /// that reads a database through the real stores needs longer.
+    /// `act` runs once the first frame is up and before the settle; `inspect` runs after the settle, on
+    /// the hosted view, for a capture that also asserts something about what it drew.
     static func capture<Content: View>(
       _ name: String,
       size: CGSize = Snapshot.phone,
@@ -574,6 +637,8 @@
       typeSize: DynamicTypeSize = .large,
       contrast: UIAccessibilityContrast = .normal,
       settle: Duration = .milliseconds(800),
+      act: (@MainActor () async -> Void)? = nil,
+      inspect: (@MainActor (UIView) -> Void)? = nil,
       @ViewBuilder _ content: () -> Content
     ) async throws {
       guard let directory else { return }
@@ -592,9 +657,13 @@
       window.makeKeyAndVisible()
       host.view.frame = window.bounds
       host.view.layoutIfNeeded()
+      // What the capture does to the screen once it is up, such as logging a set, from the test's own
+      // task and not the view's, so it cannot depend on the view's `.task` having started.
+      await act?()
       // `.task` modifiers, database reads and the first full layout land on later run-loop turns.
       try await Task.sleep(for: settle)
       host.view.layoutIfNeeded()
+      inspect?(host.view)
 
       let format = UIGraphicsImageRendererFormat()
       format.scale = 2
@@ -641,7 +710,9 @@
       }
     }
 
-    static func legPress() -> ExerciseLogState {
+    /// - Parameter firstSetLogged: `false` leaves every planned set unlogged, for a fixture that logs
+    ///   the first one itself.
+    static func legPress(firstSetLogged: Bool = true) -> ExerciseLogState {
       let exercise = ExerciseID()
       let machine = MachineID()
       let key = ProgressionKey(exerciseID: exercise, machineID: machine)
@@ -662,23 +733,25 @@
         machineIncrementKg: 10,
         snapshot: snapshot
       )
-      state.markLogged(slotID: state.slots[0].id, setID: SetID())
+      if firstSetLogged { state.markLogged(slotID: state.slots[0].id, setID: SetID()) }
       state.appendSlot(isWarmup: true)
       return state
     }
 
+    static func calfRaise() -> ExerciseLogState {
+      .build(
+        exerciseID: ExerciseID(),
+        exerciseName: "Standing Calf Raise",
+        snapshot: .empty(capturedAt: .distantPast))
+    }
+
     /// - Parameter pinned: Draws the rest bar and a record notice over the list, as the live screen
     ///   does just after a set; `false` leaves the list clear, so every row can be looked at.
-    static func session(pinned: Bool = true) -> some View {
+    /// - Parameter exercises: The workout, when a capture changes it after the first frame. `nil` is
+    ///   the fixed two-movement workout with its first set logged.
+    static func session(pinned: Bool = true, exercises: Binding<[ExerciseLogState]>? = nil) -> some View {
       SessionView(
-        exercises: .constant([
-          legPress(),
-          .build(
-            exerciseID: ExerciseID(),
-            exerciseName: "Standing Calf Raise",
-            snapshot: .empty(capturedAt: .distantPast)
-          ),
-        ]),
+        exercises: exercises ?? .constant([legPress(), calfRaise()]),
         unit: .kilograms,
         title: "Workout",
         gymName: "Metroflex Gym",
@@ -888,6 +961,37 @@
         }
       }
       .background(Tokens.Color.canvas)
+    }
+  }
+
+  /// The handle a capture uses to log a set on the harness's workout from the test's own task.
+  @MainActor
+  private final class LogsOneSetDriver {
+    var log: (() -> Void)?
+    var loggedCount: (() -> Int)?
+  }
+
+  /// The live session over a workout held in `@State`, so that a set logged from outside is a state
+  /// change SwiftUI observes by construction. Two earlier shapes were not: a binding whose getter
+  /// read an `@Observable` model lazily inside the list, and `.constant(model.exercises)`; both
+  /// rendered "0/3" with one set logged.
+  @MainActor
+  private struct LogsOneSetHarness: View {
+    let driver: LogsOneSetDriver
+    @State private var exercises = [
+      Fixtures.legPress(firstSetLogged: false),
+      Fixtures.calfRaise(),
+    ]
+
+    var body: some View {
+      Fixtures.session(exercises: $exercises)
+        .onAppear {
+          driver.log = {
+            guard let slot = exercises[0].slots.first else { return }
+            exercises[0].markLogged(slotID: slot.id, setID: SetID())
+          }
+          driver.loggedCount = { exercises.reduce(0) { $0 + $1.loggedCount } }
+        }
     }
   }
 #endif

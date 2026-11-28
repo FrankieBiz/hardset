@@ -324,6 +324,11 @@ public struct SessionView: View {
       } action: { inset in
         outerBottomInset = inset
       }
+      // At accessibility sizes the header, the machine line and the pinned stack fill the viewport
+      // and the set just logged is the only row that was on screen, so the next one is found by
+      // scrolling, which a lifter at a machine should not have to do. A rise in the logged count is
+      // a log; an undo lowers it and a correction leaves it. Nothing moves at ordinary sizes.
+      .onChange(of: loggedSetCount) { old, new in scrollToNextUp(afterLoggedCountChangedFrom: old, to: new) }
       .onChange(of: scrollRequest) { _, request in
         guard let request else { return }
         withAnimation(Tokens.Motion.adaptive(Tokens.Motion.state, reduceMotion: reduceMotion)) {
@@ -333,6 +338,37 @@ public struct SessionView: View {
         }
       }
     }
+  }
+
+  /// After a set is logged at an accessibility size, scrolls the next set that can be logged to just
+  /// above the pinned stack, so the row the lifter is about to log is on screen. It waits for the
+  /// log moment's follow beat, when the rest bar and the record notice have taken their place in the
+  /// stack, so the row is put above the stack as it will stand and not as it stood a frame earlier.
+  /// The scroll takes no focus: VoiceOver, the keypad and the keyboard are untouched.
+  private func scrollToNextUp(afterLoggedCountChangedFrom old: Int, to new: Int) {
+    guard
+      let id = Self.nextUpScrollTarget(
+        loggedBefore: old, loggedAfter: new, isAccessibilitySize: dynamicTypeSize.isAccessibilitySize,
+        nextUp: ExerciseLogState.primarySlotID(in: exercises))
+    else { return }
+    Task { @MainActor in
+      try? await Task.sleep(for: .seconds(LogMoment.followDelay))
+      // A set logged from the keypad closes it by now. If it is still up, or has moved to another
+      // row, it scrolls its own row clear of itself and this would fight it.
+      guard keypad == nil else { return }
+      // Bottom-anchored: the scroll's bottom edge is the top of the pinned stack, so the row ends
+      // just above it.
+      scrollRequest = ScrollRequest(target: .view(id), anchor: .bottom)
+    }
+  }
+
+  /// The row to scroll to after the logged count moved, or `nil` for no scroll. Only a log (the
+  /// count rose) and only at an accessibility size.
+  static func nextUpScrollTarget(
+    loggedBefore: Int, loggedAfter: Int, isAccessibilitySize: Bool, nextUp: UUID?
+  ) -> UUID? {
+    guard isAccessibilitySize, loggedAfter > loggedBefore else { return nil }
+    return nextUp
   }
 
   /// The two dialogs this screen can raise. They are presentation modifiers, so they sit outside the

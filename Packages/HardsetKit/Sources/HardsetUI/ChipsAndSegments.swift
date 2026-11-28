@@ -135,31 +135,69 @@ public nonisolated struct HardsetSegment<Value: Hashable>: Identifiable {
 public struct HardsetSegmentedControl<Value: Hashable>: View {
   @Binding private var selection: Value
   private let segments: [HardsetSegment<Value>]
+  private let accessibilityColumns: Int?
   @Namespace private var indicator
   @Environment(\.accessibilityReduceMotion) private var reduceMotion
+  @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
-  public init(selection: Binding<Value>, segments: [HardsetSegment<Value>]) {
+  /// - Parameter accessibilityColumns: How many segments share a row at accessibility sizes. `nil`
+  ///   keeps every segment in one row at every size, where a segment wraps instead. A control whose
+  ///   labels are short words that must not break, such as "12 reps", passes 2, so each gets half
+  ///   the width instead of a quarter. Ordinary sizes are one row either way.
+  public init(
+    selection: Binding<Value>, segments: [HardsetSegment<Value>],
+    accessibilityColumns: Int? = nil
+  ) {
     self._selection = selection
     self.segments = segments
+    self.accessibilityColumns = accessibilityColumns
   }
 
   public var body: some View {
-    HStack(spacing: Tokens.Spacing.hairline) {
-      ForEach(segments) { segment in
-        Button {
-          withAnimation(Tokens.Motion.adaptive(Tokens.Motion.state, reduceMotion: reduceMotion)) {
-            selection = segment.value
+    let rows = Self.rows(
+      segments, columns: dynamicTypeSize.isAccessibilitySize ? accessibilityColumns : nil)
+    VStack(spacing: Tokens.Spacing.hairline) {
+      ForEach(rows.indices, id: \.self) { rowIndex in
+        HStack(spacing: Tokens.Spacing.hairline) {
+          ForEach(rows[rowIndex]) { segment in
+            segmentButton(segment)
           }
-        } label: {
-          HardsetSegmentFace(isSelected: segment.value == selection, indicator: indicator) {
-            Text(segment.title)
+          // A short last row keeps its segments the width of the rows above it.
+          if let columns = accessibilityColumns, rows.count > 1, rows[rowIndex].count < columns,
+            dynamicTypeSize.isAccessibilitySize
+          {
+            ForEach(0..<(columns - rows[rowIndex].count), id: \.self) { _ in
+              Color.clear.frame(maxWidth: .infinity, minHeight: Tokens.minimumTapTarget)
+                .accessibilityHidden(true)
+            }
           }
         }
-        .buttonStyle(HardsetPressStyle())
-        .accessibilityAddTraits(segment.value == selection ? [.isSelected] : [])
       }
     }
     .hardsetSegmentTrack()
+  }
+
+  private func segmentButton(_ segment: HardsetSegment<Value>) -> some View {
+    Button {
+      withAnimation(Tokens.Motion.adaptive(Tokens.Motion.state, reduceMotion: reduceMotion)) {
+        selection = segment.value
+      }
+    } label: {
+      HardsetSegmentFace(isSelected: segment.value == selection, indicator: indicator) {
+        Text(segment.title)
+      }
+    }
+    .buttonStyle(HardsetPressStyle())
+    .accessibilityAddTraits(segment.value == selection ? [.isSelected] : [])
+  }
+
+  /// The segments split into rows of `columns`, in order. One row when `columns` is `nil` or
+  /// holds them all. Internal so the split is tested without a view.
+  static func rows(_ segments: [HardsetSegment<Value>], columns: Int?) -> [[HardsetSegment<Value>]] {
+    guard let columns, columns > 0, segments.count > columns else { return [segments] }
+    return stride(from: 0, to: segments.count, by: columns).map {
+      Array(segments[$0..<min($0 + columns, segments.count)])
+    }
   }
 }
 

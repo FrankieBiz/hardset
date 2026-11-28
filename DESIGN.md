@@ -30,8 +30,7 @@ the code does yet, so a reader does not look for a screen that has not moved.
   notice and muscle history's four-week comparison and lifetime figures. The audit there lists every
   figure and says which derivation explains it.
 - Not yet in code, so the bullets below that name these describe where they are going: whatever a
-  screen draws for itself instead of through the kit. That is the scorecard headline's type role and
-  the onboarding surfaces. It also includes three private outlined-card button styles that each draw their own
+  screen draws for itself instead of through the kit. That is the onboarding surfaces. It also includes three private outlined-card button styles that each draw their own
   stroke: the History row, the Settings disclosure row and the receipt's link row, plus the
   methodology citation card. A screen that uses the kit picks up the new look with no change; one that draws its own
   face or stroke keeps the old one until it is migrated.
@@ -727,7 +726,8 @@ Selection rows, the unit switch and pickers stay silent.
   row's button. It opens the latest session, the baseline and everything left out (see Inspectable
   figures), and a failed read says so under that row's control. It adds no token and no motion.
 - **Scorecard** (`WorkoutReceiptView`, `ScorecardCopy`): the block at the top of a finished workout's
-  receipt, in `hardsetCard`. The headline, "Beat last time on 5 of 7", is in `readout`; a record line sits
+  receipt, in `hardsetCard`. The headline, "Beat last time on 5 of 7", is a sentence that holds a figure, so it is `title` with
+  tabular digits and not the condensed figure face; a record line sits
   on `plateYellowSurface` with its trophy; "Biggest gain: Chest press, estimated max +6%" names its
   metric, and an estimated gain wears a non-interactive `CertaintyCapsule` on its own line beneath it
   (the share text says the same in words, "· Moderate confidence", because the receipt is rendered into an
@@ -741,9 +741,9 @@ Selection rows, the unit switch and pickers stay silent.
   the biggest gain carries a quiet "Worked from this gain" control beneath its line that opens this
   workout's sets, last time's and what was left out; the shared image never draws it. The receipt's
   own sets, the load and reps the lifter typed, are `figureXL` with the unit and the multiply sign
-  as the quiet words between them, because they are measurements; the scorecard's headline stays
-  `readout` and its estimated gain stays a sentence, so on the receipt too the estimates are the
-  smaller figures. It has no monument. It adds no token and no motion.
+  as the quiet words between them, because they are measurements; the scorecard's headline and its
+  estimated gain are sentences in `title` and `label`, so on the receipt too the estimates are the
+  smaller type. It has no monument. It adds no token and no motion.
 - **Save as workout** (receipt): a `secondary` button under the share actions, offered for a workout with
   sets and not for an imported one, whose movements are kept apart from the catalogue's. It asks for a
   name in `NameEntrySheet`, builds the plan from the workout's movements in their order with the number
@@ -779,7 +779,11 @@ Selection rows, the unit switch and pickers stay silent.
   record or an estimate from the figures before the correction. It adds no token and no motion.
 - **History search and month jump** (`HistorySearch`, `HistorySearchBar`, `HistoryMonthJumpSheet`): under the
   History header, the app's own search field and, beside it, a round calendar header button. The field finds
-  workouts by movement, machine or gym and says so in its prompt; typing waits for a pause before anything is
+  workouts by movement, machine or gym. Its prompt is "Movement, machine or gym", short enough to be read whole
+  on one line beside the calendar button; the full sentence ("Searches movement, machine and gym names.") is the
+  field's accessibility hint at every size, and at accessibility sizes, where no placeholder holds the three on one
+  line, the prompt is "Search" and the sentence is a wrapping `provenance` line in `chalkDim` under the field.
+  Typing waits for a pause before anything is
   read, and the results are the same month-grouped cards, opening the same receipt, with a subtitle that names
   the words ("7 workouts match “bench”, newest first"). A search that finds nothing is a `HardsetEmptyState`
   that names the words, "No workouts match “deadlift”", never a blank screen; one still being read says so in

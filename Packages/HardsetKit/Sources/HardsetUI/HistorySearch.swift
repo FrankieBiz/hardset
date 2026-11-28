@@ -52,14 +52,33 @@ public struct HistorySearch {
 struct HistorySearchBar: View {
   let search: HistorySearch
 
+  @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
+  /// At accessibility sizes no placeholder holds the three scopes on one line, so the field says
+  /// only "Search" and the scopes are a wrapping line under it; at every size they are the field's
+  /// hint. The placeholder is never clipped, and nothing it says is lost.
+  private var showsScopesLine: Bool { dynamicTypeSize.isAccessibilitySize }
+
   var body: some View {
     VStack(alignment: .leading, spacing: Tokens.Spacing.snug) {
       HStack(alignment: .center, spacing: Tokens.Spacing.regular) {
-        HardsetSearchField(text: search.text, prompt: HistoryCopy.searchPrompt)
+        HardsetSearchField(
+          text: search.text,
+          prompt: showsScopesLine ? HistoryCopy.searchPromptCompact : HistoryCopy.searchPrompt,
+          accessibilityLabel: HistoryCopy.searchLabel,
+          accessibilityHint: HistoryCopy.searchScopes)
         if let onJumpToMonth = search.onJumpToMonth {
           HeaderIconButton(
             systemImage: "calendar", accessibilityLabel: HistoryCopy.jumpToMonth, action: onJumpToMonth)
         }
+      }
+      if showsScopesLine {
+        Text(HistoryCopy.searchScopes)
+          .font(Tokens.Text.provenance)
+          .foregroundStyle(Tokens.Color.chalkDim)
+          .fixedSize(horizontal: false, vertical: true)
+          // The field's hint already says it.
+          .accessibilityHidden(true)
       }
       if let onBackToLatest = search.onBackToLatest {
         Button(action: onBackToLatest) {
