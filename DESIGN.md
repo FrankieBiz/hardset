@@ -594,6 +594,15 @@ Selection rows, the unit switch and pickers stay silent.
   there: loading is a quiet line, a failed read says so in `HardsetEmptyState` with the quiet style, and
   neither draws an empty library. The one accent on the screen is the "New movement" plus in the bar,
   which is the screen's primary action. It adds no token and no motion.
+- **Library usage line** (`LibraryUsage`, `CatalogSeeder.libraryUsage`): under a movement's muscles and
+  equipment, a dim `provenance` line says how many working sets the lifter has logged on it and when it
+  was last done, in `LastDoneText`'s words ("38 working sets · last done 12 days ago"). Imported sets are
+  counted apart and never added to the native count ("· 42 imported sets"), and an imported-only movement
+  says its count with no "last done", because imported history is not the lifter's live baseline. Warm-ups
+  are not working sets, so a movement with only warm-ups, or nothing logged, draws no line at all — never
+  "0 sets", "not done yet" or a dash. Future-dated sets are in the count but never in "last done" (D31); a
+  movement whose only native sets are in the future says just its count. The line is a fact read from what
+  was logged, never a target, a judgement or a nudge, and it adds no token, control or motion.
 - **Movement editor** (`MovementEditorSheet`, `MovementEditorDraft`): a name field in `entryFieldChrome`,
   body-part chips, a `SelectionRow` per muscle where the body part has more than one, up to three optional
   secondary muscles chosen from chips (each counts half a set), and the equipment as chips. Chips wrap
@@ -929,6 +938,16 @@ Selection rows, the unit switch and pickers stay silent.
     take a control's face, so a tag never imitates a control.
   - Reduce Motion drops the scale and keeps only the fill or opacity change. Disabled controls are
     never dimmed by a press style, so saved rows and inert titles keep full contrast.
+- **Dated Last time** (set row header): when a movement's "Last time" column quotes sets saved on
+  this machine, the card says when they were done in one quiet line under the machine chip, or under
+  the name when there is no chip: "Last time 25 Oct · 2 weeks ago", or "Last time today" for sets
+  logged today, in `provenance` and `chalkDim`. The date is the newest `completedAt` among the sets
+  the column quotes, not the heaviest set, which can be years old. Borrowed history gets no second
+  line: the existing "From another machine" badge takes the date into its context ("From another
+  machine · 25 Oct · 2 weeks ago · Low confidence"). A movement with no prior, or a prior with no
+  sets, draws nothing — never "never". It states what the row already relies on: no advice, no
+  detraining model, no "you may be weaker", and no cutoff for a "long" gap. No icon, capsule, tap
+  target or motion.
 - **Target line** (set row): when a movement has a rep range and history on this exact machine, an
   unlogged row is prefilled with the double-progression target and says where it came from in `provenance`
   and `chalkDim`: "Target · One more rep than last time", "Top of your range; hold it", or "Every set hit
@@ -1064,6 +1083,13 @@ components rather than native spinners.
 - Settings adds file import/export and a StoreKit Lifetime section. Reuse existing spacing, typography, buttons and semantic error colours.
   Import previews state unknown equipment and unit/time-zone interpretation before
   saving. Busy operations disable their controls and expose native progress.
+- The import/restore preview names the span of workout starts the file holds, "Workout dates
+  3 Jan 2024 to 8 Nov 2026", and how many starts are later than now. It describes the file's starts,
+  not what will be inserted: a workout already here is skipped and a file can hold duplicates. Dates
+  are drawn in the device's calendar and time zone, so a start recorded just before midnight in
+  another zone can show the neighbouring day. A later-than-now start is neither clamped nor
+  reordered, and the line claims nothing about the file being complete or safe to commit. It draws
+  no dates line at all when the file holds no workouts.
 - History opens a static receipt of committed sets. It states equipment provenance,
   caveats and same-machine record definitions. Native share sheets handle text and a
   deliberately dark image; long sessions retain text sharing rather than render an

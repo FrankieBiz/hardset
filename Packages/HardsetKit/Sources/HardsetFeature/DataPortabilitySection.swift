@@ -207,10 +207,19 @@ struct DataPortabilitySection: View {
   @ViewBuilder private func previewCard(_ preview: WorkoutImportPreview) -> some View {
     let skippedWorkouts = alreadyImported ?? 0
     let newWorkouts = preview.sessions.count - skippedWorkouts
+    let now = Date.now
     VStack(alignment: .leading, spacing: Tokens.Spacing.regular) {
       Text("\(preview.sessions.count) workouts · \(preview.setCount) sets from \(preview.source)")
         .font(Tokens.Text.headline.monospacedDigit())
         .foregroundStyle(Tokens.Color.chalk)
+      if let span = ImportSpan(starts: preview.sessions.map(\.startedAt), now: now) {
+        Text(span.line())
+          .font(Tokens.Text.provenance.monospacedDigit())
+          .foregroundStyle(Tokens.Color.chalkDim)
+          .fixedSize(horizontal: false, vertical: true)
+          .accessibilityElement(children: .ignore)
+          .accessibilityLabel(span.spokenLine())
+      }
       if let sample = preview.sessions.first?.sets.first {
         // One converted set, so the magnitude can be checked before anything is saved.
         Text("First set: \(sample.exercise) · \(Self.load(sample.weightKg, in: unit)) × \(sample.reps)")

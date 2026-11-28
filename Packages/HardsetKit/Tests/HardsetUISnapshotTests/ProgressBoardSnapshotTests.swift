@@ -320,5 +320,68 @@
         typeSize: .accessibility3
       ) { Self.chart() }
     }
+
+    /// Two machines, each with its own ladder: the inverse table under the chart. The points and
+    /// the rungs are built from the same samples through the shipping derivation, so the render is
+    /// the ladder the app draws rather than hand-written rows.
+    private static func repLadderChart() -> some View {
+      let exercise = ExerciseID()
+      let hammer = MachineID()
+      let cybex = MachineID()
+      func session(_ machine: MachineID, _ week: Int, _ sets: [(Double, Int)])
+        -> [ProgressionSample]
+      {
+        let id = SessionID()
+        let date = Self.day.addingTimeInterval(Double(week) * 604_800)
+        return sets.enumerated().map { index, set in
+          ProgressionSample(
+            sessionID: id, machineID: machine, weightKg: set.0, reps: set.1,
+            completedAt: date.addingTimeInterval(Double(index) * 300))
+        }
+      }
+      let samples =
+        session(hammer, 0, [(40, 8), (40, 10)])
+        + session(hammer, 1, [(42.5, 8), (42.5, 12)])
+        + session(cybex, 0, [(30, 10), (32.5, 10)])
+        + session(cybex, 1, [(32.5, 12)])
+      let hammerKey = ProgressionKey(exerciseID: exercise, machineID: hammer)
+      let cybexKey = ProgressionKey(exerciseID: exercise, machineID: cybex)
+      let series = ProgressionAnalyzer.series(from: samples, exerciseID: exercise)
+      let hammerLadder = RepLadder.ladder(for: hammerKey, from: samples)
+      let cybexLadder = RepLadder.ladder(for: cybexKey, from: samples)
+      return NavigationStack {
+        ScrollView {
+          ProgressionChartView(
+            series: [
+              .init(
+                label: "Hammer Strength",
+                points: series.first { $0.key == hammerKey }?.points ?? [],
+                repLadderRungs: hammerLadder.rungs, key: hammerKey),
+              .init(
+                label: "Cybex", points: series.first { $0.key == cybexKey }?.points ?? [],
+                repLadderRungs: cybexLadder.rungs, key: cybexKey),
+            ],
+            unit: .kilograms, onExplain: {}, onShowRepLadderWorking: { _, _ in }
+          )
+          .padding(Tokens.Spacing.loose)
+        }
+        .background(Tokens.Color.canvas)
+        .hardsetNavigationTitle("Chest press")
+      }
+      .tint(Tokens.Color.plateBlue)
+    }
+
+    @Test func repLadderForTwoMachines() async throws {
+      try await Snapshot.capture("kit-progresschart-repladder-dark", size: Self.tall) {
+        Self.repLadderChart()
+      }
+      try await Snapshot.capture("kit-progresschart-repladder-light", size: Self.tall, style: .light) {
+        Self.repLadderChart()
+      }
+      try await Snapshot.capture(
+        "kit-progresschart-repladder-dark-ax3", size: CGSize(width: 402, height: 3200),
+        typeSize: .accessibility3
+      ) { Self.repLadderChart() }
+    }
   }
 #endif

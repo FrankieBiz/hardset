@@ -22,8 +22,14 @@ public nonisolated struct ReceiptStore: Sendable {
       // sets share one completion time and keep file order through their ordinal.
       let sets = try LoggedSet.where { $0.sessionID.eq(id.rawValue) }
         .order { ($0.completedAt, $0.setOrdinal, $0.id) }.fetchAll(db)
+      // The session's own plan, in the order it was recorded. Read here so the planned-against-done
+      // block and the scorecard share the same array, and so a planned movement with no set this
+      // workout still has a name.
+      let plan = try SessionExercise.where { $0.sessionID.eq(id.rawValue) }
+        .order { $0.position }.fetchAll(db)
       let exerciseIDs = Set(sets.map(\.exerciseID))
-      let exercises = try Exercise.where { $0.id.in(exerciseIDs) }.fetchAll(db)
+      let namedExerciseIDs = exerciseIDs.union(plan.map(\.exerciseID))
+      let exercises = try Exercise.where { $0.id.in(namedExerciseIDs) }.fetchAll(db)
       let names = Dictionary(uniqueKeysWithValues: exercises.map { ($0.id, $0.name) })
       let modalities = Dictionary(uniqueKeysWithValues: exercises.map {
         ($0.id, ExerciseModality(rawValue: $0.modality))
@@ -77,16 +83,50 @@ public nonisolated struct ReceiptStore: Sendable {
           history[key, default: []].append(.init(weightKg: set.weightKg, reps: set.reps, completedAt: set.completedAt))
         }
       }
-      let plan = try SessionExercise.where { $0.sessionID.eq(id.rawValue) }
-        .order { $0.position }.fetchAll(db)
       let scorecard = imported
         ? nil
         : Self.scorecard(
           sets: sets, lines: lines, prior: prior, priorWarmups: priorWarmups, plan: plan, names: names,
           modalities: modalities)
+      let planned = Self.plannedVsDone(
+        plan: plan, sets: sets, names: names, modalities: modalities, machineIndex: machineIndex,
+        notes: session.notes)
       return WorkoutReceipt(id: id, title: session.title, startedAt: session.startedAt,
-        finishedAt: end, lines: lines, notes: session.notes, scorecard: scorecard)
+        finishedAt: end, lines: lines, notes: session.notes, scorecard: scorecard, planned: planned)
     }
+  }
+
+  /// How much of this workout's plan was done, from the plan and sets already fetched.
+  ///
+  /// The block is absent for an imported workout: the plan carried in an imported file was never an
+  /// intention recorded in this app. A movement removed from the plan is absent with it, and a plan
+  /// whose rows state no positive count is no plan at all. Equipment is resolved exactly as the
+  /// receipt's lines resolve it, so a row never claims a machine the receipt does not show.
+  /// Warm-ups are not part of either side.
+  private static func plannedVsDone(
+    plan: [SessionExercise], sets: [LoggedSet], names: [UUID: String],
+    modalities: [UUID: ExerciseModality?], machineIndex: [UUID: Machine], notes: String
+  ) -> PlannedVsDone? {
+    let rows = plan.map { row -> PlannedVsDone.PlanRow in
+      let machine = row.machineID.flatMap { machineIndex[$0] }
+      let machineName = machine.map { [$0.brand, $0.name].filter { !$0.isEmpty }.joined(separator: " ") }
+      let unknownMachine = row.machineID != nil && machine == nil
+      return PlannedVsDone.PlanRow(
+        id: row.id, exerciseID: ExerciseID(rawValue: row.exerciseID),
+        exerciseName: names[row.exerciseID] ?? "Unknown movement",
+        equipment: unknownMachine
+          ? .unrecorded
+          : WorkoutReceipt.Equipment(
+            machineName: machineName, modality: modalities[row.exerciseID] ?? nil),
+        plannedSets: row.plannedSets,
+        machineID: row.machineID.map(MachineID.init(rawValue:)))
+    }
+    let logged = sets.map {
+      PlannedVsDone.LoggedSet(
+        sessionExerciseID: $0.sessionExerciseID, exerciseID: ExerciseID(rawValue: $0.exerciseID),
+        machineID: $0.machineID.map(MachineID.init(rawValue:)), isWarmup: $0.isWarmup)
+    }
+    return PlannedVsDone(planRows: rows, loggedSets: logged, notes: notes)
   }
 
   /// Scores the workout against the last session that trained each movement on the same machine.

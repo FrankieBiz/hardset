@@ -13,6 +13,10 @@
   @Suite("Exercise card renders for review", .serialized)
   struct ExerciseCardSnapshotTests {
     private static let size = CGSize(width: 402, height: 720)
+    /// One pinned moment for every render, so the dated "Last time" line is fixed in the images.
+    private static let now = Date(timeIntervalSince1970: 1_793_000_000)
+    private static let lastTime = now.addingTimeInterval(-20 * 86_400)
+    private static let newestSet = lastTime.addingTimeInterval(600)
 
     private enum Machine {
       case unset
@@ -56,13 +60,13 @@
       }
       let key = ProgressionKey(exerciseID: exercise, machineID: priorKeyMachine)
       let records = [
-        PriorSetRecord(weightKg: 100, reps: 10, completedAt: .distantPast),
-        PriorSetRecord(weightKg: 105, reps: 8, completedAt: .distantPast),
-        PriorSetRecord(weightKg: 60, reps: 12, completedAt: .distantPast),
+        PriorSetRecord(weightKg: 100, reps: 10, completedAt: Self.lastTime),
+        PriorSetRecord(weightKg: 105, reps: 8, completedAt: Self.newestSet),
+        PriorSetRecord(weightKg: 60, reps: 12, completedAt: Self.newestSet),
       ]
       let snapshot = PriorPerformanceSnapshot(
         entries: [key: PriorPerformance(key: key, lastSets: records, heaviestSet: records[1])],
-        capturedAt: .distantPast
+        capturedAt: Self.now
       )
       var built = ExerciseLogState.build(
         exerciseID: exercise,
@@ -77,6 +81,14 @@
         built.markLogged(slotID: built.slots[index].id, setID: SetID())
       }
       return built
+    }
+
+    /// The leg-press card the existing renders share: the same fixture the screen suite builds,
+    /// with its records twenty days before the pinned `now` rather than at the distant past.
+    private static func legPress() -> ExerciseLogState {
+      var state = Self.state(logged: 1)
+      state.appendSlot(isWarmup: true)
+      return state
     }
 
     private static func card(
@@ -103,7 +115,8 @@
           onShowHistory: showHistory,
           lastRest: lastRest,
           onMoveDown: moveDown,
-          onRemove: remove
+          onRemove: remove,
+          now: Self.now
         )
         .padding(Tokens.Spacing.regular)
       }
@@ -129,7 +142,8 @@
           editingSlotID: editingSlot.map { state.slots[$0].id },
           editingField: field,
           editingText: text,
-          onBeginEditing: { _, _ in }
+          onBeginEditing: { _, _ in },
+          now: Self.now
         )
         .padding(Tokens.Spacing.regular)
       }
@@ -142,7 +156,7 @@
     /// it, the caret and underline while it is typed into in each field, and a long pound value
     /// being typed on the narrowest phone.
     @Test func editableRows() async throws {
-      let state = Fixtures.legPress()
+      let state = Self.legPress()
       try await Snapshot.capture("kit-exercise-editable-dark", size: Self.size) {
         Self.editableCard(state)
       }
@@ -169,19 +183,19 @@
     @Test func legPressCard() async throws {
       let name = "kit-exercise-leg-press"
       try await Snapshot.capture("\(name)-dark", size: Self.size) {
-        Self.card(Fixtures.legPress())
+        Self.card(Self.legPress())
       }
       try await Snapshot.capture("\(name)-light", size: Self.size, style: .light) {
-        Self.card(Fixtures.legPress())
+        Self.card(Self.legPress())
       }
       try await Snapshot.capture("\(name)-dark-contrast", size: Self.size, contrast: .high) {
-        Self.card(Fixtures.legPress())
+        Self.card(Self.legPress())
       }
     }
 
     @Test func inertTitle() async throws {
       try await Snapshot.capture("kit-exercise-inert-title-dark", size: Self.size) {
-        Self.card(Fixtures.legPress(), history: false)
+        Self.card(Self.legPress(), history: false)
       }
     }
 
@@ -222,6 +236,23 @@
       }
     }
 
+    /// The dated provenance line: one quiet line under the machine chip for history from this
+    /// machine, and no second line for borrowed history, whose badge context carries the date.
+    @Test func lastTimeSource() async throws {
+      try await Snapshot.capture("exercise-card-last-time-dark", size: Self.size) {
+        Self.card(Self.state())
+      }
+      try await Snapshot.capture(
+        "exercise-card-last-time-accessibility3", size: CGSize(width: 402, height: 3200),
+        typeSize: .accessibility3
+      ) {
+        Self.card(Self.state())
+      }
+      try await Snapshot.capture("exercise-card-last-time-borrowed-dark", size: Self.size) {
+        Self.card(Self.state(machine: .borrowed, logged: 0))
+      }
+    }
+
     @Test func progress() async throws {
       try await Snapshot.capture("kit-exercise-progress-pips-dark", size: Self.size) {
         Self.card(Self.state(plannedSets: 5, logged: 2))
@@ -238,10 +269,10 @@
 
     @Test func restControl() async throws {
       try await Snapshot.capture("kit-exercise-rest-last-dark", size: Self.size) {
-        Self.card(Fixtures.legPress(), rest: .lastUsed)
+        Self.card(Self.legPress(), rest: .lastUsed)
       }
       try await Snapshot.capture("kit-exercise-rest-asking-dark", size: Self.size) {
-        Self.card(Fixtures.legPress(), rest: .asking)
+        Self.card(Self.legPress(), rest: .asking)
       }
     }
 
@@ -249,7 +280,7 @@
     /// absent state is the default card, already captured above.
     @Test func movementMenu() async throws {
       try await Snapshot.capture("kit-exercise-menu-dark", size: Self.size) {
-        Self.card(Fixtures.legPress(), menu: true)
+        Self.card(Self.legPress(), menu: true)
       }
     }
 
@@ -257,7 +288,7 @@
       try await Snapshot.capture(
         "kit-exercise-leg-press-dark-375", size: CGSize(width: 375, height: 720)
       ) {
-        Self.card(Fixtures.legPress(), unit: .pounds, rest: .lastUsed, menu: true)
+        Self.card(Self.legPress(), unit: .pounds, rest: .lastUsed, menu: true)
       }
     }
 
@@ -268,7 +299,7 @@
         "kit-exercise-leg-press-dark-ax3", size: CGSize(width: 402, height: 3200),
         typeSize: .accessibility3
       ) {
-        Self.card(Fixtures.legPress(), rest: .lastUsed, menu: true)
+        Self.card(Self.legPress(), rest: .lastUsed, menu: true)
       }
       try await Snapshot.capture(
         "kit-exercise-borrowed-dark-ax3", size: CGSize(width: 402, height: 3200),

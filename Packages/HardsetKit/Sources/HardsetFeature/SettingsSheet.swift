@@ -100,7 +100,11 @@ public struct SettingsSheet: View {
   @ViewBuilder private func disclosureSheet(for item: Disclosure) -> some View {
     switch item {
     case .setCounting: MethodologySheet.setCounting()
-    case .progression: MethodologySheet(source: item.source, certainty: item.certainty)
+    case .progression:
+      if let source = item.source {
+        MethodologySheet(source: source, certainty: item.certainty)
+      }
+    case .whatItWontSay: RefusalsSheet()
     }
   }
 
@@ -212,7 +216,7 @@ public struct SettingsSheet: View {
     VStack(alignment: .leading, spacing: Tokens.Spacing.snug) {
       SectionLabel("Gyms and machines")
       NavigationLink {
-        GymManagementScreen(store: gyms, onChanged: { onDataChanged?() })
+        GymManagementScreen(store: gyms, unit: unit, onChanged: { onDataChanged?() })
       } label: {
         HStack(spacing: Tokens.Spacing.regular) {
           VStack(alignment: .leading, spacing: Tokens.Spacing.hairline) {
@@ -253,6 +257,7 @@ public struct SettingsSheet: View {
       VStack(spacing: Tokens.Spacing.snug) {
         disclosureRow(.setCounting)
         disclosureRow(.progression)
+        disclosureRow(.whatItWontSay)
       }
 
       // The Progress board's two marks, stated here as well as above its rows, because Settings is
@@ -272,8 +277,9 @@ public struct SettingsSheet: View {
     } label: {
       HStack(spacing: Tokens.Spacing.regular) {
         VStack(alignment: .leading, spacing: Tokens.Spacing.hairline) {
-          // The source's own title, so the row and the sheet it opens cannot name it differently.
-          Text(item.source.title)
+          // The row title: the source's own title where a source exists, so the row and the sheet
+          // it opens cannot name it differently.
+          Text(item.rowTitle)
             .font(Tokens.Text.headline)
             .foregroundStyle(Tokens.Color.chalk)
           Text(item.detail)
@@ -296,30 +302,47 @@ public struct SettingsSheet: View {
 
 /// The disclosures reachable from Settings.
 ///
-/// Each renders an `EvidenceSource` that the arithmetic itself uses, so what is read here cannot
-/// drift from what the app computes.
+/// Each method row renders an `EvidenceSource` that the arithmetic itself uses, so what is read
+/// here cannot drift from what the app computes. The refusal sheet does the same through
+/// `HonestyCopy`: its four rows are built from the sources behind them, and it discloses no single
+/// source of its own.
 ///
 /// `nonisolated` so its `Identifiable` conformance is an ordinary one: this target defaults to
 /// `MainActor`, and a main-actor `id` cannot satisfy a nonisolated requirement.
 private nonisolated enum Disclosure: Identifiable {
   case setCounting
   case progression
+  case whatItWontSay
 
   var id: Disclosure { self }
 
-  var source: EvidenceSource {
+  /// What the row is called. The source's own title wherever there is one; the refusal sheet's own
+  /// title where the row opens a set of rules rather than one method.
+  var rowTitle: String {
+    switch self {
+    case .setCounting: return SetCounting.source.title
+    case .progression: return ProgressionAnalyzer.source.title
+    case .whatItWontSay: return HonestyCopy.title
+    }
+  }
+
+  /// The one method a row discloses, where the row is a method. The refusal sheet cites four
+  /// sources in its rows instead of disclosing one, so it has none.
+  var source: EvidenceSource? {
     switch self {
     case .setCounting: return SetCounting.source
     case .progression: return ProgressionAnalyzer.source
+    case .whatItWontSay: return nil
     }
   }
 
   /// The best certainty a weekly count can reach, from the engine's own rule rather than a value
-  /// written here. Load history states none, so none is invented.
+  /// written here. Load history states none, so none is invented; the refusal sheet states none.
   var certainty: Certainty? {
     switch self {
     case .setCounting: return VolumeAnalyzer.bestCertainty
     case .progression: return nil
+    case .whatItWontSay: return nil
     }
   }
 
@@ -328,6 +351,7 @@ private nonisolated enum Disclosure: Identifiable {
     switch self {
     case .setCounting: return "How weekly volume credits each muscle"
     case .progression: return "How each machine's load chart is drawn"
+    case .whatItWontSay: return "The claims the app refuses to make, and the rule behind each"
     }
   }
 }

@@ -41,6 +41,9 @@ public struct ProgressionChartView: View {
   /// Opens the working behind the record stars: the set that set each, what it beat and the rule.
   /// `nil` where the screen has none to show.
   private let onShowRecordWorking: (() -> Void)?
+  /// Opens the set behind one rung of the rep ladder, for a series the screen identified. `nil`
+  /// where the screen has none to show, such as a preview, and the row is then plain text.
+  private let onShowRepLadderWorking: ((ProgressionKey, Int) -> Void)?
   /// `false` for movements whose logged load is not the load moved (bodyweight work), where no
   /// one-rep max is ever estimated. Says so instead of blaming the rep count.
   private let estimatesOneRepMax: Bool
@@ -59,6 +62,9 @@ public struct ProgressionChartView: View {
     public let recordSessionIDs: Set<SessionID>
     /// The most reps at each weight this machine has seen, heaviest first, for the table beneath.
     public let bestAtWeight: [BestAtWeight]
+    /// The heaviest working set at each rep count this machine has seen, for the inverse table.
+    /// A count with no set is absent, not drawn as a dash or a gap.
+    public let repLadderRungs: [RepLadder.Rung]
     /// Which series this is, so a tap on its figure can ask for the working behind it. `nil` for a
     /// series built without one, such as a preview's.
     public let key: ProgressionKey?
@@ -66,12 +72,14 @@ public struct ProgressionChartView: View {
 
     public init(
       label: String, points: [ProgressionPoint], recordSessionIDs: Set<SessionID> = [],
-      bestAtWeight: [BestAtWeight] = [], key: ProgressionKey? = nil
+      bestAtWeight: [BestAtWeight] = [], repLadderRungs: [RepLadder.Rung] = [],
+      key: ProgressionKey? = nil
     ) {
       self.label = label
       self.points = points
       self.recordSessionIDs = recordSessionIDs
       self.bestAtWeight = bestAtWeight
+      self.repLadderRungs = repLadderRungs
       self.key = key
     }
   }
@@ -84,7 +92,8 @@ public struct ProgressionChartView: View {
     assumesAddedLoad: Bool = false,
     onExplain: (() -> Void)? = nil,
     onShowEstimateWorking: ((ProgressionKey) -> Void)? = nil,
-    onShowRecordWorking: (() -> Void)? = nil
+    onShowRecordWorking: (() -> Void)? = nil,
+    onShowRepLadderWorking: ((ProgressionKey, Int) -> Void)? = nil
   ) {
     self.estimatesOneRepMax = estimatesOneRepMax && !assumesAddedLoad
     self.assumesAddedLoad = assumesAddedLoad
@@ -94,6 +103,7 @@ public struct ProgressionChartView: View {
     self.onExplain = onExplain
     self.onShowEstimateWorking = onShowEstimateWorking
     self.onShowRecordWorking = onShowRecordWorking
+    self.onShowRepLadderWorking = onShowRepLadderWorking
     self._metric = State(
       initialValue: assumesAddedLoad
         ? (ProgressionAnalyzer.hasNoAddedLoad(series.map(\.points)) ? .repsAtTopLoad : .heaviestLoad)
@@ -158,6 +168,10 @@ public struct ProgressionChartView: View {
 
         if plotted.contains(where: { !$0.bestAtWeight.isEmpty }) {
           bestAtEachWeight(plotted)
+        }
+
+        if plotted.contains(where: { !$0.repLadderRungs.isEmpty }) {
+          repLadder(plotted)
         }
 
         if !machineChanges.isEmpty {
@@ -615,6 +629,104 @@ public struct ProgressionChartView: View {
     .accessibilityLabel("\(weight) \(unit.abbreviation), \(reps), first reached \(date)")
   }
 
+  // MARK: - Rep ladder
+
+  /// The inverse of the table above: for each rep count, the heaviest working set actually
+  /// completed at that exact count. Only counts with a set appear, so a gap in the lifter's work
+  /// is a gap here rather than a dash or an estimate. Each row opens the set it came from, because
+  /// the row *is* that set: the load and the day are the set's own.
+  private func repLadder(_ plotted: [PlottedSeries]) -> some View {
+    VStack(alignment: .leading, spacing: Tokens.Spacing.regular) {
+      SectionLabel(RepLadderCopy.sectionTitle)
+      Text(RepLadderCopy.sectionDetail)
+        .font(Tokens.Text.caption)
+        .foregroundStyle(Tokens.Color.chalkDim)
+        .fixedSize(horizontal: false, vertical: true)
+      ForEach(plotted.filter { !$0.repLadderRungs.isEmpty }) { entry in
+        VStack(alignment: .leading, spacing: 0) {
+          if plotted.count > 1 {
+            Text(entry.name)
+              .font(Tokens.Text.provenance)
+              .foregroundStyle(Tokens.Color.chalkDim)
+              .padding(.bottom, Tokens.Spacing.tight)
+          }
+          ForEach(entry.repLadderRungs) { rung in
+            rungRow(rung, in: entry)
+          }
+        }
+      }
+    }
+    .frame(maxWidth: .infinity, alignment: .leading)
+  }
+
+  /// One rung. The whole row is the control where the screen can open the set, so the ladder is
+  /// operable without the chart, and its glyph says it opens something before any gesture.
+  @ViewBuilder private func rungRow(
+    _ rung: RepLadder.Rung, in entry: PlottedSeries
+  ) -> some View {
+    let showsGlyph = onShowRepLadderWorking != nil && entry.key != nil
+    if let key = entry.key, let onShowRepLadderWorking {
+      Button { onShowRepLadderWorking(key, rung.reps) } label: {
+        rungRowContent(rung, in: entry, showsGlyph: showsGlyph)
+      }
+      .buttonStyle(InlineControlStyle(alignment: .leading))
+      .accessibilityElement(children: .ignore)
+      .accessibilityLabel(rungLabel(rung, in: entry))
+      .accessibilityHint(RepLadderCopy.openHint)
+    } else {
+      rungRowContent(rung, in: entry, showsGlyph: showsGlyph)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(rungLabel(rung, in: entry))
+    }
+  }
+
+  private func rungRowContent(
+    _ rung: RepLadder.Rung, in entry: PlottedSeries, showsGlyph: Bool
+  ) -> some View {
+    let day = WorkedFromFormat(unit: unit).day(rung.completedAt)
+    let layout =
+      dynamicTypeSize.isAccessibilitySize
+      ? AnyLayout(VStackLayout(alignment: .leading, spacing: Tokens.Spacing.tight))
+      : AnyLayout(HStackLayout(alignment: .firstTextBaseline, spacing: Tokens.Spacing.regular))
+    return layout {
+      Text(RepLadderCopy.repsText(rung.reps))
+        .font(Tokens.Text.label)
+        .foregroundStyle(Tokens.Color.chalk)
+        .fixedSize(horizontal: false, vertical: true)
+      HStack(alignment: .firstTextBaseline, spacing: Tokens.Spacing.tight) {
+        Text(LoadText.entered(rung.weightKg, in: unit))
+          .font(Tokens.Text.figure)
+          .foregroundStyle(Tokens.Color.chalk)
+        Text(unit.abbreviation)
+          .font(Tokens.Text.unit)
+          .foregroundStyle(Tokens.Color.chalkDim)
+      }
+      if !dynamicTypeSize.isAccessibilitySize {
+        Spacer(minLength: Tokens.Spacing.regular)
+      }
+      Text(day)
+        .font(Tokens.Text.provenance)
+        .foregroundStyle(Tokens.Color.chalkDim)
+        .fixedSize(horizontal: false, vertical: true)
+      if showsGlyph {
+        Image(systemName: WorkedFromSheet.glyph)
+          .font(Tokens.Text.caption)
+          .foregroundStyle(Tokens.Color.chalkDim)
+          .accessibilityHidden(true)
+      }
+    }
+    .padding(.vertical, Tokens.Spacing.snug)
+    .overlay(alignment: .top) {
+      Rectangle().fill(Tokens.Color.hairline).frame(height: Tokens.Stroke.hairline)
+    }
+  }
+
+  private func rungLabel(_ rung: RepLadder.Rung, in entry: PlottedSeries) -> String {
+    RepLadderCopy.rowLabel(
+      reps: rung.reps, weightKg: rung.weightKg, date: rung.completedAt, machine: entry.name,
+      format: WorkedFromFormat(unit: unit))
+  }
+
   // MARK: - Machine changes
 
   private var machineChangeNotes: some View {
@@ -652,6 +764,7 @@ public struct ProgressionChartView: View {
     let points: [ProgressionPoint]
     let recordSessionIDs: Set<SessionID>
     let bestAtWeight: [BestAtWeight]
+    let repLadderRungs: [RepLadder.Rung]
     let key: ProgressionKey?
     var id: Int { index }
   }
@@ -677,7 +790,7 @@ public struct ProgressionChartView: View {
         PlottedSeries(
           index: index, name: name, points: input.points,
           recordSessionIDs: input.recordSessionIDs, bestAtWeight: input.bestAtWeight,
-          key: input.key))
+          repLadderRungs: input.repLadderRungs, key: input.key))
     }
     return result
   }

@@ -43,16 +43,46 @@
       ]
     }
 
-    private static func library(_ entries: [CatalogEntry]) -> some View {
+    private static func library(
+      _ entries: [CatalogEntry],
+      usage: [ExerciseID: LibraryUsage] = [:],
+      now: Date = Date(timeIntervalSince1970: 0)
+    ) -> some View {
       NavigationStack {
         LibraryView(
           sections: LibraryIndex.sections(entries), counts: LibraryIndex.counts(entries),
+          usage: usage, now: now,
           onSelect: { _ in }
         )
         .hardsetNavigationTitle("Library")
       }
       .tint(Tokens.Color.plateBlue)
       .background(Tokens.Color.canvas.ignoresSafeArea())
+    }
+
+    /// The moment the usage fixture was read, so "last done" is a fixed phrase in every render.
+    private static let usageNow = Date(timeIntervalSince1970: 1_700_000_000 + 12 * 3_600)
+
+    /// Four movements in one body part: native only, native with imported sets, imported only, and
+    /// one with nothing logged. The last draws no usage line, which is the fourth row shape.
+    private static let usageEntries: [CatalogEntry] = [
+      custom("Barbell bench press", modality: .barbell, primary: .chest),
+      custom("Incline dumbbell press", modality: .dumbbell, primary: .chest),
+      custom("Cable fly", modality: .cable, primary: .chest),
+      custom("Machine chest press", modality: .machine, primary: .chest),
+    ]
+
+    private static var usageFixture: [ExerciseID: LibraryUsage] {
+      [
+        usageEntries[0].id: LibraryUsage(
+          workingSets: 38, importedSets: 0,
+          lastDoneAt: usageNow.addingTimeInterval(-12 * 86_400)),
+        usageEntries[1].id: LibraryUsage(
+          workingSets: 12, importedSets: 42,
+          lastDoneAt: usageNow.addingTimeInterval(-86_400)),
+        usageEntries[2].id: LibraryUsage(
+          workingSets: 0, importedSets: 42, lastDoneAt: nil),
+      ]
     }
 
     private static func editor(_ draft: MovementEditorDraft) -> some View {
@@ -98,6 +128,19 @@
       try await Snapshot.capture(
         "kit-library-mixed-dark-ax3", size: Self.accessibility, typeSize: .accessibility3
       ) { Self.library(Self.mixed) }
+    }
+
+    /// Four movements in one body part so all four usage shapes are visible at once, at a phone's
+    /// size and then at accessibility3, where the line must wrap rather than shrink or clip.
+    @Test func libraryUsageLines() async throws {
+      try await Snapshot.capture("kit-library-usage-dark", size: Self.phone) {
+        Self.library(Self.usageEntries, usage: Self.usageFixture, now: Self.usageNow)
+      }
+      try await Snapshot.capture(
+        "kit-library-usage-dark-ax3", size: Self.accessibility, typeSize: .accessibility3
+      ) {
+        Self.library(Self.usageEntries, usage: Self.usageFixture, now: Self.usageNow)
+      }
     }
 
     /// A new movement with only a name, a movement with a body part and no muscle yet, and a fully

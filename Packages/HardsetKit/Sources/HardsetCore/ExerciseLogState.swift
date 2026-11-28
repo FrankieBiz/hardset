@@ -378,6 +378,13 @@ public struct ExerciseLogState: Hashable, Sendable, Identifiable {
 
   public var loggedCount: Int { slots.count(where: \.isLogged) }
 
+  /// When the sets the "Last time" column quotes were done, and whether they came from this
+  /// machine. `nil` when there is no prior, or the prior has no sets. It reports the source; it
+  /// never changes the prefill or the target.
+  public var lastTimeSource: LastTimeSource? {
+    LastTimeSource(prior: prior, borrowed: priorNote != nil)
+  }
+
   /// When the most recent of this exercise's saved sets was written, or `nil` when none is.
   public var lastLoggedAt: Date? { slots.compactMap(\.loggedAt).max() }
 

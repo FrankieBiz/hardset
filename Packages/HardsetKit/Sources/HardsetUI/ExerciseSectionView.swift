@@ -32,6 +32,9 @@ public struct ExerciseSectionView: View {
   private let onMoveUp: (() -> Void)?
   private let onMoveDown: (() -> Void)?
   private let onRemove: (() -> Void)?
+  /// The moment the card draws against, so a snapshot can pin it. Plain state, not a clock:
+  /// nothing here ticks, and a card built at any time states the dates it was handed.
+  private let now: Date
 
   @Environment(\.dynamicTypeSize) private var dynamicTypeSize
   @Environment(\.accessibilityShowButtonShapes) private var showsButtonShapes
@@ -83,7 +86,8 @@ public struct ExerciseSectionView: View {
     onRemoveSet: ((SetSlot) -> Void)? = nil,
     onMoveUp: (() -> Void)? = nil,
     onMoveDown: (() -> Void)? = nil,
-    onRemove: (() -> Void)? = nil
+    onRemove: (() -> Void)? = nil,
+    now: Date = .now
   ) {
     self._state = state
     self.unit = unit
@@ -106,6 +110,7 @@ public struct ExerciseSectionView: View {
     self.onMoveUp = onMoveUp
     self.onMoveDown = onMoveDown
     self.onRemove = onRemove
+    self.now = now
   }
 
   public var body: some View {
@@ -199,19 +204,40 @@ public struct ExerciseSectionView: View {
       if let onSelectMachine {
         machineChip(action: onSelectMachine)
       }
+      if state.priorNote == nil, let source = state.lastTimeSource {
+        // The date of the sets the "Last time" column quotes, so a seven-week-old baseline is
+        // not read as Tuesday's. One quiet fact under the machine line: no icon, no capsule and
+        // nothing to tap, because there is nothing here to open and nothing to advise.
+        Text(LastTimeCopy.line(dateLine: source.dateLine(now: now)))
+          .font(Tokens.Text.provenance)
+          .foregroundStyle(Tokens.Color.chalkDim)
+          .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 1)
+          .multilineTextAlignment(.leading)
+          .fixedSize(horizontal: false, vertical: true)
+          .accessibilityElement(children: .ignore)
+          .accessibilityLabel(LastTimeCopy.spoken(dateSpoken: source.spokenDateLine(now: now)))
+      }
       if let note = state.priorNote {
-        // Said in words: "From another machine · Low confidence". The borrowed loads are the
-        // caveat, so they are the one thing on the card allowed to speak up, and they do it as a
-        // sentence and not as a tinted capsule.
+        // Said in words: "From another machine · 25 Oct · 2 weeks ago · Low confidence". The
+        // borrowed loads are the caveat, so they are the one thing on the card allowed to speak
+        // up, and they do it as a sentence and not as a tinted capsule.
         CertaintyBadge(
           level: .low,
           methodology: "Suggested loads are borrowed from another machine (\(note)). Movement mechanics and leverage differ between equipment.",
           citation: "Epistemic honesty: equipment cannot be merged",
-          context: note,
+          context: borrowedContext(note: note),
           style: .language
         )
       }
     }
+  }
+
+  /// The badge is the only line for borrowed history, so the date joins its context rather than
+  /// becoming a second line. With no source to date, the note stands exactly as it always did.
+  private func borrowedContext(note: String) -> String {
+    guard let source = state.lastTimeSource else { return note }
+    return LastTimeCopy.borrowedContext(
+      note: note, dateLine: source.dateLine(now: now))
   }
 
   /// The name is the way into this movement's load history. Placed here because "how have I been
@@ -589,20 +615,23 @@ public struct ExerciseSectionView: View {
   #Preview("Exercise section") {
     struct Harness: View {
       @State private var state: ExerciseLogState
+      private let now: Date
 
       init() {
+        let now = Date()
         let exercise = ExerciseID()
         let machine = MachineID()
         let key = ProgressionKey(exerciseID: exercise, machineID: machine)
+        let lastTime = now.addingTimeInterval(-20 * 86_400)
         let records = [
-          PriorSetRecord(weightKg: 100, reps: 10, completedAt: .distantPast),
-          PriorSetRecord(weightKg: 105, reps: 8, completedAt: .distantPast),
+          PriorSetRecord(weightKg: 100, reps: 10, completedAt: lastTime),
+          PriorSetRecord(weightKg: 105, reps: 8, completedAt: lastTime.addingTimeInterval(600)),
         ]
         let snapshot = PriorPerformanceSnapshot(
           entries: [
             key: PriorPerformance(key: key, lastSets: records, heaviestSet: records.last)
           ],
-          capturedAt: .distantPast
+          capturedAt: now
         )
         _state = State(
           initialValue: .build(
@@ -613,6 +642,7 @@ public struct ExerciseSectionView: View {
             snapshot: snapshot
           )
         )
+        self.now = now
       }
 
       var body: some View {
@@ -629,7 +659,8 @@ public struct ExerciseSectionView: View {
             onShowHistory: {},
             lastRest: .seconds(90),
             onMoveDown: {},
-            onRemove: {}
+            onRemove: {},
+            now: now
           )
           .padding()
         }
@@ -659,6 +690,7 @@ public struct ExerciseSectionView: View {
     private let history: Bool
     private let rest: Rest
     private let menu: Bool
+    private let now: Date
 
     init(
       machine: Machine = .set(incrementKg: 10),
@@ -669,6 +701,7 @@ public struct ExerciseSectionView: View {
       rest: Rest = .absent,
       menu: Bool = false
     ) {
+      let now = Date()
       let exercise = ExerciseID()
       let priorMachine = MachineID()
       let machineID: MachineID?
@@ -691,14 +724,15 @@ public struct ExerciseSectionView: View {
         incrementKg = nil
       }
       let key = ProgressionKey(exerciseID: exercise, machineID: priorKeyMachine)
+      let lastTime = now.addingTimeInterval(-20 * 86_400)
       let records = [
-        PriorSetRecord(weightKg: 100, reps: 10, completedAt: .distantPast),
-        PriorSetRecord(weightKg: 105, reps: 8, completedAt: .distantPast),
-        PriorSetRecord(weightKg: 60, reps: 12, completedAt: .distantPast),
+        PriorSetRecord(weightKg: 100, reps: 10, completedAt: lastTime),
+        PriorSetRecord(weightKg: 105, reps: 8, completedAt: lastTime.addingTimeInterval(600)),
+        PriorSetRecord(weightKg: 60, reps: 12, completedAt: lastTime.addingTimeInterval(600)),
       ]
       let snapshot = PriorPerformanceSnapshot(
         entries: [key: PriorPerformance(key: key, lastSets: records, heaviestSet: records[1])],
-        capturedAt: .distantPast
+        capturedAt: now
       )
       var built = ExerciseLogState.build(
         exerciseID: exercise,
@@ -717,6 +751,7 @@ public struct ExerciseSectionView: View {
       self.history = history
       self.rest = rest
       self.menu = menu
+      self.now = now
     }
 
     var body: some View {
@@ -734,7 +769,8 @@ public struct ExerciseSectionView: View {
           onShowHistory: showHistory,
           lastRest: rest == .lastUsed ? .seconds(90) : nil,
           onMoveDown: moveDown,
-          onRemove: remove
+          onRemove: remove,
+          now: now
         )
         .padding()
       }
