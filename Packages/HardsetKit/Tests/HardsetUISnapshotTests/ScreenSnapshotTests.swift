@@ -193,18 +193,23 @@
         ("session-after-log-dark", .dark, .large, false),
       ]
       for (name, style, typeSize, scrolls) in cases {
-        let model = LogsOneSetModel()
+        let driver = LogsOneSetDriver()
         var offset: CGFloat = -1
         var overflow: CGFloat = -1
+        var logged: Int?
         try await Snapshot.capture(
           name, style: style, typeSize: typeSize, settle: .milliseconds(1_500),
           act: {
             try? await Task.sleep(for: .milliseconds(300))
-            model.logFirstSet()
+            driver.log?()
           },
-          inspect: { view in (offset, overflow) = Self.scrollMetrics(in: view) }
-        ) { LogsOneSetHarness(model: model) }
-        #expect(model.loggedCount == 1, "\(name): the harness logged one set")
+          // Read while the view is still up: its state is gone once the capture tears it down.
+          inspect: { view in
+            (offset, overflow) = Self.scrollMetrics(in: view)
+            logged = driver.loggedCount?()
+          }
+        ) { LogsOneSetHarness(driver: driver) }
+        #expect(logged == 1, "\(name): the harness logged one set")
         if scrolls {
           // Rules out a fixture that fits: there is something to scroll to.
           #expect(overflow > 0, "\(name): the list is taller than its viewport (by \(overflow))")
@@ -959,33 +964,34 @@
     }
   }
 
-  /// A workout the capture logs a set of, so the screen sees the logged count rise as it does in the
-  /// app, where the coordinator marks the row.
+  /// The handle a capture uses to log a set on the harness's workout from the test's own task.
   @MainActor
-  @Observable
-  private final class LogsOneSetModel {
-    var exercises = [
+  private final class LogsOneSetDriver {
+    var log: (() -> Void)?
+    var loggedCount: (() -> Int)?
+  }
+
+  /// The live session over a workout held in `@State`, so that a set logged from outside is a state
+  /// change SwiftUI observes by construction. Two earlier shapes were not: a binding whose getter
+  /// read an `@Observable` model lazily inside the list, and `.constant(model.exercises)`; both
+  /// rendered "0/3" with one set logged.
+  @MainActor
+  private struct LogsOneSetHarness: View {
+    let driver: LogsOneSetDriver
+    @State private var exercises = [
       Fixtures.legPress(firstSetLogged: false),
       Fixtures.calfRaise(),
     ]
 
-    var loggedCount: Int { exercises.reduce(0) { $0 + $1.loggedCount } }
-
-    func logFirstSet() {
-      guard let slot = exercises[0].slots.first else { return }
-      exercises[0].markLogged(slotID: slot.id, setID: SetID())
-    }
-  }
-
-  @MainActor
-  private struct LogsOneSetHarness: View {
-    let model: LogsOneSetModel
-
     var body: some View {
-      // Read here, in this view's own body, so the model's change invalidates it. A binding whose
-      // getter reads the model is evaluated lazily inside the list and was not observed: the
-      // first captures showed "0/3" with one set logged.
-      Fixtures.session(exercises: .constant(model.exercises))
+      Fixtures.session(exercises: $exercises)
+        .onAppear {
+          driver.log = {
+            guard let slot = exercises[0].slots.first else { return }
+            exercises[0].markLogged(slotID: slot.id, setID: SetID())
+          }
+          driver.loggedCount = { exercises.reduce(0) { $0 + $1.loggedCount } }
+        }
     }
   }
 #endif
