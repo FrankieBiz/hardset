@@ -619,8 +619,12 @@ Selection rows, the unit switch and pickers stay silent.
   opens the list, wrapping rather than truncating a long name; with no gym it is "Add a gym to track machines" in full `chalk` with a plus and its
   reason in `caption` under it, an invitation and not a warning. Its accessible name is unchanged,
   and Voice Control also answers to "Change gym". The last workout is a section label and one
-  button: the workout's title (or its date) in `headline`, its length in `figure` with a clock, a
-  chevron, the volume as the screen's one monument (`monumentAside`, 72 pt, with its unit and label:
+  button: the workout's title (or its date) in `headline`, its length in `figure` with a clock, said
+  as a length and never as a clock face ("2 min", "1 h 44 min", nothing under a minute, so "1:44" is
+  never read as an hour and forty-four minutes; History says it the same way), a
+  chevron, the volume as the screen's one monument (`monumentAside`, 72 pt, its unit word "lb volume"
+  beside the figure, as History says "800 lb volume", and "Weight × reps" under it, so a bare "800 lb"
+  is never read as a lift:
   the subject of this screen is starting a workout, so the number sits beside the action and does not outrank it)
   over a `StatLedger` of working sets and reps at `figureXL`, and the movements in `label` and
   `chalkDim`. With no volume, as in a bodyweight session, there is no monument and the ledger is
@@ -680,7 +684,11 @@ Selection rows, the unit switch and pickers stay silent.
   the history the movement does have ("4 sessions over 3 weeks. A comparison needs a session 5 to 7
   weeks before the latest.") when no session sits in that band. It never says "Not enough history":
   a movement trained every four weeks has plenty and only misses the band. The band is
-  `ProgressTrendAnalyzer.comparisonBandDays`, and the words are written from it. Beside every estimated-max figure sits its `CertaintyBadge` in the `.language`
+  `ProgressTrendAnalyzer.comparisonBandDays`, and the words are written from it. When every claim behind
+  the figure is a measured single, which estimates nothing, the metric is named "Max" and not
+  "Estimated max" ("Max +5% in 6 weeks"), here, on the scorecard's gain and in their Worked from
+  accounts alike (`ProgressTrendAnalyzer.isMeasured`); a change with a formula's estimate on either
+  side stays "Estimated max". Beside every estimated-max figure sits its `CertaintyBadge` in the `.language`
   style, a phrase ("Moderate confidence" and an info glyph) under the sentence, as its own control beneath
   the row's button so it never nests inside it. A six-week change uses the weaker
   certainty of its two estimates. Imported history has its own series and says "Imported · machine

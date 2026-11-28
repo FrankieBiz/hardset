@@ -30,7 +30,7 @@ public struct SetTarget: Hashable, Sendable {
     let repsText = reps == 1 ? "1 rep" : "\(reps) reps"
     guard case .addLoad = rule else { return "target \(repsText)" }
     // A typed load plus a step is a typed load: 92.5 lb is said as 92.5, not rounded to a plate.
-    let load = LoadText.entered(weightKg, in: unit, locale: locale)
+    let load = LoadText.exact(weightKg, in: unit, locale: locale)
     return "target \(load) \(unit.abbreviation) for \(repsText)"
   }
 

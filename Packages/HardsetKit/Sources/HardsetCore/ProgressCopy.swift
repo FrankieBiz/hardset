@@ -15,9 +15,19 @@ public enum ProgressCopy {
     "Most improved · " + metricName(ProgressTrendAnalyzer.mostImprovedMetric).lowercased()
   }
 
-  public static func metricName(_ metric: TrendMetric) -> String {
+  /// The metric's name. `measured` is true when every claim behind the figure is a measured single,
+  /// which estimates nothing: that figure is the lifter's max and says "Max", not "Estimated max".
+  /// Only the estimated-max metric has a measured form; the others are unchanged.
+  /// "Most improved · estimated max", or "Most improved · max" when every row behind the strip is a
+  /// measured single, so the heading never calls a measured figure an estimate.
+  public static func mostImprovedHeading(_ trends: [MovementTrend], metric: TrendMetric) -> String {
+    let measured = !trends.isEmpty && trends.allSatisfy(\.isMeasured)
+    return "Most improved · " + metricName(metric, measured: measured).lowercased()
+  }
+
+  public static func metricName(_ metric: TrendMetric, measured: Bool = false) -> String {
     switch metric {
-    case .estimatedMax: "Estimated max"
+    case .estimatedMax: measured ? "Max" : "Estimated max"
     case .heaviestLoad: "Heaviest weight"
     case .addedLoad: "Added load"
     case .repsAtTopLoad: "Reps at the top weight"
@@ -40,13 +50,13 @@ public enum ProgressCopy {
 
   /// "Estimated max +8% in 6 weeks": the change, labelled with its metric.
   public static func changeText(for trend: MovementTrend) -> String? {
-    shortChangeText(for: trend).map { "\(metricName(trend.metric)) \($0)" }
+    shortChangeText(for: trend).map { "\(metricName(trend.metric, measured: trend.isMeasured)) \($0)" }
   }
 
   /// "Estimated max · no 6-week comparison": what is missing, named for the metric it would have
   /// measured. Said when no session sits in the comparison band, however much history there is.
   public static func noChangeText(for trend: MovementTrend) -> String {
-    "\(metricName(trend.metric)) · no 6-week comparison"
+    "\(metricName(trend.metric, measured: trend.isMeasured)) · no 6-week comparison"
   }
 
   /// "4 sessions over 3 weeks. A comparison needs a session 5 to 7 weeks before the latest.": the

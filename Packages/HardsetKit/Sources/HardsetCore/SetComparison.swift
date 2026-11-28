@@ -77,6 +77,6 @@ public enum SetComparison: Hashable, Sendable {
   /// can show.
   private static func addedWeight(_ addedKg: Double, in unit: WeightUnit, locale: Locale) -> String? {
     guard (unit.fromKilograms(addedKg) * 100).rounded() >= 1 else { return nil }
-    return "\(LoadText.entered(addedKg, in: unit, locale: locale)) \(unit.abbreviation)"
+    return "\(LoadText.exact(addedKg, in: unit, locale: locale)) \(unit.abbreviation)"
   }
 }

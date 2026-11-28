@@ -55,6 +55,35 @@ public struct SessionVolume: Hashable, Sendable {
 }
 
 extension Duration {
+  /// A finished workout's length as a lifter says it: "2 min" under an hour, "1 h 44 min" from an
+  /// hour up, and `nil` under a minute.
+  ///
+  /// `clockString` is for countdowns. Beside a clock glyph "1:44" reads as an hour and forty-four
+  /// minutes when it is a minute and forty-four seconds, so a length is never drawn as a clock face.
+  /// It is rounded to the nearest minute, and under a minute there is no length worth drawing (an
+  /// accidental start and finish), so nothing is drawn. Callers draw nothing for `nil`.
+  public var workoutLengthText: String? {
+    guard let (hours, minutes) = workoutLengthParts else { return nil }
+    if hours == 0 { return "\(minutes) min" }
+    return minutes == 0 ? "\(hours) h" : "\(hours) h \(minutes) min"
+  }
+
+  /// The same length spelled for VoiceOver: "2 minutes", "1 hour 44 minutes".
+  public var workoutLengthSpoken: String? {
+    guard let (hours, minutes) = workoutLengthParts else { return nil }
+    let hourWords = hours == 1 ? "1 hour" : "\(hours) hours"
+    let minuteWords = minutes == 1 ? "1 minute" : "\(minutes) minutes"
+    if hours == 0 { return minuteWords }
+    return minutes == 0 ? hourWords : "\(hourWords) \(minuteWords)"
+  }
+
+  private var workoutLengthParts: (hours: Int, minutes: Int)? {
+    let total = Int(seconds.rounded())
+    guard total >= 60 else { return nil }
+    let wholeMinutes = (total + 30) / 60
+    return (wholeMinutes / 60, wholeMinutes % 60)
+  }
+
   /// `m:ss`, or `h:mm:ss` past an hour. Used for rest countdowns and session length.
   ///
   /// Negative durations render as `0:00` rather than as a minus sign: a rest timer that has

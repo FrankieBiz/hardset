@@ -130,3 +130,52 @@ struct DurationClockStringTests {
     #expect(Duration.seconds(-30).clockString == "0:00")
   }
 }
+
+/// "1:44" beside a clock glyph reads as an hour and forty-four minutes when it is a minute and
+/// forty-four seconds, so a workout's length is said in words and never as a clock face.
+@Suite("A workout's length is said as a length, never as a clock face")
+struct WorkoutLengthTextTests {
+  @Test("Under a minute there is nothing to draw")
+  func underAMinute() {
+    #expect(Duration.seconds(0).workoutLengthText == nil)
+    #expect(Duration.seconds(44).workoutLengthText == nil)
+    #expect(Duration.seconds(59.4).workoutLengthText == nil)
+    #expect(Duration.seconds(-30).workoutLengthText == nil)
+    #expect(Duration.seconds(44).workoutLengthSpoken == nil)
+  }
+
+  @Test("Under an hour it is whole minutes, to the nearest")
+  func minutes() {
+    #expect(Duration.seconds(60).workoutLengthText == "1 min")
+    #expect(Duration.seconds(104).workoutLengthText == "2 min")  // 1:44
+    #expect(Duration.seconds(89).workoutLengthText == "1 min")
+    #expect(Duration.seconds(90).workoutLengthText == "2 min")
+    #expect(Duration.seconds(45 * 60).workoutLengthText == "45 min")
+    #expect(Duration.seconds(59 * 60 + 29).workoutLengthText == "59 min")
+  }
+
+  @Test("From an hour up it is hours and minutes")
+  func hours() {
+    #expect(Duration.seconds(1 * 3600 + 44 * 60).workoutLengthText == "1 h 44 min")  // 1:44:00
+    #expect(Duration.seconds(3600 + 5 * 60).workoutLengthText == "1 h 5 min")
+    #expect(Duration.seconds(3600).workoutLengthText == "1 h")
+    // Rounding to the minute carries into the hour rather than reading "59 min" or "60 min".
+    #expect(Duration.seconds(59 * 60 + 30).workoutLengthText == "1 h")
+    #expect(Duration.seconds(2 * 3600 + 59 * 60 + 45).workoutLengthText == "3 h")
+  }
+
+  @Test("It is spelled out for VoiceOver")
+  func spoken() {
+    #expect(Duration.seconds(104).workoutLengthSpoken == "2 minutes")
+    #expect(Duration.seconds(60).workoutLengthSpoken == "1 minute")
+    #expect(Duration.seconds(3600 + 44 * 60).workoutLengthSpoken == "1 hour 44 minutes")
+    #expect(Duration.seconds(3600).workoutLengthSpoken == "1 hour")
+    #expect(Duration.seconds(2 * 3600 + 60).workoutLengthSpoken == "2 hours 1 minute")
+  }
+
+  /// Rest countdowns are clock faces and keep `clockString`.
+  @Test("A countdown is still a clock face")
+  func countdownUnchanged() {
+    #expect(Duration.seconds(104).clockString == "1:44")
+  }
+}

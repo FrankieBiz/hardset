@@ -43,39 +43,41 @@
     /// appearances, at the narrowest width and at an accessibility size.
     @Test func workoutReceiptScorecard() async throws {
       func key() -> ProgressionKey { ProgressionKey(exerciseID: ExerciseID()) }
-      func entry(
-        _ name: String, _ outcome: WorkoutScorecard.Outcome,
-        equipment: WorkoutReceipt.Equipment? = nil
-      ) -> WorkoutScorecard.Entry {
-        WorkoutScorecard.Entry(
-          key: key(), exerciseName: name, outcome: outcome, equipment: equipment)
+      // Built by the real `WorkoutScorecard.make` from the sets each movement was logged with, so the
+      // headline's counts, the records line, the biggest gain and every row are what the app derives
+      // from this workout and cannot drift apart. Counted by movement: the five that had an earlier
+      // session on their equipment are compared and three of them beat it (the headline's "3 of 5");
+      // the two first times are drawn as rows and left out of both numbers; the curl fell short and
+      // has no row; one movement, Pec Deck, set a record without a set that beat its partner.
+      func set(_ kg: Double, _ reps: Int) -> PriorSetRecord {
+        PriorSetRecord(weightKg: kg, reps: reps, completedAt: .distantPast)
       }
-      let scorecard = WorkoutScorecard(
-        entries: [
-          entry("Incline Press", .beat(.beat(addedKg: 0, addedReps: 1)),
-            equipment: .machine("Cybex · Station 2")),
-          entry("Cable Row", .beat(.beat(addedKg: 2.5, addedReps: 1))),
-          entry("Pec Deck", .beat(nil)),
-          entry("Lateral Raise", .matched),
-          // A machine first time says so; a barbell one has no machine to name.
-          entry("Hack Squat", .firstTime, equipment: .machine("Hack Squat Sled")),
-          entry("Barbell Row", .firstTime, equipment: .freeWeight),
-          entry("Curl", .notBeaten),
-        ],
-        beatenCount: 3, comparedCount: 5, recordMovementCount: 2,
-        biggestGain: .init(
-          key: key(), exerciseName: "Incline Press", fraction: 0.0625, metric: .estimatedMax,
-          certainty: .moderate,
-          basis: ScorecardInput(
-            key: key(), exerciseName: "Incline Press",
-            currentSets: [PriorSetRecord(weightKg: 80, reps: 9, completedAt: .distantPast)],
-            previousSets: [PriorSetRecord(weightKg: 80, reps: 8, completedAt: .distantPast)])))
+      func input(
+        _ name: String, current: [PriorSetRecord], previous: [PriorSetRecord],
+        record: Bool = false, equipment: WorkoutReceipt.Equipment? = nil
+      ) -> ScorecardInput {
+        ScorecardInput(
+          key: key(), exerciseName: name, currentSets: current, previousSets: previous,
+          setRecord: record, equipment: equipment)
+      }
+      let scorecard = WorkoutScorecard.make([
+        input("Incline Press", current: [set(85, 8)], previous: [set(80, 8)],
+          equipment: .machine("Cybex · Station 2")),
+        input("Cable Row", current: [set(52.5, 11)], previous: [set(50, 10)]),
+        input("Pec Deck", current: [set(60, 10)], previous: [set(60, 10)], record: true),
+        input("Lateral Raise", current: [set(10, 12)], previous: [set(10, 12)]),
+        // A machine first time says so; a barbell one has no machine to name.
+        input("Hack Squat", current: [set(120, 8)], previous: [],
+          equipment: .machine("Hack Squat Sled")),
+        input("Barbell Row", current: [set(70, 8)], previous: [], equipment: .freeWeight),
+        input("Curl", current: [set(30, 9)], previous: [set(30, 10)]),
+      ])
       let receipt = WorkoutReceipt(
         id: SessionID(), title: "Push", startedAt: Date(timeIntervalSince1970: 1793527200),
         finishedAt: Date(timeIntervalSince1970: 1793530800),
         lines: [
           .init(id: SetID(), exerciseName: "Incline Press", machineName: "Cybex · Station 2",
-            weightKg: 80, reps: 9, isWarmup: false)
+            weightKg: 85, reps: 8, isWarmup: false)
         ],
         scorecard: scorecard)
       try await Snapshot.capture("receipt-scorecard-dark-375", size: Snapshot.narrow) {
@@ -823,6 +825,23 @@
       .background(Tokens.Color.canvas)
     }
 
+    /// The record banner for a 105 kg set of 10 against an earlier 100 kg set of 10, with the record
+    /// found by `PersonalRecordDetector` and the words written by the live session's own copy, so
+    /// the figures are ones the app can produce from those two sets. A hand-written "105 kg, up from
+    /// 100 kg" beside a 100 x 10 row claimed a record the detector would never have announced.
+    static func recordBanner() -> HardsetBanner {
+      let earlier = PriorSetRecord(weightKg: 100, reps: 10, completedAt: .distantPast)
+      let records = PersonalRecordDetector.records(
+        for: .init(weightKg: 105, reps: 10), history: [earlier], increment: 2.5,
+        estimatesOneRepMax: false)
+      guard let record = records.first(where: { $0.kind == .heaviestLoad }) else {
+        // Loud on purpose: a fixture that cannot produce its own claim must not render a quiet one.
+        return HardsetBanner(.error, message: "Fixture error: the detector found no heaviest-weight record.")
+      }
+      return HardsetBanner(
+        .record, title: record.kind.label, message: SessionView.describe(record, unit: .kilograms))
+    }
+
     static func gallery() -> some View {
       ScrollView {
         VStack(alignment: .leading, spacing: Tokens.Spacing.section) {
@@ -845,7 +864,7 @@
               .init(label: "Reps", value: "96"),
               .init(label: "Volume", value: "9,400", unit: "kg"),
             ])
-            HardsetBanner(.record, title: "Heaviest weight", message: "105 kg, up from 100 kg")
+            recordBanner()
             HardsetBanner(.caveat, message: "Counts below are lower bounds.")
             HardsetBanner(.error, message: "That set could not be saved. It has not been logged.")
             ForEach(CertaintyLevel.allCases, id: \.self) { level in

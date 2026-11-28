@@ -164,7 +164,7 @@ public struct ProgressBoardView: View {
 
   private func mostImprovedStrip(_ rows: [ProgressBoard.Row], metric: TrendMetric) -> some View {
     VStack(alignment: .leading, spacing: Tokens.Spacing.snug) {
-      SectionLabel("Most improved · " + ProgressCopy.metricName(metric).lowercased())
+      SectionLabel(ProgressCopy.mostImprovedHeading(rows.map(\.trend), metric: metric))
       // The order is not by percentage alone, so the strip says what it is.
       Text(ProgressCopy.mostImprovedOrdering)
         .font(Tokens.Text.caption)
@@ -385,7 +385,7 @@ public struct ProgressBoardView: View {
       WorkedFromButton("Worked from", style: .compact) { onShowChangeWorking(row) }
         // Begins with the words the control shows, so a Voice Control user can say what they see.
         .accessibilityLabel(
-          "Worked from, \(row.exerciseName), \(ProgressCopy.metricName(row.trend.metric).lowercased()) change")
+          "Worked from, \(row.exerciseName), \(ProgressCopy.metricName(row.trend.metric, measured: row.trend.isMeasured).lowercased()) change")
         .accessibilityHint("Shows the sets this change was worked from")
     }
   }

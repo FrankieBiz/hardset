@@ -142,10 +142,14 @@ public struct WorkoutScorecard: Hashable, Sendable {
     /// through the same functions. Nil for a gain built without one, such as a preview's, which
     /// then has nothing to open.
     public let basis: ScorecardInput?
+    /// True when this is an estimated-max gain between two measured singles, so it is named "Max" and
+    /// not "Estimated max". Set by the same rule as a Progress row's, `ProgressTrendAnalyzer.isMeasured`.
+    public let isMeasured: Bool
 
     public init(
       key: ProgressionKey, exerciseName: String, fraction: Double, metric: TrendMetric,
-      certainty: Certainty? = nil, loadAssumption: String? = nil, basis: ScorecardInput? = nil
+      certainty: Certainty? = nil, loadAssumption: String? = nil, basis: ScorecardInput? = nil,
+      isMeasured: Bool = false
     ) {
       self.key = key
       self.exerciseName = exerciseName
@@ -154,6 +158,7 @@ public struct WorkoutScorecard: Hashable, Sendable {
       self.certainty = certainty
       self.loadAssumption = loadAssumption
       self.basis = basis
+      self.isMeasured = isMeasured && metric == .estimatedMax
     }
   }
 
@@ -250,6 +255,7 @@ public struct WorkoutScorecard: Hashable, Sendable {
     let current: Double
     let previous: Double
     var certainty: Certainty?
+    var measured = false
     if input.estimatesOneRepMax, !input.assumesAddedLoad,
       let currentEstimate = bestEstimate(input.currentSets),
       let previousEstimate = bestEstimate(input.previousSets),
@@ -261,6 +267,7 @@ public struct WorkoutScorecard: Hashable, Sendable {
       current = currentValue
       previous = previousValue
       certainty = Certainty.combine([currentEstimate.certainty, previousEstimate.certainty])
+      measured = ProgressTrendAnalyzer.isMeasured([currentEstimate, previousEstimate])
     } else if input.assumesAddedLoad, currentHeaviest == 0, previousHeaviest == 0 {
       metric = .repsAtTopLoad
       current = Double(input.currentSets.map(\.reps).max() ?? 0)
@@ -282,7 +289,7 @@ public struct WorkoutScorecard: Hashable, Sendable {
       key: input.key, exerciseName: input.exerciseName, fraction: fraction, metric: metric,
       certainty: certainty,
       loadAssumption: input.assumesAddedLoad ? ExerciseModality.unknownLoadAssumption : nil,
-      basis: input
+      basis: input, isMeasured: measured
     )
   }
 

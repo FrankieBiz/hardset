@@ -816,13 +816,13 @@ public struct HardsetRootView: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
 
-        if let duration {
-          // The same clock format the history list uses, so the two never disagree.
-          Label(duration.clockString, systemImage: "clock")
+        if let length = duration?.workoutLengthText {
+          // The same length format the history list uses, so the two never disagree.
+          Label(length, systemImage: "clock")
             .labelStyle(.titleAndIcon)
             .font(Tokens.Text.figure)
             .foregroundStyle(Tokens.Color.chalkDim)
-            .accessibilityLabel("Duration \(duration.clockString)")
+            .accessibilityLabel("Duration \(duration?.workoutLengthSpoken ?? length)")
         }
 
         // With nothing boxed, the chevron is what says the block opens. At accessibility sizes the
@@ -885,14 +885,7 @@ public struct HardsetRootView: View {
     ]
     let displayed = unit.fromKilograms(volume.volumeKg).rounded()
     guard displayed > 0 else { return (counts, nil) }
-    return (
-      counts,
-      StatLedger.Item(
-        label: "Volume",
-        value: displayed.formatted(.number.precision(.fractionLength(0))),
-        unit: unit.abbreviation
-      )
-    )
+    return (counts, StatLedger.Item.volume(displayed, unit: unit))
   }
 
   /// "Thursday 5 November", with the year added only when it is not this year, so an old session

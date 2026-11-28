@@ -177,6 +177,19 @@ public struct StatLedger: View {
   }
 }
 
+extension StatLedger.Item {
+  /// Train's last-workout volume, the sum of weight times reps the lifter logged, named for what it
+  /// is. A bare "800 lb" under a movement reads as a lift, so the unit word carries "volume" beside
+  /// the figure, as History's "800 lb volume" does, and the caption says how it was worked out.
+  /// The figure's size and role are the ledger's and do not change.
+  public static func volume(_ displayed: Double, unit: WeightUnit) -> StatLedger.Item {
+    StatLedger.Item(
+      label: "Weight × reps",
+      value: displayed.formatted(.number.precision(.fractionLength(0))),
+      unit: "\(unit.abbreviation) volume")
+  }
+}
+
 // MARK: - Banner
 
 /// A message that belongs above content: a failed write, a caveat, a record.
