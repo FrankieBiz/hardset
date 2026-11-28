@@ -594,6 +594,15 @@ Selection rows, the unit switch and pickers stay silent.
   there: loading is a quiet line, a failed read says so in `HardsetEmptyState` with the quiet style, and
   neither draws an empty library. The one accent on the screen is the "New movement" plus in the bar,
   which is the screen's primary action. It adds no token and no motion.
+- **Library usage line** (`LibraryUsage`, `CatalogSeeder.libraryUsage`): under a movement's muscles and
+  equipment, a dim `provenance` line says how many working sets the lifter has logged on it and when it
+  was last done, in `LastDoneText`'s words ("38 working sets · last done 12 days ago"). Imported sets are
+  counted apart and never added to the native count ("· 42 imported sets"), and an imported-only movement
+  says its count with no "last done", because imported history is not the lifter's live baseline. Warm-ups
+  are not working sets, so a movement with only warm-ups, or nothing logged, draws no line at all — never
+  "0 sets", "not done yet" or a dash. Future-dated sets are in the count but never in "last done" (D31); a
+  movement whose only native sets are in the future says just its count. The line is a fact read from what
+  was logged, never a target, a judgement or a nudge, and it adds no token, control or motion.
 - **Movement editor** (`MovementEditorSheet`, `MovementEditorDraft`): a name field in `entryFieldChrome`,
   body-part chips, a `SelectionRow` per muscle where the body part has more than one, up to three optional
   secondary muscles chosen from chips (each counts half a set), and the equipment as chips. Chips wrap

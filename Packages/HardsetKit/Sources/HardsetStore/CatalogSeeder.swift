@@ -273,6 +273,64 @@ public nonisolated struct CatalogSeeder: Sendable {
     }
   }
 
+  /// Working sets and imported sets per movement, with the newest native set at or before `asOf`.
+  ///
+  /// Warm-ups are excluded in SQL; a set belongs to the movement its `exerciseID` names, not to a
+  /// race or a machine. Imported sets are the ones whose session notes begin "Imported from ", the
+  /// same predicate `LoggerStore.readPriorPerformance` uses to keep them out of a baseline. They
+  /// are counted apart and never added to the native count, and they carry no "last done": imported
+  /// history is not the lifter's live baseline. A movement with no logged sets has no entry.
+  public func libraryUsage(asOf now: Date) throws -> [ExerciseID: LibraryUsage] {
+    try database.read { db in
+      // The native read counts every working set, including a future-dated one, and takes the
+      // newest at or before `now` separately so timing never claims a date that has not happened
+      // (D31). Grouped in SQL rather than fetched and counted in Swift.
+      let native: [(UUID, Int, Date?)] = try LoggedSet
+        .where { !$0.isWarmup }
+        .where {
+          #sql(
+            "NOT EXISTS (SELECT 1 FROM sessions WHERE sessions.id = \($0.sessionID) AND sessions.notes LIKE 'Imported from %')",
+            as: Bool.self)
+        }
+        .group { $0.exerciseID }
+        .select {
+          (
+            $0.exerciseID, $0.exerciseID.count(),
+            $0.completedAt.max(filter: $0.completedAt <= now)
+          )
+        }
+        .fetchAll(db)
+      let imported: [(UUID, Int)] = try LoggedSet
+        .where { !$0.isWarmup }
+        .where {
+          #sql(
+            "EXISTS (SELECT 1 FROM sessions WHERE sessions.id = \($0.sessionID) AND sessions.notes LIKE 'Imported from %')",
+            as: Bool.self)
+        }
+        .group { $0.exerciseID }
+        .select { ($0.exerciseID, $0.exerciseID.count()) }
+        .fetchAll(db)
+
+      var usage: [ExerciseID: LibraryUsage] = [:]
+      for (id, workingSets, lastDoneAt) in native {
+        usage[ExerciseID(rawValue: id)] = LibraryUsage(
+          workingSets: workingSets, importedSets: 0, lastDoneAt: lastDoneAt)
+      }
+      for (id, importedSets) in imported {
+        let key = ExerciseID(rawValue: id)
+        if let existing = usage[key] {
+          usage[key] = LibraryUsage(
+            workingSets: existing.workingSets, importedSets: importedSets,
+            lastDoneAt: existing.lastDoneAt)
+        } else {
+          usage[key] = LibraryUsage(
+            workingSets: 0, importedSets: importedSets, lastDoneAt: nil)
+        }
+      }
+      return usage
+    }
+  }
+
   /// Movements most recently logged, newest first, each once, at most `limit` of them.
   ///
   /// Only movements the picker would offer: archived and imported ones are skipped. Read from
