@@ -195,16 +195,19 @@
       for (name, style, typeSize, scrolls) in cases {
         let model = LogsOneSetModel()
         var offset: CGFloat = -1
+        var overflow: CGFloat = -1
         try await Snapshot.capture(
           name, style: style, typeSize: typeSize, settle: .milliseconds(1_500),
           act: {
             try? await Task.sleep(for: .milliseconds(300))
             model.logFirstSet()
           },
-          inspect: { view in offset = Self.scrollOffset(in: view) }
+          inspect: { view in (offset, overflow) = Self.scrollMetrics(in: view) }
         ) { LogsOneSetHarness(model: model) }
         #expect(model.loggedCount == 1, "\(name): the harness logged one set")
         if scrolls {
+          // Rules out a fixture that fits: there is something to scroll to.
+          #expect(overflow > 0, "\(name): the list is taller than its viewport (by \(overflow))")
           #expect(offset > 0, "\(name): the next set was scrolled into view (offset \(offset))")
         } else {
           #expect(offset <= 0.5, "\(name): nothing scrolled at the default size (offset \(offset))")
@@ -212,9 +215,9 @@
       }
     }
 
-    /// How far the screen's own scroll view has moved from its top: the tallest scroll view in the
-    /// hosted hierarchy, which is the list.
-    private static func scrollOffset(in view: UIView) -> CGFloat {
+    /// How far the screen's own scroll view has moved from its top, and by how much its content is
+    /// taller than what it shows: the tallest scroll view in the hosted hierarchy, which is the list.
+    private static func scrollMetrics(in view: UIView) -> (offset: CGFloat, overflow: CGFloat) {
       var best: UIScrollView?
       func walk(_ view: UIView) {
         if let scroll = view as? UIScrollView,
@@ -225,8 +228,11 @@
         view.subviews.forEach(walk)
       }
       walk(view)
-      guard let best else { return -1 }
-      return best.contentOffset.y + best.adjustedContentInset.top
+      guard let best else { return (-1, -1) }
+      let visible = best.bounds.height - best.adjustedContentInset.top - best.adjustedContentInset.bottom
+      return (
+        best.contentOffset.y + best.adjustedContentInset.top, best.contentSize.height - visible
+      )
     }
 
     /// The list with nothing pinned over it, so every row can be seen. The first row not yet written
@@ -976,8 +982,10 @@
     let model: LogsOneSetModel
 
     var body: some View {
-      Fixtures.session(
-        exercises: Binding(get: { model.exercises }, set: { model.exercises = $0 }))
+      // Read here, in this view's own body, so the model's change invalidates it. A binding whose
+      // getter reads the model is evaluated lazily inside the list and was not observed: the
+      // first captures showed "0/3" with one set logged.
+      Fixtures.session(exercises: .constant(model.exercises))
     }
   }
 #endif
